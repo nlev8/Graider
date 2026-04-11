@@ -5,16 +5,29 @@ import pytest
 
 
 class TestCriticalPath:
-    def test_decorator_sets_severity_tag(self):
-        """When a decorated fn raises, the Sentry scope should carry severity=critical."""
+    def test_decorator_sets_severity_tag_before_reraise(self):
+        """When a decorated fn raises, sentry_sdk.set_tag must be called
+        with ('severity', 'critical') on the current isolation scope
+        BEFORE the exception propagates out of the wrapper.
+
+        This is the production bug pin: the previous implementation used
+        `with sentry_sdk.push_scope() as scope: scope.set_tag(...)` which
+        works in sentry-sdk 1.x but silently fails in 2.x because the
+        forked scope is popped on exception exit before Flask's
+        integration captures the event. Verified broken in production
+        on 2026-04-11 via /_debug/sentry-boom?severity=critical — the
+        event arrived at BetterStack without the tag despite the unit
+        tests passing (they mocked push_scope and asserted set_tag was
+        called on the MOCK, which said nothing about whether the tag
+        reached a real event).
+
+        This test explicitly mocks `sentry_sdk.set_tag` at the module
+        level and asserts it was called as part of the exception-handling
+        path, which is what the 2.x-compatible fix actually does.
+        """
         from backend.observability.sentry import critical_path
 
-        mock_scope = MagicMock()
-        mock_ctx = MagicMock()
-        mock_ctx.__enter__ = MagicMock(return_value=mock_scope)
-        mock_ctx.__exit__ = MagicMock(return_value=False)
-
-        with patch("sentry_sdk.push_scope", return_value=mock_ctx) as mock_push:
+        with patch("sentry_sdk.set_tag") as mock_set_tag:
             @critical_path
             def boom():
                 raise RuntimeError("test failure")
@@ -22,8 +35,21 @@ class TestCriticalPath:
             with pytest.raises(RuntimeError, match="test failure"):
                 boom()
 
-        mock_push.assert_called_once()
-        mock_scope.set_tag.assert_called_with("severity", "critical")
+        # set_tag must be called exactly once, with the correct args,
+        # as part of the exception-handling path of the decorator.
+        mock_set_tag.assert_called_once_with("severity", "critical")
+
+    def test_decorator_does_not_set_tag_on_success(self):
+        """Non-raising fn must NOT touch the scope — we only tag failures."""
+        from backend.observability.sentry import critical_path
+
+        with patch("sentry_sdk.set_tag") as mock_set_tag:
+            @critical_path
+            def happy():
+                return "ok"
+
+            assert happy() == "ok"
+            mock_set_tag.assert_not_called()
 
     def test_decorator_preserves_return_value(self):
         """Non-raising decorated fn returns its value unchanged."""
@@ -38,19 +64,60 @@ class TestCriticalPath:
     def test_decorator_is_noop_when_sentry_uninitialized(self):
         """Decorator must not crash when Sentry has no configured client.
 
-        sentry_sdk.push_scope() is safe to call with no active client —
-        it returns a dummy Hub scope. This test verifies the decorator
-        runs normally in that state (which is the local-dev / CI
-        default because Task 1 tests never call init_sentry()).
+        sentry_sdk.set_tag() is safe to call with no active client —
+        it's a no-op on the default uninitialized hub. This test
+        verifies the decorator runs normally in that state (which is
+        the local-dev / CI default because tests never call
+        init_sentry()).
         """
         from backend.observability.sentry import critical_path
 
+        # No init_sentry() called anywhere in the test. Not mocking
+        # sentry_sdk.set_tag either — let the real SDK handle it.
         @critical_path
         def answer():
             return 42
 
-        # No init_sentry() called anywhere in the test.
         assert answer() == 42
+
+    def test_decorator_propagates_original_exception_unchanged(self):
+        """The decorator must re-raise the ORIGINAL exception without
+        wrapping or replacing it. Observability layer must never mask
+        the production bug it's trying to report.
+        """
+        from backend.observability.sentry import critical_path
+
+        sentinel = ValueError("original production bug")
+
+        @critical_path
+        def broken():
+            raise sentinel
+
+        with pytest.raises(ValueError) as exc_info:
+            broken()
+
+        # Must be the EXACT same exception instance (identity, not just equality),
+        # with message preserved.
+        assert exc_info.value is sentinel
+        assert str(exc_info.value) == "original production bug"
+
+    def test_decorator_survives_broken_sentry_sdk(self):
+        """If sentry_sdk.set_tag itself raises for any reason, the
+        decorator must STILL re-raise the original exception rather
+        than masking it with the observability failure. A broken
+        scrubber/observer should never eat production errors.
+        """
+        from backend.observability.sentry import critical_path
+
+        with patch("sentry_sdk.set_tag", side_effect=RuntimeError("sentry broken")):
+            @critical_path
+            def real_bug():
+                raise ValueError("real production issue")
+
+            # The ValueError (original bug) must propagate, NOT the
+            # RuntimeError from the broken sentry_sdk call.
+            with pytest.raises(ValueError, match="real production issue"):
+                real_bug()
 
 
 class TestInitSentry:
