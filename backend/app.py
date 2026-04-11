@@ -3438,6 +3438,36 @@ def healthz():
 
 
 # ══════════════════════════════════════════════════════════════
+# SENTRY DEBUG ROUTE (guarded by SENTRY_TEST_ROUTE_ENABLED)
+# ══════════════════════════════════════════════════════════════
+# Used ONLY during post-deploy production verification of Sentry.
+# The route is only registered when SENTRY_TEST_ROUTE_ENABLED=1 is set
+# in the env at app startup. Unset (the default), it returns 404.
+#
+# IMPORTANT: Do NOT use FLASK_DEBUG or DEBUG for this gate. Those env
+# vars enable the Werkzeug interactive debugger, which allows anyone
+# who hits an error page to execute arbitrary Python on the server —
+# a severe production security hole. Use SENTRY_TEST_ROUTE_ENABLED,
+# which only controls this single route.
+#
+# Post-rollout cleanup (see docs/observability.md): delete this block
+# entirely in a follow-up PR within 7 days of sub-project A merging.
+if os.getenv("SENTRY_TEST_ROUTE_ENABLED") == "1":
+    from backend.observability import critical_path as _critical_path_for_debug
+
+    @app.route('/_debug/sentry-boom')
+    def _debug_sentry_boom():
+        severity = request.args.get("severity", "normal")
+        if severity == "critical":
+            @_critical_path_for_debug
+            def _raise():
+                raise RuntimeError("sentry critical smoke test")
+            _raise()
+        else:
+            raise RuntimeError("sentry normal smoke test")
+
+
+# ══════════════════════════════════════════════════════════════
 # STATIC FILE SERVING
 # ══════════════════════════════════════════════════════════════
 
