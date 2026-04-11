@@ -263,6 +263,11 @@ def init_sentry() -> None:
     release = sha[:7] if sha else "unknown"
 
     try:
+        from sentry_sdk.utils import BadDsn
+    except ImportError:
+        BadDsn = ValueError  # type: ignore[misc,assignment]
+
+    try:
         sentry_sdk.init(
             dsn=dsn,
             environment="production",
@@ -279,11 +284,14 @@ def init_sentry() -> None:
                 wex.MethodNotAllowed,
             ],
         )
-    except Exception as exc:
-        # Malformed DSN, network issues during init, etc. Log and continue
-        # with Sentry disabled rather than crashing the app at startup.
-        logger.warning("sentry_sdk.init() failed; Sentry disabled: %s", exc)
-        _initialized = True
+    except (BadDsn, ValueError) as exc:
+        # DSN is syntactically invalid — log and continue booting with
+        # Sentry disabled so the solo founder can still reach the app
+        # to fix the env var. Other exceptions (TypeError from a wrong
+        # kwarg, a future SDK regression, etc.) are deliberately NOT
+        # caught — they represent real bugs that should surface loudly
+        # via CI / staging before hitting production.
+        logger.warning("sentry_sdk.init() failed with invalid DSN; Sentry disabled: %s", exc)
         return
 
     _initialized = True

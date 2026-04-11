@@ -97,6 +97,18 @@ class TestInitSentry:
             assert kwargs["send_default_pii"] is False
             # before_send hook is our scrubber
             assert kwargs["before_send"] is mod.before_send
+            # CRITICAL: transaction_style must be "endpoint", NOT "url".
+            # URL grouping explodes cardinality on ID-bearing routes
+            # like /api/student/submission/<id>/draft. This assertion
+            # prevents silent regression back to "url".
+            from sentry_sdk.integrations.flask import FlaskIntegration
+            integrations = kwargs["integrations"]
+            assert any(isinstance(i, FlaskIntegration) for i in integrations), \
+                "FlaskIntegration missing from integrations list"
+            flask_integration = next(i for i in integrations if isinstance(i, FlaskIntegration))
+            assert flask_integration.transaction_style == "endpoint", \
+                f"transaction_style must be 'endpoint', got {flask_integration.transaction_style!r}"
+
             # ignore_errors must include the 5 werkzeug 4xx classes
             import werkzeug.exceptions as wex
             assert wex.BadRequest in kwargs["ignore_errors"]
@@ -108,19 +120,28 @@ class TestInitSentry:
         assert mod._initialized is True
 
     def test_malformed_dsn_does_not_crash(self, monkeypatch):
-        """If sentry_sdk.init raises (e.g., typo'd DSN), app startup must continue."""
+        """If sentry_sdk.init raises BadDsn (typo'd env var), app startup must continue.
+
+        Uses the actual sentry_sdk.utils.BadDsn exception, not a generic
+        Exception, so the test fails if the except clause is accidentally
+        narrowed to exclude BadDsn.
+        """
         import backend.observability.sentry as mod
+        from sentry_sdk.utils import BadDsn
 
         monkeypatch.setattr(mod, "_initialized", False)
         monkeypatch.setenv("SENTRY_DSN", "not-a-real-dsn")
 
         from unittest.mock import patch
-        with patch("sentry_sdk.init", side_effect=Exception("BadDsn")) as mock_init:
-            # Should NOT raise — the scrubber swallows init errors.
+        with patch("sentry_sdk.init", side_effect=BadDsn("malformed DSN")) as mock_init:
+            # Should NOT raise — the init wrapper swallows BadDsn specifically.
             mod.init_sentry()
             mock_init.assert_called_once()
 
-        assert mod._initialized is True
+        # After a transient init failure, _initialized should NOT be set —
+        # a later call (e.g., after the env var is fixed) should retry.
+        assert mod._initialized is False, \
+            "_initialized should remain False after bad-DSN failure to allow retry"
 
     def test_idempotent_when_called_twice(self, monkeypatch):
         """Second call to init_sentry is a no-op thanks to the _initialized guard."""
@@ -135,3 +156,23 @@ class TestInitSentry:
             mod.init_sentry()
             # sentry_sdk.init should have been called exactly ONCE despite two init_sentry calls
             assert mock_init.call_count == 1
+
+    def test_unexpected_init_error_propagates(self, monkeypatch):
+        """Non-DSN exceptions (e.g., TypeError from a wrong kwarg) must NOT be swallowed.
+
+        The hardening in init_sentry only catches (ValueError, BadDsn) — real
+        programming errors like a wrong kwarg or a future SDK regression
+        should surface loudly so CI / staging catches them before production.
+        """
+        import backend.observability.sentry as mod
+
+        monkeypatch.setattr(mod, "_initialized", False)
+        monkeypatch.setenv("SENTRY_DSN", "https://fake@fake.ingest.sentry.io/1234567")
+
+        from unittest.mock import patch
+        with patch("sentry_sdk.init", side_effect=TypeError("unexpected kwarg")):
+            with pytest.raises(TypeError, match="unexpected kwarg"):
+                mod.init_sentry()
+
+        # After an unexpected failure, _initialized should also NOT be set.
+        assert mod._initialized is False
