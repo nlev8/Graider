@@ -62,8 +62,8 @@ No monolith splitting, no RLS work, no new features. Those belong to Phase 3 and
 
 **Modify (hotfix 2):** Hotfix 2 is **schema-only** — the approach chosen in Task 2 (union-widen the CHECK constraint, codify the already-live `teacher_id` column) requires zero code changes in the grading path. Do not rewrite status-write sites in `portal_grading.py`, `student_account_routes.py`, or `student_portal_routes.py` — those paths already produce values the migration will accept once applied.
 - Create: `backend/database/migration_2026_04_13_schema_reconcile.sql`
-- Modify: `backend/database/supabase_schema.sql` — the SQL-of-record file that defines `published_assessments` and `student_submissions`. Update the `published_assessments` CREATE TABLE to include `teacher_id` (type per Step 2.2 discovery) and widen the `student_submissions.status` CHECK to the union set.
-- Modify: `cloud_migration.sql` — also defines `published_assessments`; keep in sync with `backend/database/supabase_schema.sql` or greps will find divergence.
+- Modify: **`published_assessments.teacher_id`** lives in `backend/database/supabase_schema.sql:7` and `cloud_migration.sql:14`. Update both to add `teacher_id` (type per Step 2.2 discovery).
+- Modify: **`student_submissions.status` CHECK** lives in `supabase_student_portal_schema.sql:81` and `cloud_migration.sql:207`. Update both to widen the CHECK constraint. (`cloud_migration.sql` is the only file modified for both changes.) `backend/database/supabase_schema.sql` does NOT define `student_submissions` — do not edit it for the status change.
 - Modify: `tests/test_schema_assertions.py` (drift docs + CHECK probe)
 
 **Create (Task 3):**
@@ -354,7 +354,11 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `backend/database/migration_2026_04_13_schema_reconcile.sql` (matches existing migration naming convention; the repo has no `supabase/migrations/` directory)
-- Modify: `backend/database/supabase_schema.sql` and `cloud_migration.sql` — the two files that define `published_assessments` + `student_submissions`. Keep them in sync with each other and with the live DB after the migration applies.
+- Modify: the SQL-of-record files **per table**:
+  - `published_assessments.teacher_id` → `backend/database/supabase_schema.sql` and `cloud_migration.sql`.
+  - `student_submissions.status` CHECK → `supabase_student_portal_schema.sql` and `cloud_migration.sql`.
+  - `backend/database/supabase_schema.sql` owns `published_assessments` + a different table called `submissions` (not `student_submissions`) — don't touch it for the status change.
+  - `cloud_migration.sql` is the only file modified for both changes.
 - Test: `tests/test_schema_assertions.py` (update drift-documentation tests)
 
 **Pre-flight — this task depends on live DB access.** The plan's original Step 2.4 blocked on "apply to staging," but staging is deferred to Phase 4. Resolution for Phase 2: apply the migration directly to the single production Supabase instance, with a human-confirmed dry-run step (2.5) before the apply step (2.6). Wrap in a transaction so a failing CHECK-probe rolls back cleanly.
@@ -450,7 +454,11 @@ CREATE INDEX IF NOT EXISTS idx_published_assessments_teacher
 COMMIT;
 ```
 
-Also update the two SQL-of-record files that define `published_assessments` and `student_submissions` — `backend/database/supabase_schema.sql` and `cloud_migration.sql` — so they match live. Update both in the same commit so they don't drift from each other.
+Also update the SQL-of-record files **per table**, in the same commit as the migration:
+- `published_assessments.teacher_id` → `backend/database/supabase_schema.sql:7` and `cloud_migration.sql:14` (both have `CREATE TABLE IF NOT EXISTS published_assessments`).
+- `student_submissions.status` CHECK → `supabase_student_portal_schema.sql:81` and `cloud_migration.sql:207` (both have `CREATE TABLE IF NOT EXISTS student_submissions`).
+
+Do not add `teacher_id` to `supabase_student_portal_schema.sql` — that file defines `student_submissions`, not `published_assessments`. Do not widen the `status` CHECK in `backend/database/supabase_schema.sql` — that file defines a different table called `submissions`, not `student_submissions`.
 
 ### Step 2.5 — Dry-run verification (no apply)
 
@@ -529,7 +537,7 @@ Expected: 10 original tests + 9 parametrized status probes = 19 passed, 0 skippe
 ### Step 2.9 — Commit
 
 ```bash
-git add backend/database/migration_2026_04_13_schema_reconcile.sql backend/database/supabase_schema.sql cloud_migration.sql tests/test_schema_assertions.py
+git add backend/database/migration_2026_04_13_schema_reconcile.sql backend/database/supabase_schema.sql supabase_student_portal_schema.sql cloud_migration.sql tests/test_schema_assertions.py
 git commit -m "fix(schema): reconcile status CHECK + teacher_id drift
 
 Phase 2 Hotfix 2. Closes two drifts surfaced during Phase 1:
