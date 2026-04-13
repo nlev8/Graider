@@ -1,0 +1,18 @@
+{
+  "input": {
+    "fn": "grade_place_name",
+    "kwargs": {
+      "expected_names": [
+        "United Kingdom"
+      ],
+      "student_answer": "king"
+    }
+  },
+  "output": {
+    "question_type": "place_name",
+    "correct": true,
+    "feedback": [
+      "Correct! (Accepted as matching \"United Kingdom\")"
+    ]
+  }
+}

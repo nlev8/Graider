@@ -1,0 +1,14 @@
+{
+  "input": {
+    "fn": "check_math_equivalence",
+    "kwargs": {
+      "student_answer": "",
+      "correct_answer": "3.14"
+    }
+  },
+  "output": {
+    "equivalent": false,
+    "error": "I expected something else here\n\n^",
+    "method": "failed"
+  }
+}

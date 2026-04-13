@@ -1,0 +1,14 @@
+{
+  "input": {
+    "fn": "check_math_equivalence",
+    "kwargs": {
+      "student_answer": "@#$",
+      "correct_answer": "3.14"
+    }
+  },
+  "output": {
+    "equivalent": false,
+    "error": "I don't understand this\n@#$\n^",
+    "method": "failed"
+  }
+}

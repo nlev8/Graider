@@ -1,0 +1,13 @@
+{
+  "input": {
+    "fn": "check_math_equivalence",
+    "kwargs": {
+      "student_answer": "2x",
+      "correct_answer": "2*x"
+    }
+  },
+  "output": {
+    "equivalent": true,
+    "method": "symbolic"
+  }
+}

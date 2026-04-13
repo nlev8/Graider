@@ -1,0 +1,15 @@
+{
+  "input": {
+    "fn": "check_math_equivalence",
+    "kwargs": {
+      "student_answer": "2/3",
+      "correct_answer": "0.6666666667"
+    }
+  },
+  "output": {
+    "equivalent": true,
+    "method": "numerical",
+    "student_value": 0.6666666666666666,
+    "correct_value": 0.6666666667
+  }
+}

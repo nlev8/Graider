@@ -1,0 +1,37 @@
+{
+  "input": {
+    "fn": "grade_data_table",
+    "kwargs": {
+      "expected_table": {
+        "data": [
+          [
+            "apple"
+          ]
+        ]
+      },
+      "student_table": {
+        "data": [
+          [
+            "Apple"
+          ]
+        ]
+      },
+      "tolerance_percent": 5.0
+    }
+  },
+  "output": {
+    "question_type": "data_table",
+    "total_cells": 1,
+    "correct_cells": 1,
+    "cell_results": [
+      {
+        "correct": true,
+        "feedback": "Correct",
+        "row": 0,
+        "col": 0
+      }
+    ],
+    "feedback": [],
+    "score_percent": 100.0
+  }
+}

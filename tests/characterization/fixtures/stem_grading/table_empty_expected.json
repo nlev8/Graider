@@ -1,0 +1,22 @@
+{
+  "input": {
+    "fn": "grade_data_table",
+    "kwargs": {
+      "expected_table": {
+        "data": []
+      },
+      "student_table": {
+        "data": []
+      },
+      "tolerance_percent": 5.0
+    }
+  },
+  "output": {
+    "question_type": "data_table",
+    "total_cells": 0,
+    "correct_cells": 0,
+    "cell_results": [],
+    "feedback": [],
+    "score_percent": 0
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "input": {
+    "fn": "grade_math_question",
+    "kwargs": {
+      "question": {
+        "correctAnswer": "",
+        "acceptEquivalent": true,
+        "showWork": false,
+        "points": 5
+      },
+      "student_response": "4"
+    }
+  },
+  "output": {
+    "question_type": "math",
+    "points_earned": 0,
+    "points_possible": 5,
+    "feedback": [
+      "No correct answer defined for this question."
+    ],
+    "needs_ai_review": true
+  }
+}
