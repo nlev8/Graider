@@ -15,16 +15,16 @@
 
 | File | Line | Exception Type | Handler Behavior | Parent Function | Category |
 |------|------|---------------|-----------------|-----------------|----------|
-| `backend/accommodations.py` | 25 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/accommodations.py` | 54 | `Exception` | print | `audit_log_accommodation` | UNCATEGORIZED |
-| `backend/accommodations.py` | 303 | `Exception` | print + return | `save_preset` | UNCATEGORIZED |
-| `backend/accommodations.py` | 333 | `Exception` | print + return | `delete_preset` | UNCATEGORIZED |
-| `backend/accommodations.py` | 382 | `Exception` | print + return | `save_student_accommodations` | UNCATEGORIZED |
-| `backend/accommodations.py` | 460 | `Exception` | pass | `_get_ell_language` | UNCATEGORIZED |
-| `backend/accommodations.py` | 694 | `Exception` | print + return | `clear_all_accommodations` | UNCATEGORIZED |
-| `backend/accommodations.py` | 28 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/accommodations.py` | 268 | `Exception` | print | `load_presets` | UNCATEGORIZED |
-| `backend/accommodations.py` | 363 | `Exception` | print | `load_student_accommodations` | UNCATEGORIZED |
+| `backend/accommodations.py` | 25 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/accommodations.py` | 54 | `Exception` | print | `audit_log_accommodation` | NEEDS_ALERT |
+| `backend/accommodations.py` | 303 | `Exception` | print + return | `save_preset` | NEEDS_ALERT |
+| `backend/accommodations.py` | 333 | `Exception` | print + return | `delete_preset` | NEEDS_ALERT |
+| `backend/accommodations.py` | 382 | `Exception` | print + return | `save_student_accommodations` | NEEDS_ALERT |
+| `backend/accommodations.py` | 460 | `Exception` | pass | `_get_ell_language` | LEGACY |
+| `backend/accommodations.py` | 694 | `Exception` | print + return | `clear_all_accommodations` | NEEDS_ALERT |
+| `backend/accommodations.py` | 28 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/accommodations.py` | 268 | `Exception` | print | `load_presets` | NEEDS_ALERT |
+| `backend/accommodations.py` | 363 | `Exception` | print | `load_student_accommodations` | NEEDS_ALERT |
 | `backend/api_keys.py` | 43 | `(ImportError, RuntimeError)` | return | `_get_district_id` | UNCATEGORIZED |
 | `backend/api_keys.py` | 91 | `Exception` | pass | `get_api_key` | UNCATEGORIZED |
 | `backend/api_keys.py` | 124 | `Exception` | other | `resolve_keys_for_teacher` | UNCATEGORIZED |
