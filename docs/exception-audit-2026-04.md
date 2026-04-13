@@ -554,16 +554,16 @@
 | `backend/services/assistant_tools.py` | 743 | `Exception` | return | `_load_parent_contacts` | LEGACY |
 | `backend/services/assistant_tools.py` | 804 | `Exception` | return | `_load_calendar` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 831 | `Exception` | return | `_load_memories` | LEGACY |
-| `backend/services/assistant_tools.py` | 979 | `Exception` | return | `execute_tool` | LEGACY |
+| `backend/services/assistant_tools.py` | 979 | `Exception` | return | `execute_tool` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 35 | `ImportError` | other | `<module>` | INTENTIONAL |
-| `backend/services/assistant_tools.py` | 329 | `Exception` | pass | `_load_master_csv` | LEGACY |
+| `backend/services/assistant_tools.py` | 329 | `Exception` | pass | `_load_master_csv` | NEEDS_ALERT |
 | `backend/services/assistant_tools.py` | 463 | `Exception` | pass | `_load_settings` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 509 | `Exception` | pass | `_load_standards` | LEGACY |
 | `backend/services/assistant_tools.py` | 786 | `Exception` | pass | `_load_saved_assignments` | LEGACY |
 | `backend/services/assistant_tools.py` | 852 | `Exception` | pass | `_load_email_config` | LEGACY |
 | `backend/services/assistant_tools.py` | 919 | `(ImportError, AttributeError)` | other | `_merge_submodules` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 420 | `Exception` | pass | `_load_period_class_levels` | INTENTIONAL |
-| `backend/services/assistant_tools.py` | 446 | `Exception` | pass | `_load_accommodations` | LEGACY |
+| `backend/services/assistant_tools.py` | 446 | `Exception` | pass | `_load_accommodations` | NEEDS_ALERT |
 | `backend/services/assistant_tools.py` | 673 | `Exception` | pass | `_load_roster` | LEGACY |
 | `backend/services/assistant_tools.py` | 725 | `Exception` | pass | `_load_roster` | LEGACY |
 | `backend/services/assistant_tools.py` | 961 | `Exception` | pass | `execute_tool` | NEEDS_ALERT |
