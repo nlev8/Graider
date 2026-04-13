@@ -28,19 +28,19 @@
 | `backend/api_keys.py` | 43 | `(ImportError, RuntimeError)` | return | `_get_district_id` | UNCATEGORIZED |
 | `backend/api_keys.py` | 91 | `Exception` | pass | `get_api_key` | UNCATEGORIZED |
 | `backend/api_keys.py` | 124 | `Exception` | other | `resolve_keys_for_teacher` | UNCATEGORIZED |
-| `backend/app.py` | 38 | `ImportError` | pass + return | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 59 | `ImportError` | return | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 74 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 169 | `Exception` | print | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 175 | `Exception` | print | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 206 | `Exception` | pass | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 246 | `Exception` | print + return | `get_audit_logs` | UNCATEGORIZED |
-| `backend/app.py` | 2032 | `Exception` | append | `_run_grading_thread_inner` | UNCATEGORIZED |
+| `backend/app.py` | 38 | `ImportError` | pass + return | `<module>` | INTENTIONAL |
+| `backend/app.py` | 59 | `ImportError` | return | `<module>` | INTENTIONAL |
+| `backend/app.py` | 74 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/app.py` | 169 | `Exception` | print | `<module>` | INTENTIONAL |
+| `backend/app.py` | 175 | `Exception` | print | `<module>` | LEGACY |
+| `backend/app.py` | 206 | `Exception` | pass | `<module>` | INTENTIONAL |
+| `backend/app.py` | 246 | `Exception` | print + return | `get_audit_logs` | LEGACY |
+| `backend/app.py` | 2032 | `Exception` | append | `_run_grading_thread_inner` | NEEDS_ALERT |
 | `backend/app.py` | 2237 | `Exception` | log.exception + return | `grade_individual` | INTENTIONAL |
-| `backend/app.py` | 2288 | `Exception` | print | `_remove_from_master_csv` | UNCATEGORIZED |
-| `backend/app.py` | 2342 | `Exception` | print | `_sync_approval_to_master_csv` | UNCATEGORIZED |
+| `backend/app.py` | 2288 | `Exception` | print | `_remove_from_master_csv` | LEGACY |
+| `backend/app.py` | 2342 | `Exception` | print | `_sync_approval_to_master_csv` | LEGACY |
 | `backend/app.py` | 2522 | `Exception` | log.exception + return | `delete_all_student_data` | INTENTIONAL |
-| `backend/app.py` | 2865 | `Exception` | print | `export_individual_student_data` | UNCATEGORIZED |
+| `backend/app.py` | 2865 | `Exception` | print | `export_individual_student_data` | LEGACY |
 | `backend/app.py` | 2912 | `(json.JSONDecodeError, UnicodeDecodeError)` | log.exception + return | `import_individual_student_data` | INTENTIONAL |
 | `backend/app.py` | 3167 | `Exception` | log.exception + return | `retranslate_feedback` | INTENTIONAL |
 | `backend/app.py` | 3255 | `json.JSONDecodeError` | log.exception + return | `extract_student_from_image` | INTENTIONAL |
@@ -48,46 +48,46 @@
 | `backend/app.py` | 3333 | `Exception` | log.exception + return | `add_student_to_roster` | INTENTIONAL |
 | `backend/app.py` | 3363 | `Exception` | log.exception + return | `list_periods` | INTENTIONAL |
 | `backend/app.py` | 3386 | `Exception` | log.exception + return | `get_user_manual` | INTENTIONAL |
-| `backend/app.py` | 3430 | `Exception` | other | `healthz` | UNCATEGORIZED |
-| `backend/app.py` | 3443 | `Exception` | other | `healthz` | UNCATEGORIZED |
-| `backend/app.py` | 41 | `ImportError` | pass + return | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 62 | `ImportError` | return | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 77 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 400 | `Exception` | pass | `load_saved_results` | UNCATEGORIZED |
-| `backend/app.py` | 412 | `Exception` | print | `save_results` | UNCATEGORIZED |
+| `backend/app.py` | 3430 | `Exception` | other | `healthz` | INTENTIONAL |
+| `backend/app.py` | 3443 | `Exception` | other | `healthz` | INTENTIONAL |
+| `backend/app.py` | 41 | `ImportError` | pass + return | `<module>` | INTENTIONAL |
+| `backend/app.py` | 62 | `ImportError` | return | `<module>` | INTENTIONAL |
+| `backend/app.py` | 77 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/app.py` | 400 | `Exception` | pass | `load_saved_results` | LEGACY |
+| `backend/app.py` | 412 | `Exception` | print | `save_results` | LEGACY |
 | `backend/app.py` | 502 | `(ValueError, TypeError)` | pass | `_check_batch_calibration` | INTENTIONAL |
-| `backend/app.py` | 865 | `(ValueError, TypeError)` | return | `calculate_late_penalty` | UNCATEGORIZED |
-| `backend/app.py` | 871 | `(OSError, TypeError)` | return | `calculate_late_penalty` | UNCATEGORIZED |
-| `backend/app.py` | 2106 | `Exception` | pass | `grade_individual` | UNCATEGORIZED |
-| `backend/app.py` | 2114 | `Exception` | pass | `grade_individual` | UNCATEGORIZED |
-| `backend/app.py` | 2740 | `Exception` | pass | `export_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 2752 | `Exception` | pass | `export_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 2764 | `Exception` | pass | `export_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 2873 | `Exception` | pass | `export_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 3090 | `Exception` | print | `import_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 3191 | `ImportError` | return | `extract_student_from_image` | UNCATEGORIZED |
-| `backend/app.py` | 204 | `Exception` | pass | `<module>` | UNCATEGORIZED |
-| `backend/app.py` | 318 | `Exception` | print | `load_support_documents_for_grading` | UNCATEGORIZED |
-| `backend/app.py` | 1044 | `Exception` | pass | `_run_grading_thread_inner` | UNCATEGORIZED |
+| `backend/app.py` | 865 | `(ValueError, TypeError)` | return | `calculate_late_penalty` | INTENTIONAL |
+| `backend/app.py` | 871 | `(OSError, TypeError)` | return | `calculate_late_penalty` | INTENTIONAL |
+| `backend/app.py` | 2106 | `Exception` | pass | `grade_individual` | INTENTIONAL |
+| `backend/app.py` | 2114 | `Exception` | pass | `grade_individual` | INTENTIONAL |
+| `backend/app.py` | 2740 | `Exception` | pass | `export_individual_student_data` | LEGACY |
+| `backend/app.py` | 2752 | `Exception` | pass | `export_individual_student_data` | LEGACY |
+| `backend/app.py` | 2764 | `Exception` | pass | `export_individual_student_data` | LEGACY |
+| `backend/app.py` | 2873 | `Exception` | pass | `export_individual_student_data` | INTENTIONAL |
+| `backend/app.py` | 3090 | `Exception` | print | `import_individual_student_data` | LEGACY |
+| `backend/app.py` | 3191 | `ImportError` | return | `extract_student_from_image` | INTENTIONAL |
+| `backend/app.py` | 204 | `Exception` | pass | `<module>` | INTENTIONAL |
+| `backend/app.py` | 318 | `Exception` | print | `load_support_documents_for_grading` | INTENTIONAL |
+| `backend/app.py` | 1044 | `Exception` | pass | `_run_grading_thread_inner` | INTENTIONAL |
 | `backend/app.py` | 1726 | `Exception` | log.error + return | `grade_single_file` | INTENTIONAL |
-| `backend/app.py` | 2005 | `Exception` | append | `_run_grading_thread_inner` | UNCATEGORIZED |
-| `backend/app.py` | 2229 | `Exception` | print | `grade_individual` | UNCATEGORIZED |
-| `backend/app.py` | 2688 | `Exception` | other | `export_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 3040 | `Exception` | pass | `import_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 3056 | `Exception` | pass | `import_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 655 | `Exception` | pass | `_run_grading_thread_inner` | UNCATEGORIZED |
-| `backend/app.py` | 1347 | `Exception` | print | `grade_single_file` | UNCATEGORIZED |
-| `backend/app.py` | 2667 | `Exception` | pass | `export_individual_student_data` | UNCATEGORIZED |
-| `backend/app.py` | 1016 | `Exception` | append | `_run_grading_thread_inner` | UNCATEGORIZED |
-| `backend/app.py` | 1192 | `Exception` | pass | `grade_single_file` | UNCATEGORIZED |
-| `backend/app.py` | 1681 | `Exception` | pass | `grade_single_file` | UNCATEGORIZED |
-| `backend/app.py` | 1690 | `Exception` | pass | `grade_single_file` | UNCATEGORIZED |
-| `backend/app.py` | 1773 | `Exception` | append | `_run_grading_thread_inner` | UNCATEGORIZED |
-| `backend/app.py` | 3356 | `Exception` | pass | `list_periods` | UNCATEGORIZED |
-| `backend/app.py` | 300 | `Exception` | other | `load_support_documents_for_grading` | UNCATEGORIZED |
-| `backend/app.py` | 975 | `Exception` | pass | `_run_grading_thread_inner` | UNCATEGORIZED |
-| `backend/app.py` | 1528 | `Exception` | pass | `grade_single_file` | UNCATEGORIZED |
-| `backend/app.py` | 308 | `Exception` | other | `load_support_documents_for_grading` | UNCATEGORIZED |
+| `backend/app.py` | 2005 | `Exception` | append | `_run_grading_thread_inner` | LEGACY |
+| `backend/app.py` | 2229 | `Exception` | print | `grade_individual` | LEGACY |
+| `backend/app.py` | 2688 | `Exception` | other | `export_individual_student_data` | INTENTIONAL |
+| `backend/app.py` | 3040 | `Exception` | pass | `import_individual_student_data` | LEGACY |
+| `backend/app.py` | 3056 | `Exception` | pass | `import_individual_student_data` | LEGACY |
+| `backend/app.py` | 655 | `Exception` | pass | `_run_grading_thread_inner` | INTENTIONAL |
+| `backend/app.py` | 1347 | `Exception` | print | `grade_single_file` | INTENTIONAL |
+| `backend/app.py` | 2667 | `Exception` | pass | `export_individual_student_data` | INTENTIONAL |
+| `backend/app.py` | 1016 | `Exception` | append | `_run_grading_thread_inner` | INTENTIONAL |
+| `backend/app.py` | 1192 | `Exception` | pass | `grade_single_file` | INTENTIONAL |
+| `backend/app.py` | 1681 | `Exception` | pass | `grade_single_file` | INTENTIONAL |
+| `backend/app.py` | 1690 | `Exception` | pass | `grade_single_file` | LEGACY |
+| `backend/app.py` | 1773 | `Exception` | append | `_run_grading_thread_inner` | INTENTIONAL |
+| `backend/app.py` | 3356 | `Exception` | pass | `list_periods` | INTENTIONAL |
+| `backend/app.py` | 300 | `Exception` | other | `load_support_documents_for_grading` | INTENTIONAL |
+| `backend/app.py` | 975 | `Exception` | pass | `_run_grading_thread_inner` | INTENTIONAL |
+| `backend/app.py` | 1528 | `Exception` | pass | `grade_single_file` | INTENTIONAL |
+| `backend/app.py` | 308 | `Exception` | other | `load_support_documents_for_grading` | INTENTIONAL |
 | `backend/auth.py` | 30 | `Exception` | return | `load_clever_links` | UNCATEGORIZED |
 | `backend/auth.py` | 45 | `Exception` | other | `save_clever_link` | UNCATEGORIZED |
 | `backend/auth.py` | 146 | `jwt.ExpiredSignatureError` | return | `validate_token` | UNCATEGORIZED |
