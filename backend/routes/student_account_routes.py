@@ -17,9 +17,12 @@ import json
 import os
 import random
 import secrets
+import threading
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+
+import sentry_sdk
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
 from backend.extensions import limiter
@@ -63,6 +66,19 @@ def _generate_class_code():
 def _hash_token(token):
     """Hash a session token with SHA-256 for storage."""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _spawn_grading_thread_safe(*, target, args, kwargs=None):
+    """Start a daemon thread for grading work; capture to Sentry on failure.
+    Returns the started Thread, or None if spawn failed."""
+    try:
+        t = threading.Thread(target=target, args=args, kwargs=kwargs or {}, daemon=True)
+        t.start()
+        return t
+    except Exception as e:
+        _logger.warning("Failed to spawn portal grading: %s", e)
+        sentry_sdk.capture_exception(e)
+        return None
 
 
 def _check_rate_limit(student_id_number):
@@ -845,32 +861,26 @@ def submit_student_work(content_id):
             teacher_config = load_teacher_config(teacher_id)
             teacher_config["period"] = s.get("period", "")
 
-            try:
-                # Get accommodations from published content settings (already fetched with settings column)
-                published_accommodations = pc.data[0].get('settings', {}).get('student_accommodations', {}) if pc.data else {}
+            # Get accommodations from published content settings (already fetched with settings column)
+            published_accommodations = pc.data[0].get('settings', {}).get('student_accommodations', {}) if pc.data else {}
 
-                import threading
-                grading_thread = threading.Thread(
-                    target=run_portal_grading_thread,
-                    args=(
-                        submission_id,
-                        assessment_content,
-                        answers,
-                        {
-                            "student_name": student_name,
-                            "student_id": s.get("student_id_number", ""),
-                            "email": s.get("email", ""),
-                        },
-                        teacher_config,
-                        teacher_id,
-                        "student_submissions",
-                    ),
-                    kwargs={"student_accommodations": published_accommodations},
-                    daemon=True,
-                )
-                grading_thread.start()
-            except Exception as grading_err:
-                _logger.warning("Failed to spawn portal grading: %s", str(grading_err))
+            _spawn_grading_thread_safe(
+                target=run_portal_grading_thread,
+                args=(
+                    submission_id,
+                    assessment_content,
+                    answers,
+                    {
+                        "student_name": student_name,
+                        "student_id": s.get("student_id_number", ""),
+                        "email": s.get("email", ""),
+                    },
+                    teacher_config,
+                    teacher_id,
+                    "student_submissions",
+                ),
+                kwargs={"student_accommodations": published_accommodations},
+            )
 
         # Queue confirmation email (keep existing logic)
         student_email = s.get('email')
