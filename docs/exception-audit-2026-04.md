@@ -458,7 +458,7 @@
 | `backend/routes/settings_routes.py` | 1108 | `Exception` | log.exception + return | `save_parent_contact_mapping` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1169 | `Exception` | log.exception + return | `get_parent_contacts` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1374 | `Exception` | log.exception + return | `import_accommodations` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1572 | `Exception` | other | `_run_focus_import` | LEGACY |
+| `backend/routes/settings_routes.py` | 1572 | `Exception` | other | `_run_focus_import` | NEEDS_ALERT |
 | `backend/routes/settings_routes.py` | 1953 | `Exception` | log.exception + return | `add_student` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 2004 | `Exception` | log.exception + return | `remove_student` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 2118 | `Exception` | log.exception + return | `update_student` | INTENTIONAL |
