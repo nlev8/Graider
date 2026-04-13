@@ -32,7 +32,7 @@
 | `backend/app.py` | 59 | `ImportError` | return | `<module>` | INTENTIONAL |
 | `backend/app.py` | 74 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/app.py` | 169 | `Exception` | print | `<module>` | INTENTIONAL |
-| `backend/app.py` | 175 | `Exception` | print | `<module>` | LEGACY |
+| `backend/app.py` | 175 | `Exception` | print | `<module>` | NEEDS_ALERT |
 | `backend/app.py` | 206 | `Exception` | pass | `<module>` | INTENTIONAL |
 | `backend/app.py` | 246 | `Exception` | print + return | `get_audit_logs` | LEGACY |
 | `backend/app.py` | 2032 | `Exception` | append | `_run_grading_thread_inner` | NEEDS_ALERT |
@@ -71,7 +71,7 @@
 | `backend/app.py` | 1044 | `Exception` | pass | `_run_grading_thread_inner` | INTENTIONAL |
 | `backend/app.py` | 1726 | `Exception` | log.error + return | `grade_single_file` | INTENTIONAL |
 | `backend/app.py` | 2005 | `Exception` | append | `_run_grading_thread_inner` | LEGACY |
-| `backend/app.py` | 2229 | `Exception` | print | `grade_individual` | LEGACY |
+| `backend/app.py` | 2229 | `Exception` | print | `grade_individual` | NEEDS_ALERT |
 | `backend/app.py` | 2688 | `Exception` | other | `export_individual_student_data` | INTENTIONAL |
 | `backend/app.py` | 3040 | `Exception` | pass | `import_individual_student_data` | LEGACY |
 | `backend/app.py` | 3056 | `Exception` | pass | `import_individual_student_data` | LEGACY |
@@ -81,7 +81,7 @@
 | `backend/app.py` | 1016 | `Exception` | append | `_run_grading_thread_inner` | INTENTIONAL |
 | `backend/app.py` | 1192 | `Exception` | pass | `grade_single_file` | INTENTIONAL |
 | `backend/app.py` | 1681 | `Exception` | pass | `grade_single_file` | INTENTIONAL |
-| `backend/app.py` | 1690 | `Exception` | pass | `grade_single_file` | LEGACY |
+| `backend/app.py` | 1690 | `Exception` | pass | `grade_single_file` | NEEDS_ALERT |
 | `backend/app.py` | 1773 | `Exception` | append | `_run_grading_thread_inner` | INTENTIONAL |
 | `backend/app.py` | 3356 | `Exception` | pass | `list_periods` | INTENTIONAL |
 | `backend/app.py` | 300 | `Exception` | other | `load_support_documents_for_grading` | INTENTIONAL |

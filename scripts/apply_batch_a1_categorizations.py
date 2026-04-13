@@ -31,7 +31,7 @@ DECISIONS = [
     ("backend/app.py", 74,  "INTENTIONAL", "ImportError → storage_load=None explicit fallback"),
     ("backend/app.py", 77,  "INTENTIONAL", "ImportError inner fallback → same"),
     ("backend/app.py", 169, "INTENTIONAL", "bootstrap logging config fail → print warning; logging is non-critical"),
-    ("backend/app.py", 175, "LEGACY",      "auth middleware load fail → silent swallow. Codex rule: required auth state; NOT a bootstrap carveout."),
+    ("backend/app.py", 175, "NEEDS_ALERT", "auth middleware load fail → no degraded mode; app serves /api/ without auth. Codex Gate 3: startup security hook that keeps serving traffic must page."),
     ("backend/app.py", 204, "INTENTIONAL", "startup stale-partial recovery per-id inner pass; per-Codex: stale-partial recovery fits bootstrap carveout"),
     ("backend/app.py", 206, "INTENTIONAL", "outer catch of the recovery block; best-effort startup cleanup"),
 
@@ -65,12 +65,12 @@ DECISIONS = [
     ("backend/app.py", 1347, "INTENTIONAL", "correction context fetch fail → print + skip feature; grading continues with degraded notes"),
     ("backend/app.py", 1528, "INTENTIONAL", "prior result CSV lookup fail → pass; prev_r defaults to None, caller handles"),
     ("backend/app.py", 1681, "INTENTIONAL", "baseline deviation detect fail → pass; baseline_deviation defaulted to 'normal'"),
-    ("backend/app.py", 1690, "LEGACY",      "add_assignment_to_history fail → pass; student-history system-of-record write silently lost"),
+    ("backend/app.py", 1690, "NEEDS_ALERT", "add_assignment_to_history fail → pass; student-history write. Codex Gate 3 consistency rule: same failure class as portal_grading.py:606 which is NEEDS_ALERT."),
 
     # ── grade_individual (3 rows) ─────────────────────────────────────
     ("backend/app.py", 2106, "INTENTIONAL", "student_info JSON parse fail → pass; student_info defaults to None, route tolerates"),
     ("backend/app.py", 2114, "INTENTIONAL", "assignment_config JSON parse fail → same pattern"),
-    ("backend/app.py", 2229, "LEGACY",      "add_assignment_to_history fail → print; history system-of-record silent loss (same as 1690)"),
+    ("backend/app.py", 2229, "NEEDS_ALERT", "add_assignment_to_history fail → print; same data class as 1690. Mirror NEEDS_ALERT per Codex consistency rule."),
 
     # ── _remove_from_master_csv / _sync_approval_to_master_csv ────────
     ("backend/app.py", 2288, "LEGACY",      "master_grades.csv write fail → print; CSV is system-of-record for grading history"),
