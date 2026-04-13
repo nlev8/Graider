@@ -675,26 +675,26 @@
 | `backend/services/assistant_tools_student.py` | 1007 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
 | `backend/services/assistant_tools_student.py` | 479 | `Exception` | append | `_execute_student_removal` | INTENTIONAL |
 | `backend/services/correction_patterns.py` | 15 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 53 | `(ValueError, TypeError)` | return | `_hex_to_rgb` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 81 | `Exception` | pass | `load_style` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 91 | `(ValueError, TypeError)` | other | `load_style` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 97 | `(ValueError, TypeError)` | other | `load_style` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 105 | `(ValueError, TypeError)` | other | `load_style` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 338 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 353 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 368 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 409 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 422 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 447 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 463 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 479 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 494 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 510 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 525 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 541 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 553 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 567 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
-| `backend/services/document_generator.py` | 579 | `Exception` | other | `create_document_docx` | UNCATEGORIZED |
+| `backend/services/document_generator.py` | 53 | `(ValueError, TypeError)` | return | `_hex_to_rgb` | INTENTIONAL |
+| `backend/services/document_generator.py` | 81 | `Exception` | pass | `load_style` | LEGACY |
+| `backend/services/document_generator.py` | 91 | `(ValueError, TypeError)` | other | `load_style` | INTENTIONAL |
+| `backend/services/document_generator.py` | 97 | `(ValueError, TypeError)` | other | `load_style` | INTENTIONAL |
+| `backend/services/document_generator.py` | 105 | `(ValueError, TypeError)` | other | `load_style` | INTENTIONAL |
+| `backend/services/document_generator.py` | 338 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 353 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 368 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 409 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 422 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 447 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 463 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 479 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 494 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 510 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 525 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 541 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 553 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 567 | `Exception` | other | `create_document_docx` | LEGACY |
+| `backend/services/document_generator.py` | 579 | `Exception` | other | `create_document_docx` | LEGACY |
 | `backend/services/elevenlabs_service.py` | 17 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/services/elevenlabs_service.py` | 204 | `Exception` | pass | `close` | UNCATEGORIZED |
 | `backend/services/elevenlabs_service.py` | 259 | `Exception` | pass | `_on_message` | UNCATEGORIZED |
