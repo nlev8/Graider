@@ -723,18 +723,18 @@
 | `backend/services/openai_tts_service.py` | 216 | `queue.Empty` | other | `_worker_loop` | UNCATEGORIZED |
 | `backend/services/openai_tts_service.py` | 248 | `Exception` | log.error | `_worker_loop` | UNCATEGORIZED |
 | `backend/services/outlook_sender.py` | 140 | `Exception` | raise | `navigate_to_outlook` | INTENTIONAL |
-| `backend/services/outlook_sender.py` | 152 | `Exception` | pass | `navigate_to_outlook` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 81 | `Exception` | pass | `navigate_to_outlook` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 98 | `Exception` | pass | `navigate_to_outlook` | UNCATEGORIZED |
+| `backend/services/outlook_sender.py` | 152 | `Exception` | pass | `navigate_to_outlook` | LEGACY |
+| `backend/services/outlook_sender.py` | 81 | `Exception` | pass | `navigate_to_outlook` | NEEDS_ALERT |
+| `backend/services/outlook_sender.py` | 98 | `Exception` | pass | `navigate_to_outlook` | NEEDS_ALERT |
 | `backend/services/outlook_sender.py` | 123 | `Exception` | raise | `navigate_to_outlook` | INTENTIONAL |
-| `backend/services/outlook_sender.py` | 184 | `Exception` | pass | `send_email` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 206 | `Exception` | other | `send_email` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 229 | `Exception` | other | `send_email` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 351 | `Exception` | pass | `main` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 327 | `Exception` | pass | `main` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 355 | `Exception` | pass | `main` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 332 | `Exception` | pass | `main` | UNCATEGORIZED |
-| `backend/services/outlook_sender.py` | 337 | `Exception` | pass | `main` | UNCATEGORIZED |
+| `backend/services/outlook_sender.py` | 184 | `Exception` | pass | `send_email` | INTENTIONAL |
+| `backend/services/outlook_sender.py` | 206 | `Exception` | other | `send_email` | INTENTIONAL |
+| `backend/services/outlook_sender.py` | 229 | `Exception` | other | `send_email` | INTENTIONAL |
+| `backend/services/outlook_sender.py` | 351 | `Exception` | pass | `main` | LEGACY |
+| `backend/services/outlook_sender.py` | 327 | `Exception` | pass | `main` | LEGACY |
+| `backend/services/outlook_sender.py` | 355 | `Exception` | pass | `main` | NEEDS_ALERT |
+| `backend/services/outlook_sender.py` | 332 | `Exception` | pass | `main` | NEEDS_ALERT |
+| `backend/services/outlook_sender.py` | 337 | `Exception` | pass | `main` | LEGACY |
 | `backend/services/portal_grading.py` | 39 | `(OSError, ValueError)` | pass | `<module>` | INTENTIONAL |
 | `backend/services/portal_grading.py` | 54 | `(ImportError, AttributeError)` | log.warning + return | `_import_from_assignment_grader` | INTENTIONAL |
 | `backend/services/portal_grading.py` | 243 | `Exception` | log.error + return | `_safe_generate_feedback` | INTENTIONAL |
