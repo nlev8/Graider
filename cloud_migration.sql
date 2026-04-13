@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS published_assessments (
     settings JSONB DEFAULT '{}'::jsonb,
     teacher_name TEXT,
     teacher_email TEXT,
+    teacher_id TEXT,  -- Owner teacher's ID (TEXT, not UUID — confirmed live on 2026-04-13)
     is_active BOOLEAN DEFAULT true,
     submission_count INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS published_assessments (
 
 CREATE INDEX IF NOT EXISTS idx_assessments_join_code ON published_assessments(join_code);
 CREATE INDEX IF NOT EXISTS idx_assessments_active ON published_assessments(is_active);
+CREATE INDEX IF NOT EXISTS idx_published_assessments_teacher ON published_assessments(teacher_id);
 
 CREATE TABLE IF NOT EXISTS submissions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -218,7 +220,10 @@ CREATE TABLE IF NOT EXISTS student_submissions (
     percentage NUMERIC,
     letter_grade TEXT,
     status TEXT DEFAULT 'submitted' CHECK (status IN (
-        'in_progress', 'submitted', 'grading', 'graded', 'returned'
+        -- Original lifecycle states:
+        'in_progress', 'submitted', 'grading', 'graded', 'returned',
+        -- Portal grading states (widened 2026-04-13):
+        'partial', 'grading_deferred', 'grading_failed', 'draft'
     )),
     time_taken_seconds INTEGER,
     submitted_at TIMESTAMPTZ DEFAULT now(),

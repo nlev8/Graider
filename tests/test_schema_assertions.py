@@ -15,13 +15,21 @@ PostgREST raises an error (supabase-py surfaces it via `.execute()`). If
 PostgREST ever starts silently ignoring missing columns in the select list,
 escalate to a SQL RPC or the Supabase management API.
 
-These tests also document known schema drift captured during Phase 1 review:
-    - student_submissions.status CHECK constraint allows
-      (in_progress, submitted, grading, graded, returned) but the code writes
-      (partial, grading_deferred, grading_failed, draft) in some paths.
-    - published_assessments does NOT have a teacher_id column per SQL schema,
-      contrary to the original Phase 1 spec (Codex caught this).
-Phase 4 resolves both.
+Phase 2 Hotfix 2 resolved the two drifts surfaced in Phase 1 via migration
+backend/database/migration_2026_04_13_schema_reconcile.sql:
+    - student_submissions.status CHECK now accepts the union of the original
+      5 lifecycle states {in_progress, submitted, grading, graded, returned}
+      plus the 4 code-written states {partial, grading_deferred,
+      grading_failed, draft}. TestStudentSubmissionsSchema::
+      test_status_check_accepts_all_code_written_values round-trips each
+      value through a dedicated sentinel row and asserts no CheckViolation.
+    - published_assessments.teacher_id is codified as TEXT. The column's
+      live type was verified by scripts/probe_teacher_id_type.py before
+      the migration was authored.
+
+These tests are the regression guard for Phase 4 RLS work — if RLS
+changes break column access or reintroduce drift, the core_columns_exist
+tests catch it.
 """
 import os
 
@@ -54,19 +62,66 @@ class TestStudentSubmissionsSchema:
         ).limit(0).execute()
         assert result is not None
 
-    def test_status_values_drift_is_documented(self):
-        """Documents known schema drift: the SQL CHECK constraint on
-        student_submissions.status allows {in_progress, submitted, grading,
-        graded, returned} but the code writes {partial, grading_deferred,
-        grading_failed, draft} in some paths.
+    def test_status_check_accepts_all_code_written_values(self):
+        """Migration 2026_04_13 widened the CHECK constraint to the union
+        of the original 5 lifecycle states and the 4 code-written states.
+        Insert a DEDICATED sentinel row (never touch real submissions),
+        round-trip each status value through an UPDATE, delete on exit.
 
-        This test PASSES as long as the table is queryable. The real value
-        is the docstring — it pins the drift as a known-bug record so a
-        future reader doesn't "fix" one side without the other.
-        """
+        If the test process crashes mid-loop, the worst case is one
+        orphan row with NULL FKs and student_name="__schema_probe_sentinel__" —
+        trivially identifiable and safe to delete. Never mutates a real
+        student's submission."""
         sb = _get_live_supabase()
-        result = sb.table("student_submissions").select("status").limit(1).execute()
-        assert result is not None
+        sentinel_name = "__schema_probe_sentinel__"
+
+        # Pre-clean any orphans from prior crashed runs.
+        sb.table("student_submissions").delete().eq(
+            "student_name", sentinel_name
+        ).execute()
+
+        all_values = [
+            "in_progress", "submitted", "grading", "graded", "returned",
+            "partial", "grading_deferred", "grading_failed", "draft",
+        ]
+
+        # Insert sentinel with NULL FKs (student_id + content_id both
+        # nullable per schema). A SKIP here would let the overall suite
+        # report "10/10 green" without the CHECK probe ever having run —
+        # defeats the purpose. Hard-fail with explicit messaging instead.
+        try:
+            insert_result = sb.table("student_submissions").insert({
+                "student_name": sentinel_name,
+                "status": "submitted",  # known-valid under both old + new CHECK
+            }).execute()
+        except Exception as e:
+            pytest.fail(
+                f"Sentinel INSERT blocked (likely RLS or permissions on "
+                f"student_submissions for the service-role key used by the "
+                f"test): {e!r}. Grant INSERT/UPDATE/DELETE on rows with "
+                f"student_name='{sentinel_name}' to the test role, or "
+                f"disable RLS for the probe path, then retry. Do NOT "
+                f"downgrade this to pytest.skip — a skip hides whether "
+                f"the CHECK widening actually landed in prod."
+            )
+        if not insert_result.data:
+            pytest.fail(
+                f"Sentinel INSERT returned no data (PostgREST filtered "
+                f"the result, likely RLS). Same remediation as above — "
+                f"do NOT downgrade to skip."
+            )
+        sentinel_id = insert_result.data[0]["id"]
+
+        try:
+            for value in all_values:
+                # If the CHECK rejects the value, supabase-py raises APIError.
+                sb.table("student_submissions").update({"status": value}).eq(
+                    "id", sentinel_id
+                ).execute()
+        finally:
+            sb.table("student_submissions").delete().eq(
+                "id", sentinel_id
+            ).execute()
 
 
 class TestPublishedAssessmentsSchema:
@@ -78,20 +133,13 @@ class TestPublishedAssessmentsSchema:
         ).limit(0).execute()
         assert result is not None
 
-    def test_no_teacher_id_column(self):
-        """published_assessments should NOT have a teacher_id column
-        (SQL schema of record). Documents the absence so nobody adds code
-        that references it."""
+    def test_teacher_id_column_exists(self):
+        """published_assessments.teacher_id is codified in the SQL-of-record
+        as TEXT per migration 2026_04_13. Query must succeed, not error.
+        Live type was verified via scripts/probe_teacher_id_type.py."""
         sb = _get_live_supabase()
-        try:
-            sb.table("published_assessments").select("teacher_id").limit(0).execute()
-            # If this succeeds the column DOES exist — flag as drift.
-            pytest.skip(
-                "published_assessments.teacher_id appears to exist — "
-                "schema drift vs SQL of record; reconcile in Phase 4."
-            )
-        except Exception:
-            pass  # Correct per SQL schema
+        result = sb.table("published_assessments").select("teacher_id").limit(0).execute()
+        assert result is not None
 
 
 class TestSubmissionsSchema:
