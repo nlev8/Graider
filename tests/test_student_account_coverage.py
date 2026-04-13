@@ -627,7 +627,12 @@ class TestStudentLogin:
         assert 'token' in data
         assert data['student']['first_name'] == 'Jo'
 
-    def test_login_missing_fields_returns_400(self, client):
+    @patch('routes.student_account_routes._get_supabase')
+    def test_login_missing_fields_returns_400(self, mock_get_sb, client):
+        # The route calls _get_supabase() before validating inputs (line 558),
+        # so CI needs the mock even though the 400 branch never touches the
+        # returned client. MagicMock's default return is fine.
+        mock_get_sb.return_value = MagicMock()
         resp = client.post('/api/student/login',
                            headers={'Content-Type': 'application/json'},
                            json={'email': '', 'class_code': ''})
