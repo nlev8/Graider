@@ -587,7 +587,7 @@
 | `backend/services/assistant_tools_behavior.py` | 198 | `Exception` | return | `_load_parent_contacts` | NEEDS_ALERT |
 | `backend/services/assistant_tools_behavior.py` | 329 | `Exception` | return | `debug_behavior` | INTENTIONAL |
 | `backend/services/assistant_tools_behavior.py` | 617 | `Exception` | log.warning + return | `_generate_email_ai` | INTENTIONAL |
-| `backend/services/assistant_tools_behavior.py` | 855 | `Exception` | pass | `send_behavior_email` | NEEDS_ALERT |
+| `backend/services/assistant_tools_behavior.py` | 855 | `Exception` | pass | `send_behavior_email` | INTENTIONAL |
 | `backend/services/assistant_tools_behavior.py` | 865 | `Exception` | pass | `send_behavior_email` | NEEDS_ALERT |
 | `backend/services/assistant_tools_behavior.py` | 108 | `Exception` | log.error | `_load_behavior_events` | NEEDS_ALERT |
 | `backend/services/assistant_tools_behavior.py` | 139 | `Exception` | pass | `_load_behavior_events` | INTENTIONAL |
