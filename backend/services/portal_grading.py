@@ -10,6 +10,9 @@ import signal
 import sys
 import threading
 from datetime import datetime, timezone
+from importlib import import_module
+
+import sentry_sdk
 
 from backend.observability import critical_path
 
@@ -36,11 +39,26 @@ try:
 except (OSError, ValueError):
     pass  # Can't set signal handler in non-main thread
 
-# Import grade_per_question at module level so it can be patched in tests
-try:
-    from assignment_grader import grade_per_question
-except ImportError:
-    grade_per_question = None
+# Import grade_per_question + generate_feedback at module level so tests can
+# patch backend.services.portal_grading.grade_per_question / .generate_feedback.
+# On ImportError we page Sentry directly: grade_per_question's downstream
+# TypeError is caught by grade_written_questions which only logs + falls back,
+# so log-only here would hide a config-level failure (assignment_grader
+# unavailable means NO STEM grading happens for any student).
+def _import_from_assignment_grader(attr):
+    """Import attr from assignment_grader; page Sentry on failure, return None.
+    Isolated so tests can drive the error path without reloading modules."""
+    try:
+        mod = import_module("assignment_grader")
+        return getattr(mod, attr)
+    except (ImportError, AttributeError) as e:
+        logger.warning("assignment_grader.%s unavailable: %s", attr, e)
+        sentry_sdk.capture_exception(e)
+        return None
+
+
+grade_per_question = _import_from_assignment_grader("grade_per_question")
+generate_feedback = _import_from_assignment_grader("generate_feedback")
 
 from backend.services.grading_service import _build_standards_mastery
 
@@ -204,6 +222,62 @@ def build_result_record(student_name, student_id, assignment_title, score,
         "per_question_scores": per_question_scores,
         "breakdown": breakdown,
     }
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 2 Hotfix 1 — observability helpers for NEEDS_ALERT catches.
+#
+# These helpers wrap sub-steps of the grading thread that previously
+# swallowed exceptions silently. Each one: calls the real work inside
+# try/except, logs the error, and calls sentry_sdk.capture_exception
+# so BetterStack sees the failure. No behavior change on the happy
+# path.
+# ══════════════════════════════════════════════════════════════
+
+
+def _safe_generate_feedback(**kwargs):
+    """Call assignment_grader.generate_feedback; capture to Sentry on failure
+    and return a safe fallback so the grading thread can continue."""
+    try:
+        return generate_feedback(**kwargs)
+    except Exception as e:
+        logger.error("Feedback generation failed: %s", e)
+        sentry_sdk.capture_exception(e)
+        return {
+            "feedback": "Grading complete. Teacher will review and provide detailed feedback.",
+            "rubric_breakdown": {},
+        }
+
+
+def _safe_save_results(results, teacher_id):
+    """Persist results to teacher storage; capture to Sentry on failure."""
+    try:
+        from backend.app import save_results
+        save_results(results, teacher_id)
+    except Exception as e:
+        logger.error("Failed to save result to teacher storage: %s", e)
+        sentry_sdk.capture_exception(e)
+
+
+def _safe_update_submission(sb, submission_id, update_fields,
+                            table_name="student_submissions"):
+    """Update a Supabase submission row; capture to Sentry on failure.
+    Skips silently when submission_id is falsy (the anonymous join-code
+    path doesn't have a Supabase row). If submission_id IS set but sb
+    is None, that's a real config/connectivity problem — page it."""
+    if not submission_id:
+        return  # Intentional skip: join-code path has no submission row
+    if not sb:
+        msg = ("Cannot update submission %s: Supabase client unavailable"
+               % submission_id)
+        logger.error(msg)
+        sentry_sdk.capture_message(msg, level="error")
+        return
+    try:
+        sb.table(table_name).update(update_fields).eq("id", submission_id).execute()
+    except Exception as e:
+        logger.error("Failed to update Supabase submission: %s", e)
+        sentry_sdk.capture_exception(e)
 
 
 @critical_path
@@ -441,39 +515,33 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         # Generate overall feedback via Pass 3
         feedback_text = ""
         breakdown = {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0}
-        try:
-            from assignment_grader import generate_feedback
+        student_responses = []
+        for q in all_questions:
+            answer_key = q.get("_answer_key", "")
+            student_responses.append({
+                "question": q.get("question", ""),
+                "answer": answers.get(answer_key, ""),
+            })
 
-            student_responses = []
-            for q in all_questions:
-                answer_key = q.get("_answer_key", "")
-                student_responses.append({
-                    "question": q.get("question", ""),
-                    "answer": answers.get(answer_key, ""),
-                })
+        percentage = round((total_score / total_possible * 100) if total_possible > 0 else 0)
+        letter = _score_to_letter(percentage)
 
-            percentage = round((total_score / total_possible * 100) if total_possible > 0 else 0)
-            letter = _score_to_letter(percentage)
-
-            feedback_result = generate_feedback(
-                question_results=written_results,
-                total_score=total_score,
-                total_possible=total_possible,
-                letter_grade=letter,
-                grade_level=teacher_config.get("grade_level", ""),
-                subject=teacher_config.get("subject", ""),
-                teacher_instructions=ai_notes,
-                ai_model=ai_model,
-                ai_provider="anthropic" if ai_model.startswith("claude") else "gemini" if ai_model.startswith("gemini") else "openai",
-                student_responses=student_responses,
-                student_history=history_context,
-                grading_style=teacher_config.get("grading_style", "standard"),
-            )
-            feedback_text = feedback_result.get("feedback", "")
-            breakdown = feedback_result.get("rubric_breakdown", breakdown)
-        except Exception as e:
-            logger.error("Feedback generation failed: %s", str(e))
-            feedback_text = "Grading complete. Teacher will review and provide detailed feedback."
+        feedback_result = _safe_generate_feedback(
+            question_results=written_results,
+            total_score=total_score,
+            total_possible=total_possible,
+            letter_grade=letter,
+            grade_level=teacher_config.get("grade_level", ""),
+            subject=teacher_config.get("subject", ""),
+            teacher_instructions=ai_notes,
+            ai_model=ai_model,
+            ai_provider="anthropic" if ai_model.startswith("claude") else "gemini" if ai_model.startswith("gemini") else "openai",
+            student_responses=student_responses,
+            student_history=history_context,
+            grading_style=teacher_config.get("grading_style", "standard"),
+        )
+        feedback_text = feedback_result.get("feedback", "") or feedback_text
+        breakdown = feedback_result.get("rubric_breakdown", breakdown)
 
         # Build result record in analytics-compatible format
         result_record = build_result_record(
@@ -489,39 +557,37 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         )
 
         # Save to teacher's results storage (for Results tab + Analytics)
-        # Use per-teacher lock to prevent race conditions with concurrent submissions
+        # Use per-teacher lock to prevent race conditions with concurrent submissions.
+        # Outer try catches load/lock failures; inner _safe_save_results covers save_results.
         try:
-            from backend.app import load_saved_results, save_results, _get_lock
+            from backend.app import load_saved_results, _get_lock
             with _get_lock(teacher_id):
                 results = load_saved_results(teacher_id)
                 results.append(result_record)
-                save_results(results, teacher_id)
+                _safe_save_results(results, teacher_id)
         except Exception as e:
-            logger.error("Failed to save result to teacher storage: %s", str(e))
+            logger.error("Failed to load/lock for result save: %s", str(e))
+            sentry_sdk.capture_exception(e)
 
         # Update Supabase submission record with full grading
         standards_mastery = _build_standards_mastery(per_question_scores)
-        try:
-            from backend.supabase_client import get_supabase
-            sb = get_supabase()
-            if sb and submission_id:
-                sb.table(supabase_table).update({
-                    "results": {
-                        "questions": per_question_scores,
-                        "score": total_score,
-                        "total_points": total_possible,
-                        "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
-                        "feedback_summary": feedback_text,
-                        "breakdown": breakdown,
-                        "grading_source": "multipass",
-                        "standards_mastery": standards_mastery,
-                    },
-                    "score": total_score,
-                    "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
-                    "status": "graded",
-                }).eq("id", submission_id).execute()
-        except Exception as e:
-            logger.error("Failed to update Supabase submission: %s", str(e))
+        from backend.supabase_client import get_supabase
+        sb = get_supabase()
+        _safe_update_submission(sb, submission_id, {
+            "results": {
+                "questions": per_question_scores,
+                "score": total_score,
+                "total_points": total_possible,
+                "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
+                "feedback_summary": feedback_text,
+                "breakdown": breakdown,
+                "grading_source": "multipass",
+                "standards_mastery": standards_mastery,
+            },
+            "score": total_score,
+            "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
+            "status": "graded",
+        }, table_name=supabase_table)
 
         # Update student history for writing style tracking
         try:
@@ -545,6 +611,9 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
 
     except Exception as e:
         logger.error("Portal grading thread failed: %s", str(e))
+        # Page via BetterStack: @critical_path tags only ESCAPING exceptions,
+        # and this outer except swallows. Capture explicitly before cleanup.
+        sentry_sdk.capture_exception(e)
         # Update submission status to grading_failed so it doesn't stay in 'partial' forever
         try:
             from backend.supabase_client import get_supabase
