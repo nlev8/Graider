@@ -20,6 +20,40 @@ No monolith splitting, no RLS work, no new features. Those belong to Phase 3 and
 
 ---
 
+## SIS Compliance Guardrail (Clever, ClassLink, OneRoster)
+
+**This is a hard constraint on every task in this plan.** Graider's SIS integrations are certification-gated: behavior changes to OAuth flows, token handling, roster sync semantics, AGS grade-push, data-delete endpoints, or the shape of any documented HTTP contract risk breaking district onboarding or getting the tenant flagged.
+
+**Rules that apply to every task below:**
+
+1. **No behavior changes in `backend/routes/clever_routes.py`, `backend/routes/classlink_routes.py`, `backend/routes/oneroster_routes.py`, `backend/clever.py`, `backend/services/oneroster_gradebook.py`, or `backend/services/oneroster_client.py`** — only observability additions (`sentry_sdk.capture_exception(e)` inside existing `except` blocks).
+
+2. **No redirect-URL string changes**, even if they look like typos. The ClassLink `?classlink_error=no_code` vs Clever `?clever_error=missing_code` asymmetry is pinned by Phase 1 contract tests for a reason — frontend error handlers branch on literals.
+
+3. **No scope or endpoint changes.** The authorize URLs, scope sets, and token-exchange endpoints are locked by Phase 1 contract tests; Phase 2 must leave them untouched.
+
+4. **No roster-sync semantics changes.** Background sync threads (Clever, ClassLink, OneRoster) keep their current swallow-and-log behavior — Phase 2 adds `capture_exception` calls but does not propagate the exception upward, does not retry differently, and does not alter which records get written.
+
+5. **Exit-gate test requirement:** before Task 7 passes, run the full SIS contract suite explicitly and prove 100% green:
+   ```bash
+   source venv/bin/activate && python -m pytest \
+     tests/test_sso_contracts.py \
+     tests/test_clever_sso_contract.py \
+     tests/test_classlink_sso_contract.py \
+     tests/test_clever_sso.py \
+     tests/test_classlink_sso.py \
+     tests/test_clever_student_sso.py \
+     tests/test_oneroster.py \
+     -v 2>&1 | tail -30
+   ```
+   Any failure blocks the Phase 2 exit until resolved.
+
+6. **Data-delete endpoint discipline:** `POST /api/clever/delete-data` and its OneRoster sibling are FERPA-compliance surfaces. If Task 4/5 categorization flags any catch inside them as LEGACY or NEEDS_ALERT, the fix is **only** to add `capture_exception`, never to change return shape, status code, or the set of rows deleted. Re-review the Phase 1 `feat/classroom-safety-net` categorizations that flagged `clever_routes.py:672` as NEEDS_ALERT with this constraint in mind.
+
+7. **When in doubt, skip.** Any ambiguity about whether a change affects SIS compliance → leave the catch `UNCATEGORIZED` and defer to a future phase rather than risk a certification issue.
+
+---
+
 ## File Structure
 
 **Modify (hotfix 1):**
@@ -38,7 +72,7 @@ No monolith splitting, no RLS work, no new features. Those belong to Phase 3 and
 - `tests/characterization/fixtures/` — captured input/output pairs
 
 **Modify (Task 4):**
-- `docs/exception-audit-2026-04.md` — categorize remaining 703 rows
+- `docs/exception-audit-2026-04.md` — categorize remaining 704 rows
 
 **Modify (Task 5):**
 - Various files per-row from Task 4 output
@@ -160,6 +194,8 @@ Expected: `1 passed`.
 
 ### Step 1.5 — Add failing tests for the other three portal_grading catches
 
+**Note on `@critical_path`:** `run_portal_grading_thread` is **already** decorated with `@critical_path` as of Phase 1's observability v1 work (`portal_grading.py:209`). That decorator tags *escaping* exceptions. The current line-546 `except Exception as e: logger.error(...)` block **swallows** the exception — so `@critical_path` never fires on the grading-thread failure path today. The fix is to add an explicit `sentry_sdk.capture_exception(e)` inside that existing catch, not to add the decorator again.
+
 Append to `tests/test_portal_grading_alerting.py`:
 
 ```python
@@ -182,15 +218,32 @@ def test_supabase_submission_update_failure_captures_to_sentry():
         mock_sentry.capture_exception.assert_called_once()
 
 
-def test_grading_thread_top_level_failure_captures_to_sentry():
-    """The whole thread entry point (line 546 region) must capture any
-    escaping exception. Apply the @critical_path decorator on the
-    thread entry — Sentry's FlaskIntegration captures the exception
-    with severity=critical set."""
+def test_grading_thread_top_level_swallowed_exception_still_captures():
+    """The thread's outer except (portal_grading.py:546 region) swallows
+    the exception so finally{} can still clean up + mark grading_failed.
+    Because it's swallowed, @critical_path never fires. The fix: the
+    except body MUST call sentry_sdk.capture_exception(e) before the
+    cleanup sub-block. This test drives any grading-thread body to
+    raise, then asserts capture_exception was called exactly once."""
     from backend.services import portal_grading
-    # Pin that the function is decorated with critical_path.
-    assert hasattr(portal_grading.run_portal_grading_thread, "__wrapped__"), \
-        "run_portal_grading_thread must be wrapped by @critical_path"
+    # Force the grading body to blow up by patching one of its first
+    # inner calls (get_supabase is invoked early).
+    with patch("backend.services.portal_grading.sentry_sdk") as mock_sentry, \
+         patch("backend.services.portal_grading.get_supabase",
+               side_effect=RuntimeError("db boom")):
+        # Call with minimal stub args — we only need the body to enter
+        # and raise. Exact signature: (submission_id, assessment, answers,
+        # student_info, teacher_config, teacher_id).
+        portal_grading.run_portal_grading_thread(
+            submission_id="s1",
+            assessment={"questions": []},
+            answers={},
+            student_info={"student_name": "x", "student_id": "sid"},
+            teacher_config={},
+            teacher_id="t1",
+        )
+        # Must have captured the swallowed exception.
+        assert mock_sentry.capture_exception.call_count >= 1
 ```
 
 ### Step 1.6 — Run them, confirm they fail
@@ -209,23 +262,21 @@ In `backend/services/portal_grading.py`:
 - Around line 499 (the `save_results` call site): replace with `_safe_save_results(results, teacher_id)`.
 - Around line 523 (the Supabase `update(...).execute()` call site): replace with `_safe_update_submission(sb, submission_id, {...})`.
 
-### Step 1.8 — Decorate the grading thread entry with `@critical_path`
+### Step 1.8 — Add capture_exception to the swallowing top-level catch
 
-In `backend/services/portal_grading.py`, at the top:
-
-```python
-from backend.observability.sentry import critical_path
-```
-
-And on the `run_portal_grading_thread` definition:
+In `backend/services/portal_grading.py`, in the outer `except Exception as e:` block around line 546 (verify the exact line — it may have shifted after Step 1.7), insert a `sentry_sdk.capture_exception(e)` call **before** the existing cleanup sub-block:
 
 ```python
-@critical_path
-def run_portal_grading_thread(...):
-    ...
+    except Exception as e:
+        logger.error("Portal grading thread failed: %s", str(e))
+        sentry_sdk.capture_exception(e)  # NEW — @critical_path can't tag a swallowed exc
+        # Update submission status to grading_failed so it doesn't stay in 'partial' forever
+        try:
+            from backend.supabase_client import get_supabase
+            ...
 ```
 
-The existing line-546-region `except Exception as e: logger.error(...)` block stays as-is — `@critical_path` tags the escape; the existing `except` gracefully records partial state. Keep both.
+Do **not** remove `@critical_path` from the function definition — it stays as defense-in-depth for any future path that re-raises instead of swallowing.
 
 ### Step 1.9 — Run full alerting suite
 
@@ -302,11 +353,11 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 **Why now, not Phase 4:** RLS policies in Phase 4 assume schema truth. Enforcing access control on top of `status` write-paths the CHECK constraint rejects, or on a column (`teacher_id`) that exists in live DB but not in SQL of record, is reckless — first bad row makes the RLS-gated route look broken. Reconcile before hardening.
 
 **Files:**
-- Create: `supabase/migrations/20260413_phase2_schema_reconcile.sql`
-- Modify: `backend/services/portal_grading.py`
-- Modify: `backend/routes/student_account_routes.py`
-- Modify: `backend/routes/student_portal_routes.py`
+- Create: `backend/database/migration_2026_04_13_schema_reconcile.sql` (matches existing migration naming convention; the repo has no `supabase/migrations/` directory)
+- Modify: `supabase_student_portal_schema.sql` and/or `backend/database/supabase_teacher_schema.sql` — the SQL-of-record files — to match live after the migration lands
 - Test: `tests/test_schema_assertions.py` (update drift-documentation tests)
+
+**Pre-flight — this task depends on live DB access.** The plan's original Step 2.4 blocked on "apply to staging," but staging is deferred to Phase 4. Resolution for Phase 2: apply the migration directly to the single production Supabase instance, with a human-confirmed dry-run step (2.5) before the apply step (2.6). Wrap in a transaction so a failing CHECK-probe rolls back cleanly.
 
 ### Step 2.1 — Decide the `status` target set
 
@@ -320,10 +371,31 @@ Record the code-write set (expected: `partial`, `grading_deferred`, `grading_fai
 
 Document the decision at the top of the migration file.
 
-### Step 2.2 — Decide the `teacher_id` question
+### Step 2.2 — Discover the live type of `published_assessments.teacher_id`
+
+The SQL-of-record files disagree with each other on `teacher_id` typing (`UUID` in `supabase_student_portal_schema.sql` lines 7/29/66; `TEXT` in `backend/database/supabase_teacher_schema.sql` lines 13/26). Codifying the wrong type leaves the drift in place.
+
+Run against the **live** Supabase instance via the SQL editor or a one-off script:
+
+```sql
+SELECT column_name, data_type, udt_name, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'published_assessments'
+  AND column_name = 'teacher_id';
+```
+
+Record the result. Typical outcomes:
+- `data_type = 'uuid'` → migration uses `UUID`; SQL-of-record update goes in `supabase_student_portal_schema.sql`.
+- `data_type = 'text'` → migration uses `TEXT`; SQL-of-record update goes in the teacher-schema file.
+- column missing → Phase 1 schema test may have passed for a different reason; re-run the schema assertion suite and reopen.
+
+Capture the result in the migration file header as a comment so future readers know the intent.
+
+### Step 2.3 — Decide the `teacher_id` question
 
 Two options:
-- **Option A (recommended):** `teacher_id` exists in live DB (Phase 1 schema test proved this) — codify it in SQL of record and keep the live column. Minimal change.
+- **Option A (recommended):** `teacher_id` exists in live DB — codify it in SQL of record and keep the live column. Minimal change.
 - **Option B:** Drop the column from live DB — breaks anything reading it.
 
 Grep for reads first:
@@ -334,9 +406,9 @@ source venv/bin/activate && grep -rn "published_assessments" backend/ --include=
 
 If any read references `teacher_id`, Option A is the only safe choice.
 
-### Step 2.3 — Write the migration SQL
+### Step 2.4 — Write the migration SQL
 
-Create `supabase/migrations/20260413_phase2_schema_reconcile.sql`:
+Create `backend/database/migration_2026_04_13_schema_reconcile.sql`:
 
 ```sql
 -- Phase 2 Hotfix 2: Schema drift reconciliation.
@@ -347,10 +419,12 @@ Create `supabase/migrations/20260413_phase2_schema_reconcile.sql`:
 --    graded, returned). Union approach — no code changes required.
 --
 -- 2. Codifies published_assessments.teacher_id that already exists in
---    live DB (surfaced by tests/test_schema_assertions.py::
---    TestPublishedAssessmentsSchema::test_no_teacher_id_column on
---    2026-04-12). The column is present; we're making the SQL file
---    the source of record match live.
+--    live DB (surfaced by Phase 1 schema assertion tests).
+--    Type is {LIVE_TYPE_FROM_STEP_2_2} — filled in after the
+--    information_schema probe. Do NOT hardcode without verifying.
+--
+-- 3. The status-check expansion is verified by Step 2.7's live-DB
+--    CHECK probe (insert + rollback) — see that step for the test.
 
 BEGIN;
 
@@ -366,9 +440,9 @@ ALTER TABLE student_submissions
     ));
 
 -- 2. published_assessments.teacher_id — codify existing live column.
---    Idempotent: only adds if missing.
+--    REPLACE {LIVE_TYPE} with UUID or TEXT per Step 2.2. Idempotent.
 ALTER TABLE published_assessments
-    ADD COLUMN IF NOT EXISTS teacher_id text;
+    ADD COLUMN IF NOT EXISTS teacher_id {LIVE_TYPE};
 
 CREATE INDEX IF NOT EXISTS idx_published_assessments_teacher
     ON published_assessments(teacher_id);
@@ -376,51 +450,83 @@ CREATE INDEX IF NOT EXISTS idx_published_assessments_teacher
 COMMIT;
 ```
 
-### Step 2.4 — Apply the migration to staging (manual)
+Also update the matching SQL-of-record file (`supabase_student_portal_schema.sql` or `backend/database/supabase_teacher_schema.sql`) so greps find the column going forward. Keep the two in sync.
 
-```bash
-# Apply via Supabase SQL editor or supabase CLI against staging project.
-# Do NOT apply to production until Task 2 verify passes end-to-end.
-```
+### Step 2.5 — Dry-run verification (no apply)
 
-Pause here — ask the human for confirmation that staging has been migrated before proceeding.
+Open the Supabase SQL editor. Paste the migration inside an outer `BEGIN; ... ROLLBACK;` wrapper. Confirm every statement reports success without commit. Capture screenshots or a transcript in the PR description.
 
-### Step 2.5 — Update schema assertion tests to reflect the reconciled truth
+Pause here and ask the human for explicit "apply to production" approval before Step 2.6 — staging does not exist (Phase 4 work), so production is the only target.
+
+### Step 2.6 — Apply the migration to production (human-approved)
+
+After the human approves Step 2.5's dry-run transcript, run the migration for real (no ROLLBACK). Tail the Supabase logs for a clean exit.
+
+### Step 2.7 — Update schema assertion tests to reflect the reconciled truth
 
 In `tests/test_schema_assertions.py`, replace `test_no_teacher_id_column` with `test_teacher_id_column_exists`:
 
 ```python
 def test_teacher_id_column_exists(self):
     """published_assessments.teacher_id is codified in the SQL of record
-    as of migration 20260413. Query must succeed, not error."""
+    as of migration 2026_04_13. Query must succeed, not error."""
     sb = _get_live_supabase()
     result = sb.table("published_assessments").select("teacher_id").limit(0).execute()
     assert result is not None
 ```
 
-Update the docstring in `test_status_values_drift_is_documented` to note the drift is resolved and rename to `test_status_accepts_all_code_values`:
+Replace `test_status_values_drift_is_documented` with a **real constraint probe** that proves every code-written value is now accepted (not just that the column is queryable). The probe inserts one row per status into a disposable record, rolls it back, and asserts no `CheckViolation` was raised:
 
 ```python
-def test_status_accepts_all_code_values(self):
-    """After migration 20260413, student_submissions.status accepts
-    the union of the original 5 values and the 4 code-written values.
-    Proves the CHECK no longer rejects legitimate code writes."""
-    # Verified by the migration itself; this test just ensures the
-    # column is queryable.
+import uuid
+
+ALL_STATUS_VALUES = [
+    "in_progress", "submitted", "grading", "graded", "returned",
+    "partial", "grading_deferred", "grading_failed", "draft",
+]
+
+@pytest.mark.parametrize("status", ALL_STATUS_VALUES)
+def test_status_check_accepts(status):
+    """Live probe: CHECK constraint must accept every value the code
+    writes. Inserts a single minimal row, then deletes it. If the
+    CHECK rejects the value, supabase-py raises an APIError whose
+    message contains 'student_submissions_status_check' — that's the
+    failure mode this test guards against."""
     sb = _get_live_supabase()
-    result = sb.table("student_submissions").select("status").limit(1).execute()
-    assert result is not None
+    row_id = str(uuid.uuid4())
+    # Use a synthetic content_id and student_id that won't collide.
+    # If your FKs forbid bare inserts, use an RPC you've defined for
+    # probing; see docs/db-probes.md. (If that RPC doesn't exist
+    # yet, create it as part of this step — it's the only portable
+    # way to probe CHECK constraints via PostgREST.)
+    try:
+        sb.table("student_submissions").insert({
+            "id": row_id,
+            "student_id": str(uuid.uuid4()),
+            "content_id": str(uuid.uuid4()),
+            "status": status,
+            "answers": {},
+            "results": {},
+        }).execute()
+    finally:
+        sb.table("student_submissions").delete().eq("id", row_id).execute()
 ```
 
-### Step 2.6 — Run the live suite
+**Implementer note:** the insert above will fail on foreign-key constraints in a real DB. Two acceptable approaches:
+1. **RPC probe:** author a Supabase RPC `probe_status_check(p_status text)` that runs the insert in a `BEGIN ... ROLLBACK` block and returns success/error. Parametrize this test over the 9 values calling the RPC. This is portable and deferred-FK-safe.
+2. **Existing-row update:** pick a known sentinel `student_submissions.id` and UPDATE its status to each value, then restore. The UPDATE triggers the CHECK identically without needing FK rows.
+
+Approach 2 is simpler but requires a stable sentinel row; approach 1 is cleaner long-term. Pick one before implementing — don't leave the `try/finally` insert code above as-is, it will fail on FKs.
+
+### Step 2.8 — Run the live suite
 
 ```bash
-source venv/bin/activate && python -m pytest tests/test_schema_assertions.py -v -m live 2>&1 | tail -15
+source venv/bin/activate && python -m pytest tests/test_schema_assertions.py -v -m live 2>&1 | tail -20
 ```
 
-Expected: 10 passed, 0 skipped.
+Expected: 10 original tests + 9 parametrized status probes = 19 passed, 0 skipped, 0 failed. Any `CheckViolation` in the status probe means the migration didn't apply correctly.
 
-### Step 2.7 — Commit
+### Step 2.9 — Commit
 
 ```bash
 git add supabase/migrations/20260413_phase2_schema_reconcile.sql tests/test_schema_assertions.py
@@ -443,69 +549,134 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
 ## Task 3: Characterization tests for `stem_grading.py`
 
-**Why:** Feathers' rule. `stem_grading.py` is 5% covered and tangled. Before Phase 3 splits it, we need a black-box test harness that pins observable outputs for a set of known inputs. After the split, the same harness must still pass — that's the regression proof.
+**Why:** Feathers' rule. `stem_grading.py` is 5% covered. Before Phase 3 splits it, we need a black-box test harness that pins observable outputs for a set of known inputs. After the split, the same harness must still pass — that's the regression proof.
 
-**Approach:** Capture N real grading inputs+outputs as JSON fixtures (no live API calls — mock the OpenAI layer, pin the function's deterministic post-processing). Each fixture is one test case.
+**Key fact about the module:** `stem_grading.py` is a **pure deterministic grader** — it uses SymPy for symbolic math equivalence, tolerance-based comparisons for data tables, and Haversine distance for coordinates. **It does NOT call OpenAI.** Characterization is therefore simple input→output: no external mocks, no network, no randomness to patch. (An earlier draft of this plan assumed an `openai_client` mock seam — that seam does not exist.)
+
+**Approach:** Capture the public entry points' outputs on a curated set of inputs that exercise every observable branch. Fixtures are `(input, output)` JSON pairs. Each fixture becomes one parametrized test case.
 
 **Files:**
 - Create: `tests/characterization/__init__.py`
 - Create: `tests/characterization/test_stem_grading_golden.py`
-- Create: `tests/characterization/fixtures/stem_grading/` (~8-12 JSON fixtures)
+- Create: `tests/characterization/fixtures/stem_grading/` (~10–15 JSON fixtures)
 
-### Step 3.1 — Survey `stem_grading.py` entry points
+### Step 3.1 — Inventory public entry points and input-shape branches
 
 ```bash
-source venv/bin/activate && grep -n "^def \|^class " backend/services/stem_grading.py
+source venv/bin/activate && grep -n "^def [^_]" backend/services/stem_grading.py
 ```
 
-Pick the ~3 top-level entry points that route handlers actually call. Those are the characterization targets. Internal helpers are out of scope — if they change during the split, the top-level outputs shouldn't.
+Typical public surface (verify against current file):
+- `grade_math_expression(student_answer, correct_answer, ...)` — SymPy symbolic equivalence
+- `grade_data_table(student_rows, correct_rows, tolerance, ...)` — numerical tolerance
+- `grade_coordinate(student_coord, correct_coord, tolerance_miles, ...)` — Haversine distance
+
+For each, list every distinct **input shape** the function branches on. Example for `grade_math_expression`:
+- Plain number (`"3.14"`)
+- Percentage (`"50%"`)
+- Fraction (`"1/2"`)
+- Algebra with implicit multiplication (`"2x"`)
+- Caret exponent (`"x^2"`)
+- LaTeX (`"\\frac{1}{2}"`)
+- Unparseable garbage (`"@#$"`)
+- Empty string
+- Correct vs incorrect (for each of the above where applicable)
+
+Read `stem_grading.py` line-by-line and build this list **before** writing fixtures. Aim for one fixture per observable branch, not one per "question type."
 
 ### Step 3.2 — Write a fixture capture script
 
-Create `tests/characterization/capture_stem_fixtures.py` (not committed as a test — it's a one-shot tool):
+Create `tests/characterization/capture_stem_fixtures.py` (tooling, not a test):
 
 ```python
-"""One-shot: runs stem_grading entry points on a curated set of
-inputs with a mocked OpenAI layer, writes (input, output) JSON pairs
-to fixtures/stem_grading/. Re-run when adding coverage; never run
-from CI."""
+"""One-shot capture: runs stem_grading public entry points on the
+curated CASES list and writes (input, output) JSON pairs to
+fixtures/stem_grading/. Re-run when adding coverage. Never run from CI.
+
+stem_grading is a pure deterministic grader — no OpenAI, no network,
+no randomness. Just call the function and record the return value.
+"""
 import json, pathlib
-from unittest.mock import patch
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "stem_grading"
 FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
 
+# Each case: (name, fn_name, kwargs)
 CASES = [
-    # name, (entrypoint, kwargs, mocked_openai_response)
-    # Fill in 8-12 cases covering: MC correct, MC wrong, free-response
-    # correct, free-response partial, empty answer, malformed rubric,
-    # accommodation-present, accommodation-absent.
+    # --- grade_math_expression: plain numbers ---
+    ("math_plain_number_correct",     "grade_math_expression",
+        {"student_answer": "3.14", "correct_answer": "3.14"}),
+    ("math_plain_number_wrong",       "grade_math_expression",
+        {"student_answer": "3.15", "correct_answer": "3.14"}),
+
+    # --- grade_math_expression: fractions / percentages ---
+    ("math_fraction_equivalent",      "grade_math_expression",
+        {"student_answer": "1/2", "correct_answer": "0.5"}),
+    ("math_percent_equivalent",       "grade_math_expression",
+        {"student_answer": "50%", "correct_answer": "0.5"}),
+
+    # --- grade_math_expression: algebra + caret + LaTeX ---
+    ("math_implicit_mult",            "grade_math_expression",
+        {"student_answer": "2x", "correct_answer": "2*x"}),
+    ("math_caret_exponent",           "grade_math_expression",
+        {"student_answer": "x^2", "correct_answer": "x**2"}),
+    ("math_latex_equivalent",         "grade_math_expression",
+        {"student_answer": r"\frac{1}{2}", "correct_answer": "0.5"}),
+
+    # --- grade_math_expression: error paths ---
+    ("math_unparseable_garbage",      "grade_math_expression",
+        {"student_answer": "@#$", "correct_answer": "3.14"}),
+    ("math_empty_answer",             "grade_math_expression",
+        {"student_answer": "", "correct_answer": "3.14"}),
+
+    # --- grade_data_table: tolerance ---
+    ("table_within_tolerance",        "grade_data_table",
+        {"student_rows": [[1.01]], "correct_rows": [[1.0]], "tolerance": 0.05}),
+    ("table_outside_tolerance",       "grade_data_table",
+        {"student_rows": [[1.5]], "correct_rows": [[1.0]], "tolerance": 0.05}),
+    ("table_wrong_shape",             "grade_data_table",
+        {"student_rows": [[1, 2]], "correct_rows": [[1]], "tolerance": 0.01}),
+
+    # --- grade_coordinate: haversine ---
+    ("coord_exact_match",             "grade_coordinate",
+        {"student_coord": (40.0, -75.0), "correct_coord": (40.0, -75.0),
+         "tolerance_miles": 1.0}),
+    ("coord_within_tolerance",        "grade_coordinate",
+        {"student_coord": (40.001, -75.001), "correct_coord": (40.0, -75.0),
+         "tolerance_miles": 1.0}),
+    ("coord_outside_tolerance",       "grade_coordinate",
+        {"student_coord": (41.0, -75.0), "correct_coord": (40.0, -75.0),
+         "tolerance_miles": 1.0}),
 ]
 
 def run():
     from backend.services import stem_grading
-    for name, (fn_name, kwargs, fake_oai) in CASES:
+    for name, fn_name, kwargs in CASES:
         fn = getattr(stem_grading, fn_name)
-        with patch("backend.services.stem_grading.openai_client") as mock:
-            mock.chat.completions.create.return_value = fake_oai
-            out = fn(**kwargs)
+        out = fn(**kwargs)
         (FIXTURES_DIR / f"{name}.json").write_text(json.dumps(
-            {"input": {"fn": fn_name, "kwargs": kwargs, "oai": fake_oai},
-             "output": out}, indent=2, default=str))
+            {"input": {"fn": fn_name, "kwargs": kwargs}, "output": out},
+            indent=2, default=str))
 
 if __name__ == "__main__":
     run()
 ```
 
-Populate `CASES` by reading `stem_grading.py` and picking 8-12 inputs that exercise the branches you can see. The exact list is the implementer's call — the rule is: coverage of every `if`/`else` branch that produces a distinct output shape.
+**Before running:** verify the function names and kwargs in `CASES` match the actual public API of `stem_grading.py`. If the surface differs (e.g., the function is named `grade_math` not `grade_math_expression`, or takes different kwargs), edit `CASES` to match reality. Don't force the real API to match this plan's guesses.
 
-### Step 3.3 — Run the capture, commit the fixtures
+### Step 3.3 — Run the capture, hand-review each fixture
 
 ```bash
 source venv/bin/activate && python tests/characterization/capture_stem_fixtures.py && ls tests/characterization/fixtures/stem_grading/
 ```
 
-Manually eyeball each JSON file — if any output looks wrong (e.g., negative score, swallowed error message, empty feedback where the input clearly warrants one), that's a **latent bug**. STOP and raise it before pinning the "wrong" output as the golden truth.
+Eyeball every output. Red flags that indicate a latent bug to raise *before* pinning:
+- `grade` is `None` or negative where the inputs clearly warrant a numeric score
+- `correct` is `True` for obviously-wrong inputs
+- Error message leaks an internal traceback instead of a user-facing hint
+- SymPy `ImportError` surfaces (means sympy isn't installed in the venv — fix that, don't pin it)
+
+If a fixture looks wrong, STOP, open an issue, and exclude it from the pin until the underlying bug is discussed.
 
 ### Step 3.4 — Write the characterization test
 
@@ -515,13 +686,11 @@ Create `tests/characterization/test_stem_grading_golden.py`:
 """Characterization tests for stem_grading.
 
 For each fixture in fixtures/stem_grading/, re-run the entry point
-with the captured input + mocked OpenAI response and assert the
-output matches the captured output byte-for-byte. These tests PIN
-the current behavior so the Phase 3 monolith split can prove it
-preserved it.
+with the captured input and assert the output matches the captured
+output byte-for-byte. These tests PIN the current behavior so the
+Phase 3 monolith split can prove it preserved it.
 
-If a fixture's assertion breaks, there are three legitimate
-responses:
+If a fixture's assertion breaks, there are three legitimate responses:
   1. The split introduced a regression — fix the split.
   2. The split intentionally changed the output — re-capture the
      fixture in the same commit as the split, with a commit message
@@ -533,7 +702,6 @@ What's NOT legitimate: silently editing a fixture to make a failing
 test pass.
 """
 import json, pathlib
-from unittest.mock import patch
 
 import pytest
 
@@ -541,7 +709,8 @@ FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "stem_grading"
 
 
 def _load_fixtures():
-    return [(p.stem, json.loads(p.read_text())) for p in sorted(FIXTURES_DIR.glob("*.json"))]
+    return [(p.stem, json.loads(p.read_text()))
+            for p in sorted(FIXTURES_DIR.glob("*.json"))]
 
 
 @pytest.mark.parametrize("name,fixture", _load_fixtures())
@@ -549,22 +718,21 @@ def test_stem_grading_characterization(name, fixture):
     from backend.services import stem_grading
     fn = getattr(stem_grading, fixture["input"]["fn"])
     kwargs = fixture["input"]["kwargs"]
-    fake_oai = fixture["input"]["oai"]
-
-    with patch("backend.services.stem_grading.openai_client") as mock:
-        mock.chat.completions.create.return_value = fake_oai
-        out = fn(**kwargs)
-
+    # Tuple kwargs (e.g., coordinates) round-trip through JSON as lists.
+    # Convert back where needed so the call matches the original capture.
+    kwargs = {k: tuple(v) if isinstance(v, list) and fixture["input"]["fn"] == "grade_coordinate" else v
+              for k, v in kwargs.items()}
+    out = fn(**kwargs)
     assert out == fixture["output"], f"Characterization drift in fixture {name}"
 ```
 
 ### Step 3.5 — Run and verify green
 
 ```bash
-source venv/bin/activate && python -m pytest tests/characterization/ -v 2>&1 | tail -15
+source venv/bin/activate && python -m pytest tests/characterization/ -v 2>&1 | tail -20
 ```
 
-Expected: all parametrized cases pass. If any fail, your capture is non-deterministic (hidden time/randomness). Fix by patching the source of non-determinism before re-capturing.
+Expected: all parametrized cases pass. If any fail, the capture is non-deterministic (hidden floating-point variance, locale-dependent parsing, SymPy version drift). Fix the source of non-determinism — don't loosen the assertion to `pytest.approx` blindly; understand *why* it drifted first.
 
 ### Step 3.6 — Commit
 
@@ -585,7 +753,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
 ---
 
-## Task 4: Categorize the remaining 703 exception catches
+## Task 4: Categorize the remaining 704 exception catches
 
 **Leaner task — mechanical sweep.** The goal is a fully-annotated audit file, not perfection per row. Use the Task 3 Task 11 categorization patterns (from Phase 1) as the rubric; most new rows will fall into one bucket on sight.
 
@@ -635,9 +803,9 @@ Commit:
 
 ```bash
 git add docs/exception-audit-2026-04.md
-git commit -m "docs: complete exception audit (703 remaining catches categorized)
+git commit -m "docs: complete exception audit (704 remaining catches categorized)
 
-All 789 catches now carry a category. Phase 2 Task 5 fixes the LEGACY
+All 790 catches now carry a category. Phase 2 Task 5 fixes the LEGACY
 and NEEDS_ALERT buckets; INTENTIONAL stays as-is.
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
@@ -741,13 +909,27 @@ Expected: pass.
 
 ### Step 7.3 — Confirm exit criteria checklist
 
-- [ ] Hotfix 1 merged: 5 grading-critical catches capture to Sentry.
-- [ ] Hotfix 2 merged: schema drifts reconciled; `tests/test_schema_assertions.py` is 10 passed, 0 skipped.
-- [ ] Characterization harness green: `tests/characterization/test_stem_grading_golden.py` covers ≥ 8 fixtures, all passing.
-- [ ] `docs/exception-audit-2026-04.md` has zero `UNCATEGORIZED` rows.
+- [ ] Hotfix 1 merged: 5 grading-critical catches capture to Sentry (including the swallowing top-level at line 546).
+- [ ] Hotfix 2 merged: schema drifts reconciled; `tests/test_schema_assertions.py` passes (19 tests, 0 skipped) including the CHECK-constraint probe.
+- [ ] `published_assessments.teacher_id` type codified in SQL-of-record matches live DB type (verified in Step 2.2).
+- [ ] Characterization harness green: `tests/characterization/test_stem_grading_golden.py` covers ≥ 10 fixtures across `grade_math_expression`, `grade_data_table`, `grade_coordinate`, all passing deterministically (no `openai_client` mocks — the module is pure SymPy).
+- [ ] `docs/exception-audit-2026-04.md` has zero `UNCATEGORIZED` rows (baseline: 704 remaining after Phase 1).
 - [ ] All LEGACY + NEEDS_ALERT catches fixed.
 - [ ] Zero production modules at 0% coverage.
 - [ ] CI coverage floor = 35%.
+- [ ] **SIS compliance gate (see guardrail section above):** full SSO/roster contract suite green.
+      ```bash
+      source venv/bin/activate && python -m pytest \
+        tests/test_sso_contracts.py \
+        tests/test_clever_sso_contract.py \
+        tests/test_classlink_sso_contract.py \
+        tests/test_clever_sso.py \
+        tests/test_classlink_sso.py \
+        tests/test_clever_student_sso.py \
+        tests/test_oneroster.py \
+        -v 2>&1 | tail -5
+      ```
+      Expected: all passed, 0 failed. Any failure blocks Phase 2 exit.
 
 ### Step 7.4 — Commit + PR
 
