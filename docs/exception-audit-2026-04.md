@@ -178,7 +178,7 @@
 | `backend/routes/assignment_player_routes.py` | 574 | `Exception` | print + return | `_grade_with_ai` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 695 | `Exception` | return | `grade_question` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 958 | `(ValueError, TypeError)` | return | `grade_geometry` | INTENTIONAL |
-| `backend/routes/assignment_player_routes.py` | 1027 | `Exception` | return | `grade_math_equation` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1027 | `Exception` | return | `grade_math_equation` | LEGACY |
 | `backend/routes/assignment_player_routes.py` | 1056 | `Exception` | return | `grade_coordinates` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 1104 | `Exception` | return | `grade_data_table` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 1190 | `ImportError` | return | `grade_function_graph` | INTENTIONAL |
