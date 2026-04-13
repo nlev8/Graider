@@ -149,7 +149,7 @@
 | `backend/routes/analytics_routes.py` | 390 | `ImportError` | other | `get_analytics` | INTENTIONAL |
 | `backend/routes/analytics_routes.py` | 498 | `Exception` | log.exception + return | `get_analytics` | INTENTIONAL |
 | `backend/routes/analytics_routes.py` | 695 | `Exception` | pass | `export_district_report` | INTENTIONAL |
-| `backend/routes/analytics_routes.py` | 737 | `Exception` | pass | `export_district_report` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 737 | `Exception` | pass | `export_district_report` | LEGACY |
 | `backend/routes/analytics_routes.py` | 862 | `ImportError` | other | `cleanup_master_csv` | INTENTIONAL |
 | `backend/routes/analytics_routes.py` | 891 | `Exception` | log.exception + return | `cleanup_master_csv` | INTENTIONAL |
 | `backend/routes/analytics_routes.py` | 985 | `Exception` | log.exception + return | `cleanup_master_csv` | INTENTIONAL |
