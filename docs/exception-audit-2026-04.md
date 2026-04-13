@@ -213,7 +213,7 @@
 | `backend/routes/assistant_routes.py` | 90 | `Exception` | return | `_get_assistant_model` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 234 | `Exception` | log.warning | `_persist_conversation` | LEGACY |
 | `backend/routes/assistant_routes.py` | 246 | `Exception` | log.warning | `_load_conversation` | INTENTIONAL |
-| `backend/routes/assistant_routes.py` | 289 | `Exception` | other | `_load_user_manual` | INTENTIONAL |
+| `backend/routes/assistant_routes.py` | 289 | `Exception` | other | `_load_user_manual` | LEGACY |
 | `backend/routes/assistant_routes.py` | 304 | `ImportError` | return | `_extract_text_from_pdf` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 306 | `Exception` | return | `_extract_text_from_pdf` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 334 | `ImportError` | return | `_extract_text_from_docx` | INTENTIONAL |
@@ -224,9 +224,9 @@
 | `backend/routes/assistant_routes.py` | 533 | `Exception` | return | `_load_resource_content` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 545 | `Exception` | pass | `_load_rubric` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 576 | `Exception` | pass | `_load_assessment_templates` | INTENTIONAL |
-| `backend/routes/assistant_routes.py` | 712 | `Exception` | return | `_load_analytics_snapshot` | INTENTIONAL |
+| `backend/routes/assistant_routes.py` | 712 | `Exception` | return | `_load_analytics_snapshot` | LEGACY |
 | `backend/routes/assistant_routes.py` | 969 | `Exception` | pass | `_build_system_prompt` | INTENTIONAL |
-| `backend/routes/assistant_routes.py` | 1062 | `Exception` | pass | `_audit_log` | LEGACY |
+| `backend/routes/assistant_routes.py` | 1062 | `Exception` | pass | `_audit_log` | NEEDS_ALERT |
 | `backend/routes/assistant_routes.py` | 1127 | `Exception` | log.error | `_record_assistant_cost` | LEGACY |
 | `backend/routes/assistant_routes.py` | 1930 | `(FileNotFoundError, json.JSONDecodeError)` | return | `get_assistant_costs` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 2100 | `Exception` | pass | `get_voice_config` | INTENTIONAL |
@@ -234,13 +234,13 @@
 | `backend/routes/assistant_routes.py` | 599 | `Exception` | pass | `_load_analytics_snapshot` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 744 | `Exception` | pass | `_build_system_prompt` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 1094 | `(FileNotFoundError, json.JSONDecodeError)` | other | `_record_assistant_cost` | INTENTIONAL |
-| `backend/routes/assistant_routes.py` | 1964 | `Exception` | pass | `get_memory` | LEGACY |
+| `backend/routes/assistant_routes.py` | 1964 | `Exception` | pass | `get_memory` | NEEDS_ALERT |
 | `backend/routes/assistant_routes.py` | 1977 | `Exception` | log.exception + return | `clear_memory` | INTENTIONAL |
-| `backend/routes/assistant_routes.py` | 2039 | `Exception` | pass | `get_credentials` | LEGACY |
+| `backend/routes/assistant_routes.py` | 2039 | `Exception` | pass | `get_credentials` | NEEDS_ALERT |
 | `backend/routes/assistant_routes.py` | 2067 | `Exception` | pass | `load_portal_credentials` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 511 | `Exception` | other | `_load_resource_content` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 1409 | `Exception` | log.warning | `generate` | INTENTIONAL |
-| `backend/routes/assistant_routes.py` | 1814 | `Exception` | other | `generate` | INTENTIONAL |
+| `backend/routes/assistant_routes.py` | 1814 | `Exception` | other | `generate` | LEGACY |
 | `backend/routes/assistant_routes.py` | 449 | `Exception` | pass | `_load_resource_names` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 494 | `Exception` | pass | `_load_resource_content` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 630 | `(ValueError, TypeError)` | other | `_load_analytics_snapshot` | INTENTIONAL |
@@ -248,7 +248,7 @@
 | `backend/routes/assistant_routes.py` | 1424 | `queue.Empty` | other | `_flush_audio_queue` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 643 | `(ValueError, TypeError)` | pass | `_load_analytics_snapshot` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 1498 | `Exception` | pass | `generate` | INTENTIONAL |
-| `backend/routes/assistant_routes.py` | 1712 | `json.JSONDecodeError` | other | `generate` | INTENTIONAL |
+| `backend/routes/assistant_routes.py` | 1712 | `json.JSONDecodeError` | other | `generate` | LEGACY |
 | `backend/routes/assistant_routes.py` | 1844 | `queue.Empty` | other | `generate` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 1647 | `Exception` | pass | `generate` | LEGACY |
 | `backend/routes/assistant_routes.py` | 1655 | `Exception` | pass | `generate` | INTENTIONAL |
