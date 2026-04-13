@@ -92,7 +92,10 @@ CREATE TABLE IF NOT EXISTS student_submissions (
     percentage NUMERIC,
     letter_grade TEXT,
     status TEXT DEFAULT 'submitted' CHECK (status IN (
-        'in_progress', 'submitted', 'grading', 'graded', 'returned'
+        -- Original lifecycle states:
+        'in_progress', 'submitted', 'grading', 'graded', 'returned',
+        -- Portal grading states (widened 2026-04-13):
+        'partial', 'grading_deferred', 'grading_failed', 'draft'
     )),
     time_taken_seconds INTEGER,
     submitted_at TIMESTAMPTZ DEFAULT now(),
