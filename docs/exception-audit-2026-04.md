@@ -1,7 +1,7 @@
 # Exception Handler Audit — Graider Backend
 
-> Generated: 2026-04-12
-> Total handlers: 789
+> Generated: 2026-04-13
+> Total handlers: 790
 > Files scanned: 73
 
 ## Category Legend
@@ -491,31 +491,31 @@
 | `backend/routes/stripe_routes.py` | 205 | `stripe.error.SignatureVerificationError` | return | `stripe_webhook` | UNCATEGORIZED |
 | `backend/routes/stripe_routes.py` | 207 | `Exception` | log.error + return | `stripe_webhook` | UNCATEGORIZED |
 | `backend/routes/stripe_routes.py` | 261 | `Exception` | pass | `_sync_subscription_metadata` | UNCATEGORIZED |
-| `backend/routes/student_account_routes.py` | 144 | `Exception` | log.exception + return | `create_class` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 163 | `Exception` | log.exception + return | `list_classes` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 285 | `Exception` | log.exception + return | `sync_roster_to_class` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 312 | `Exception` | log.exception + return | `list_class_students` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 372 | `Exception` | log.exception + return | `publish_to_class` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 438 | `Exception` | log.exception + return | `get_portal_submissions` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 542 | `Exception` | log.exception + return | `grade_portal_submission` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 627 | `Exception` | log.exception + return | `student_login` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 674 | `Exception` | log.exception + return | `student_dashboard` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 731 | `Exception` | log.exception + return | `get_student_content` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 941 | `Exception` | log.exception + return | `submit_student_work` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 988 | `Exception` | return | `check_student_session` | LEGACY |
-| `backend/routes/student_account_routes.py` | 1091 | `Exception` | log.exception + return | `send_submission_confirmations` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 1128 | `Exception` | log.exception + return | `mark_confirmations_sent` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 1174 | `Exception` | log.exception + return | `student_resources` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 1219 | `Exception` | log.exception + return | `student_resource_content` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 1310 | `Exception` | log.exception + return | `save_submission_draft` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 1364 | `Exception` | log.exception + return | `get_submission_draft` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 434 | `Exception` | pass | `get_portal_submissions` | LEGACY |
-| `backend/routes/student_account_routes.py` | 832 | `Exception` | raise + return | `submit_student_work` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 975 | `Exception` | pass | `check_student_session` | LEGACY |
-| `backend/routes/student_account_routes.py` | 276 | `Exception` | append | `sync_roster_to_class` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 872 | `Exception` | log.warning | `submit_student_work` | NEEDS_ALERT |
-| `backend/routes/student_account_routes.py` | 907 | `Exception` | log.debug | `submit_student_work` | INTENTIONAL |
-| `backend/routes/student_account_routes.py` | 1048 | `Exception` | pass | `send_submission_confirmations` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 78 | `Exception` | log.warning + return | `_spawn_grading_thread_safe` | UNCATEGORIZED |
+| `backend/routes/student_account_routes.py` | 160 | `Exception` | log.exception + return | `create_class` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 179 | `Exception` | log.exception + return | `list_classes` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 301 | `Exception` | log.exception + return | `sync_roster_to_class` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 328 | `Exception` | log.exception + return | `list_class_students` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 388 | `Exception` | log.exception + return | `publish_to_class` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 454 | `Exception` | log.exception + return | `get_portal_submissions` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 558 | `Exception` | log.exception + return | `grade_portal_submission` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 643 | `Exception` | log.exception + return | `student_login` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 690 | `Exception` | log.exception + return | `student_dashboard` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 747 | `Exception` | log.exception + return | `get_student_content` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 951 | `Exception` | log.exception + return | `submit_student_work` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 998 | `Exception` | return | `check_student_session` | LEGACY |
+| `backend/routes/student_account_routes.py` | 1101 | `Exception` | log.exception + return | `send_submission_confirmations` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 1138 | `Exception` | log.exception + return | `mark_confirmations_sent` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 1184 | `Exception` | log.exception + return | `student_resources` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 1229 | `Exception` | log.exception + return | `student_resource_content` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 1320 | `Exception` | log.exception + return | `save_submission_draft` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 1374 | `Exception` | log.exception + return | `get_submission_draft` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 450 | `Exception` | pass | `get_portal_submissions` | LEGACY |
+| `backend/routes/student_account_routes.py` | 848 | `Exception` | raise + return | `submit_student_work` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 985 | `Exception` | pass | `check_student_session` | LEGACY |
+| `backend/routes/student_account_routes.py` | 292 | `Exception` | append | `sync_roster_to_class` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 917 | `Exception` | log.debug | `submit_student_work` | INTENTIONAL |
+| `backend/routes/student_account_routes.py` | 1058 | `Exception` | pass | `send_submission_confirmations` | INTENTIONAL |
 | `backend/routes/student_portal_routes.py` | 45 | `(ValueError, AttributeError)` | return | `_parse_ts` | INTENTIONAL |
 | `backend/routes/student_portal_routes.py` | 289 | `Exception` | log.exception + return | `publish_assessment` | INTENTIONAL |
 | `backend/routes/student_portal_routes.py` | 331 | `Exception` | log.exception + return | `save_assessment` | INTENTIONAL |
@@ -735,22 +735,23 @@
 | `backend/services/outlook_sender.py` | 355 | `Exception` | pass | `main` | UNCATEGORIZED |
 | `backend/services/outlook_sender.py` | 332 | `Exception` | pass | `main` | UNCATEGORIZED |
 | `backend/services/outlook_sender.py` | 337 | `Exception` | pass | `main` | UNCATEGORIZED |
-| `backend/services/portal_grading.py` | 36 | `(OSError, ValueError)` | pass | `<module>` | INTENTIONAL |
-| `backend/services/portal_grading.py` | 42 | `ImportError` | other | `<module>` | INTENTIONAL |
-| `backend/services/portal_grading.py` | 546 | `Exception` | log.error + log.info + pass | `run_portal_grading_thread` | NEEDS_ALERT |
-| `backend/services/portal_grading.py` | 160 | `Exception` | append + log.error | `grade_written_questions` | INTENTIONAL |
-| `backend/services/portal_grading.py` | 276 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
-| `backend/services/portal_grading.py` | 287 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
+| `backend/services/portal_grading.py` | 39 | `(OSError, ValueError)` | pass | `<module>` | INTENTIONAL |
+| `backend/services/portal_grading.py` | 54 | `(ImportError, AttributeError)` | log.warning + return | `_import_from_assignment_grader` | UNCATEGORIZED |
+| `backend/services/portal_grading.py` | 243 | `Exception` | log.error + return | `_safe_generate_feedback` | UNCATEGORIZED |
+| `backend/services/portal_grading.py` | 257 | `Exception` | log.error | `_safe_save_results` | UNCATEGORIZED |
+| `backend/services/portal_grading.py` | 278 | `Exception` | log.error | `_safe_update_submission` | UNCATEGORIZED |
+| `backend/services/portal_grading.py` | 612 | `Exception` | log.error + log.info + pass | `run_portal_grading_thread` | NEEDS_ALERT |
+| `backend/services/portal_grading.py` | 178 | `Exception` | append + log.error | `grade_written_questions` | INTENTIONAL |
+| `backend/services/portal_grading.py` | 350 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
+| `backend/services/portal_grading.py` | 361 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
+| `backend/services/portal_grading.py` | 404 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
+| `backend/services/portal_grading.py` | 568 | `Exception` | log.error | `run_portal_grading_thread` | NEEDS_ALERT |
+| `backend/services/portal_grading.py` | 606 | `Exception` | log.error | `run_portal_grading_thread` | NEEDS_ALERT |
+| `backend/services/portal_grading.py` | 315 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
 | `backend/services/portal_grading.py` | 330 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
-| `backend/services/portal_grading.py` | 474 | `Exception` | log.error | `run_portal_grading_thread` | NEEDS_ALERT |
-| `backend/services/portal_grading.py` | 499 | `Exception` | log.error | `run_portal_grading_thread` | NEEDS_ALERT |
-| `backend/services/portal_grading.py` | 523 | `Exception` | log.error | `run_portal_grading_thread` | NEEDS_ALERT |
-| `backend/services/portal_grading.py` | 540 | `Exception` | log.error | `run_portal_grading_thread` | INTENTIONAL |
-| `backend/services/portal_grading.py` | 241 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
-| `backend/services/portal_grading.py` | 256 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
-| `backend/services/portal_grading.py` | 557 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
-| `backend/services/portal_grading.py` | 266 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
-| `backend/services/portal_grading.py` | 422 | `ValueError` | pass | `run_portal_grading_thread` | INTENTIONAL |
+| `backend/services/portal_grading.py` | 626 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
+| `backend/services/portal_grading.py` | 340 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
+| `backend/services/portal_grading.py` | 496 | `ValueError` | pass | `run_portal_grading_thread` | INTENTIONAL |
 | `backend/services/seo_service.py` | 28 | `ImportError` | return | `_get_anthropic_client` | UNCATEGORIZED |
 | `backend/services/seo_service.py` | 50 | `json.JSONDecodeError` | return | `_call_haiku` | UNCATEGORIZED |
 | `backend/services/seo_service.py` | 52 | `Exception` | return | `_call_haiku` | UNCATEGORIZED |
