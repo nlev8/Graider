@@ -324,10 +324,10 @@
 | `backend/routes/email_routes.py` | 1460 | `Exception` | log.exception + return | `confirm_send` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 51 | `Exception` | pass | `send_emails` | NEEDS_ALERT |
 | `backend/routes/email_routes.py` | 267 | `Exception` | pass | `export_outlook_emails` | NEEDS_ALERT |
-| `backend/routes/email_routes.py` | 1219 | `Exception` | print | `mark_confirmations_sent_file` | LEGACY |
+| `backend/routes/email_routes.py` | 1219 | `Exception` | print | `mark_confirmations_sent_file` | NEEDS_ALERT |
 | `backend/routes/email_routes.py` | 1481 | `Exception` | pass | `confirm_send` | NEEDS_ALERT |
 | `backend/routes/email_routes.py` | 999 | `Exception` | pass | `send_confirmation_emails` | NEEDS_ALERT |
-| `backend/routes/email_routes.py` | 1494 | `Exception` | pass | `confirm_send` | LEGACY |
+| `backend/routes/email_routes.py` | 1494 | `Exception` | pass | `confirm_send` | NEEDS_ALERT |
 | `backend/routes/email_routes.py` | 890 | `Exception` | pass | `send_confirmation_emails` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 287 | `Exception` | print | `_sync_result_to_master_csv` | NEEDS_ALERT |
 | `backend/routes/grading_routes.py` | 371 | `Exception` | pass | `update_result` | NEEDS_ALERT |
