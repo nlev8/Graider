@@ -186,10 +186,21 @@ class TestAuthSessionMatrix:
         assert resp.status_code == 401
 
     def test_expired_session_returns_401_not_500(self, client):
-        """Invalid/expired student session token -> clean 401, never 500."""
-        resp = client.get(
-            "/api/student/session",
-            headers={"X-Student-Token": "expired-token-123"},
-        )
+        """Invalid/expired student session token -> clean 401, never 500.
+
+        Supabase is mocked so the lookup returns "no matching session" —
+        which is the failure mode this test actually cares about pinning.
+        Without the mock, CI (no SUPABASE_URL) short-circuits into a 500
+        from _get_supabase, which hides the real 401 contract.
+        """
+        from unittest.mock import MagicMock
+        mock_db = MagicMock()
+        mock_db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+        with patch("backend.routes.student_account_routes._get_supabase",
+                   return_value=mock_db):
+            resp = client.get(
+                "/api/student/session",
+                headers={"X-Student-Token": "expired-token-123"},
+            )
         assert resp.status_code in (401, 403)
         assert resp.status_code != 500
