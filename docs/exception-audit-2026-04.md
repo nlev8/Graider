@@ -547,30 +547,30 @@
 | `backend/scripts/populate_fl_standards.py` | 177 | `requests.RequestException` | print + return | `fetch_ixl_page` | UNCATEGORIZED |
 | `backend/scripts/populate_fl_standards.py` | 415 | `Exception` | print | `enrich_batch` | UNCATEGORIZED |
 | `backend/scripts/populate_fl_standards.py` | 315 | `ValueError` | append | `_code_sort_key` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 32 | `ImportError` | other | `<module>` | UNCATEGORIZED |
+| `backend/services/assistant_tools.py` | 32 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 140 | `(ValueError, TypeError)` | return | `_safe_int_score` | INTENTIONAL |
-| `backend/services/assistant_tools.py` | 242 | `Exception` | return | `_load_results` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 481 | `Exception` | pass | `_load_standards` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 743 | `Exception` | return | `_load_parent_contacts` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 804 | `Exception` | return | `_load_calendar` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 831 | `Exception` | return | `_load_memories` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 979 | `Exception` | return | `execute_tool` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 35 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 329 | `Exception` | pass | `_load_master_csv` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 463 | `Exception` | pass | `_load_settings` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 509 | `Exception` | pass | `_load_standards` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 786 | `Exception` | pass | `_load_saved_assignments` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 852 | `Exception` | pass | `_load_email_config` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 919 | `(ImportError, AttributeError)` | other | `_merge_submodules` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 420 | `Exception` | pass | `_load_period_class_levels` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 446 | `Exception` | pass | `_load_accommodations` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 673 | `Exception` | pass | `_load_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 725 | `Exception` | pass | `_load_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 961 | `Exception` | pass | `execute_tool` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 631 | `Exception` | pass | `_load_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 693 | `Exception` | pass | `_load_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 974 | `(ValueError, TypeError)` | other | `execute_tool` | UNCATEGORIZED |
-| `backend/services/assistant_tools.py` | 546 | `Exception` | pass | `_load_saved_lessons` | UNCATEGORIZED |
+| `backend/services/assistant_tools.py` | 242 | `Exception` | return | `_load_results` | LEGACY |
+| `backend/services/assistant_tools.py` | 481 | `Exception` | pass | `_load_standards` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 743 | `Exception` | return | `_load_parent_contacts` | LEGACY |
+| `backend/services/assistant_tools.py` | 804 | `Exception` | return | `_load_calendar` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 831 | `Exception` | return | `_load_memories` | LEGACY |
+| `backend/services/assistant_tools.py` | 979 | `Exception` | return | `execute_tool` | LEGACY |
+| `backend/services/assistant_tools.py` | 35 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 329 | `Exception` | pass | `_load_master_csv` | LEGACY |
+| `backend/services/assistant_tools.py` | 463 | `Exception` | pass | `_load_settings` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 509 | `Exception` | pass | `_load_standards` | LEGACY |
+| `backend/services/assistant_tools.py` | 786 | `Exception` | pass | `_load_saved_assignments` | LEGACY |
+| `backend/services/assistant_tools.py` | 852 | `Exception` | pass | `_load_email_config` | LEGACY |
+| `backend/services/assistant_tools.py` | 919 | `(ImportError, AttributeError)` | other | `_merge_submodules` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 420 | `Exception` | pass | `_load_period_class_levels` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 446 | `Exception` | pass | `_load_accommodations` | LEGACY |
+| `backend/services/assistant_tools.py` | 673 | `Exception` | pass | `_load_roster` | LEGACY |
+| `backend/services/assistant_tools.py` | 725 | `Exception` | pass | `_load_roster` | LEGACY |
+| `backend/services/assistant_tools.py` | 961 | `Exception` | pass | `execute_tool` | NEEDS_ALERT |
+| `backend/services/assistant_tools.py` | 631 | `Exception` | pass | `_load_roster` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 693 | `Exception` | pass | `_load_roster` | LEGACY |
+| `backend/services/assistant_tools.py` | 974 | `(ValueError, TypeError)` | other | `execute_tool` | INTENTIONAL |
+| `backend/services/assistant_tools.py` | 546 | `Exception` | pass | `_load_saved_lessons` | LEGACY |
 | `backend/services/assistant_tools_ai.py` | 113 | `ImportError` | return | `_get_anthropic_client` | UNCATEGORIZED |
 | `backend/services/assistant_tools_ai.py` | 135 | `json.JSONDecodeError` | return | `_call_haiku` | UNCATEGORIZED |
 | `backend/services/assistant_tools_ai.py` | 137 | `Exception` | return | `_call_haiku` | UNCATEGORIZED |
