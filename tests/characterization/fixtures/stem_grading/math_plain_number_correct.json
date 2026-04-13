@@ -8,7 +8,7 @@
   },
   "output": {
     "equivalent": true,
-    "method": "numeric",
+    "method": "numerical",
     "student_value": 3.14,
     "correct_value": 3.14
   }

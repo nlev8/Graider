@@ -53,7 +53,7 @@ CASES = [
         {"student_answer": "2/3", "correct_answer": "0.6666666667"}),
 
     # ============================================================
-    # grade_math_question — 8 branches
+    # grade_math_question — 9 branches
     # ============================================================
     ("question_math_empty_response",        "grade_math_question",
         # Pins the "no `correct` key" contract on early return.
@@ -69,14 +69,24 @@ CASES = [
         {"question": {"correctAnswer": "x**2", "acceptEquivalent": True,
                        "showWork": False, "points": 5},
          "student_response": "x^2"}),
+    ("question_math_equivalent_plain_numeric", "grade_math_question",
+        # Plain-number fast path via grade_math_question. Prior to the
+        # fix at stem_grading.py:161/168 this path returned
+        # method='numeric' and the :274 consumer's `== 'numerical'`
+        # check never matched — so the "numerically equivalent"
+        # feedback was missing. After the fix the feedback fires.
+        # Uses the same 3.14 vs 3.14 input as math_plain_number_correct
+        # to specifically target the plain-number fast path (NOT the
+        # fraction-vs-decimal numerical fallback covered by
+        # question_math_equivalent_numerical below).
+        {"question": {"correctAnswer": "3.14", "acceptEquivalent": True,
+                       "showWork": False, "points": 5},
+         "student_response": "3.14"}),
     ("question_math_equivalent_numerical",  "grade_math_question",
-        # Fraction vs decimal approximation → SymPy routes through
-        # the numerical tolerance fallback (method='numerical'), which
-        # triggers the "Your answer is numerically equivalent" feedback
-        # at stem_grading.py:275. NOTE: there's ALSO a 'numeric' return
-        # value (plain-number fast path) whose feedback branch at :274
-        # IS dead code due to the 'numeric' vs 'numerical' typo — but
-        # the numerical branch hit here is reachable.
+        # Fraction vs decimal approximation → SymPy routes through the
+        # numerical tolerance fallback (method='numerical'). Pairs with
+        # question_math_equivalent_plain_numeric above to pin BOTH
+        # code paths that produce method='numerical'.
         {"question": {"correctAnswer": "0.6666666667", "acceptEquivalent": True,
                        "showWork": False, "points": 5},
          "student_response": "2/3"}),
@@ -218,6 +228,7 @@ def run():
                 {"input": {"fn": fn_name, "kwargs": kwargs}, "output": out},
                 indent=2,
             )
+            + "\n"
         )
         written += 1
         print(f"  wrote {name}")
