@@ -582,15 +582,15 @@
 | `backend/services/assistant_tools_automation.py` | 17 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/services/assistant_tools_automation.py` | 105 | `Exception` | pass | `list_automations_tool` | UNCATEGORIZED |
 | `backend/services/assistant_tools_automation.py` | 192 | `Exception` | pass | `run_automation_tool` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 78 | `Exception` | append + log.error + log.info + log.warning | `_load_behavior_events` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 188 | `Exception` | return | `_load_settings` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 198 | `Exception` | return | `_load_parent_contacts` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 329 | `Exception` | return | `debug_behavior` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 617 | `Exception` | log.warning + return | `_generate_email_ai` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 855 | `Exception` | pass | `send_behavior_email` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 865 | `Exception` | pass | `send_behavior_email` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 108 | `Exception` | log.error | `_load_behavior_events` | UNCATEGORIZED |
-| `backend/services/assistant_tools_behavior.py` | 139 | `Exception` | pass | `_load_behavior_events` | UNCATEGORIZED |
+| `backend/services/assistant_tools_behavior.py` | 78 | `Exception` | append + log.error + log.info + log.warning | `_load_behavior_events` | INTENTIONAL |
+| `backend/services/assistant_tools_behavior.py` | 188 | `Exception` | return | `_load_settings` | LEGACY |
+| `backend/services/assistant_tools_behavior.py` | 198 | `Exception` | return | `_load_parent_contacts` | NEEDS_ALERT |
+| `backend/services/assistant_tools_behavior.py` | 329 | `Exception` | return | `debug_behavior` | INTENTIONAL |
+| `backend/services/assistant_tools_behavior.py` | 617 | `Exception` | log.warning + return | `_generate_email_ai` | INTENTIONAL |
+| `backend/services/assistant_tools_behavior.py` | 855 | `Exception` | pass | `send_behavior_email` | NEEDS_ALERT |
+| `backend/services/assistant_tools_behavior.py` | 865 | `Exception` | pass | `send_behavior_email` | NEEDS_ALERT |
+| `backend/services/assistant_tools_behavior.py` | 108 | `Exception` | log.error | `_load_behavior_events` | LEGACY |
+| `backend/services/assistant_tools_behavior.py` | 139 | `Exception` | pass | `_load_behavior_events` | INTENTIONAL |
 | `backend/services/assistant_tools_communication.py` | 395 | `Exception` | pass | `generate_parent_conference_notes` | UNCATEGORIZED |
 | `backend/services/assistant_tools_data.py` | 16 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/services/assistant_tools_data.py` | 68 | `Exception` | return | `_load_memories` | UNCATEGORIZED |
