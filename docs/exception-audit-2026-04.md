@@ -297,7 +297,7 @@
 | `backend/routes/document_routes.py` | 107 | `ImportError` | append + return | `_parse_docx` | UNCATEGORIZED |
 | `backend/routes/document_routes.py` | 201 | `ImportError` | return | `_parse_pdf` | UNCATEGORIZED |
 | `backend/routes/document_routes.py` | 91 | `Exception` | pass | `_parse_docx` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 136 | `ImportError` | return | `send_emails` | UNCATEGORIZED |
+| `backend/routes/email_routes.py` | 136 | `ImportError` | return | `send_emails` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 138 | `Exception` | log.exception + return | `send_emails` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 164 | `Exception` | log.exception + return | `test_email` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 193 | `Exception` | log.exception + return | `email_status` | INTENTIONAL |
@@ -307,28 +307,28 @@
 | `backend/routes/email_routes.py` | 616 | `Exception` | log.exception + return | `outlook_login` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 1061 | `Exception` | log.exception + return | `send_confirmation_emails` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 1153 | `Exception` | log.exception + return | `pending_confirmations` | INTENTIONAL |
-| `backend/routes/email_routes.py` | 1175 | `Exception` | print | `_save_confirmed_filenames` | UNCATEGORIZED |
+| `backend/routes/email_routes.py` | 1175 | `Exception` | print | `_save_confirmed_filenames` | LEGACY |
 | `backend/routes/email_routes.py` | 1229 | `Exception` | log.exception + return | `mark_confirmations_sent_file` | INTENTIONAL |
-| `backend/routes/email_routes.py` | 1356 | `Exception` | pass | `_read_focus_comms_output` | UNCATEGORIZED |
+| `backend/routes/email_routes.py` | 1356 | `Exception` | pass | `_read_focus_comms_output` | NEEDS_ALERT |
 | `backend/routes/email_routes.py` | 1390 | `Exception` | log.exception + return | `send_focus_comms` | INTENTIONAL |
-| `backend/routes/email_routes.py` | 284 | `Exception` | pass | `export_outlook_emails` | UNCATEGORIZED |
+| `backend/routes/email_routes.py` | 284 | `Exception` | pass | `export_outlook_emails` | LEGACY |
 | `backend/routes/email_routes.py` | 456 | `json.JSONDecodeError` | pass | `_read_outlook_output` | INTENTIONAL |
-| `backend/routes/email_routes.py` | 840 | `ImportError` | other | `send_confirmation_emails` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 865 | `Exception` | other | `send_confirmation_emails` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 1091 | `ImportError` | other | `pending_confirmations` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 1108 | `Exception` | pass | `pending_confirmations` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 1116 | `Exception` | other | `pending_confirmations` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 1164 | `Exception` | pass | `_load_confirmed_filenames` | UNCATEGORIZED |
+| `backend/routes/email_routes.py` | 840 | `ImportError` | other | `send_confirmation_emails` | INTENTIONAL |
+| `backend/routes/email_routes.py` | 865 | `Exception` | other | `send_confirmation_emails` | INTENTIONAL |
+| `backend/routes/email_routes.py` | 1091 | `ImportError` | other | `pending_confirmations` | INTENTIONAL |
+| `backend/routes/email_routes.py` | 1108 | `Exception` | pass | `pending_confirmations` | INTENTIONAL |
+| `backend/routes/email_routes.py` | 1116 | `Exception` | other | `pending_confirmations` | INTENTIONAL |
+| `backend/routes/email_routes.py` | 1164 | `Exception` | pass | `_load_confirmed_filenames` | LEGACY |
 | `backend/routes/email_routes.py` | 1349 | `json.JSONDecodeError` | pass | `_read_focus_comms_output` | INTENTIONAL |
-| `backend/routes/email_routes.py` | 1452 | `Exception` | pass | `confirm_send` | UNCATEGORIZED |
+| `backend/routes/email_routes.py` | 1452 | `Exception` | pass | `confirm_send` | NEEDS_ALERT |
 | `backend/routes/email_routes.py` | 1460 | `Exception` | log.exception + return | `confirm_send` | INTENTIONAL |
-| `backend/routes/email_routes.py` | 51 | `Exception` | pass | `send_emails` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 267 | `Exception` | pass | `export_outlook_emails` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 1219 | `Exception` | print | `mark_confirmations_sent_file` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 1481 | `Exception` | pass | `confirm_send` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 999 | `Exception` | pass | `send_confirmation_emails` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 1494 | `Exception` | pass | `confirm_send` | UNCATEGORIZED |
-| `backend/routes/email_routes.py` | 890 | `Exception` | pass | `send_confirmation_emails` | UNCATEGORIZED |
+| `backend/routes/email_routes.py` | 51 | `Exception` | pass | `send_emails` | NEEDS_ALERT |
+| `backend/routes/email_routes.py` | 267 | `Exception` | pass | `export_outlook_emails` | NEEDS_ALERT |
+| `backend/routes/email_routes.py` | 1219 | `Exception` | print | `mark_confirmations_sent_file` | LEGACY |
+| `backend/routes/email_routes.py` | 1481 | `Exception` | pass | `confirm_send` | NEEDS_ALERT |
+| `backend/routes/email_routes.py` | 999 | `Exception` | pass | `send_confirmation_emails` | NEEDS_ALERT |
+| `backend/routes/email_routes.py` | 1494 | `Exception` | pass | `confirm_send` | LEGACY |
+| `backend/routes/email_routes.py` | 890 | `Exception` | pass | `send_confirmation_emails` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 287 | `Exception` | print | `_sync_result_to_master_csv` | NEEDS_ALERT |
 | `backend/routes/grading_routes.py` | 371 | `Exception` | pass | `update_result` | NEEDS_ALERT |
 | `backend/routes/grading_routes.py` | 435 | `ImportError` | return | `grade_math` | INTENTIONAL |
