@@ -62,7 +62,8 @@ No monolith splitting, no RLS work, no new features. Those belong to Phase 3 and
 
 **Modify (hotfix 2):** Hotfix 2 is **schema-only** — the approach chosen in Task 2 (union-widen the CHECK constraint, codify the already-live `teacher_id` column) requires zero code changes in the grading path. Do not rewrite status-write sites in `portal_grading.py`, `student_account_routes.py`, or `student_portal_routes.py` — those paths already produce values the migration will accept once applied.
 - Create: `backend/database/migration_2026_04_13_schema_reconcile.sql`
-- Modify: the SQL-of-record files (`supabase_student_portal_schema.sql` and/or `backend/database/supabase_teacher_schema.sql`) to match live after migration applies
+- Modify: `backend/database/supabase_schema.sql` — the SQL-of-record file that defines `published_assessments` and `student_submissions`. Update the `published_assessments` CREATE TABLE to include `teacher_id` (type per Step 2.2 discovery) and widen the `student_submissions.status` CHECK to the union set.
+- Modify: `cloud_migration.sql` — also defines `published_assessments`; keep in sync with `backend/database/supabase_schema.sql` or greps will find divergence.
 - Modify: `tests/test_schema_assertions.py` (drift docs + CHECK probe)
 
 **Create (Task 3):**
@@ -353,7 +354,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `backend/database/migration_2026_04_13_schema_reconcile.sql` (matches existing migration naming convention; the repo has no `supabase/migrations/` directory)
-- Modify: `supabase_student_portal_schema.sql` and/or `backend/database/supabase_teacher_schema.sql` — the SQL-of-record files — to match live after the migration lands
+- Modify: `backend/database/supabase_schema.sql` and `cloud_migration.sql` — the two files that define `published_assessments` + `student_submissions`. Keep them in sync with each other and with the live DB after the migration applies.
 - Test: `tests/test_schema_assertions.py` (update drift-documentation tests)
 
 **Pre-flight — this task depends on live DB access.** The plan's original Step 2.4 blocked on "apply to staging," but staging is deferred to Phase 4. Resolution for Phase 2: apply the migration directly to the single production Supabase instance, with a human-confirmed dry-run step (2.5) before the apply step (2.6). Wrap in a transaction so a failing CHECK-probe rolls back cleanly.
@@ -372,7 +373,7 @@ Document the decision at the top of the migration file.
 
 ### Step 2.2 — Discover the live type of `published_assessments.teacher_id`
 
-The SQL-of-record files disagree with each other on `teacher_id` typing (`UUID` in `supabase_student_portal_schema.sql` lines 7/29/66; `TEXT` in `backend/database/supabase_teacher_schema.sql` lines 13/26). Codifying the wrong type leaves the drift in place.
+`published_assessments.teacher_id` is missing from the SQL-of-record entirely — it lives in `backend/database/supabase_schema.sql` and `cloud_migration.sql`, neither of which currently declares a `teacher_id` column on that table, yet the live DB has one (Phase 1 schema assertion surfaced this). We need to discover what type live is actually using before codifying. Note: the `teacher_id` typing disagreement elsewhere in the repo (UUID in `supabase_student_portal_schema.sql` for the `students`/`classes` tables; TEXT in `backend/database/supabase_teacher_schema.sql` for `teacher_data`) is a *different* question and does not bind this decision — those columns belong to other tables.
 
 Run against the **live** Supabase instance via the SQL editor or a one-off script:
 
@@ -385,8 +386,8 @@ WHERE table_schema = 'public'
 ```
 
 Record the result. Typical outcomes:
-- `data_type = 'uuid'` → migration uses `UUID`; SQL-of-record update goes in `supabase_student_portal_schema.sql`.
-- `data_type = 'text'` → migration uses `TEXT`; SQL-of-record update goes in the teacher-schema file.
+- `data_type = 'uuid'` → migration uses `UUID`; add `teacher_id UUID` to the `published_assessments` CREATE in both `backend/database/supabase_schema.sql` and `cloud_migration.sql`.
+- `data_type = 'text'` → migration uses `TEXT`; add `teacher_id TEXT` to the same two files.
 - column missing → Phase 1 schema test may have passed for a different reason; re-run the schema assertion suite and reopen.
 
 Capture the result in the migration file header as a comment so future readers know the intent.
@@ -449,7 +450,7 @@ CREATE INDEX IF NOT EXISTS idx_published_assessments_teacher
 COMMIT;
 ```
 
-Also update the matching SQL-of-record file (`supabase_student_portal_schema.sql` or `backend/database/supabase_teacher_schema.sql`) so greps find the column going forward. Keep the two in sync.
+Also update the two SQL-of-record files that define `published_assessments` and `student_submissions` — `backend/database/supabase_schema.sql` and `cloud_migration.sql` — so they match live. Update both in the same commit so they don't drift from each other.
 
 ### Step 2.5 — Dry-run verification (no apply)
 
@@ -528,7 +529,7 @@ Expected: 10 original tests + 9 parametrized status probes = 19 passed, 0 skippe
 ### Step 2.9 — Commit
 
 ```bash
-git add backend/database/migration_2026_04_13_schema_reconcile.sql tests/test_schema_assertions.py supabase_student_portal_schema.sql backend/database/supabase_teacher_schema.sql
+git add backend/database/migration_2026_04_13_schema_reconcile.sql backend/database/supabase_schema.sql cloud_migration.sql tests/test_schema_assertions.py
 git commit -m "fix(schema): reconcile status CHECK + teacher_id drift
 
 Phase 2 Hotfix 2. Closes two drifts surfaced during Phase 1:
@@ -633,38 +634,50 @@ CASES = [
     ("math_empty_answer",           "check_math_equivalence",
         {"student_answer": "", "correct_answer": "3.14"}),
 
-    # --- grade_math_question: question-level wrapper ---
+    # --- grade_math_question: wrapper (reads correctAnswer,
+    #     acceptEquivalent, showWork, points from question dict;
+    #     student_response is a plain string) ---
     ("question_math_correct",       "grade_math_question",
-        {"question": {"question_text": "What is 2+2?", "correct_answer": "4",
-                       "points": 5, "tolerance": 0.001},
+        {"question": {"correctAnswer": "4", "acceptEquivalent": True,
+                       "showWork": False, "points": 5},
          "student_response": "4"}),
     ("question_math_wrong",         "grade_math_question",
-        {"question": {"question_text": "What is 2+2?", "correct_answer": "4",
-                       "points": 5, "tolerance": 0.001},
+        {"question": {"correctAnswer": "4", "acceptEquivalent": True,
+                       "showWork": False, "points": 5},
          "student_response": "5"}),
+    ("question_math_empty",         "grade_math_question",
+        {"question": {"correctAnswer": "4", "acceptEquivalent": True,
+                       "showWork": False, "points": 5},
+         "student_response": ""}),
 
-    # --- grade_data_table: tolerance_percent ---
+    # --- grade_data_table: tables use {'data': [[...]]} (with optional
+    #     'headers' and 'units'), NOT {'rows': ...} ---
     ("table_within_tolerance",      "grade_data_table",
-        {"expected_table": {"rows": [[1.0]]},
-         "student_table":  {"rows": [[1.01]]},
+        {"expected_table": {"data": [[1.0]]},
+         "student_table":  {"data": [[1.01]]},
          "tolerance_percent": 5.0}),
     ("table_outside_tolerance",     "grade_data_table",
-        {"expected_table": {"rows": [[1.0]]},
-         "student_table":  {"rows": [[1.5]]},
+        {"expected_table": {"data": [[1.0]]},
+         "student_table":  {"data": [[1.5]]},
+         "tolerance_percent": 5.0}),
+    ("table_row_count_mismatch",    "grade_data_table",
+        {"expected_table": {"data": [[1.0], [2.0]]},
+         "student_table":  {"data": [[1.0]]},
          "tolerance_percent": 5.0}),
 
-    # --- grade_coordinate_question: haversine ---
+    # --- grade_coordinate_question: uses {'latitude': ..., 'longitude': ...},
+    #     NOT {'lat': ..., 'lon': ...} ---
     ("coord_exact_match",           "grade_coordinate_question",
-        {"expected": {"lat": 40.0, "lon": -75.0},
-         "student":  {"lat": 40.0, "lon": -75.0},
+        {"expected": {"latitude": 40.0, "longitude": -75.0},
+         "student":  {"latitude": 40.0, "longitude": -75.0},
          "tolerance_km": 1.0}),
     ("coord_within_tolerance",      "grade_coordinate_question",
-        {"expected": {"lat": 40.0,   "lon": -75.0},
-         "student":  {"lat": 40.001, "lon": -75.001},
+        {"expected": {"latitude": 40.0,   "longitude": -75.0},
+         "student":  {"latitude": 40.001, "longitude": -75.001},
          "tolerance_km": 1.0}),
     ("coord_outside_tolerance",     "grade_coordinate_question",
-        {"expected": {"lat": 40.0, "lon": -75.0},
-         "student":  {"lat": 41.0, "lon": -75.0},
+        {"expected": {"latitude": 40.0, "longitude": -75.0},
+         "student":  {"latitude": 41.0, "longitude": -75.0},
          "tolerance_km": 1.0}),
 
     # --- grade_place_name: fuzzy match ---
@@ -748,7 +761,7 @@ def test_stem_grading_characterization(name, fixture):
     # Tuple kwargs (e.g., coordinates) round-trip through JSON as lists.
     # Convert back where needed so the call matches the original capture.
     # Nothing in the current CASES list needs tuple-reconstruction —
-    # coordinates are passed as dicts ({"lat": ..., "lon": ...}), place
+    # coordinates are passed as dicts ({"latitude": ..., "longitude": ...}), place
     # names as lists, table rows as nested lists — all round-trip through
     # JSON unchanged. If you add a case that uses tuples (e.g. for a
     # legacy signature), convert it back here before calling the fn.
