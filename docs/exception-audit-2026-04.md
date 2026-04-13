@@ -347,10 +347,10 @@
 | `backend/routes/grading_routes.py` | 1262 | `Exception` | log.exception + return | `get_ell_students` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 1387 | `Exception` | pass | `_build_student_name_lookup` | LEGACY |
 | `backend/routes/grading_routes.py` | 1509 | `Exception` | print | `migrate_student_names` | NEEDS_ALERT |
-| `backend/routes/grading_routes.py` | 163 | `Exception` | pass | `clear_results` | LEGACY |
-| `backend/routes/grading_routes.py` | 182 | `Exception` | print | `clear_results` | LEGACY |
-| `backend/routes/grading_routes.py` | 204 | `Exception` | pass | `clear_results` | LEGACY |
-| `backend/routes/grading_routes.py` | 212 | `Exception` | print | `clear_results` | LEGACY |
+| `backend/routes/grading_routes.py` | 163 | `Exception` | pass | `clear_results` | NEEDS_ALERT |
+| `backend/routes/grading_routes.py` | 182 | `Exception` | print | `clear_results` | NEEDS_ALERT |
+| `backend/routes/grading_routes.py` | 204 | `Exception` | pass | `clear_results` | NEEDS_ALERT |
+| `backend/routes/grading_routes.py` | 212 | `Exception` | print | `clear_results` | NEEDS_ALERT |
 | `backend/routes/grading_routes.py` | 395 | `Exception` | log.warning | `update_result` | LEGACY |
 | `backend/routes/grading_routes.py` | 628 | `Exception` | pass | `export_focus_csv` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 669 | `Exception` | pass | `export_focus_csv` | INTENTIONAL |
