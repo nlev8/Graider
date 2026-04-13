@@ -40,9 +40,9 @@ No monolith splitting, no RLS work, no new features. Those belong to Phase 3 and
      tests/test_sso_contracts.py \
      tests/test_clever_sso_contract.py \
      tests/test_classlink_sso_contract.py \
-     tests/test_clever_sso.py \
+     tests/test_oneroster_gradebook.py \
      tests/test_classlink_sso.py \
-     tests/test_clever_student_sso.py \
+     tests/test_oneroster_sync_grades.py \
      tests/test_oneroster.py \
      -v 2>&1 | tail -30
    ```
@@ -60,11 +60,10 @@ No monolith splitting, no RLS work, no new features. Those belong to Phase 3 and
 - `backend/services/portal_grading.py` — wire 4 grading-critical catches to Sentry
 - `backend/routes/student_account_routes.py:872` — wire grading-thread spawn failure
 
-**Modify (hotfix 2):**
-- `backend/services/portal_grading.py` — normalize `status` writes to the CHECK constraint set
-- `backend/routes/student_account_routes.py` — same
-- `backend/routes/student_portal_routes.py` — same
-- One of: new Supabase migration SQL OR code removal of `teacher_id` references on `published_assessments` (decision in Task 2 Step 1)
+**Modify (hotfix 2):** Hotfix 2 is **schema-only** — the approach chosen in Task 2 (union-widen the CHECK constraint, codify the already-live `teacher_id` column) requires zero code changes in the grading path. Do not rewrite status-write sites in `portal_grading.py`, `student_account_routes.py`, or `student_portal_routes.py` — those paths already produce values the migration will accept once applied.
+- Create: `backend/database/migration_2026_04_13_schema_reconcile.sql`
+- Modify: the SQL-of-record files (`supabase_student_portal_schema.sql` and/or `backend/database/supabase_teacher_schema.sql`) to match live after migration applies
+- Modify: `tests/test_schema_assertions.py` (drift docs + CHECK probe)
 
 **Create (Task 3):**
 - `tests/characterization/__init__.py`
@@ -529,7 +528,7 @@ Expected: 10 original tests + 9 parametrized status probes = 19 passed, 0 skippe
 ### Step 2.9 — Commit
 
 ```bash
-git add supabase/migrations/20260413_phase2_schema_reconcile.sql tests/test_schema_assertions.py
+git add backend/database/migration_2026_04_13_schema_reconcile.sql tests/test_schema_assertions.py supabase_student_portal_schema.sql backend/database/supabase_teacher_schema.sql
 git commit -m "fix(schema): reconcile status CHECK + teacher_id drift
 
 Phase 2 Hotfix 2. Closes two drifts surfaced during Phase 1:
@@ -566,12 +565,15 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 source venv/bin/activate && grep -n "^def [^_]" backend/services/stem_grading.py
 ```
 
-Typical public surface (verify against current file):
-- `grade_math_expression(student_answer, correct_answer, ...)` — SymPy symbolic equivalence
-- `grade_data_table(student_rows, correct_rows, tolerance, ...)` — numerical tolerance
-- `grade_coordinate(student_coord, correct_coord, tolerance_miles, ...)` — Haversine distance
+Public surface as of 2026-04-12 (verified against `backend/services/stem_grading.py`):
+- `check_math_equivalence(student_answer, correct_answer, tolerance=0.001) -> dict` — SymPy symbolic equivalence; returns `{correct, method, ...}`.
+- `grade_math_question(question, student_response) -> dict` — end-to-end grader that wraps `check_math_equivalence` with question-level metadata + points.
+- `grade_data_table(expected_table, student_table, tolerance_percent=5.0) -> dict` — tolerance-based table comparison.
+- `grade_coordinate_question(expected, student, tolerance_km=50) -> dict` — Haversine distance grader.
+- `grade_place_name(expected_names, student_answer) -> dict` — fuzzy place-name matcher.
+- `check_cell_value(...)` and `haversine_distance(...)` exist but are helpers called from the above; characterize via their callers, not directly.
 
-For each, list every distinct **input shape** the function branches on. Example for `grade_math_expression`:
+For each public entry point, enumerate every distinct **input shape** the function branches on. Example branches for `check_math_equivalence`:
 - Plain number (`"3.14"`)
 - Percentage (`"50%"`)
 - Fraction (`"1/2"`)
@@ -601,52 +603,77 @@ import json, pathlib
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "stem_grading"
 FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
 
-# Each case: (name, fn_name, kwargs)
+# Each case: (name, fn_name, kwargs). Verify these kwargs match the
+# current signatures in stem_grading.py — this plan was authored
+# against the 2026-04-12 surface; function kwargs may drift.
 CASES = [
-    # --- grade_math_expression: plain numbers ---
-    ("math_plain_number_correct",     "grade_math_expression",
+    # --- check_math_equivalence: plain numbers ---
+    ("math_plain_number_correct",   "check_math_equivalence",
         {"student_answer": "3.14", "correct_answer": "3.14"}),
-    ("math_plain_number_wrong",       "grade_math_expression",
+    ("math_plain_number_wrong",     "check_math_equivalence",
         {"student_answer": "3.15", "correct_answer": "3.14"}),
 
-    # --- grade_math_expression: fractions / percentages ---
-    ("math_fraction_equivalent",      "grade_math_expression",
+    # --- check_math_equivalence: fractions / percentages ---
+    ("math_fraction_equivalent",    "check_math_equivalence",
         {"student_answer": "1/2", "correct_answer": "0.5"}),
-    ("math_percent_equivalent",       "grade_math_expression",
+    ("math_percent_equivalent",     "check_math_equivalence",
         {"student_answer": "50%", "correct_answer": "0.5"}),
 
-    # --- grade_math_expression: algebra + caret + LaTeX ---
-    ("math_implicit_mult",            "grade_math_expression",
+    # --- check_math_equivalence: algebra + caret + LaTeX ---
+    ("math_implicit_mult",          "check_math_equivalence",
         {"student_answer": "2x", "correct_answer": "2*x"}),
-    ("math_caret_exponent",           "grade_math_expression",
+    ("math_caret_exponent",         "check_math_equivalence",
         {"student_answer": "x^2", "correct_answer": "x**2"}),
-    ("math_latex_equivalent",         "grade_math_expression",
+    ("math_latex_equivalent",       "check_math_equivalence",
         {"student_answer": r"\frac{1}{2}", "correct_answer": "0.5"}),
 
-    # --- grade_math_expression: error paths ---
-    ("math_unparseable_garbage",      "grade_math_expression",
+    # --- check_math_equivalence: error paths ---
+    ("math_unparseable_garbage",    "check_math_equivalence",
         {"student_answer": "@#$", "correct_answer": "3.14"}),
-    ("math_empty_answer",             "grade_math_expression",
+    ("math_empty_answer",           "check_math_equivalence",
         {"student_answer": "", "correct_answer": "3.14"}),
 
-    # --- grade_data_table: tolerance ---
-    ("table_within_tolerance",        "grade_data_table",
-        {"student_rows": [[1.01]], "correct_rows": [[1.0]], "tolerance": 0.05}),
-    ("table_outside_tolerance",       "grade_data_table",
-        {"student_rows": [[1.5]], "correct_rows": [[1.0]], "tolerance": 0.05}),
-    ("table_wrong_shape",             "grade_data_table",
-        {"student_rows": [[1, 2]], "correct_rows": [[1]], "tolerance": 0.01}),
+    # --- grade_math_question: question-level wrapper ---
+    ("question_math_correct",       "grade_math_question",
+        {"question": {"question_text": "What is 2+2?", "correct_answer": "4",
+                       "points": 5, "tolerance": 0.001},
+         "student_response": "4"}),
+    ("question_math_wrong",         "grade_math_question",
+        {"question": {"question_text": "What is 2+2?", "correct_answer": "4",
+                       "points": 5, "tolerance": 0.001},
+         "student_response": "5"}),
 
-    # --- grade_coordinate: haversine ---
-    ("coord_exact_match",             "grade_coordinate",
-        {"student_coord": (40.0, -75.0), "correct_coord": (40.0, -75.0),
-         "tolerance_miles": 1.0}),
-    ("coord_within_tolerance",        "grade_coordinate",
-        {"student_coord": (40.001, -75.001), "correct_coord": (40.0, -75.0),
-         "tolerance_miles": 1.0}),
-    ("coord_outside_tolerance",       "grade_coordinate",
-        {"student_coord": (41.0, -75.0), "correct_coord": (40.0, -75.0),
-         "tolerance_miles": 1.0}),
+    # --- grade_data_table: tolerance_percent ---
+    ("table_within_tolerance",      "grade_data_table",
+        {"expected_table": {"rows": [[1.0]]},
+         "student_table":  {"rows": [[1.01]]},
+         "tolerance_percent": 5.0}),
+    ("table_outside_tolerance",     "grade_data_table",
+        {"expected_table": {"rows": [[1.0]]},
+         "student_table":  {"rows": [[1.5]]},
+         "tolerance_percent": 5.0}),
+
+    # --- grade_coordinate_question: haversine ---
+    ("coord_exact_match",           "grade_coordinate_question",
+        {"expected": {"lat": 40.0, "lon": -75.0},
+         "student":  {"lat": 40.0, "lon": -75.0},
+         "tolerance_km": 1.0}),
+    ("coord_within_tolerance",      "grade_coordinate_question",
+        {"expected": {"lat": 40.0,   "lon": -75.0},
+         "student":  {"lat": 40.001, "lon": -75.001},
+         "tolerance_km": 1.0}),
+    ("coord_outside_tolerance",     "grade_coordinate_question",
+        {"expected": {"lat": 40.0, "lon": -75.0},
+         "student":  {"lat": 41.0, "lon": -75.0},
+         "tolerance_km": 1.0}),
+
+    # --- grade_place_name: fuzzy match ---
+    ("place_exact_match",           "grade_place_name",
+        {"expected_names": ["Paris"], "student_answer": "Paris"}),
+    ("place_case_insensitive",      "grade_place_name",
+        {"expected_names": ["Paris"], "student_answer": "paris"}),
+    ("place_wrong",                 "grade_place_name",
+        {"expected_names": ["Paris"], "student_answer": "London"}),
 ]
 
 def run():
@@ -662,7 +689,7 @@ if __name__ == "__main__":
     run()
 ```
 
-**Before running:** verify the function names and kwargs in `CASES` match the actual public API of `stem_grading.py`. If the surface differs (e.g., the function is named `grade_math` not `grade_math_expression`, or takes different kwargs), edit `CASES` to match reality. Don't force the real API to match this plan's guesses.
+**Before running:** verify the function names and kwargs in `CASES` match the actual public API of `stem_grading.py` at the head of your branch. Signatures in this plan were pinned against the 2026-04-12 surface and may drift. If a name or kwarg differs, edit `CASES` to match reality. Don't force the real API to match this plan's guesses.
 
 ### Step 3.3 — Run the capture, hand-review each fixture
 
@@ -720,8 +747,11 @@ def test_stem_grading_characterization(name, fixture):
     kwargs = fixture["input"]["kwargs"]
     # Tuple kwargs (e.g., coordinates) round-trip through JSON as lists.
     # Convert back where needed so the call matches the original capture.
-    kwargs = {k: tuple(v) if isinstance(v, list) and fixture["input"]["fn"] == "grade_coordinate" else v
-              for k, v in kwargs.items()}
+    # Nothing in the current CASES list needs tuple-reconstruction —
+    # coordinates are passed as dicts ({"lat": ..., "lon": ...}), place
+    # names as lists, table rows as nested lists — all round-trip through
+    # JSON unchanged. If you add a case that uses tuples (e.g. for a
+    # legacy signature), convert it back here before calling the fn.
     out = fn(**kwargs)
     assert out == fixture["output"], f"Characterization drift in fixture {name}"
 ```
@@ -741,7 +771,10 @@ git add tests/characterization/
 git commit -m "test: characterization harness for stem_grading (Phase 3 prep)
 
 Black-box pins of stem_grading entry points against captured input/
-output pairs with a mocked OpenAI layer. Phase 3's monolith split
+output pairs against the deterministic SymPy/math public surface
+(check_math_equivalence, grade_math_question, grade_data_table,
+grade_coordinate_question, grade_place_name). No mocks — the module
+has no external dependencies beyond SymPy. Phase 3's monolith split
 must keep these green; any intentional output change requires
 re-capturing the fixture in the same commit.
 
@@ -912,7 +945,7 @@ Expected: pass.
 - [ ] Hotfix 1 merged: 5 grading-critical catches capture to Sentry (including the swallowing top-level at line 546).
 - [ ] Hotfix 2 merged: schema drifts reconciled; `tests/test_schema_assertions.py` passes (19 tests, 0 skipped) including the CHECK-constraint probe.
 - [ ] `published_assessments.teacher_id` type codified in SQL-of-record matches live DB type (verified in Step 2.2).
-- [ ] Characterization harness green: `tests/characterization/test_stem_grading_golden.py` covers ≥ 10 fixtures across `grade_math_expression`, `grade_data_table`, `grade_coordinate`, all passing deterministically (no `openai_client` mocks — the module is pure SymPy).
+- [ ] Characterization harness green: `tests/characterization/test_stem_grading_golden.py` covers ≥ 15 fixtures across `check_math_equivalence`, `grade_math_question`, `grade_data_table`, `grade_coordinate_question`, and `grade_place_name`, all passing deterministically (no `openai_client` mocks — the module is pure SymPy).
 - [ ] `docs/exception-audit-2026-04.md` has zero `UNCATEGORIZED` rows (baseline: 704 remaining after Phase 1).
 - [ ] All LEGACY + NEEDS_ALERT catches fixed.
 - [ ] Zero production modules at 0% coverage.
@@ -923,9 +956,9 @@ Expected: pass.
         tests/test_sso_contracts.py \
         tests/test_clever_sso_contract.py \
         tests/test_classlink_sso_contract.py \
-        tests/test_clever_sso.py \
+        tests/test_oneroster_gradebook.py \
         tests/test_classlink_sso.py \
-        tests/test_clever_student_sso.py \
+        tests/test_oneroster_sync_grades.py \
         tests/test_oneroster.py \
         -v 2>&1 | tail -5
       ```
