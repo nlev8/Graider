@@ -167,32 +167,32 @@
 | `backend/routes/assessment_results_routes.py` | 308 | `Exception` | log.warning | `get_assessment_results` | UNCATEGORIZED |
 | `backend/routes/assessment_results_routes.py` | 256 | `Exception` | pass | `get_assessment_results` | UNCATEGORIZED |
 | `backend/routes/assessment_results_routes.py` | 263 | `Exception` | pass | `get_assessment_results` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 33 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 40 | `ImportError` | return | `<module>` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 94 | `Exception` | pass | `_load_teacher_context` | UNCATEGORIZED |
+| `backend/routes/assignment_player_routes.py` | 33 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 40 | `ImportError` | return | `<module>` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 94 | `Exception` | pass | `_load_teacher_context` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 117 | `Exception` | log.exception + return | `get_assignment` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 154 | `Exception` | log.exception + return | `create_assignment` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 198 | `Exception` | log.exception + return | `submit_assignment` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 226 | `Exception` | log.exception + return | `get_submissions` | INTENTIONAL |
-| `backend/routes/assignment_player_routes.py` | 371 | `Exception` | print + return | `_vision_ocr_fallback` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 574 | `Exception` | print + return | `_grade_with_ai` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 695 | `Exception` | return | `grade_question` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 958 | `(ValueError, TypeError)` | return | `grade_geometry` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1027 | `Exception` | return | `grade_math_equation` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1056 | `Exception` | return | `grade_coordinates` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1104 | `Exception` | return | `grade_data_table` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1190 | `ImportError` | return | `grade_function_graph` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1451 | `(ValueError, ZeroDivisionError)` | return | `normalize_fraction` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 994 | `Exception` | pass | `grade_box_plot` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1523 | `ValueError` | return | `grade_tape_diagram` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1583 | `(ValueError, TypeError)` | return | `grade_protractor` | UNCATEGORIZED |
+| `backend/routes/assignment_player_routes.py` | 371 | `Exception` | print + return | `_vision_ocr_fallback` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 574 | `Exception` | print + return | `_grade_with_ai` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 695 | `Exception` | return | `grade_question` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 958 | `(ValueError, TypeError)` | return | `grade_geometry` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1027 | `Exception` | return | `grade_math_equation` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1056 | `Exception` | return | `grade_coordinates` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1104 | `Exception` | return | `grade_data_table` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1190 | `ImportError` | return | `grade_function_graph` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1451 | `(ValueError, ZeroDivisionError)` | return | `normalize_fraction` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 994 | `Exception` | pass | `grade_box_plot` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1523 | `ValueError` | return | `grade_tape_diagram` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1583 | `(ValueError, TypeError)` | return | `grade_protractor` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 1605 | `ValueError` | pass | `grade_protractor` | INTENTIONAL |
-| `backend/routes/assignment_player_routes.py` | 933 | `(ValueError, TypeError)` | return | `grade_geometry` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1163 | `Exception` | other | `grade_function_graph` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1503 | `ValueError` | other | `grade_tape_diagram` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1544 | `ValueError` | other | `grade_venn_diagram` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1092 | `(ValueError, TypeError)` | other | `grade_data_table` | UNCATEGORIZED |
-| `backend/routes/assignment_player_routes.py` | 1173 | `Exception` | other | `grade_function_graph` | UNCATEGORIZED |
+| `backend/routes/assignment_player_routes.py` | 933 | `(ValueError, TypeError)` | return | `grade_geometry` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1163 | `Exception` | other | `grade_function_graph` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1503 | `ValueError` | other | `grade_tape_diagram` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1544 | `ValueError` | other | `grade_venn_diagram` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1092 | `(ValueError, TypeError)` | other | `grade_data_table` | INTENTIONAL |
+| `backend/routes/assignment_player_routes.py` | 1173 | `Exception` | other | `grade_function_graph` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 22 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/routes/assignment_routes.py` | 77 | `Exception` | log.exception + return | `save_assignment_config` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 155 | `json.JSONDecodeError` | return | `generate_model_answers` | UNCATEGORIZED |
