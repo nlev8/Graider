@@ -144,24 +144,24 @@
 | `backend/routes/admin_routes.py` | 461 | `(ValueError, TypeError)` | pass | `admin_teacher_summary` | INTENTIONAL |
 | `backend/routes/admin_routes.py` | 360 | `(ValueError, TypeError)` | pass | `admin_overview` | INTENTIONAL |
 | `backend/routes/admin_routes.py` | 387 | `(ValueError, TypeError)` | pass | `admin_overview` | INTENTIONAL |
-| `backend/routes/analytics_routes.py` | 124 | `Exception` | log.warning | `_fetch_assessment_analytics` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 135 | `ImportError` | other | `_analytics_from_results` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 390 | `ImportError` | other | `get_analytics` | UNCATEGORIZED |
+| `backend/routes/analytics_routes.py` | 124 | `Exception` | log.warning | `_fetch_assessment_analytics` | LEGACY |
+| `backend/routes/analytics_routes.py` | 135 | `ImportError` | other | `_analytics_from_results` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 390 | `ImportError` | other | `get_analytics` | INTENTIONAL |
 | `backend/routes/analytics_routes.py` | 498 | `Exception` | log.exception + return | `get_analytics` | INTENTIONAL |
-| `backend/routes/analytics_routes.py` | 695 | `Exception` | pass | `export_district_report` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 737 | `Exception` | pass | `export_district_report` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 862 | `ImportError` | other | `cleanup_master_csv` | UNCATEGORIZED |
+| `backend/routes/analytics_routes.py` | 695 | `Exception` | pass | `export_district_report` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 737 | `Exception` | pass | `export_district_report` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 862 | `ImportError` | other | `cleanup_master_csv` | INTENTIONAL |
 | `backend/routes/analytics_routes.py` | 891 | `Exception` | log.exception + return | `cleanup_master_csv` | INTENTIONAL |
 | `backend/routes/analytics_routes.py` | 985 | `Exception` | log.exception + return | `cleanup_master_csv` | INTENTIONAL |
-| `backend/routes/analytics_routes.py` | 33 | `Exception` | pass | `_find_master_grades` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 60 | `ImportError` | other | `_fetch_assessment_analytics` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 354 | `Exception` | pass | `_load_valid_assignment_names` | UNCATEGORIZED |
+| `backend/routes/analytics_routes.py` | 33 | `Exception` | pass | `_find_master_grades` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 60 | `ImportError` | other | `_fetch_assessment_analytics` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 354 | `Exception` | pass | `_load_valid_assignment_names` | LEGACY |
 | `backend/routes/analytics_routes.py` | 762 | `Exception` | log.exception + return | `export_district_report` | INTENTIONAL |
-| `backend/routes/analytics_routes.py` | 882 | `Exception` | pass | `cleanup_master_csv` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 393 | `ImportError` | other | `get_analytics` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 708 | `Exception` | pass | `export_district_report` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 867 | `ImportError` | other | `cleanup_master_csv` | UNCATEGORIZED |
-| `backend/routes/analytics_routes.py` | 925 | `ValueError` | return | `_is_corrupted_row` | UNCATEGORIZED |
+| `backend/routes/analytics_routes.py` | 882 | `Exception` | pass | `cleanup_master_csv` | NEEDS_ALERT |
+| `backend/routes/analytics_routes.py` | 393 | `ImportError` | other | `get_analytics` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 708 | `Exception` | pass | `export_district_report` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 867 | `ImportError` | other | `cleanup_master_csv` | INTENTIONAL |
+| `backend/routes/analytics_routes.py` | 925 | `ValueError` | return | `_is_corrupted_row` | INTENTIONAL |
 | `backend/routes/assessment_results_routes.py` | 170 | `Exception` | log.warning | `get_assessment_results` | UNCATEGORIZED |
 | `backend/routes/assessment_results_routes.py` | 233 | `Exception` | log.warning | `get_assessment_results` | UNCATEGORIZED |
 | `backend/routes/assessment_results_routes.py` | 308 | `Exception` | log.warning | `get_assessment_results` | UNCATEGORIZED |
