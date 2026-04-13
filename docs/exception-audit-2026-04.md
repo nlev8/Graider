@@ -329,36 +329,36 @@
 | `backend/routes/email_routes.py` | 999 | `Exception` | pass | `send_confirmation_emails` | UNCATEGORIZED |
 | `backend/routes/email_routes.py` | 1494 | `Exception` | pass | `confirm_send` | UNCATEGORIZED |
 | `backend/routes/email_routes.py` | 890 | `Exception` | pass | `send_confirmation_emails` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 287 | `Exception` | print | `_sync_result_to_master_csv` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 371 | `Exception` | pass | `update_result` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 435 | `ImportError` | return | `grade_math` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 470 | `ImportError` | return | `grade_data_table` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 498 | `ImportError` | return | `grade_coordinates` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 525 | `ImportError` | return | `grade_place_name` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 551 | `ImportError` | return | `check_math_equivalence` | UNCATEGORIZED |
+| `backend/routes/grading_routes.py` | 287 | `Exception` | print | `_sync_result_to_master_csv` | NEEDS_ALERT |
+| `backend/routes/grading_routes.py` | 371 | `Exception` | pass | `update_result` | NEEDS_ALERT |
+| `backend/routes/grading_routes.py` | 435 | `ImportError` | return | `grade_math` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 470 | `ImportError` | return | `grade_data_table` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 498 | `ImportError` | return | `grade_coordinates` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 525 | `ImportError` | return | `grade_place_name` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 551 | `ImportError` | return | `check_math_equivalence` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 1225 | `Exception` | log.exception + return | `upload_focus_comments` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 1282 | `Exception` | log.exception + return | `save_ell_students` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 1426 | `Exception` | log.exception + return | `get_student_history` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 1445 | `Exception` | log.exception + return | `delete_student_history` | INTENTIONAL |
-| `backend/routes/grading_routes.py` | 778 | `Exception` | print | `export_focus_csv` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 902 | `Exception` | pass | `export_focus_batch` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 1019 | `Exception` | pass | `export_lms_csv` | UNCATEGORIZED |
+| `backend/routes/grading_routes.py` | 778 | `Exception` | print | `export_focus_csv` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 902 | `Exception` | pass | `export_focus_batch` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 1019 | `Exception` | pass | `export_lms_csv` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 1140 | `json.JSONDecodeError` | pass | `_read_focus_comments_output` | INTENTIONAL |
 | `backend/routes/grading_routes.py` | 1262 | `Exception` | log.exception + return | `get_ell_students` | INTENTIONAL |
-| `backend/routes/grading_routes.py` | 1387 | `Exception` | pass | `_build_student_name_lookup` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 1509 | `Exception` | print | `migrate_student_names` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 163 | `Exception` | pass | `clear_results` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 182 | `Exception` | print | `clear_results` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 204 | `Exception` | pass | `clear_results` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 212 | `Exception` | print | `clear_results` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 395 | `Exception` | log.warning | `update_result` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 628 | `Exception` | pass | `export_focus_csv` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 669 | `Exception` | pass | `export_focus_csv` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 1468 | `Exception` | append | `delete_all_student_history` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 1549 | `Exception` | pass | `migrate_student_names` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 1325 | `Exception` | append | `list_student_history` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 1403 | `Exception` | pass | `_build_student_name_lookup` | UNCATEGORIZED |
-| `backend/routes/grading_routes.py` | 1525 | `Exception` | pass | `migrate_student_names` | UNCATEGORIZED |
+| `backend/routes/grading_routes.py` | 1387 | `Exception` | pass | `_build_student_name_lookup` | LEGACY |
+| `backend/routes/grading_routes.py` | 1509 | `Exception` | print | `migrate_student_names` | NEEDS_ALERT |
+| `backend/routes/grading_routes.py` | 163 | `Exception` | pass | `clear_results` | LEGACY |
+| `backend/routes/grading_routes.py` | 182 | `Exception` | print | `clear_results` | LEGACY |
+| `backend/routes/grading_routes.py` | 204 | `Exception` | pass | `clear_results` | LEGACY |
+| `backend/routes/grading_routes.py` | 212 | `Exception` | print | `clear_results` | LEGACY |
+| `backend/routes/grading_routes.py` | 395 | `Exception` | log.warning | `update_result` | LEGACY |
+| `backend/routes/grading_routes.py` | 628 | `Exception` | pass | `export_focus_csv` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 669 | `Exception` | pass | `export_focus_csv` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 1468 | `Exception` | append | `delete_all_student_history` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 1549 | `Exception` | pass | `migrate_student_names` | NEEDS_ALERT |
+| `backend/routes/grading_routes.py` | 1325 | `Exception` | append | `list_student_history` | INTENTIONAL |
+| `backend/routes/grading_routes.py` | 1403 | `Exception` | pass | `_build_student_name_lookup` | LEGACY |
+| `backend/routes/grading_routes.py` | 1525 | `Exception` | pass | `migrate_student_names` | NEEDS_ALERT |
 | `backend/routes/lesson_routes.py` | 15 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/routes/lesson_routes.py` | 28 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/routes/lesson_routes.py` | 171 | `Exception` | log.exception + return | `load_lesson` | INTENTIONAL |
