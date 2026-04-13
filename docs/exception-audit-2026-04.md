@@ -385,29 +385,29 @@
 | `backend/routes/oneroster_routes.py` | 218 | `Exception` | log.warning | `sync_roster` | NEEDS_ALERT |
 | `backend/routes/oneroster_routes.py` | 363 | `Exception` | log.error + return | `sync_grades` | INTENTIONAL |
 | `backend/routes/oneroster_routes.py` | 369 | `Exception` | log.error + return | `sync_grades` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 23 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 35 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 68 | `(FileNotFoundError, json.JSONDecodeError)` | other | `_record_planner_cost` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 730 | `Exception` | print | `_auto_fix_flagged_questions` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 2300 | `Exception` | return | `_load_standards_file` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 23 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 35 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 68 | `(FileNotFoundError, json.JSONDecodeError)` | other | `_record_planner_cost` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 730 | `Exception` | print | `_auto_fix_flagged_questions` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 2300 | `Exception` | return | `_load_standards_file` | LEGACY |
 | `backend/routes/planner_routes.py` | 2519 | `Exception` | log.exception + return | `align_document_to_standards` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 2611 | `Exception` | log.exception + return | `rewrite_for_alignment` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 2655 | `Exception` | log.exception + return | `get_lesson_templates` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 2823 | `Exception` | print + return | `brainstorm_lesson_ideas` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 3314 | `Exception` | print + return | `generate_lesson_plan` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 3968 | `Exception` | print + return | `generate_assignment_from_lesson` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 2823 | `Exception` | print + return | `brainstorm_lesson_ideas` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 3314 | `Exception` | print + return | `generate_lesson_plan` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 3968 | `Exception` | print + return | `generate_assignment_from_lesson` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 4211 | `Exception` | log.exception + return | `export_lesson_plan` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 4344 | `Exception` | print | `_save_grading_config_for_export` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 4344 | `Exception` | print | `_save_grading_config_for_export` | LEGACY |
 | `backend/routes/planner_routes.py` | 5164 | `Exception` | log.exception + return | `export_generated_assignment` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 5749 | `Exception` | print + return | `_create_visual_for_question` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 6265 | `Exception` | print + return | `generate_assessment` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 5749 | `Exception` | print + return | `_create_visual_for_question` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 6265 | `Exception` | print + return | `generate_assessment` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 6449 | `Exception` | log.exception + return | `export_assessment` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 6556 | `Exception` | other | `parse_template_structure` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 6556 | `Exception` | other | `parse_template_structure` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 6614 | `Exception` | log.exception + return | `delete_assessment_template` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 6847 | `Exception` | log.exception + return | `export_assessment_for_platform` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 7143 | `Exception` | log.exception + return | `grade_assessment_answers` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 7272 | `Exception` | log.exception + return | `regenerate_questions` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 7285 | `(FileNotFoundError, json.JSONDecodeError)` | return | `get_planner_costs` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 7285 | `(FileNotFoundError, json.JSONDecodeError)` | return | `get_planner_costs` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 7366 | `Exception` | log.exception + return | `adjust_reading_level` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 7460 | `Exception` | log.exception + return | `extract_text_from_file` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 7570 | `json.JSONDecodeError` | log.error + return | `generate_study_guide` | INTENTIONAL |
@@ -419,26 +419,26 @@
 | `backend/routes/planner_routes.py` | 8054 | `json.JSONDecodeError` | log.error + return | `generate_slides` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 8057 | `Exception` | log.exception + return | `generate_slides` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 8102 | `Exception` | log.exception + return | `export_slides` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 38 | `ImportError` | other | `<module>` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 38 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 1344 | `(ValueError, IndexError)` | pass | `_hydrate_fraction_model` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 2270 | `(ValueError, IndexError)` | pass | `_grade_matches` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 2510 | `json.JSONDecodeError` | print + return | `align_document_to_standards` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 2602 | `json.JSONDecodeError` | print + return | `rewrite_for_alignment` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 2510 | `json.JSONDecodeError` | print + return | `align_document_to_standards` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 2602 | `json.JSONDecodeError` | print + return | `rewrite_for_alignment` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 4764 | `Exception` | log.exception + return | `export_generated_assignment` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 562 | `(ValueError, IndexError)` | pass | `_check_question_quality` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 2203 | `Exception` | other | `load_support_documents_for_planning` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 4340 | `Exception` | pass | `_save_grading_config_for_export` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 6578 | `Exception` | pass | `get_assessment_templates` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 7120 | `Exception` | print | `grade_assessment_answers` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 8043 | `Exception` | log.warning | `generate_slides` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 8086 | `Exception` | pass | `export_slides` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 4523 | `Exception` | print | `_export_assignment_docx_graider` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 7411 | `ImportError` | return | `extract_text_from_file` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 2203 | `Exception` | other | `load_support_documents_for_planning` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 4340 | `Exception` | pass | `_save_grading_config_for_export` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 6578 | `Exception` | pass | `get_assessment_templates` | LEGACY |
+| `backend/routes/planner_routes.py` | 7120 | `Exception` | print | `grade_assessment_answers` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 8043 | `Exception` | log.warning | `generate_slides` | LEGACY |
+| `backend/routes/planner_routes.py` | 8086 | `Exception` | pass | `export_slides` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 4523 | `Exception` | print | `_export_assignment_docx_graider` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 7411 | `ImportError` | return | `extract_text_from_file` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 1781 | `ValueError` | pass | `_extract_dimensions_from_text` | INTENTIONAL |
-| `backend/routes/planner_routes.py` | 2183 | `Exception` | other | `load_support_documents_for_planning` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 2191 | `Exception` | other | `load_support_documents_for_planning` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 7030 | `ValueError` | other | `grade_assessment_answers` | UNCATEGORIZED |
-| `backend/routes/planner_routes.py` | 5440 | `Exception` | other | `_create_visual_for_question` | UNCATEGORIZED |
+| `backend/routes/planner_routes.py` | 2183 | `Exception` | other | `load_support_documents_for_planning` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 2191 | `Exception` | other | `load_support_documents_for_planning` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 7030 | `ValueError` | other | `grade_assessment_answers` | INTENTIONAL |
+| `backend/routes/planner_routes.py` | 5440 | `Exception` | other | `_create_visual_for_question` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 28 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/routes/settings_routes.py` | 41 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/routes/settings_routes.py` | 153 | `Exception` | print | `get_students_from_period_file` | UNCATEGORIZED |
