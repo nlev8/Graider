@@ -646,34 +646,34 @@
 | `backend/services/assistant_tools_reports.py` | 2581 | `OSError` | pass | `confirm_and_send` | INTENTIONAL |
 | `backend/services/assistant_tools_reports.py` | 2598 | `OSError` | pass | `_clear_behavior_pending` | INTENTIONAL |
 | `backend/services/assistant_tools_stem.py` | 221 | `(TypeError, ValueError)` | return | `handle_grade_coordinates` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 428 | `Exception` | log.warning + return | `_delete_student_supabase` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 522 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 548 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 557 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 574 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 591 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 608 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 676 | `Exception` | pass | `remove_student_from_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 684 | `Exception` | pass | `remove_student_from_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 691 | `Exception` | pass | `remove_student_from_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 724 | `Exception` | pass | `confirm_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 749 | `Exception` | pass | `confirm_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 755 | `Exception` | pass | `confirm_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 875 | `(json.JSONDecodeError, UnicodeDecodeError)` | return | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 445 | `Exception` | other | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 495 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 642 | `Exception` | other | `remove_student_from_roster` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 716 | `Exception` | other | `confirm_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 734 | `Exception` | pass | `confirm_student_removal` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 1037 | `Exception` | print | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 342 | `Exception` | other | `_find_all_student_files` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 900 | `Exception` | pass | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 921 | `Exception` | return | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 938 | `Exception` | pass | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 972 | `Exception` | pass | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 990 | `Exception` | pass | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 1007 | `Exception` | pass | `import_student_data` | UNCATEGORIZED |
-| `backend/services/assistant_tools_student.py` | 479 | `Exception` | append | `_execute_student_removal` | UNCATEGORIZED |
+| `backend/services/assistant_tools_student.py` | 428 | `Exception` | log.warning + return | `_delete_student_supabase` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 522 | `Exception` | append | `_execute_student_removal` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 548 | `Exception` | append | `_execute_student_removal` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 557 | `Exception` | append | `_execute_student_removal` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 574 | `Exception` | append | `_execute_student_removal` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 591 | `Exception` | append | `_execute_student_removal` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 608 | `Exception` | append | `_execute_student_removal` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 676 | `Exception` | pass | `remove_student_from_roster` | INTENTIONAL |
+| `backend/services/assistant_tools_student.py` | 684 | `Exception` | pass | `remove_student_from_roster` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 691 | `Exception` | pass | `remove_student_from_roster` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 724 | `Exception` | pass | `confirm_student_removal` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 749 | `Exception` | pass | `confirm_student_removal` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 755 | `Exception` | pass | `confirm_student_removal` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 875 | `(json.JSONDecodeError, UnicodeDecodeError)` | return | `import_student_data` | INTENTIONAL |
+| `backend/services/assistant_tools_student.py` | 445 | `Exception` | other | `_execute_student_removal` | INTENTIONAL |
+| `backend/services/assistant_tools_student.py` | 495 | `Exception` | append | `_execute_student_removal` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 642 | `Exception` | other | `remove_student_from_roster` | INTENTIONAL |
+| `backend/services/assistant_tools_student.py` | 716 | `Exception` | other | `confirm_student_removal` | INTENTIONAL |
+| `backend/services/assistant_tools_student.py` | 734 | `Exception` | pass | `confirm_student_removal` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 1037 | `Exception` | print | `import_student_data` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 342 | `Exception` | other | `_find_all_student_files` | LEGACY |
+| `backend/services/assistant_tools_student.py` | 900 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 921 | `Exception` | return | `import_student_data` | INTENTIONAL |
+| `backend/services/assistant_tools_student.py` | 938 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 972 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 990 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 1007 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
+| `backend/services/assistant_tools_student.py` | 479 | `Exception` | append | `_execute_student_removal` | INTENTIONAL |
 | `backend/services/correction_patterns.py` | 15 | `ImportError` | other | `<module>` | UNCATEGORIZED |
 | `backend/services/document_generator.py` | 53 | `(ValueError, TypeError)` | return | `_hex_to_rgb` | UNCATEGORIZED |
 | `backend/services/document_generator.py` | 81 | `Exception` | pass | `load_style` | UNCATEGORIZED |
