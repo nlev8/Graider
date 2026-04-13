@@ -158,14 +158,14 @@ def check_math_equivalence(student_answer: str, correct_answer: str, tolerance: 
             if abs(student_num - correct_num) < tolerance:
                 return {
                     'equivalent': True,
-                    'method': 'numeric',
+                    'method': 'numerical',
                     'student_value': student_num,
                     'correct_value': correct_num
                 }
             else:
                 return {
                     'equivalent': False,
-                    'method': 'numeric',
+                    'method': 'numerical',
                     'student_value': student_num,
                     'correct_value': correct_num,
                     'difference': abs(student_num - correct_num)

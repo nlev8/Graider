@@ -1,0 +1,24 @@
+{
+  "input": {
+    "fn": "grade_math_question",
+    "kwargs": {
+      "question": {
+        "correctAnswer": "3.14",
+        "acceptEquivalent": true,
+        "showWork": false,
+        "points": 5
+      },
+      "student_response": "3.14"
+    }
+  },
+  "output": {
+    "question_type": "math",
+    "points_earned": 5,
+    "points_possible": 5,
+    "feedback": [
+      "Correct!",
+      "Your answer is numerically equivalent to the expected answer."
+    ],
+    "correct": true
+  }
+}
