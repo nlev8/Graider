@@ -439,52 +439,52 @@
 | `backend/routes/planner_routes.py` | 2191 | `Exception` | other | `load_support_documents_for_planning` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 7030 | `ValueError` | other | `grade_assessment_answers` | INTENTIONAL |
 | `backend/routes/planner_routes.py` | 5440 | `Exception` | other | `_create_visual_for_question` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 28 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 41 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 153 | `Exception` | print | `get_students_from_period_file` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 28 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/routes/settings_routes.py` | 41 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/routes/settings_routes.py` | 153 | `Exception` | print | `get_students_from_period_file` | LEGACY |
 | `backend/routes/settings_routes.py` | 175 | `Exception` | log.exception + return | `save_rubric` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 198 | `Exception` | log.exception + return | `load_rubric` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 219 | `Exception` | log.exception + return | `save_global_settings` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 242 | `Exception` | log.exception + return | `load_global_settings` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 261 | `Exception` | return | `parse_csv_headers` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 261 | `Exception` | return | `parse_csv_headers` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 373 | `Exception` | log.exception + return | `delete_roster` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 534 | `Exception` | log.exception + return | `delete_period` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 574 | `Exception` | log.exception + return | `update_period_level` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 598 | `Exception` | log.exception + return | `get_period_students` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 681 | `Exception` | log.exception + return | `delete_document` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 893 | `ImportError` | return | `preview_parent_contacts` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 893 | `ImportError` | return | `preview_parent_contacts` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 895 | `Exception` | log.exception + return | `preview_parent_contacts` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1106 | `ImportError` | return | `save_parent_contact_mapping` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 1106 | `ImportError` | return | `save_parent_contact_mapping` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1108 | `Exception` | log.exception + return | `save_parent_contact_mapping` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1169 | `Exception` | log.exception + return | `get_parent_contacts` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1374 | `Exception` | log.exception + return | `import_accommodations` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1572 | `Exception` | other | `_run_focus_import` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 1572 | `Exception` | other | `_run_focus_import` | LEGACY |
 | `backend/routes/settings_routes.py` | 1953 | `Exception` | log.exception + return | `add_student` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 2004 | `Exception` | log.exception + return | `remove_student` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 2118 | `Exception` | log.exception + return | `update_student` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 2145 | `Exception` | log.exception + return | `sync_to_cloud` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 44 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 428 | `Exception` | pass | `upload_period` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 44 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/routes/settings_routes.py` | 428 | `Exception` | pass | `upload_period` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1082 | `OSError` | pass | `save_parent_contact_mapping` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1130 | `Exception` | log.exception + return | `get_parent_contacts` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1147 | `Exception` | pass | `get_parent_contacts` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 1147 | `Exception` | pass | `get_parent_contacts` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1596 | `(json.JSONDecodeError, IOError)` | pass | `_process_focus_import` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1788 | `(json.JSONDecodeError, IOError)` | pass | `_update_meta_row_count` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1815 | `(json.JSONDecodeError, IOError)` | pass | `_load_parent_contacts` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1834 | `RuntimeError` | other | `_save_parent_contacts` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 130 | `ImportError` | print | `get_students_from_period_file` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 348 | `Exception` | pass | `list_rosters` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 490 | `Exception` | print | `list_periods` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 656 | `Exception` | pass | `list_documents` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 1252 | `Exception` | pass | `get_all_student_accommodations` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 1834 | `RuntimeError` | other | `_save_parent_contacts` | INTENTIONAL |
+| `backend/routes/settings_routes.py` | 130 | `ImportError` | print | `get_students_from_period_file` | INTENTIONAL |
+| `backend/routes/settings_routes.py` | 348 | `Exception` | pass | `list_rosters` | LEGACY |
+| `backend/routes/settings_routes.py` | 490 | `Exception` | print | `list_periods` | LEGACY |
+| `backend/routes/settings_routes.py` | 656 | `Exception` | pass | `list_documents` | LEGACY |
+| `backend/routes/settings_routes.py` | 1252 | `Exception` | pass | `get_all_student_accommodations` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 1547 | `json.JSONDecodeError` | pass | `_run_focus_import` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1842 | `Exception` | log.warning | `_save_parent_contacts` | UNCATEGORIZED |
-| `backend/routes/settings_routes.py` | 509 | `Exception` | print | `list_periods` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 1842 | `Exception` | log.warning | `_save_parent_contacts` | INTENTIONAL |
+| `backend/routes/settings_routes.py` | 509 | `Exception` | print | `list_periods` | LEGACY |
 | `backend/routes/settings_routes.py` | 773 | `(ValueError, TypeError)` | pass | `_suggest_mapping` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1266 | `Exception` | pass | `get_all_student_accommodations` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 1266 | `Exception` | pass | `get_all_student_accommodations` | LEGACY |
 | `backend/routes/settings_routes.py` | 1934 | `(json.JSONDecodeError, IOError)` | pass | `add_student` | INTENTIONAL |
 | `backend/routes/settings_routes.py` | 2095 | `(json.JSONDecodeError, IOError)` | pass | `update_student` | INTENTIONAL |
-| `backend/routes/settings_routes.py` | 1003 | `(ValueError, TypeError)` | other | `_process_rows` | UNCATEGORIZED |
+| `backend/routes/settings_routes.py` | 1003 | `(ValueError, TypeError)` | other | `_process_rows` | INTENTIONAL |
 | `backend/routes/stripe_routes.py` | 118 | `Exception` | log.exception + return | `subscription_status` | INTENTIONAL |
 | `backend/routes/stripe_routes.py` | 156 | `Exception` | log.exception + return | `create_checkout_session` | INTENTIONAL |
 | `backend/routes/stripe_routes.py` | 181 | `Exception` | log.exception + return | `create_portal_session` | INTENTIONAL |
