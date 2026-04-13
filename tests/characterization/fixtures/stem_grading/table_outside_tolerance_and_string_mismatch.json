@@ -1,0 +1,50 @@
+{
+  "input": {
+    "fn": "grade_data_table",
+    "kwargs": {
+      "expected_table": {
+        "data": [
+          [
+            100.0
+          ],
+          [
+            "apple"
+          ]
+        ]
+      },
+      "student_table": {
+        "data": [
+          [
+            200.0
+          ],
+          [
+            "banana"
+          ]
+        ]
+      },
+      "tolerance_percent": 5.0
+    }
+  },
+  "output": {
+    "question_type": "data_table",
+    "total_cells": 2,
+    "correct_cells": 0,
+    "cell_results": [
+      {
+        "correct": false,
+        "feedback": "Expected 100.0, got 200.0 (100.0% off)",
+        "deviation": 100.0,
+        "row": 0,
+        "col": 0
+      },
+      {
+        "correct": false,
+        "feedback": "Expected \"apple\", got \"banana\"",
+        "row": 1,
+        "col": 0
+      }
+    ],
+    "feedback": [],
+    "score_percent": 0.0
+  }
+}

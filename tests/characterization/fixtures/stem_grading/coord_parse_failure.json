@@ -1,0 +1,23 @@
+{
+  "input": {
+    "fn": "grade_coordinate_question",
+    "kwargs": {
+      "expected": {
+        "latitude": 40.0,
+        "longitude": -75.0
+      },
+      "student": {
+        "latitude": "not-a-number",
+        "longitude": -75.0
+      },
+      "tolerance_km": 50.0
+    }
+  },
+  "output": {
+    "question_type": "coordinates",
+    "correct": false,
+    "feedback": [
+      "Could not parse coordinates: could not convert string to float: 'not-a-number'"
+    ]
+  }
+}

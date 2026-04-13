@@ -1,0 +1,18 @@
+{
+  "input": {
+    "fn": "grade_place_name",
+    "kwargs": {
+      "expected_names": [
+        "Paris"
+      ],
+      "student_answer": "London"
+    }
+  },
+  "output": {
+    "question_type": "place_name",
+    "correct": false,
+    "feedback": [
+      "Incorrect. Expected one of: Paris"
+    ]
+  }
+}

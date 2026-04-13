@@ -1,0 +1,59 @@
+{
+  "input": {
+    "fn": "grade_data_table",
+    "kwargs": {
+      "expected_table": {
+        "data": [
+          [
+            1.0
+          ],
+          [
+            2.0
+          ],
+          [
+            3.0
+          ]
+        ]
+      },
+      "student_table": {
+        "data": [
+          [
+            1.0
+          ]
+        ]
+      },
+      "tolerance_percent": 5.0
+    }
+  },
+  "output": {
+    "question_type": "data_table",
+    "total_cells": 3,
+    "correct_cells": 1,
+    "cell_results": [
+      {
+        "correct": true,
+        "feedback": "Correct",
+        "row": 0,
+        "col": 0
+      },
+      {
+        "row": 1,
+        "col": 0,
+        "correct": false,
+        "feedback": "Missing row"
+      },
+      {
+        "row": 2,
+        "col": 0,
+        "correct": false,
+        "feedback": "Missing row"
+      }
+    ],
+    "feedback": [
+      "Row count mismatch: expected 3, got 1",
+      "Missing row 2",
+      "Missing row 3"
+    ],
+    "score_percent": 33.3
+  }
+}

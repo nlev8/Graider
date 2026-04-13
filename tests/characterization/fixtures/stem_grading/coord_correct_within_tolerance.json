@@ -1,0 +1,24 @@
+{
+  "input": {
+    "fn": "grade_coordinate_question",
+    "kwargs": {
+      "expected": {
+        "latitude": 40.0,
+        "longitude": -75.0
+      },
+      "student": {
+        "latitude": 40.2,
+        "longitude": -75.0
+      },
+      "tolerance_km": 50.0
+    }
+  },
+  "output": {
+    "question_type": "coordinates",
+    "correct": true,
+    "feedback": [
+      "Correct! Within 22.2 km of the expected location (tolerance: 50.0 km)."
+    ],
+    "distance_km": 22.24
+  }
+}

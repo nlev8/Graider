@@ -1,0 +1,24 @@
+{
+  "input": {
+    "fn": "grade_math_question",
+    "kwargs": {
+      "question": {
+        "correctAnswer": "4",
+        "acceptEquivalent": true,
+        "showWork": false,
+        "points": 5
+      },
+      "student_response": "@#$"
+    }
+  },
+  "output": {
+    "question_type": "math",
+    "points_earned": 0,
+    "points_possible": 5,
+    "feedback": [
+      "Incorrect. Expected: 4",
+      "Note: Could not fully parse your answer. Please check notation."
+    ],
+    "correct": false
+  }
+}

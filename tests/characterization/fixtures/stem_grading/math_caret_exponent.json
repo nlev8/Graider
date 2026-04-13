@@ -1,0 +1,13 @@
+{
+  "input": {
+    "fn": "check_math_equivalence",
+    "kwargs": {
+      "student_answer": "x^2",
+      "correct_answer": "x**2"
+    }
+  },
+  "output": {
+    "equivalent": true,
+    "method": "symbolic"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "input": {
+    "fn": "check_math_equivalence",
+    "kwargs": {
+      "student_answer": "50%",
+      "correct_answer": "0.5"
+    }
+  },
+  "output": {
+    "equivalent": true,
+    "method": "symbolic"
+  }
+}

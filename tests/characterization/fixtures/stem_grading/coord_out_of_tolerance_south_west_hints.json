@@ -1,0 +1,26 @@
+{
+  "input": {
+    "fn": "grade_coordinate_question",
+    "kwargs": {
+      "expected": {
+        "latitude": 40.0,
+        "longitude": -75.0
+      },
+      "student": {
+        "latitude": 40.5,
+        "longitude": -74.5
+      },
+      "tolerance_km": 10.0
+    }
+  },
+  "output": {
+    "question_type": "coordinates",
+    "correct": false,
+    "feedback": [
+      "Your coordinates are 69.9 km from the expected location (tolerance: 10.0 km).",
+      "Hint: The correct location is further south.",
+      "Hint: The correct location is further west."
+    ],
+    "distance_km": 69.94
+  }
+}

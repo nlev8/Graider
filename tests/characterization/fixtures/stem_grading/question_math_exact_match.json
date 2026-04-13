@@ -1,0 +1,23 @@
+{
+  "input": {
+    "fn": "grade_math_question",
+    "kwargs": {
+      "question": {
+        "correctAnswer": "4",
+        "acceptEquivalent": false,
+        "showWork": false,
+        "points": 5
+      },
+      "student_response": "4"
+    }
+  },
+  "output": {
+    "question_type": "math",
+    "points_earned": 5,
+    "points_possible": 5,
+    "feedback": [
+      "Correct!"
+    ],
+    "correct": true
+  }
+}
