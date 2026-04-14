@@ -18,6 +18,7 @@ from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.retry import with_retry
+import sentry_sdk
 
 grading_bp = Blueprint('grading', __name__)
 _logger = logging.getLogger(__name__)
@@ -160,8 +161,8 @@ def clear_results():
                 saved_results = [r for r in saved_results if r.get("filename") not in filenames_set]
                 with open(results_file, 'w') as f:
                     json.dump(saved_results, f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
         # Also remove from master_grades.csv
         if os.path.exists(master_file) and filenames_set:
@@ -181,6 +182,7 @@ def clear_results():
                 print(f"Removed {cleared_count} entries from master_grades.csv")
             except Exception as e:
                 print(f"Could not update master_grades.csv: {e}")
+                sentry_sdk.capture_exception(e)
 
         return jsonify({"status": "cleared", "cleared_count": cleared_count})
     else:
@@ -201,8 +203,8 @@ def clear_results():
         if os.path.exists(results_file):
             try:
                 os.remove(results_file)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
         # Also clear master_grades.csv so files can be regraded
         if os.path.exists(master_file):
@@ -211,6 +213,7 @@ def clear_results():
                 print(f"🗑️ Removed master_grades.csv")
             except Exception as e:
                 print(f"⚠️ Could not remove master_grades.csv: {e}")
+                sentry_sdk.capture_exception(e)
 
         return jsonify({"status": "cleared", "cleared_count": cleared_count})
 
@@ -286,6 +289,7 @@ def _sync_result_to_master_csv(result):
                 writer.writerows(rows)
     except Exception as e:
         print(f"Could not sync to master_grades.csv: {e}")
+        sentry_sdk.capture_exception(e)
 
 
 @grading_bp.route('/api/update-result', methods=['POST'])
@@ -368,8 +372,8 @@ def update_result():
             results_copy = list(grading_state["results"])
         with open(results_file, 'w', encoding='utf-8') as f:
             json.dump(results_copy, f, indent=2)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # Sync updated fields to master_grades.csv so the Assistant sees fresh data
     _sync_result_to_master_csv(updated_result)
@@ -1508,6 +1512,7 @@ def migrate_student_names():
                         id_to_name[str(student_id).strip()] = f"{first} {last}"
         except Exception as e:
             print(f"Could not read roster: {e}")
+            sentry_sdk.capture_exception(e)
 
     # Also try period CSVs
     if os.path.exists(periods_dir):
@@ -1522,8 +1527,8 @@ def migrate_student_names():
                             last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
                             if student_id and first and last:
                                 id_to_name[str(student_id).strip()] = f"{first} {last}"
-                except Exception:
-                    pass
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
 
     # Update profiles with names
     updated = 0
@@ -1546,8 +1551,8 @@ def migrate_student_names():
                     with open(filepath, 'w') as hf:
                         json.dump(data, hf, indent=2)
                     updated += 1
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
     return jsonify({
         "status": "migrated",

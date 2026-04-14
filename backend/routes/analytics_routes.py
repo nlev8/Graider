@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify
 from backend.services.assistant_tools import _normalize_assignment_name
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 analytics_bp = Blueprint('analytics', __name__)
 _logger = logging.getLogger(__name__)
@@ -879,8 +880,8 @@ def cleanup_master_csv():
                     approval = r.get('email_approval', '')
                     if student and assignment and approval:
                         approval_lookup[(student.lower(), assignment)] = approval
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     # Read all rows
     try:

@@ -25,6 +25,7 @@ import subprocess
 import statistics
 from collections import defaultdict
 from datetime import datetime
+import sentry_sdk
 
 # Import storage abstraction
 try:
@@ -326,8 +327,8 @@ def _load_master_csv(period_filter='all', teacher_id='local-dev'):
                     rows.append(parsed)
                     if sid and sid != "UNKNOWN":
                         seen_keys.add((sid, _norm_assign(assign)))
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     # 2. Merge in results JSON entries not already in master CSV.
     #    Master CSV is authoritative for scores (it's synced on edits).
@@ -443,8 +444,8 @@ def _load_accommodations(teacher_id='local-dev'):
                     "notes": data.get('notes', ''),
                     "student_id": student_id,
                 }
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
     return accommodations
 
 
@@ -958,8 +959,9 @@ def execute_tool(tool_name, tool_input):
             try:
                 from backend.utils.compliance import audit_tool_action
                 audit_tool_action(tool_input['teacher_id'], tool_name, 'INVOKE')
-            except Exception:
+            except Exception as e:
                 pass  # Audit failure should never block tool execution
+                sentry_sdk.capture_exception(e)
 
         if tool_input:
             # Strip teacher_id if the handler doesn't accept it

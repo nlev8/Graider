@@ -1,8 +1,12 @@
-"""Sentry capture_exception contract tests for SIS observability (PR-0).
+"""Sentry capture_exception contract tests for SIS + non-SIS observability
+(PR-0 + PR-a).
 
 Phase 2 Task 5 PR-0 adds `sentry_sdk.capture_exception(e)` to every
 LEGACY + NEEDS_ALERT exception handler in SIS-compliance files (Clever,
 ClassLink, OneRoster, roster_sync, sync_routes, oneroster_gradebook).
+
+PR-a extends to the remaining 80+ NEEDS_ALERT catches in non-SIS files
+(accommodations, app, assistant tools, email, grading routes, etc.).
 
 Per SIS compliance guardrail: zero behavior changes. Since mocking SIS
 HTTP clients against their full signatures is brittle, these tests
@@ -90,3 +94,52 @@ def test_every_flagged_sis_catch_captures_to_sentry():
         "The following SIS catches are missing capture_exception: "
         + ", ".join(failures)
     )
+
+
+# PR-a: non-SIS NEEDS_ALERT files. Expected minimum capture counts per
+# file (from the Task 4 audit). Static total check — robust against
+# line-shift from line-number-altering edits.
+PR_A_EXPECTED_CAPTURES = {
+    "backend/accommodations.py": 7,
+    "backend/api_keys.py": 2,
+    "backend/app.py": 4,
+    "backend/auth.py": 2,
+    "backend/routes/analytics_routes.py": 1,
+    "backend/routes/assessment_results_routes.py": 3,
+    "backend/routes/assistant_routes.py": 3,
+    "backend/routes/automation_routes.py": 1,
+    "backend/routes/behavior_routes.py": 4,
+    "backend/routes/district_routes.py": 3,
+    "backend/routes/email_routes.py": 8,
+    "backend/routes/grading_routes.py": 9,
+    "backend/routes/settings_routes.py": 1,
+    "backend/routes/stripe_routes.py": 1,
+    "backend/services/assistant_tools.py": 3,
+    "backend/services/assistant_tools_behavior.py": 3,
+    "backend/services/assistant_tools_communication.py": 1,
+    "backend/services/assistant_tools_reports.py": 2,
+    "backend/services/assistant_tools_student.py": 12,
+    "backend/services/notebooklm_service.py": 3,
+    "backend/services/outlook_sender.py": 4,
+    "backend/student_history.py": 2,
+    "backend/utils/audit.py": 2,
+}
+
+
+def test_pr_a_non_sis_files_have_expected_captures():
+    """PR-a: each non-SIS NEEDS_ALERT file must import sentry_sdk and
+    contain at least the expected number of capture_exception calls
+    (one per originally flagged catch). Line numbers aren't pinned
+    because patches shift them; the count floor is the real contract."""
+    failures = []
+    for path, expected in PR_A_EXPECTED_CAPTURES.items():
+        src = _file(path)
+        if not _imports_sentry(src):
+            failures.append(f"{path}: missing `import sentry_sdk`")
+            continue
+        count = src.count("sentry_sdk.capture_exception")
+        if count < expected:
+            failures.append(
+                f"{path}: has {count} capture calls, expected >= {expected}"
+            )
+    assert not failures, "\n".join(failures)

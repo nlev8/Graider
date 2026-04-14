@@ -21,6 +21,7 @@ from backend.services.assistant_tools import (
     _extract_first_name, PARENT_CONTACTS_FILE,
 )
 from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action, require_teacher_id
+import sentry_sdk
 
 # ═══════════════════════════════════════════════════════
 # SUPABASE CLIENT (lazy, same pattern as routes)
@@ -107,6 +108,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
             logger.info("_load_behavior_events: after fallback filtering, %d rows", len(rows))
         except Exception as e2:
             logger.error("_load_behavior_events: fallback query also failed: %s", e2)
+            sentry_sdk.capture_exception(e2)
 
     # Filter by student name in Python (fuzzy match)
     if student_name:
@@ -195,8 +197,9 @@ def _load_parent_contacts():
     try:
         with open(PARENT_CONTACTS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
         return []
+        sentry_sdk.capture_exception(e)
 
 
 # ═══════════════════════════════════════════════════════
@@ -862,8 +865,8 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
         pending_path = os.path.join(data_dir, "pending_send.json")
         with open(pending_path, 'w') as f:
             json.dump(pending, f)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     to_preview = parent_email if method == "email" else "Focus Communications portal"
 

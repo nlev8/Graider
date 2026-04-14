@@ -11,6 +11,7 @@ import asyncio
 import threading
 import time
 from pathlib import Path
+import sentry_sdk
 
 # ── Configurable paths (env vars for container deployments) ──────────────
 
@@ -256,8 +257,9 @@ def cleanup_expired_materials():
                     if nb_id:
                         storage_path = _resolve_storage_path(teacher_id)
                         asyncio.run(_delete_notebook(nb_id, storage_path))
-                except Exception:
+                except Exception as e:
                     pass  # Best-effort
+                    sentry_sdk.capture_exception(e)
                 import shutil
                 shutil.rmtree(dirpath, ignore_errors=True)
 
@@ -501,6 +503,7 @@ async def _create_notebook_with_sources(title, sources_list, storage_path=None):
                 added_count += 1
             except Exception as e:
                 src_name = src.get("path") or src.get("url") or src.get("title", "unknown")
+                sentry_sdk.capture_exception(e)
                 print(f"Warning: Source '{src_name}' failed to process: {e}")
                 # Continue with remaining sources instead of aborting
         if added_count == 0:
@@ -807,5 +810,6 @@ def run_generation_thread(teacher_id, notebook_id, material_types, options):
         # Clean up remote notebook — all materials are downloaded locally
         try:
             asyncio.run(_delete_notebook(notebook_id, storage_path))
-        except Exception:
+        except Exception as e:
             pass  # Best-effort cleanup; don't fail the generation
+            sentry_sdk.capture_exception(e)

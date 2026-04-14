@@ -15,6 +15,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 _logger = logging.getLogger(__name__)
 
@@ -169,8 +170,9 @@ def get_behavior_data():
 
         res = query.execute()
         rows = res.data or []
-    except Exception:
+    except Exception as e:
         _logger.debug("Supabase query returned no behavior data for teacher %s", teacher_id)
+        sentry_sdk.capture_exception(e)
         rows = []
 
     # Filter by student name (case-insensitive substring) in Python
@@ -284,8 +286,9 @@ def get_behavior_events():
 
         res = query.execute()
         rows = res.data or []
-    except Exception:
+    except Exception as e:
         _logger.debug("Supabase query returned no behavior events for teacher %s", teacher_id)
+        sentry_sdk.capture_exception(e)
         rows = []
 
     if student_filter:
@@ -375,8 +378,9 @@ def debug_behavior_data():
             'teacher_id', teacher_id
         ).execute()
         sessions = ses_res.data or []
-    except Exception:
+    except Exception as e:
         sessions = []
+        sentry_sdk.capture_exception(e)
 
     # Count events for this teacher
     try:
@@ -384,8 +388,9 @@ def debug_behavior_data():
             'teacher_id', teacher_id
         ).order('event_time', desc=True).limit(100).execute()
         events = evt_res.data or []
-    except Exception:
+    except Exception as e:
         events = []
+        sentry_sdk.capture_exception(e)
 
     # Unique student names
     student_names = sorted(set(e.get('student_name', '') for e in events if e.get('student_name')))

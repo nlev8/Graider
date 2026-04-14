@@ -14,6 +14,7 @@ from backend.services.assistant_tools import (
     _normalize_period, _extract_first_name, PARENT_CONTACTS_FILE,
 )
 from backend.utils.compliance import require_teacher_id
+import sentry_sdk
 
 
 # ═══════════════════════════════════════════════════════
@@ -392,8 +393,8 @@ def generate_parent_conference_notes(student_name, teacher_id='local-dev', **kwa
         try:
             with open(PARENT_CONTACTS_FILE, "r") as f:
                 contacts = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     # Find parent info
     parent_name = "Parent/Guardian"

@@ -14,6 +14,7 @@ stripe_bp = Blueprint('stripe', __name__)
 _logger = logging.getLogger(__name__)
 
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
+import sentry_sdk
 
 
 def _init_stripe():
@@ -258,5 +259,6 @@ def _sync_subscription_metadata(customer_id, subscription_id):
                 "subscription_period_end": sub["current_period_end"],
                 "subscription_cancel_at_period_end": sub["cancel_at_period_end"],
             })
-    except Exception:
+    except Exception as e:
         pass  # Webhook must return 200; errors logged by Stripe retry
+        sentry_sdk.capture_exception(e)

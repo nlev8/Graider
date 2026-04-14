@@ -14,6 +14,7 @@ from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 # Import accommodation module
 try:
@@ -1571,6 +1572,7 @@ def _run_focus_import():
 
     except Exception as e:
         _focus_import_state["status"] = "failed"
+        sentry_sdk.capture_exception(e)
         _focus_import_state["error"] = str(e)
 
 

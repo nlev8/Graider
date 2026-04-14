@@ -8,6 +8,7 @@ Extracted from app.py to avoid circular imports when used by compliance utilitie
 import os
 import logging
 from datetime import datetime
+import sentry_sdk
 
 AUDIT_LOG_FILE = os.path.expanduser("~/.graider_audit.log")
 logger = logging.getLogger(__name__)
@@ -35,8 +36,8 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
         log_entry = f"{timestamp} | {user} | {action} | {details[:500]}\n"
         with open(AUDIT_LOG_FILE, 'a') as f:
             f.write(log_entry)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # Supabase (persistent across deploys)
     try:
@@ -53,5 +54,6 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
                 'details': details[:500],
                 'user_type': user,
             }).execute()
-    except Exception:
+    except Exception as e:
         pass  # Supabase unavailable — local file is the fallback
+        sentry_sdk.capture_exception(e)

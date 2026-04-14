@@ -16,6 +16,7 @@ import time
 import logging
 import threading
 from contextvars import ContextVar
+import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +89,8 @@ def get_api_key(provider: str, teacher_id: str | None = None) -> str:
             val = district_ai.get(provider, '')
             if val:
                 return val
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # 4. Fall back to env var
     return os.getenv(env_var, '')
@@ -121,8 +122,9 @@ def resolve_keys_for_teacher(teacher_id: str) -> dict:
     try:
         from backend.storage import load as _storage_load
         district_admin_keys = _storage_load("district:ai_keys", "system") or {}
-    except Exception:
+    except Exception as e:
         district_admin_keys = {}
+        sentry_sdk.capture_exception(e)
     resolved = {}
     for provider, env_var in _ENV_MAP.items():
         resolved[provider] = (

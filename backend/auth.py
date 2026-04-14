@@ -13,6 +13,7 @@ from flask import request, jsonify, g, session
 logger = logging.getLogger(__name__)
 
 from backend.supabase_client import get_supabase as _get_supabase
+import sentry_sdk
 
 # Clever → Supabase account linking (uses storage.py for Supabase persistence)
 def load_clever_links():
@@ -27,8 +28,9 @@ def load_clever_links():
                 clever_id = key[len('clever_link:'):]
                 links[clever_id] = data.get('supabase_user_id', '')
         return links
-    except Exception:
+    except Exception as e:
         # Fallback to legacy file if storage not available
+        sentry_sdk.capture_exception(e)
         legacy_path = os.path.expanduser("~/.graider_data/clever_links.json")
         try:
             with open(legacy_path, 'r') as f:
@@ -42,8 +44,9 @@ def save_clever_link(clever_id, supabase_user_id):
     try:
         from backend.storage import save
         save(f'clever_link:{clever_id}', {'supabase_user_id': supabase_user_id}, 'system')
-    except Exception:
+    except Exception as e:
         # Fallback to legacy file
+        sentry_sdk.capture_exception(e)
         legacy_path = os.path.expanduser("~/.graider_data/clever_links.json")
         links = load_clever_links()
         links[clever_id] = supabase_user_id
