@@ -13,7 +13,9 @@ Endpoints:
 import os
 import logging
 import secrets
+
 import requests
+import sentry_sdk
 from flask import Blueprint, request, redirect, jsonify, session, g
 from urllib.parse import urlencode
 
@@ -91,6 +93,7 @@ def _link_classlink_account(classlink_id, email):
 
     except Exception as e:
         logger.warning("ClassLink account linking failed: %s", e)
+        sentry_sdk.capture_exception(e)
 
 
 def _resolve_classlink_user_id(classlink_id):
@@ -149,6 +152,7 @@ def _trigger_roster_sync(teacher_id, tenant_id):
             logger.info("Post-login ClassLink roster sync complete for %s", teacher_id)
         except Exception as e:
             logger.warning("Post-login ClassLink roster sync failed for %s: %s", teacher_id, e)
+            sentry_sdk.capture_exception(e)
 
     thread = threading.Thread(target=_bg_sync, daemon=True)
     thread.start()

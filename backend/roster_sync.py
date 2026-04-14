@@ -7,6 +7,8 @@ into the same shape and call sync_roster_to_db() / delete_roster_data().
 import logging
 import os
 
+import sentry_sdk
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,6 +77,7 @@ def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="manu
         )
     except Exception as e:
         logger.warning("Failed to batch-upsert classes (%s): %s", provider, str(e))
+        sentry_sdk.capture_exception(e)
         return zero
 
     class_rows = class_result.data if class_result and class_result.data else []
@@ -134,6 +137,7 @@ def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="manu
         )
     except Exception as e:
         logger.warning("Failed to batch-upsert students (%s): %s", provider, str(e))
+        sentry_sdk.capture_exception(e)
         return {"classes": synced_classes, "students": 0, "enrollments": 0}
 
     stu_rows = stu_result.data if stu_result and stu_result.data else []
@@ -167,6 +171,7 @@ def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="manu
             synced_enrollments = len(enrollment_payloads)
         except Exception as e:
             logger.warning("Failed to batch-upsert enrollments (%s): %s", provider, str(e))
+            sentry_sdk.capture_exception(e)
 
     logger.info(
         "%s DB sync complete: %d classes, %d students, %d enrollments",
@@ -269,6 +274,7 @@ def delete_roster_data(teacher_id):
             deleted["enrollments"] = len(class_ids)  # approximation
         except Exception as e:
             logger.error("Supabase roster deletion failed for %s: %s", teacher_id, str(e))
+            sentry_sdk.capture_exception(e)
 
     # --- Step 2: Delete local roster files ---
     import glob as globmod
@@ -287,6 +293,7 @@ def delete_roster_data(teacher_id):
                 deleted["roster_files"] += 1
             except OSError as e:
                 logger.warning("Failed to delete %s: %s", filepath, e)
+                sentry_sdk.capture_exception(e)
 
     logger.info("Roster data deletion complete for %s: %s", teacher_id, deleted)
     return deleted

@@ -11,6 +11,8 @@ import os
 import time
 import logging
 from datetime import datetime, timezone, timedelta
+
+import sentry_sdk
 from flask import Blueprint, request, jsonify
 
 from backend.extensions import limiter
@@ -144,6 +146,7 @@ def _save_cursor(last_teacher_id):
         storage_save('sync:last_cursor', {'last_teacher_id': last_teacher_id}, 'system')
     except Exception as e:
         logger.warning("Failed to save sync cursor: %s", e)
+        sentry_sdk.capture_exception(e)
 
 
 def _sync_one_teacher(teacher):
