@@ -618,7 +618,7 @@ def get_assessment_for_student(code):
         assessment = data.get('assessment', {})
         settings = data.get('settings', {})
 
-        # Shared material content (NotebookLM) — return directly
+        # Shared study-material content (study guide, flashcards, etc.) — return directly
         content_type = settings.get('content_type') or assessment.get('content_type')
         # Only study materials get the material response format.
         # Assignments and assessments both get the sections/questions format.

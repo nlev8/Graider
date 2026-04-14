@@ -119,7 +119,6 @@ PR_A_EXPECTED_CAPTURES = {
     "backend/services/assistant_tools_communication.py": 1,
     "backend/services/assistant_tools_reports.py": 2,
     "backend/services/assistant_tools_student.py": 12,
-    "backend/services/notebooklm_service.py": 3,
     "backend/services/outlook_sender.py": 4,
     "backend/student_history.py": 2,
     "backend/utils/audit.py": 2,
