@@ -1197,106 +1197,6 @@ export async function stopElementPicker() {
   return fetchApi('/api/automations/picker/stop', { method: 'POST' })
 }
 
-// ============ NotebookLM Materials ============
-
-export async function notebookLMAuthStatus() {
-  return fetchApi('/api/notebooklm/auth-status')
-}
-
-export async function notebookLMLogin(step) {
-  return fetchApi('/api/notebooklm/login', {
-    method: 'POST',
-    body: JSON.stringify({ step: step || 'start' }),
-  })
-}
-
-export async function notebookLMUploadContext(file) {
-  const formData = new FormData()
-  formData.append('file', file)
-  const authHeaders = await getAuthHeaders()
-  const response = await fetch('/api/notebooklm/upload-context', {
-    method: 'POST',
-    headers: { ...authHeaders },
-    body: formData,
-  })
-  return response.json()
-}
-
-export async function notebookLMCreateNotebook(plan, standards, config, supportDocPaths, plannerDocTexts) {
-  const body = { plan: plan, standards: standards, config: config }
-  if (supportDocPaths && supportDocPaths.length > 0) {
-    body.support_doc_paths = supportDocPaths
-  }
-  if (plannerDocTexts && plannerDocTexts.length > 0) {
-    body.planner_docs = plannerDocTexts
-  }
-  return fetchApi('/api/notebooklm/create-notebook', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-}
-
-export async function notebookLMGenerate(notebookId, materials, options) {
-  return fetchApi('/api/notebooklm/generate', {
-    method: 'POST',
-    body: JSON.stringify({ notebook_id: notebookId, materials: materials, options: options }),
-  })
-}
-
-export async function notebookLMStatus() {
-  return fetchApi('/api/notebooklm/status')
-}
-
-export async function notebookLMDownload(materialType) {
-  var authHeaders = await getAuthHeaders()
-  var response = await fetch('/api/notebooklm/download/' + materialType, {
-    headers: authHeaders,
-  })
-  if (!response.ok) throw new Error('Download failed')
-  var blob = await response.blob()
-  var url = URL.createObjectURL(blob)
-  var a = document.createElement('a')
-  a.href = url
-  var extMap = {
-    audio_overview: 'mp3', video_overview: 'mp4', quiz: 'json',
-    flashcards: 'json', study_guide: 'docx', slide_deck: 'pptx',
-    mind_map: 'json', infographic: 'png', data_table: 'csv',
-  }
-  a.download = materialType + '.' + (extMap[materialType] || 'bin')
-  document.body.appendChild(a)
-  a.click()
-  setTimeout(function() {
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }, 100)
-}
-
-export async function notebookLMPreview(materialType) {
-  return fetchApi('/api/notebooklm/preview/' + materialType)
-}
-
-export async function notebookLMCancel() {
-  return fetchApi('/api/notebooklm/cancel', { method: 'POST' })
-}
-
-export async function notebookLMRetry(options) {
-  return fetchApi('/api/notebooklm/retry', {
-    method: 'POST',
-    body: JSON.stringify({ options: options || {} }),
-  })
-}
-
-export async function shareMaterial(materialType, title, teacherName) {
-  return fetchApi('/api/notebooklm/share-material', {
-    method: 'POST',
-    body: JSON.stringify({
-      material_type: materialType,
-      title: title || materialType,
-      teacher_name: teacherName || 'Teacher',
-    }),
-  })
-}
-
 // ============ Resources (Assets) ============
 
 export async function saveResource(content, contentType, title, resourceId) {
@@ -1662,18 +1562,6 @@ export default {
   getPickerEvents,
   stopElementPicker,
   checkApiKeys,
-  // NotebookLM Materials
-  notebookLMAuthStatus,
-  notebookLMLogin,
-  notebookLMUploadContext,
-  notebookLMCreateNotebook,
-  notebookLMGenerate,
-  notebookLMStatus,
-  notebookLMDownload,
-  notebookLMPreview,
-  notebookLMCancel,
-  notebookLMRetry,
-  shareMaterial,
   // Resources (Assets)
   saveResource,
   listResources,

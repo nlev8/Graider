@@ -497,12 +497,6 @@ python graider_app.py
 - `DELETE /api/automations/<id>` — Delete workflow
 - `POST /api/automations/<id>/run` — Run a workflow
 
-### NotebookLM Integration
-- `GET /api/notebooklm/auth-status` — Check auth status
-- `POST /api/notebooklm/create-notebook` — Create notebook
-- `POST /api/notebooklm/generate` — Generate study materials
-- `GET /api/notebooklm/download/<type>` — Download generated material
-
 ### Slide Deck Generation
 - `POST /api/generate-slides` — Generate slide deck content + AI graphics from lesson plan
 - `POST /api/export-slides` — Export generated slides as PowerPoint (.pptx)
@@ -649,7 +643,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **Graider** (4880 symbols, 12630 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Graider** (11218 symbols, 29846 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
