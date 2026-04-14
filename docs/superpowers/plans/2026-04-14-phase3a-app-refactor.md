@@ -4,7 +4,7 @@
 
 **Goal:** Reduce `backend/app.py` from 3528 → ~1400 lines by extracting grading state + thread code into `backend/grading/` while establishing the Flask app-factory pattern. Zero behavior change. SIS compliance (Clever/ClassLink/OneRoster) stays green throughout.
 
-**Architecture:** Four sequential PRs. PR1 introduces `create_app()` pattern with no code movement. PR2 extracts state + persistence helpers into `grading/state.py` with import shims in app.py. PR3 extracts thread + pipeline into `grading/thread.py` with shims. PR4 migrates consumers and removes shims.
+**Architecture:** Four sequential PRs. PR1 introduces `init_app(app)` initializer (module-level `app` and `@app.route` decorators stay put). PR2 extracts state + persistence helpers into `grading/state.py` with import shims in app.py. PR3 extracts thread wrapper to `grading/thread.py` and pipeline to `grading/pipeline.py` (3-file split). PR4 migrates consumers, extracts `format_rubric_for_prompt` to `services/rubric_formatting.py`, and removes shims.
 
 **Tech Stack:** Python 3.14, Flask, pytest.
 
@@ -18,12 +18,14 @@ After all four PRs:
 
 | File | Role | Size (approx) |
 |---|---|---|
-| `backend/app.py` | Factory (`create_app`), top-level middleware, error handlers, audit helpers, calibration helper, legacy route handlers not yet in blueprints | ~1400 LOC |
-| `backend/grading/__init__.py` | Package marker + re-exports | ~20 LOC |
+| `backend/app.py` | Module-level `app = Flask(...)`, `init_app(app)` initializer, module-level `@app.route` decorators (legacy handlers not yet in blueprints), audit helpers, calibration helper | ~1400 LOC |
+| `backend/grading/__init__.py` | Package marker | ~20 LOC |
 | `backend/grading/state.py` | `_grading_states`, `_grading_locks`, `_get_state`, `_get_lock`, `_update_state`, `reset_state`, `_create_default_state`, `load_saved_results`, `save_results` | ~220 LOC |
-| `backend/grading/thread.py` | `run_grading_thread` (BYOK wrapper), `_run_grading_thread_inner` (with its nested `format_rubric_for_prompt` intact) | ~2100 LOC |
-| `tests/test_app_boot.py` | Boot + route-count smoke tests (new) | ~40 LOC |
-| `tests/test_grading_shims.py` | Verify backwards-compat shims work (temporary, deleted in PR4) | ~30 LOC |
+| `backend/grading/thread.py` | `run_grading_thread` BYOK wrapper (thread lifecycle only; imports pipeline) | ~70 LOC |
+| `backend/grading/pipeline.py` | `_run_grading_thread_inner` business-logic pipeline (moved byte-identical in PR3; nested `format_rubric_for_prompt` extracted in PR4) | ~2000 LOC |
+| `backend/services/rubric_formatting.py` | `format_rubric_for_prompt` (extracted from pipeline's nested scope in PR4) | ~40 LOC |
+| `tests/test_app_boot.py` | Boot + route-snapshot smoke tests (new) | ~60 LOC |
+| `tests/test_grading_shims.py` | Verify backwards-compat shims work (temporary, deleted in PR4) | ~50 LOC |
 
 ## Hard constraints (enforced every PR)
 
@@ -35,13 +37,13 @@ After all four PRs:
 
 ---
 
-## Task 1 (PR1): Introduce app-factory pattern — ZERO code movement to other files
+## Task 1 (PR1): Introduce `init_app(app)` initializer — ZERO code movement to other files
 
 **Files:**
 - Modify: `backend/app.py` (restructure internally only; no extraction)
 - Create: `tests/test_app_boot.py`
 
-**Why:** Establishes `create_app()` entry point so later PRs have a clean seam for adding modules. Nothing is moved out of `app.py` in this PR — only internally reorganized.
+**Why:** Establishes `init_app(app)` as a well-defined initialization seam. Module-level `app = Flask(...)` and all module-level `@app.route` decorators STAY PUT (Codex/Gemini tie-break: full `create_app()` factory would require moving every `@app.route` inside the factory scope or converting all to blueprints — both are scope creep for Phase 3a). Only middleware / error-handler registration, `register_routes(...)` call, and SIGTERM setup move into the initializer.
 
 - [ ] **Step 1.1: Create branch**
 
@@ -50,133 +52,182 @@ git checkout main && git pull origin main
 git checkout -b feat/phase3a-pr1-app-factory
 ```
 
-- [ ] **Step 1.2: Write boot-check test FIRST (TDD)**
+- [ ] **Step 1.2: Write boot + route-snapshot tests FIRST (TDD)**
 
 Create `/Users/alexc/Downloads/Graider/tests/test_app_boot.py`:
 
 ```python
-"""Boot + route-count smoke tests for backend/app.py.
+"""Boot + route-snapshot smoke tests for backend/app.py.
 
-Phase 3a safety net: pin that the app still boots and has the expected
-number of URL rules across the Phase 3a refactor. Line-shift-tolerant;
-uses a floor rather than exact count.
+Phase 3a safety net: pin that the app still boots, has the expected
+minimum URL rules, and no existing endpoint silently changed path or
+methods across the refactor. Per Codex/Gemini tie-break, snapshot
+captures endpoint → (rule, methods) not just count.
 """
 import importlib
 import sys
 
 
-def test_app_module_imports_cleanly():
-    """Importing backend.app must not raise."""
-    # Put backend/ on path (same as production entry point)
+def _import_app():
+    """Fresh import of backend.app with backend/ on sys.path.
+    Matches production entry point."""
     sys.path.insert(0, "backend")
     try:
         import app as backend_app
         importlib.reload(backend_app)
-        assert hasattr(backend_app, "app"), "Module must expose a Flask `app` instance"
+        return backend_app
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
+
+
+def test_app_module_imports_cleanly():
+    """Importing backend.app must not raise."""
+    backend_app = _import_app()
+    assert hasattr(backend_app, "app"), "Module must expose a Flask `app` instance"
 
 
 def test_app_registers_expected_route_count():
-    """Ensure the Flask app has at least 250 URL rules registered.
-    This floors the count against accidental blueprint-registration regressions."""
-    sys.path.insert(0, "backend")
-    try:
-        import app as backend_app
-        importlib.reload(backend_app)
-        rule_count = len(backend_app.app.url_map._rules)
-        assert rule_count >= 250, f"Expected >= 250 rules, got {rule_count}"
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
+    """Floor check: at least 250 URL rules registered.
+    Guards against accidental blueprint-registration regressions."""
+    backend_app = _import_app()
+    rule_count = len(backend_app.app.url_map._rules)
+    assert rule_count >= 250, f"Expected >= 250 rules, got {rule_count}"
 
 
-def test_app_exposes_create_app_factory():
-    """Phase 3a PR1 adds a create_app() factory. This test exists from PR1
-    onward; before PR1 it would fail (function doesn't exist)."""
-    sys.path.insert(0, "backend")
-    try:
-        import app as backend_app
-        importlib.reload(backend_app)
-        assert callable(backend_app.create_app), "create_app() must be callable"
-        # The factory must be idempotent: calling it returns a Flask app
-        # with registered routes.
-        test_app = backend_app.create_app()
-        assert len(test_app.url_map._rules) >= 250
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
+def test_app_exposes_init_app_initializer():
+    """Phase 3a PR1 adds init_app(app). This test exists from PR1 onward;
+    before PR1 it would fail (function doesn't exist)."""
+    backend_app = _import_app()
+    assert callable(backend_app.init_app), "init_app(app) must be callable"
+
+
+def test_app_route_snapshot_has_no_silent_drift():
+    """Pin endpoint → (rule, methods) so a silent path/method change in any
+    refactor step surfaces as a failed assertion.
+
+    Collects current snapshot and asserts the KEY endpoints used by Clever,
+    ClassLink, and OneRoster SSO still exist with their original rules +
+    HTTP methods. This is the SIS-compliance safety rail.
+    """
+    backend_app = _import_app()
+    snapshot = {
+        rule.endpoint: (rule.rule, sorted(rule.methods - {"HEAD", "OPTIONS"}))
+        for rule in backend_app.app.url_map.iter_rules()
+    }
+    # Pin critical SIS endpoints. If an endpoint is renamed or its methods
+    # change, this test fails and the refactor is blocked.
+    required = {
+        # Clever
+        "clever_routes.clever_login_url":       ("/api/clever/login-url",       ["GET"]),
+        "clever_routes.clever_callback":        ("/api/clever/callback",        ["GET"]),
+        "clever_routes.clever_session":         ("/api/clever/session",         ["GET"]),
+        # ClassLink
+        "classlink_routes.classlink_login_url": ("/api/classlink/login-url",    ["GET"]),
+        "classlink_routes.classlink_callback":  ("/api/classlink/callback",     ["GET"]),
+        # OneRoster
+        "oneroster_routes.oneroster_config":    ("/api/oneroster/config",       ["GET", "POST"]),
+    }
+    missing = {k: v for k, v in required.items() if k not in snapshot}
+    mismatched = {
+        k: (snapshot[k], v)
+        for k, v in required.items()
+        if k in snapshot and snapshot[k] != v
+    }
+    assert not missing, f"SIS-critical endpoints missing from snapshot: {missing}"
+    assert not mismatched, f"SIS-critical endpoint path/method drift: {mismatched}"
 ```
 
-- [ ] **Step 1.3: Run the new test — confirm the third test fails**
+**Before writing the test, verify the exact endpoint names by running:**
+
+```bash
+cd backend && source ../venv/bin/activate && python -c "
+from app import app
+for rule in sorted(app.url_map.iter_rules(), key=lambda r: r.rule):
+    if '/api/clever' in rule.rule or '/api/classlink' in rule.rule or '/api/oneroster' in rule.rule:
+        methods = sorted(rule.methods - {'HEAD', 'OPTIONS'})
+        print(f'{rule.endpoint!r:60} {rule.rule!r:45} {methods}')
+" 2>&1 | head -30
+cd ..
+```
+
+Replace the `required = {...}` dict with the EXACT endpoint names printed. If endpoint names differ from the guesses above, use the actual printed values. The test must represent REAL current state before refactor.
+
+- [ ] **Step 1.3: Run the new tests — confirm `test_app_exposes_init_app_initializer` fails**
 
 ```bash
 source venv/bin/activate
 python -m pytest tests/test_app_boot.py -v
 ```
 
-Expected: `test_app_module_imports_cleanly` and `test_app_registers_expected_route_count` PASS (app already boots and has routes). `test_app_exposes_create_app_factory` FAILS (create_app doesn't exist yet).
+Expected: `test_app_module_imports_cleanly`, `test_app_registers_expected_route_count`, and `test_app_route_snapshot_has_no_silent_drift` PASS. `test_app_exposes_init_app_initializer` FAILS (init_app doesn't exist yet). This failing test is the TDD driver for Step 1.4.
 
-- [ ] **Step 1.4: Refactor app.py to introduce `create_app()` without moving code**
+- [ ] **Step 1.4: Refactor app.py to introduce `init_app(app)` initializer (module-level `app` stays put)**
 
 Open `/Users/alexc/Downloads/Graider/backend/app.py`.
 
-Current state: `app = Flask(__name__, static_folder='static', static_url_path='')` at line 82, followed by top-level middleware / error handlers / function defs / state init / thread fns / blueprint registration at line 2055.
+Current state: `app = Flask(__name__, static_folder='static', static_url_path='')` at line 82; module-level `@app.after_request` / `@app.errorhandler` / multiple `@app.route` decorators scattered throughout; `register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)` at line 2055; `signal.signal(signal.SIGTERM, _handle_sigterm)` registration also at module level.
 
-Goal: Wrap the Flask instantiation + middleware + blueprint registration inside `create_app()`. The function returns the same `app` instance. For backwards compatibility, keep `app = create_app()` at module level so `from backend.app import app` still works.
+Goal: Extract ONLY the imperative initialization calls (`register_routes` + SIGTERM registration) into `init_app(app)`. Leave every decorator and every function definition at module level so their scope doesn't change.
 
-Conceptual shape after refactor (actual line numbers will differ):
+Conceptual shape after refactor:
 
 ```python
-# ... all imports stay at top ...
+# Imports at top (unchanged)
+from flask import Flask, request, jsonify, ...
+import signal, threading, ...
 
-def create_app():
-    """Flask application factory.
+# Module-level Flask instance — STAYS HERE so decorators keep attaching
+app = Flask(__name__, static_folder='static', static_url_path='')
 
-    Returns the Flask app instance with middleware, error handlers, and
-    route blueprints registered. Currently all code still lives in app.py;
-    PRs 2-4 extract grading state and thread code into backend/grading/.
+
+# Middleware (STAYS at module level, body byte-identical)
+@app.after_request
+def set_security_headers(response):
+    # ... existing body, BYTE-IDENTICAL ...
+    return response
+
+
+# Error handlers (STAY at module level, body byte-identical)
+@app.errorhandler(500)
+def handle_500(e):
+    # ... existing body, BYTE-IDENTICAL ...
+    ...
+
+
+@app.errorhandler(404)
+def handle_404(e):
+    # ... existing body, BYTE-IDENTICAL ...
+    ...
+
+
+# All module-level functions STAY WHERE THEY ARE (unchanged in PR1):
+# load_saved_results, save_results, _grading_states, _create_default_state,
+# _get_state, _get_lock, _update_state, reset_state,
+# run_grading_thread, _run_grading_thread_inner, _handle_sigterm, plus every
+# module-level @app.route(...) handler at former lines 2359/2898/etc.
+
+
+def init_app(app):
+    """Imperative initialization wiring for the Flask app.
+
+    Called exactly once at module load (below) AFTER all decorators have
+    attached. Factored out as a named function so Phase 3a PR2+ can reason
+    about the initialization seam and Phase 3b+ can eventually evolve this
+    into a full create_app() factory once module-level @app.route handlers
+    migrate to blueprints.
     """
-    app = Flask(__name__, static_folder='static', static_url_path='')
-
-    # Register middleware
-    @app.after_request
-    def set_security_headers(response):
-        # ... existing body ...
-        pass
-
-    # Register error handlers
-    @app.errorhandler(500)
-    def handle_500(e):
-        # ... existing body ...
-        pass
-
-    @app.errorhandler(404)
-    def handle_404(e):
-        # ... existing body ...
-        pass
-
-    # Register routes (blueprints)
+    # Lazy imports preserved from original code
     from routes import register_routes
     register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
 
-    # Register legacy route handlers that are still on app.py directly
-    # (they must be moved INTO create_app's scope so they hit this app instance)
-    _register_legacy_routes(app)
-
-    return app
+    # SIGTERM registration (the _handle_sigterm function body itself stays
+    # at module level; only the signal.signal() call moves here)
+    signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
-def _register_legacy_routes(app):
-    """Legacy inline route handlers that haven't migrated to blueprints yet."""
-    # All @app.route(...) defs currently at module level move here
-    # ... exact bodies preserved ...
-    pass
-
-
-# Module-level app for backwards compat: `from backend.app import app` still works
-app = create_app()
+# Run initializer ONCE at module load, AFTER all decorators have attached.
+init_app(app)
 
 
 if __name__ == '__main__':
@@ -184,17 +235,19 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000, debug=False)
 ```
 
-Key rule for this PR: ALL function bodies stay byte-for-byte identical. Only wrapping and call-order change. The state dict `_grading_states`, all state helper functions, `load_saved_results`, `save_results`, `run_grading_thread`, `_run_grading_thread_inner` stay at module level (unchanged). SIGTERM handler `_handle_sigterm` also stays at module level (it needs `_grading_states` which is module-level).
+Key rules for this PR:
+1. **Module-level `app = Flask(...)` stays.** So does every `@app.after_request`, `@app.errorhandler`, and `@app.route` decorator + decorated function.
+2. **Function bodies are byte-identical** to pre-refactor. The ONLY diff is: extract the `register_routes(...)` line + `signal.signal(...)` line into `init_app()`, and add a single `init_app(app)` call at the bottom.
+3. **The `_handle_sigterm` function body stays at module level** — only its `signal.signal(...)` registration moves.
+4. `from routes import register_routes` stays INSIDE `init_app` (lazy import preserves the original pattern).
 
-**Subtlety:** `@app.after_request`, `@app.errorhandler`, and `@app.route` decorators in the original code reference the module-level `app`. When we move these into `create_app()`, they now decorate the `app` that's in scope there (the local one). Because `create_app()` returns that same `app` instance and we assign `app = create_app()` at module level, the module-level `app` IS the one with all the decorators applied. No behavior change.
-
-- [ ] **Step 1.5: Run the test — all three tests must now pass**
+- [ ] **Step 1.5: Run the test — all four tests must now pass**
 
 ```bash
 python -m pytest tests/test_app_boot.py -v
 ```
 
-Expected: all 3 tests PASS.
+Expected: all 4 tests PASS, including `test_app_exposes_init_app_initializer` and `test_app_route_snapshot_has_no_silent_drift`.
 
 - [ ] **Step 1.6: Run the full SIS compliance suite**
 
@@ -240,19 +293,24 @@ If Codex returns HOLD, address each finding and re-run steps 1.5-1.7 before re-s
 ```bash
 git add backend/app.py tests/test_app_boot.py
 git commit -m "$(cat <<'EOF'
-refactor: introduce create_app() factory pattern (Phase 3a PR1)
+refactor: introduce init_app(app) initializer (Phase 3a PR1)
 
-Wraps Flask instantiation + middleware + error handlers + blueprint
-registration inside create_app(). Module-level `app = create_app()`
-preserves backwards-compat for `from backend.app import app`. Zero
-code movement out of app.py; function bodies byte-identical.
+Extracts the imperative initialization wiring (register_routes call +
+SIGTERM signal registration) into an init_app(app) function. Module-level
+`app = Flask(...)` stays in place so all module-level @app.after_request
+/ @app.errorhandler / @app.route decorators continue to attach correctly
+(Codex/Gemini tie-break: full create_app() factory would require moving
+every route decorator and was deemed Phase 3a scope creep).
 
 Adds tests/test_app_boot.py pinning:
 - Module imports cleanly
 - URL rule count >= 250 (guards blueprint regression)
-- create_app() factory is callable and returns a Flask app with routes
+- init_app(app) initializer is callable
+- SIS-critical endpoints (Clever/ClassLink/OneRoster) exist with their
+  exact path + HTTP methods — route-snapshot drift guard
 
-SIS compliance: 180/180 green. Coverage: unchanged.
+Function bodies byte-identical. SIS compliance: 180/180 green.
+Coverage: unchanged.
 
 Spec: docs/superpowers/specs/2026-04-14-phase3a-app-refactor-design.md
 Codex Gate 3: GREEN.
@@ -261,7 +319,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git push origin feat/phase3a-pr1-app-factory
-gh pr create --title "refactor: introduce create_app() factory (Phase 3a PR1)" --body "Phase 3a PR1 of 4. Pure structural refactor; no code extraction yet. Establishes factory pattern for PR2-4."
+gh pr create --title "refactor: introduce init_app(app) initializer (Phase 3a PR1)" --body "Phase 3a PR1 of 4. Pure structural refactor; no code extraction yet. Establishes init_app seam for PR2-4; full create_app factory deferred to Phase 3b+ after module-level route handlers migrate to blueprints."
 ```
 
 Wait for CI green and user merge signoff.
@@ -550,11 +608,14 @@ Wait for CI + user merge signoff.
 
 ---
 
-## Task 3 (PR3): Extract thread + inner pipeline to `backend/grading/thread.py`
+## Task 3 (PR3): Extract thread wrapper to `backend/grading/thread.py` AND pipeline to `backend/grading/pipeline.py`
 
 **Files:**
-- Create: `backend/grading/thread.py`
-- Modify: `backend/app.py` (remove thread code; extend shim)
+- Create: `backend/grading/thread.py` (~70 LOC — wrapper only)
+- Create: `backend/grading/pipeline.py` (~2000 LOC — inner pipeline)
+- Modify: `backend/app.py` (remove thread + pipeline code; extend shim)
+
+**Why 3 files, not 2 (rev 2 change):** Codex + Gemini tie-break — putting a 2000-line business-logic pipeline in a file named `thread.py` conflates lifecycle/concurrency with business logic. Splitting to `thread.py` (orchestration wrapper) + `pipeline.py` (business logic) is still a pure byte-identical move per the Phase 3a constraint ("no internal decomposition"), just split across 2 target files. Paves the road for Phase 3b unit-testing the pipeline in isolation.
 
 - [ ] **Step 3.1: Create branch**
 
@@ -563,14 +624,15 @@ git checkout main && git pull origin main
 git checkout -b feat/phase3a-pr3-thread-extract
 ```
 
-- [ ] **Step 3.2: Extend `tests/test_grading_shims.py` to pin thread shim**
+- [ ] **Step 3.2: Extend `tests/test_grading_shims.py` to pin thread AND pipeline shims**
 
 Add to `/Users/alexc/Downloads/Graider/tests/test_grading_shims.py`:
 
 ```python
-def test_backend_app_reexports_grading_thread_helpers():
-    """Phase 3a PR3: thread wrapper and inner pipeline live in
-    backend.grading.thread. app.py keeps re-export shim until PR4."""
+def test_backend_app_reexports_grading_thread_and_pipeline_helpers():
+    """Phase 3a PR3: thread wrapper lives in backend.grading.thread;
+    inner pipeline lives in backend.grading.pipeline. app.py keeps
+    re-export shim for both until PR4."""
     import importlib
     import sys
     sys.path.insert(0, "backend")
@@ -585,53 +647,120 @@ def test_backend_app_reexports_grading_thread_helpers():
 
 
 def test_grading_thread_module_is_canonical():
-    """Canonical path for the thread wrapper + inner pipeline."""
+    """Canonical path for the thread wrapper."""
     import sys
     sys.path.insert(0, "backend")
     try:
         from grading import thread as grading_thread
-        for name in ("run_grading_thread", "_run_grading_thread_inner"):
-            assert hasattr(grading_thread, name), f"backend.grading.thread must define {name!r}"
+        assert hasattr(grading_thread, "run_grading_thread"), "backend.grading.thread must define run_grading_thread"
+    finally:
+        if "backend" in sys.path:
+            sys.path.remove("backend")
+
+
+def test_grading_pipeline_module_is_canonical():
+    """Canonical path for the inner pipeline."""
+    import sys
+    sys.path.insert(0, "backend")
+    try:
+        from grading import pipeline as grading_pipeline
+        assert hasattr(grading_pipeline, "_run_grading_thread_inner"), "backend.grading.pipeline must define _run_grading_thread_inner"
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
 ```
 
-- [ ] **Step 3.3: Run the new tests — both must fail**
+- [ ] **Step 3.3: Run the new tests — both module-canonical tests must fail**
 
 ```bash
-python -m pytest tests/test_grading_shims.py::test_grading_thread_module_is_canonical -v
+python -m pytest tests/test_grading_shims.py::test_grading_thread_module_is_canonical tests/test_grading_shims.py::test_grading_pipeline_module_is_canonical -v
 ```
 
-Expected: FAIL with ImportError (module doesn't exist yet).
+Expected: both FAIL with ImportError (modules don't exist yet).
 
-- [ ] **Step 3.4: Create `backend/grading/thread.py`**
+- [ ] **Step 3.4a: Create `backend/grading/pipeline.py`**
 
 The code to move from `backend/app.py`:
-- Lines 543–568: `run_grading_thread(...)` wrapper
-- Lines 570–2053: `_run_grading_thread_inner(...)` (including its nested `format_rubric_for_prompt` at former line 587)
-- All imports that `_run_grading_thread_inner` needs at the top of app.py (identify each one — e.g., `from backend.services.grading_service import ...`, `from backend.services.portal_grading import ...`, pandas, openpyxl, etc.)
+- Lines 570–2053: `_run_grading_thread_inner(...)` (including its nested `format_rubric_for_prompt` at former line 587 — stays nested in this PR; extracted out in PR4)
+- All module-level imports that `_run_grading_thread_inner` needs (copy them to the top of pipeline.py — do NOT remove from app.py yet; shim keeps app.py imports intact until PR4)
 
-Create `/Users/alexc/Downloads/Graider/backend/grading/thread.py`:
+Create `/Users/alexc/Downloads/Graider/backend/grading/pipeline.py`:
 
 ```python
-"""Grading thread wrapper + inner pipeline.
+"""Grading business-logic pipeline.
 
-Extracted from backend/app.py in Phase 3a PR3. The nested
-format_rubric_for_prompt inside _run_grading_thread_inner moves along
-with its parent. The ~2000-line inner function remains a single unit
-(internal decomposition deferred per spec).
+Extracted from backend/app.py in Phase 3a PR3. Byte-identical move —
+no internal decomposition. The nested format_rubric_for_prompt at
+former line 587 stays nested here in PR3; it moves out to
+backend/services/rubric_formatting.py in PR4.
 """
 # All imports _run_grading_thread_inner needs — copied from app.py top.
-# Do NOT remove these imports from app.py yet; that happens in PR4.
 import json
 import os
 import threading
 from pathlib import Path
+from datetime import datetime
 
-# Graider-internal imports that the grading thread uses:
+# Graider-internal imports the pipeline needs (enumerate EVERY one that
+# _run_grading_thread_inner references at runtime — grading_service,
+# portal_grading helpers, assignment_grader, plagiarism_detector,
+# writing_style, handwriting_fallback, extractors, storage, compliance,
+# and any others. Use grep to confirm completeness):
 from backend.grading.state import _get_state, _get_lock, save_results, _update_state
-# ... all other service imports _run_grading_thread_inner references ...
+# ... etc. ...
+
+
+def _run_grading_thread_inner(assignments_folder, output_folder, roster_file,
+                              assignment_config=None, global_ai_notes='',
+                              grading_period='Q3', grade_level='7',
+                              subject='Social Studies', teacher_name='',
+                              school_name='', selected_files=None,
+                              ai_model='gpt-4o-mini', skip_verified=False,
+                              class_period='', rubric=None, ensemble_models=None,
+                              extraction_mode='structured', trusted_students=None,
+                              grading_style='standard', teacher_id='local-dev'):
+    """Exact body from backend/app.py:570-2053 (BYTE-IDENTICAL), including
+    the nested format_rubric_for_prompt at former line 587."""
+    # ... byte-identical copy ...
+```
+
+**Critical (imports completeness):** Before creating pipeline.py, scan `_run_grading_thread_inner` for every external name it references. Use:
+```bash
+cd backend && source ../venv/bin/activate && python -c "
+import ast
+tree = ast.parse(open('app.py').read())
+for node in ast.walk(tree):
+    if isinstance(node, ast.FunctionDef) and node.name == '_run_grading_thread_inner':
+        names = set()
+        for n in ast.walk(node):
+            if isinstance(n, ast.Name):
+                names.add(n.id)
+            elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name):
+                names.add(n.value.id)
+        for name in sorted(names):
+            print(name)
+        break
+" | sort -u
+cd ..
+```
+Every name in that list that's not defined WITHIN the function must be importable in pipeline.py.
+
+- [ ] **Step 3.4b: Create `backend/grading/thread.py`**
+
+The code to move from `backend/app.py`:
+- Lines 543–568: `run_grading_thread(...)` wrapper (BYOK context manager + call to `_run_grading_thread_inner`)
+
+Create `/Users/alexc/Downloads/Graider/backend/grading/thread.py`:
+
+```python
+"""Grading thread lifecycle wrapper.
+
+Extracted from backend/app.py in Phase 3a PR3. Handles BYOK (bring your
+own key) context management then delegates to the pipeline module for
+the actual grading logic. Thin wrapper (~70 LOC) — lifecycle concerns
+ONLY; business logic lives in backend.grading.pipeline.
+"""
+from backend.grading.pipeline import _run_grading_thread_inner
 
 
 def run_grading_thread(assignments_folder, output_folder, roster_file,
@@ -644,37 +773,25 @@ def run_grading_thread(assignments_folder, output_folder, roster_file,
                        extraction_mode='structured', trusted_students=None,
                        grading_style='standard', teacher_id='local-dev',
                        user_api_keys=None):
-    """Exact body from backend/app.py:543-568."""
-    # ... byte-identical ...
-
-
-def _run_grading_thread_inner(assignments_folder, output_folder, roster_file,
-                              assignment_config=None, global_ai_notes='',
-                              grading_period='Q3', grade_level='7',
-                              subject='Social Studies', teacher_name='',
-                              school_name='', selected_files=None,
-                              ai_model='gpt-4o-mini', skip_verified=False,
-                              class_period='', rubric=None, ensemble_models=None,
-                              extraction_mode='structured', trusted_students=None,
-                              grading_style='standard', teacher_id='local-dev'):
-    """Exact body from backend/app.py:570-2053, including the nested
-    format_rubric_for_prompt at former line 587."""
-    # ... byte-identical, nested function and all ...
+    """Exact body from backend/app.py:543-568 (BYTE-IDENTICAL). Wraps
+    _run_grading_thread_inner with BYOK user_api_keys context.
+    """
+    # ... byte-identical copy ...
 ```
 
-**Critical:** The body of `_run_grading_thread_inner` references `_get_state` — that now needs to come from `backend.grading.state`. The old code used the local module-level reference, which worked because `_get_state` was in app.py. Since we moved `_get_state` to `grading.state` in PR2, `thread.py` can import it directly. No behavior change.
+**Critical (format_rubric_for_prompt in PR3):** The nested `format_rubric_for_prompt` inside `_run_grading_thread_inner` stays nested in pipeline.py for this PR. It moves to `backend/services/rubric_formatting.py` in PR4.
 
-**Critical (nested function):** The `def format_rubric_for_prompt` at former line 587 is local to `_run_grading_thread_inner`. It stays nested. It moves with its enclosing function. The `from backend.app import format_rubric_for_prompt` in `portal_grading.py:380` remains a pre-existing latent issue NOT fixed by this PR (the function was never at module level; that import has always failed when exercised). Document this in the PR body.
+**Critical (latent import bug unchanged by PR3):** `portal_grading.py:380` does `from backend.app import format_rubric_for_prompt`. That import has always raised ImportError when exercised (the function has always been nested). PR3 does NOT fix this — PR4 does. Document in the PR body.
 
 - [ ] **Step 3.5: Remove moved code from app.py; extend the shim**
 
 In `backend/app.py`:
 
-1. Delete lines 543–2053 (the two thread functions).
-2. Extend the shim import (still at the same location PR2 introduced it):
+1. Delete lines 543–2053 (the two thread functions: `run_grading_thread` and `_run_grading_thread_inner`).
+2. Extend the shim import (still at the same location PR2 introduced it) to re-export from BOTH modules:
 
 ```python
-# Phase 3a: grading state + thread moved to backend/grading/.
+# Phase 3a: grading state + thread + pipeline moved to backend/grading/.
 # Re-export for backwards compat until PR4 migrates consumers.
 from grading.state import (
     load_saved_results,
@@ -687,11 +804,11 @@ from grading.state import (
     _update_state,
     reset_state,
 )
-from grading.thread import (
-    run_grading_thread,
-    _run_grading_thread_inner,
-)
+from grading.thread import run_grading_thread
+from grading.pipeline import _run_grading_thread_inner
 ```
+
+**Note:** `register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)` inside `init_app(app)` still works unchanged — `run_grading_thread` is in module namespace via the shim.
 
 - [ ] **Step 3.6: Run the updated shim-guard tests**
 
@@ -699,7 +816,7 @@ from grading.thread import (
 python -m pytest tests/test_grading_shims.py -v
 ```
 
-Expected: all 4 tests PASS.
+Expected: all 5 tests PASS (the PR2 pair + 3 new PR3 tests: reexport check, thread canonical, pipeline canonical).
 
 - [ ] **Step 3.7: Run boot + SIS + full suite**
 
@@ -727,30 +844,37 @@ Expected: `/api/status` returns a valid state dict with `is_running: false` init
 - [ ] **Step 3.9: Codex Gate 3 review**
 
 Requirements:
-- Only `backend/app.py`, `backend/grading/thread.py`, `tests/test_grading_shims.py` changed.
-- Function bodies in `grading/thread.py` are byte-identical to the deleted app.py lines (nested function included).
+- Only `backend/app.py`, `backend/grading/thread.py`, `backend/grading/pipeline.py`, `tests/test_grading_shims.py` changed.
+- Function bodies in `grading/thread.py` and `grading/pipeline.py` are byte-identical to the deleted app.py lines (nested `format_rubric_for_prompt` still nested inside pipeline's `_run_grading_thread_inner`).
+- Import chain: `grading/thread.py` imports `_run_grading_thread_inner` from `grading.pipeline`; `grading/pipeline.py` imports state helpers from `grading.state`; no circular deps.
 - No Clever/ClassLink/OneRoster file modifications.
 - `portal_grading.py`, `assistant_tools_student.py`, `email_routes.py` NOT modified (those stay on the shim path until PR4).
 
 - [ ] **Step 3.10: Commit, push, open PR**
 
 ```bash
-git add backend/app.py backend/grading/thread.py tests/test_grading_shims.py
+git add backend/app.py backend/grading/thread.py backend/grading/pipeline.py tests/test_grading_shims.py
 git commit -m "$(cat <<'EOF'
-refactor: extract grading thread to backend/grading/thread.py (Phase 3a PR3)
+refactor: extract grading thread + pipeline (Phase 3a PR3)
 
-Moves run_grading_thread + _run_grading_thread_inner (with nested
-format_rubric_for_prompt intact) from backend/app.py into
-backend/grading/thread.py. Function bodies byte-identical. Shim in
-app.py re-exports both names so register_routes(...) injection and
-SIGTERM handler continue to work unchanged.
+Splits the 3-file extraction per Codex/Gemini tie-break:
+- backend/grading/thread.py (~70 LOC): run_grading_thread BYOK wrapper.
+  Lifecycle concerns only; imports the pipeline.
+- backend/grading/pipeline.py (~2000 LOC): _run_grading_thread_inner
+  business-logic pipeline. Byte-identical move from app.py. Nested
+  format_rubric_for_prompt stays nested here in PR3 (moves out in PR4).
 
-Net app.py delta: ~-2100 LOC. grading/thread.py net ~+2100 LOC.
+Import chain: thread → pipeline → state (no cycles).
+Shim in app.py re-exports run_grading_thread and
+_run_grading_thread_inner so register_routes(...) injection and all
+existing consumers continue to work unchanged.
 
-Pre-existing latent: portal_grading.py:380 imports format_rubric_for_prompt
-from backend.app — that function is nested inside
-_run_grading_thread_inner and has never been module-level importable.
-Not fixed here; out of Phase 3a scope.
+Net app.py delta: ~-2100 LOC.
+
+Pre-existing latent (not fixed here; PR4 fixes it):
+portal_grading.py:380 imports format_rubric_for_prompt from
+backend.app — that function is nested inside _run_grading_thread_inner
+and has never been module-level importable.
 
 SIS compliance: 180/180 green. Coverage: >= 32%.
 
@@ -761,22 +885,23 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git push origin feat/phase3a-pr3-thread-extract
-gh pr create --title "refactor: extract grading thread to backend/grading/thread.py (Phase 3a PR3)" --body "Phase 3a PR3 of 4. Thread wrapper + ~2000-line inner pipeline extracted; shim maintains backwards-compat."
+gh pr create --title "refactor: extract grading thread + pipeline (Phase 3a PR3)" --body "Phase 3a PR3 of 4. 3-file split: thread.py (lifecycle wrapper) + pipeline.py (~2000 LOC business logic). Shim maintains backwards-compat; PR4 does final consumer migration."
 ```
 
 Wait for CI + user merge signoff.
 
 ---
 
-## Task 4 (PR4): Migrate consumers, remove shims
+## Task 4 (PR4): Extract `format_rubric_for_prompt`, migrate consumers, remove shims
 
 **Files:**
-- Modify: `backend/services/portal_grading.py` (lines 255, 380, 563)
+- Create: `backend/services/rubric_formatting.py` (~40 LOC — new home for the extracted nested function)
+- Modify: `backend/grading/pipeline.py` (remove nested def; import from new module; update call site)
+- Modify: `backend/services/portal_grading.py` (lines 255, 380, 563 — all three imports updated, NOT deleted)
 - Modify: `backend/services/assistant_tools_student.py` (lines 515, 680)
 - Modify: `backend/routes/email_routes.py` (line 1102)
-- Modify: `backend/app.py` (remove shim imports; update `register_routes(...)` call; update `_handle_sigterm`)
+- Modify: `backend/app.py` (replace shim block with direct imports of only the names app.py itself needs)
 - Delete: `tests/test_grading_shims.py` (temporary test no longer needed)
-- Modify: `tests/test_app_boot.py` (remove the `create_app` test if it stays equivalent, or leave as-is)
 
 - [ ] **Step 4.1: Create branch**
 
@@ -785,20 +910,64 @@ git checkout main && git pull origin main
 git checkout -b feat/phase3a-pr4-shim-cleanup
 ```
 
-- [ ] **Step 4.2: Rewrite `portal_grading.py` imports**
+- [ ] **Step 4.2a: Extract `format_rubric_for_prompt` to `backend/services/rubric_formatting.py`**
+
+Codex verified the nested function at former `app.py:587` (now inside `backend/grading/pipeline.py._run_grading_thread_inner`) does NOT close over enclosing state — it only uses its `rubric_data` parameter. Safe to extract.
+
+Create `/Users/alexc/Downloads/Graider/backend/services/rubric_formatting.py`:
+
+```python
+"""Rubric prompt formatting — shared by grading pipeline + portal grading.
+
+Extracted from the nested scope inside
+backend/grading/pipeline.py:_run_grading_thread_inner as part of
+Phase 3a PR4. Pure function; no side effects; no closure dependencies.
+"""
+
+
+def format_rubric_for_prompt(rubric_data):
+    """Convert rubric dict to a formatted prompt string.
+
+    Body BYTE-IDENTICAL to the nested definition formerly at
+    backend/app.py:587 (moved to backend/grading/pipeline.py in PR3,
+    now extracted here).
+    """
+    if not rubric_data or not rubric_data.get('categories'):
+        return None
+
+    categories = rubric_data.get('categories', [])
+    generous = rubric_data.get('generous', True)
+
+    lines = []
+    lines.append("GRADING RUBRIC (from teacher's custom settings):")
+    lines.append("")
+
+    total_weight = sum(c.get('weight', 0) for c in categories)
+    # ... BYTE-IDENTICAL continuation from the nested version ...
+```
+
+Verify: open `backend/grading/pipeline.py`, locate `def format_rubric_for_prompt(rubric_data):` inside `_run_grading_thread_inner`, copy the ENTIRE function body into `backend/services/rubric_formatting.py`. Keep indentation corrected (go from nested 4 spaces to module-level 0 spaces). No body changes.
+
+- [ ] **Step 4.2b: Update pipeline.py to import from rubric_formatting instead of nesting**
+
+In `/Users/alexc/Downloads/Graider/backend/grading/pipeline.py`:
+
+1. At the top of the file, add:
+   ```python
+   from backend.services.rubric_formatting import format_rubric_for_prompt
+   ```
+2. Delete the nested `def format_rubric_for_prompt(rubric_data):` block inside `_run_grading_thread_inner` entirely (all ~40 lines).
+3. Leave the CALL site unchanged: `rubric_prompt = format_rubric_for_prompt(rubric)` (now resolves to the imported module-level function).
+
+- [ ] **Step 4.2c: Rewrite `portal_grading.py` imports — FIX the broken :380 import**
 
 In `/Users/alexc/Downloads/Graider/backend/services/portal_grading.py`:
 
-- Line 255: change `from backend.app import save_results, load_saved_results, _get_lock` (or however it's phrased) → `from backend.grading.state import save_results, load_saved_results, _get_lock`
-- Line 380: `from backend.app import format_rubric_for_prompt` → DELETE this line and the following `rubric_prompt = format_rubric_for_prompt(rubric)` call (the import was always broken — nested function never module-importable). Replace the block with inline rubric formatting or a stub — see note below.
+- Line 255 (whatever specific names are there): change `from backend.app import save_results, load_saved_results, _get_lock` → `from backend.grading.state import save_results, load_saved_results, _get_lock`.
+- Line 380: change `from backend.app import format_rubric_for_prompt` → `from backend.services.rubric_formatting import format_rubric_for_prompt`. Leave the `rubric_prompt = format_rubric_for_prompt(rubric)` call exactly as it was. The pre-existing latent ImportError is now FIXED — the import resolves correctly, the feature actually works.
 - Line 563: same pattern as line 255.
 
-**Decision for line 380:** Since `format_rubric_for_prompt` has NEVER been importable from `backend.app` (it's nested), `portal_grading.py:380` is dead code that would ImportError if reached. Two options:
-
-(a) Delete lines 378–383 entirely (the `if rubric.get("categories"):` block that does the broken import).
-(b) Inline a minimal rubric formatter here so the feature works. But this expands scope.
-
-**Choose (a) in PR4.** Document the removal in the commit message. If rubric formatting from portal_grading turns out to be needed, a separate follow-up PR can add it with proper tests.
+**Rationale for fixing (not deleting) line 380:** Codex + Gemini tie-break — the function is pure, narrow blast radius, and belongs in a dedicated formatting module. Deleting the block (rev 1 plan) would have silently removed rubric-formatting behavior from the portal grading path. The rev 2 approach makes the feature actually work.
 
 - [ ] **Step 4.3: Rewrite `assistant_tools_student.py` imports**
 
@@ -863,31 +1032,37 @@ Expected: prints same route count baseline as PR1/PR2/PR3.
 - [ ] **Step 4.10: Codex Gate 3 review**
 
 Requirements:
-- Only `backend/app.py`, `backend/services/portal_grading.py`, `backend/services/assistant_tools_student.py`, `backend/routes/email_routes.py` modified. `tests/test_grading_shims.py` deleted.
-- `portal_grading.py` lines 378–383 deletion is intentional (document broken-import removal).
+- Only `backend/app.py`, `backend/grading/pipeline.py`, `backend/services/rubric_formatting.py` (new), `backend/services/portal_grading.py`, `backend/services/assistant_tools_student.py`, `backend/routes/email_routes.py` modified. `tests/test_grading_shims.py` deleted.
+- `backend/services/rubric_formatting.py` body is byte-identical to the nested definition it replaces (indentation normalized to module level).
+- `backend/grading/pipeline.py` has the import at the top AND the nested def removed (no duplicate definition).
+- `portal_grading.py:380` import now points to `backend.services.rubric_formatting` — previously-broken import is now working, feature restored.
 - No Clever/ClassLink/OneRoster file modifications.
-- Grep verification in Step 4.8 returned zero matches.
+- Grep verification in Step 4.8 returned zero matches (no consumer still imports from `backend.app` for state/thread helpers).
 
 - [ ] **Step 4.11: Commit, push, open PR**
 
 ```bash
-git add backend/app.py backend/services/portal_grading.py backend/services/assistant_tools_student.py backend/routes/email_routes.py tests/test_grading_shims.py
+git add backend/app.py backend/grading/pipeline.py backend/services/rubric_formatting.py backend/services/portal_grading.py backend/services/assistant_tools_student.py backend/routes/email_routes.py tests/test_grading_shims.py
 git commit -m "$(cat <<'EOF'
-refactor: migrate consumers off app.py shim; remove shim (Phase 3a PR4)
+refactor: extract rubric formatter + migrate consumers + remove shim (Phase 3a PR4)
 
+Rubric formatter extraction (new file):
+- Create backend/services/rubric_formatting.py with format_rubric_for_prompt
+  extracted byte-identical from pipeline.py's nested scope
+- pipeline.py: remove nested def; import from rubric_formatting
+- portal_grading.py:380: fix latent ImportError — import now points
+  to backend.services.rubric_formatting (feature newly functional)
+
+Consumer migration (shim removal):
 - portal_grading.py (lines 255, 563): state imports now from
   backend.grading.state
-- portal_grading.py (lines 378-383): DELETE broken format_rubric_for_prompt
-  import block — the function has always been nested inside
-  _run_grading_thread_inner and was never module-importable. Dead code
-  removal.
 - assistant_tools_student.py (lines 515, 680): state imports now from
   backend.grading.state
 - email_routes.py (line 1102): _get_state import now from
   backend.grading.state
 - app.py: shim block replaced with direct imports of only the names
   app.py itself needs (register_routes args + SIGTERM handler)
-- tests/test_grading_shims.py DELETED (transitional; purpose served)
+- tests/test_grading_shims.py DELETED (transitional purpose served)
 
 Net app.py size after Phase 3a: ~1400 LOC (down from 3528).
 
@@ -900,7 +1075,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 EOF
 )"
 git push origin feat/phase3a-pr4-shim-cleanup
-gh pr create --title "refactor: migrate consumers + remove shim (Phase 3a PR4)" --body "Phase 3a PR4 of 4. All consumers migrated to canonical backend.grading.* paths. Shim removed. app.py down to ~1400 LOC."
+gh pr create --title "refactor: extract rubric formatter + remove shim (Phase 3a PR4)" --body "Phase 3a PR4 of 4. New backend/services/rubric_formatting.py; all consumers migrated to canonical backend.grading.* paths; shim removed; portal_grading:380 latent ImportError fixed. app.py down to ~1400 LOC."
 ```
 
 Wait for CI + user merge signoff.
@@ -913,23 +1088,23 @@ Update memory: `/Users/alexc/.claude/projects/-Users-alexc-Downloads-Graider/mem
 
 ---
 
-## Self-review
+## Self-review (rev 2)
 
 **1. Spec coverage:**
 - Spec Decision 1 (scope decomposition — 3a only) → enforced throughout by exclusion of planner_routes.py.
-- Spec Decision 2 (c then b migration) → Task 1 (factory) → Tasks 2-4 (incremental extraction with shims).
-- Spec Decision 3 (granularity: 2 files) → state.py (Task 2) + thread.py (Task 3); no pipeline.py.
+- Spec Decision 2 (init_app + incremental with shims) → Task 1 (init_app, no code movement) → Tasks 2-4 (incremental extraction with shims).
+- Spec Decision 3 (3-file granularity: state + thread + pipeline) → state.py (Task 2), thread.py wrapper (Task 3.4b), pipeline.py (Task 3.4a).
 - Gotcha #1 (persistence with state) → Task 2 Step 2.6 moves `load_saved_results` + `save_results` into state.py.
-- Gotcha #2 (shim surface) → Tasks 2-4 maintain shim then remove it in Task 4.
-- Gotcha #3 (format_rubric nested) → Task 3 Step 3.4 + Task 4 Step 4.2 handle the nested-function reality (moves with thread; broken import line in portal_grading deleted).
-- Safety net (boot check, route-count, SIS, shim guard) → Task 1 Step 1.2 creates boot test; shim guard test lives through PR2-3 and deleted in PR4.
+- Gotcha #2 (shim surface) → Tasks 2-3 maintain shim; Task 4 removes it.
+- Gotcha #3 (format_rubric nested) → Task 3 keeps it nested inside pipeline.py (byte-identical move from app.py); Task 4.2a extracts to services/rubric_formatting.py; Task 4.2c fixes portal_grading.py:380 to use the new location.
+- Safety net (boot check, route snapshot with methods, SIS, shim guard) → Task 1 Step 1.2 creates boot + route-snapshot tests with SIS-critical endpoint assertions; shim guard test grows through PR2-3 and deletes in PR4.
 - 4-PR sequence → Tasks 1-4 map 1:1 to PR1-PR4.
 
 **2. Placeholder scan:** No TBD/TODO remains. "exact body copied from backend/app.py:X-Y" is a delegation directive with concrete line anchors, not a placeholder. Manual smoke test commands are exact.
 
-**3. Type consistency:** Function names (`_get_state`, `_get_lock`, `_update_state`, `reset_state`, `_create_default_state`, `load_saved_results`, `save_results`, `run_grading_thread`, `_run_grading_thread_inner`) used consistently across all 4 tasks.
+**3. Type consistency:** Function names (`_get_state`, `_get_lock`, `_update_state`, `reset_state`, `_create_default_state`, `load_saved_results`, `save_results`, `run_grading_thread`, `_run_grading_thread_inner`, `format_rubric_for_prompt`, `init_app`) used consistently across all 4 tasks.
 
 **4. Risk callouts:**
-- Task 1 risk: blueprint decorators move inside `create_app()`. If decorators reference the module-level `app` before the factory ran, they'd register on a different instance. Mitigation: test 1.2 asserts route count ≥ 250 after factory call.
-- Task 3 risk: the 2000-line `_run_grading_thread_inner` is the biggest moving target. Mitigation: byte-identical copy enforced via Codex Gate 3; manual smoke check in 3.8 confirms /api/status still routes.
-- Task 4 risk: the `format_rubric_for_prompt` dead-code removal in portal_grading.py. Mitigation: Step 4.2 documents the decision; if it turns out to be load-bearing (it shouldn't be, since it always failed), a follow-up PR adds the feature with tests.
+- Task 1 risk: the initializer must be called AFTER all decorators have attached — the `init_app(app)` call MUST be at the bottom of the module (after every `@app.route` / `@app.after_request` / `@app.errorhandler` definition). Mitigation: route-snapshot test catches any missing registration; boot test catches import-time crashes.
+- Task 3 risk: the 2000-line `_run_grading_thread_inner` is the biggest moving target. Every runtime-referenced name must be importable in pipeline.py. Mitigation: Step 3.4a's AST scan enumerates every external reference; Codex Gate 3 enforces byte-identical body; manual smoke check 3.8 confirms /api/status still routes.
+- Task 4 risk: extracting `format_rubric_for_prompt` requires byte-identical body copy with dedent. Mitigation: Codex verified no closure dependencies; Step 4.10 Codex Gate 3 enforces byte-identity minus indentation normalization.
