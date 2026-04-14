@@ -8,6 +8,8 @@ line item mappings in teacher_data storage.
 from datetime import datetime, timezone
 import logging
 
+import sentry_sdk
+
 from backend.storage import load, save
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,7 @@ async def post_results(client, line_item_id, scores):
         except Exception as exc:
             failed += 1
             errors.append(str(exc))
+            sentry_sdk.capture_exception(exc)
             logger.warning(
                 "post_results: failed for student %s on line_item %s: %s",
                 student_sourced_id, line_item_id, exc,

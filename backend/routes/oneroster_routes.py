@@ -7,6 +7,7 @@ accommodation application, and data deletion endpoints.
 import asyncio
 import logging
 
+import sentry_sdk
 from flask import Blueprint, request, jsonify, g
 
 from backend.oneroster import OneRosterClient, normalize_roster, get_oneroster_config
@@ -154,8 +155,8 @@ def sync_roster():
                 # Stale lock — clear it and proceed
                 logger.warning("Stale provider switch lock detected (>5min old). Clearing.")
                 _ss("district:provider_switch_in_progress", None, "system")
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # Load config
     cfg = get_oneroster_config(teacher_id)
@@ -203,6 +204,7 @@ def sync_roster():
         persist_roster_as_csv(csv_students, teacher_id)
     except Exception as e:
         logger.warning("Failed to persist OneRoster roster as CSV: %s", str(e))
+        sentry_sdk.capture_exception(e)
 
     try:
         csv_sections = [
@@ -217,6 +219,7 @@ def sync_roster():
         persist_sections_as_periods(csv_sections, teacher_id)
     except Exception as e:
         logger.warning("Failed to persist OneRoster sections as periods: %s", str(e))
+        sentry_sdk.capture_exception(e)
 
     # Build accommodation suggestions
     accommodation_suggestions = {}

@@ -8,6 +8,7 @@ import secrets
 import threading
 import time as _time
 
+import sentry_sdk
 from flask import Blueprint, request, jsonify, redirect, session, g
 
 from backend.clever import (
@@ -51,8 +52,8 @@ def _clever_audit(action, details="", teacher_id=""):
                 'details': details[:500],
                 'user_type': 'teacher',
             }).execute()
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
 # Short-lived auth codes for student Clever SSO (code → {token, expires})
 _pending_student_auth_codes = {}
@@ -230,6 +231,7 @@ def _create_clever_student_session(clever_id, email):
         }
     except Exception as e:
         logger.warning("Failed to create clever student session: %s", str(e))
+        sentry_sdk.capture_exception(e)
         return None
 
 
@@ -253,6 +255,7 @@ def _background_roster_sync(district_token, teacher_id):
                     len(students), len(sections), len(contacts))
     except Exception as e:
         logger.warning("Background roster sync failed: %s", str(e))
+        sentry_sdk.capture_exception(e)
 
 
 @clever_bp.route("/api/clever/login-url", methods=["GET"])
@@ -671,6 +674,7 @@ def clever_delete_data():
                 logger.info("AUDIT: Clever Supabase data deleted for %s: %s", teacher_id, result.get("supabase_deleted"))
         except Exception as sb_err:
             logger.error("Supabase deletion failed for %s: %s", teacher_id, str(sb_err))
+            sentry_sdk.capture_exception(sb_err)
             result["supabase_error"] = "Partial deletion — local files removed, Supabase cleanup failed"
 
         _clever_audit("clever_data_deletion", f"Deleted: {result}", teacher_id)

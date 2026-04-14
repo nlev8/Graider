@@ -14,6 +14,7 @@ from base64 import b64encode
 import asyncio
 
 import httpx
+import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,8 @@ def get_clever_config():
                 "client_secret": district_cfg.get("client_secret"),
                 "redirect_uri": redirect_uri,
             }
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # Fall back to environment variables
     client_id = os.getenv("CLEVER_CLIENT_ID")
@@ -216,6 +217,7 @@ async def sync_roster(district_token):
                     url = _next_page_url(body)
                 except httpx.HTTPError as e:
                     logger.error("Clever roster fetch error (%s): %s", user_type, str(e))
+                    sentry_sdk.capture_exception(e)
                     break
 
         # Fetch sections (class periods)
@@ -230,6 +232,7 @@ async def sync_roster(district_token):
                 url = _next_page_url(body)
             except httpx.HTTPError as e:
                 logger.error("Clever sections fetch error: %s", str(e))
+                sentry_sdk.capture_exception(e)
                 break
 
         # Fetch contacts/guardians (parent data)
@@ -244,6 +247,7 @@ async def sync_roster(district_token):
                 url = _next_page_url(body)
             except httpx.HTTPError as e:
                 logger.warning("Clever contacts fetch error (non-blocking): %s", str(e))
+                sentry_sdk.capture_exception(e)
                 break
 
     logger.info(
