@@ -111,16 +111,16 @@
 | `backend/lti.py` | 240 | `jwt.InvalidIssuerError` | raise | `validate_launch_jwt` | INTENTIONAL |
 | `backend/lti.py` | 242 | `Exception` | raise | `validate_launch_jwt` | INTENTIONAL |
 | `backend/lti.py` | 442 | `Exception` | log.error + return | `post_score` | INTENTIONAL |
-| `backend/observability/sentry.py` | 60 | `Exception` | pass | `_is_client_error` | UNCATEGORIZED |
-| `backend/observability/sentry.py` | 83 | `ImportError` | return | `_resolve_user_id` | UNCATEGORIZED |
-| `backend/observability/sentry.py` | 89 | `RuntimeError` | return | `_resolve_user_id` | UNCATEGORIZED |
-| `backend/observability/sentry.py` | 94 | `RuntimeError` | return | `_resolve_user_id` | UNCATEGORIZED |
-| `backend/observability/sentry.py` | 150 | `Exception` | pass | `_scrub_frame_locals` | UNCATEGORIZED |
-| `backend/observability/sentry.py` | 288 | `ImportError` | log.warning + return | `init_sentry` | UNCATEGORIZED |
-| `backend/observability/sentry.py` | 298 | `ImportError` | other | `init_sentry` | UNCATEGORIZED |
-| `backend/observability/sentry.py` | 318 | `(BadDsn, ValueError)` | log.warning + return | `init_sentry` | UNCATEGORIZED |
+| `backend/observability/sentry.py` | 60 | `Exception` | pass | `_is_client_error` | INTENTIONAL |
+| `backend/observability/sentry.py` | 83 | `ImportError` | return | `_resolve_user_id` | INTENTIONAL |
+| `backend/observability/sentry.py` | 89 | `RuntimeError` | return | `_resolve_user_id` | INTENTIONAL |
+| `backend/observability/sentry.py` | 94 | `RuntimeError` | return | `_resolve_user_id` | INTENTIONAL |
+| `backend/observability/sentry.py` | 150 | `Exception` | pass | `_scrub_frame_locals` | INTENTIONAL |
+| `backend/observability/sentry.py` | 288 | `ImportError` | log.warning + return | `init_sentry` | INTENTIONAL |
+| `backend/observability/sentry.py` | 298 | `ImportError` | other | `init_sentry` | INTENTIONAL |
+| `backend/observability/sentry.py` | 318 | `(BadDsn, ValueError)` | log.warning + return | `init_sentry` | INTENTIONAL |
 | `backend/observability/sentry.py` | 221 | `Exception` | pass + raise | `wrapper` | INTENTIONAL |
-| `backend/observability/sentry.py` | 230 | `Exception` | pass | `wrapper` | UNCATEGORIZED |
+| `backend/observability/sentry.py` | 230 | `Exception` | pass | `wrapper` | INTENTIONAL |
 | `backend/oneroster.py` | 446 | `Exception` | log.debug | `get_oneroster_config` | UNCATEGORIZED |
 | `backend/oneroster.py` | 423 | `Exception` | log.debug | `get_oneroster_config` | UNCATEGORIZED |
 | `backend/oneroster.py` | 203 | `Exception` | log.info | `fetch_roster` | UNCATEGORIZED |
