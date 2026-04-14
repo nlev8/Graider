@@ -25,6 +25,7 @@ import time
 # Add parent dir to path so we can import districts
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from districts import find_district_by_email
+import sentry_sdk
 
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 BROWSER_DATA_DIR = os.path.join(GRAIDER_DATA_DIR, "outlook_browser")
@@ -78,8 +79,9 @@ def navigate_to_outlook(page, context, district, email, password):
             emit("status", message="Clicked portal login, waiting for ADFS...")
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(2000)
-        except Exception:
+        except Exception as e:
             pass  # May already be past this step (cached session)
+            sentry_sdk.capture_exception(e)
 
     # Step 3: ADFS login (if we landed on the ADFS form)
     current_url = page.url.lower()
@@ -95,8 +97,9 @@ def navigate_to_outlook(page, context, district, email, password):
             page.click(login_sel)
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(3000)
-        except Exception:
+        except Exception as e:
             pass  # May already be authenticated (persistent session)
+            sentry_sdk.capture_exception(e)
 
     # Step 4: Skip M365 tile — go straight to Outlook
     # SSO cookies are set from ADFS login, so direct nav works
@@ -329,8 +332,8 @@ def main():
                     emit("error", message="Failed for " + student + ": " + str(e))
                     try:
                         page.screenshot(path=ERROR_SCREENSHOT)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
                     # Try to dismiss any open compose window
                     try:
                         page.click('[aria-label="Discard"]', timeout=3000)
@@ -352,8 +355,8 @@ def main():
             emit("error", message=str(e))
             try:
                 page.screenshot(path=ERROR_SCREENSHOT)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
             # Keep browser open on error so user can inspect
             if test_mode or login_only:
                 page.wait_for_timeout(60000)

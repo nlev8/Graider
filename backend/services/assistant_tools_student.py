@@ -21,6 +21,7 @@ from backend.services.assistant_tools import (
     ROSTERS_DIR,
 )
 from backend.utils.compliance import audit_tool_action, require_teacher_id
+import sentry_sdk
 
 
 # ═══════════════════════════════════════════════════════
@@ -427,6 +428,7 @@ def _delete_student_supabase(student_name):
         return ""
     except Exception as e:
         import logging
+        sentry_sdk.capture_exception(e)
         logging.getLogger(__name__).warning("Supabase student delete failed: %s", e)
         return ""
 
@@ -681,15 +683,15 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
     try:
         from backend.storage import save as storage_save
         storage_save("pending_send:remove_student", pending, teacher_id)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
     try:
         pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
         os.makedirs(os.path.dirname(pending_path), exist_ok=True)
         with open(pending_path, "w") as f:
             json.dump(pending, f)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     return {
         "PENDING_CONFIRMATION": True,
@@ -721,8 +723,8 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
     try:
         from backend.storage import load as storage_load, save as storage_save
         pending = storage_load("pending_send:remove_student", teacher_id)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # Filesystem fallback
     if not pending:
@@ -731,8 +733,8 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
             if os.path.exists(pending_path):
                 with open(pending_path, "r") as f:
                     pending = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     if not pending or pending.get("action") != "remove_student":
         return {"error": "No pending student removal found. Run remove_student_from_roster first to preview."}
@@ -746,14 +748,14 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
     # Clear pending storage
     try:
         storage_save("pending_send:remove_student", None, pending_teacher_id)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
     try:
         pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
         if os.path.exists(pending_path):
             os.remove(pending_path)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     if isinstance(result, dict):
         result["status"] = "removed"
@@ -897,8 +899,8 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
             try:
                 with open(results_file, 'r') as f:
                     all_results = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
         existing_timestamps = set()
         for r in all_results:
@@ -935,8 +937,8 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
             try:
                 with open(history_path, 'r') as f:
                     existing_history = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
         if existing_history and existing_history.get("assignments"):
             existing_keys = set()
@@ -969,8 +971,8 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
             try:
                 with open(accomm_file, 'r') as f:
                     all_acc = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
         all_acc[sid] = accommodations
         all_acc[sid]["updated"] = datetime.now().isoformat()
         with open(accomm_file, 'w') as f:
@@ -987,8 +989,8 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
             try:
                 with open(ell_file, 'r') as f:
                     all_ell = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
         all_ell[sid] = ell_data
         with open(ell_file, 'w') as f:
             json.dump(all_ell, f, indent=2)
@@ -1004,8 +1006,8 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
             try:
                 with open(contacts_file, 'r') as f:
                     all_contacts = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
         all_contacts[sid] = parent_contacts
         with open(contacts_file, 'w') as f:
             json.dump(all_contacts, f, indent=2)

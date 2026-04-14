@@ -13,6 +13,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 email_bp = Blueprint('email', __name__)
 _logger = logging.getLogger(__name__)
@@ -48,8 +49,8 @@ def send_emails():
             try:
                 with open(contacts_file, 'r', encoding='utf-8') as cf:
                     parent_contacts = json.load(cf)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
         # Group by student email for combined emails
         students = defaultdict(list)
@@ -264,8 +265,8 @@ def export_outlook_emails():
                 if os.path.exists(results_file):
                     with open(results_file, 'r') as f:
                         results = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
         if not results:
             return jsonify({"error": "No results to export"}), 400
@@ -996,8 +997,8 @@ def send_confirmation_emails():
                 try:
                     with open(contacts_path, 'r') as fh:
                         parent_contacts = json.load(fh)
-                except Exception:
-                    pass
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
 
         # Build one confirmation email per student
         emails = []
@@ -1218,6 +1219,7 @@ def mark_confirmations_sent_file():
                     json.dump(results, f, indent=2)
             except Exception as e:
                 print(f"Error saving results after marking confirmations: {e}")
+                sentry_sdk.capture_exception(e)
 
         # Also persist to dedicated confirmations file (covers ungraded files)
         confirmed = _load_confirmed_filenames()
@@ -1353,8 +1355,8 @@ def _read_focus_comms_output(proc):
     stderr_output = ""
     try:
         stderr_output = proc.stderr.read().strip()
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     proc.wait()
 
@@ -1449,8 +1451,8 @@ def confirm_send():
                     pending = _storage_load('pending_send:' + _key, _teacher_id)
                     if pending:
                         break
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     # Fall back to pending file
     if not pending and os.path.exists(pending_path):
@@ -1478,8 +1480,8 @@ def confirm_send():
             try:
                 if os.path.exists(pending_path):
                     os.remove(pending_path)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
         return jsonify(result)
 
     elif action == "send_parent_emails":
@@ -1491,8 +1493,8 @@ def confirm_send():
             try:
                 if os.path.exists(pending_path):
                     os.remove(pending_path)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
         return jsonify(result)
 
     else:

@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
+import sentry_sdk
 
 # Import storage abstraction
 try:
@@ -76,8 +77,8 @@ def load_student_history(student_id: str, teacher_id: str = 'local-dev') -> dict
         try:
             with open(path, 'r') as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     return {
         "student_id": student_id,
@@ -103,6 +104,7 @@ def save_student_history(student_id: str, history: dict, teacher_id: str = 'loca
             json.dump(history, f, indent=2)
     except Exception as e:
         print(f"Error saving student history: {e}")
+        sentry_sdk.capture_exception(e)
 
     # Also write to storage
     if _storage_save_history:

@@ -31,6 +31,7 @@ load_dotenv(os.path.join(_root_dir, '.env'), override=True)
 
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 # Import student history for progress tracking
 try:
@@ -174,6 +175,7 @@ try:
     init_auth(app)
 except Exception as e:
     print(f"Warning: Auth middleware not loaded: {e}")
+    sentry_sdk.capture_exception(e)
 
 @app.errorhandler(500)
 def handle_500(e):
@@ -1687,8 +1689,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
                                        "assignment": matched_title, "period": student_period}
                         add_assignment_to_history(student_info['student_id'], grade_record_hist)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
 
                 # Get class level for logging
                 class_level = period_class_level_map.get(student_period, 'standard') if student_period else 'standard'
@@ -2031,6 +2033,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
 
     except Exception as e:
         _update_state(error=str(e))
+        sentry_sdk.capture_exception(e)
         grading_state["log"].append(f"Error: {str(e)}")
     finally:
         _update_state(is_running=False, stop_requested=False)
@@ -2228,6 +2231,7 @@ def grade_individual():
                 add_assignment_to_history(result['student_id'], result)
             except Exception as e:
                 print(f"  Note: Could not update student history: {e}")
+                sentry_sdk.capture_exception(e)
 
         # FERPA audit log
         audit_log("GRADE_INDIVIDUAL", f"Graded individual upload for student (image-based, GPT-4o)")

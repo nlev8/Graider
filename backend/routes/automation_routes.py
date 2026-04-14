@@ -14,6 +14,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 automation_bp = Blueprint('automation', __name__)
 
@@ -255,8 +256,8 @@ def delete_template(template_id):
             if wf.get("id") == template_id:
                 os.remove(filepath)
                 return jsonify({"status": "deleted"})
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return jsonify({"status": "deleted"})
 
 

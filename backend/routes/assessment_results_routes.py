@@ -9,6 +9,7 @@ from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as get_supabase
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 assessment_results_bp = Blueprint('assessment_results', __name__)
 _logger = logging.getLogger(__name__)
@@ -169,6 +170,7 @@ def get_assessment_results():
         audit_log("VIEW_ASSESSMENT_RESULTS", "Teacher viewed assessment results", user="teacher", teacher_id=teacher_id)
     except Exception as audit_err:
         _logger.warning("Audit log failed for VIEW_ASSESSMENT_RESULTS: %s", str(audit_err))
+        sentry_sdk.capture_exception(audit_err)
 
     assessments = []
 
@@ -232,6 +234,7 @@ def get_assessment_results():
             assessments.append(entry)
     except Exception as e:
         _logger.warning("Error fetching join-code assessments: %s", str(e))
+        sentry_sdk.capture_exception(e)
 
     # 2. Class-based assessments (published_content + student_submissions)
     try:
@@ -307,6 +310,7 @@ def get_assessment_results():
             assessments.append(entry)
     except Exception as e:
         _logger.warning("Error fetching class-based assessments: %s", str(e))
+        sentry_sdk.capture_exception(e)
 
     # Sort by published_at descending
     assessments.sort(key=lambda a: a.get('published_at') or '', reverse=True)

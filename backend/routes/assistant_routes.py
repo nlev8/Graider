@@ -43,6 +43,7 @@ from backend.services.assistant_tools import (
     DOCUMENTS_DIR,
 )
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
+import sentry_sdk
 
 # Import storage abstraction for per-teacher credential isolation
 try:
@@ -1059,8 +1060,8 @@ def _audit_log(action, details=""):
         entry = f"{timestamp} | teacher | {action} | {details}\n"
         with open(AUDIT_LOG_FILE, 'a') as f:
             f.write(entry)
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
 
 logger = logging.getLogger(__name__)
@@ -1961,8 +1962,8 @@ def get_memory():
                     fact = m.get("fact", m) if isinstance(m, dict) else str(m)
                     facts.append(fact)
                 return jsonify({"memories": facts, "count": len(facts)})
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return jsonify({"memories": [], "count": 0})
 
 
@@ -2036,8 +2037,8 @@ def get_credentials():
             with open(CREDS_FILE, 'r') as f:
                 data = json.load(f)
             return jsonify({"configured": True, "email": data.get("email", "")})
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return jsonify({"configured": False})
 
 

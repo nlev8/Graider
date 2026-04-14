@@ -16,6 +16,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from backend.storage import save as storage_save, load as storage_load, list_keys
 from backend.utils.audit import audit_log
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ def _clear_old_provider_data(old_provider):
         all_classes = db.table("classes").select("id, teacher_id, clever_section_id").execute()
     except Exception as e:
         logger.warning("Failed to query classes for provider switch: %s", str(e))
+        sentry_sdk.capture_exception(e)
         return 0
 
     classes_to_delete = []
@@ -127,6 +129,7 @@ def _clear_old_provider_data(old_provider):
             deleted_classes += 1
         except Exception as e:
             logger.warning("Failed to delete class %s: %s", cls["id"], str(e))
+            sentry_sdk.capture_exception(e)
 
     deleted_students = 0
     for sid in orphaned_students:
@@ -135,8 +138,8 @@ def _clear_old_provider_data(old_provider):
             if remaining.count == 0:
                 db.table("students").delete().eq("id", sid).execute()
                 deleted_students += 1
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     import glob
     data_dir = os.path.expanduser("~/.graider_data")

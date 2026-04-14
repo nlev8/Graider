@@ -18,6 +18,7 @@ import os
 import json
 from datetime import datetime
 from typing import Optional
+import sentry_sdk
 
 # Import storage abstraction
 try:
@@ -53,6 +54,7 @@ def audit_log_accommodation(action: str, details: str = ""):
             f.write(log_entry)
     except Exception as e:
         print(f"Audit log error: {e}")
+        sentry_sdk.capture_exception(e)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -267,6 +269,7 @@ def load_presets(teacher_id: str = 'local-dev') -> dict:
                 presets.update(custom)
         except Exception as e:
             print(f"Error loading custom presets: {e}")
+            sentry_sdk.capture_exception(e)
 
     audit_log_accommodation("LOAD_PRESETS", f"Loaded {len(presets)} presets")
     return presets
@@ -302,6 +305,7 @@ def save_preset(preset: dict, teacher_id: str = 'local-dev') -> bool:
         return True
     except Exception as e:
         print(f"Error saving preset: {e}")
+        sentry_sdk.capture_exception(e)
         return False
 
 
@@ -332,6 +336,7 @@ def delete_preset(preset_id: str, teacher_id: str = 'local-dev') -> bool:
         return False
     except Exception as e:
         print(f"Error deleting preset: {e}")
+        sentry_sdk.capture_exception(e)
         return False
 
 
@@ -362,6 +367,7 @@ def load_student_accommodations(teacher_id: str = 'local-dev') -> dict:
             return data
         except Exception as e:
             print(f"Error loading student accommodations: {e}")
+            sentry_sdk.capture_exception(e)
 
     return {}
 
@@ -381,6 +387,7 @@ def save_student_accommodations(mappings: dict, teacher_id: str = 'local-dev') -
         return True
     except Exception as e:
         print(f"Error saving student accommodations: {e}")
+        sentry_sdk.capture_exception(e)
         return False
 
 
@@ -693,6 +700,7 @@ def clear_all_accommodations(teacher_id: str = 'local-dev') -> bool:
         return True
     except Exception as e:
         print(f"Error clearing accommodations: {e}")
+        sentry_sdk.capture_exception(e)
         return False
 
 

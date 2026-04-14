@@ -28,6 +28,7 @@ from backend.services.assistant_tools import (
 )
 from backend.services.assistant_tools_grading import get_missing_assignments
 from backend.utils.compliance import audit_tool_action, require_teacher_id
+import sentry_sdk
 
 try:
     from backend.storage import load as storage_load, save as storage_save
@@ -2334,8 +2335,8 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
         try:
             with open(pending_path, 'w') as pf:
                 json.dump(pending_data, pf)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
         audit_tool_action(teacher_id, 'send_parent_emails', 'SEND_EMAIL')
 
@@ -2481,8 +2482,8 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
         try:
             with open(pending_path, 'w') as pf:
                 json.dump(pending_data, pf)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
         audit_tool_action(teacher_id, 'send_focus_comms', 'SEND_EMAIL')
 
