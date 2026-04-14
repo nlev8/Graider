@@ -714,7 +714,7 @@
 | `backend/services/notebooklm_service.py` | 192 | `(json.JSONDecodeError, IOError)` | pass | `get_generation_state` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 810 | `Exception` | pass | `run_generation_thread` | NEEDS_ALERT |
 | `backend/services/notebooklm_service.py` | 234 | `(json.JSONDecodeError, IOError)` | pass | `cleanup_stale_states` | INTENTIONAL |
-| `backend/services/notebooklm_service.py` | 502 | `Exception` | print | `_create_notebook_with_sources` | LEGACY |
+| `backend/services/notebooklm_service.py` | 502 | `Exception` | print | `_create_notebook_with_sources` | NEEDS_ALERT |
 | `backend/services/notebooklm_service.py` | 799 | `Exception` | append | `run_generation_thread` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 259 | `Exception` | pass | `cleanup_expired_materials` | NEEDS_ALERT |
 | `backend/services/notebooklm_service.py` | 783 | `Exception` | append + raise | `run_generation_thread` | INTENTIONAL |
