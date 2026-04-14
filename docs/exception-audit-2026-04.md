@@ -121,10 +121,10 @@
 | `backend/observability/sentry.py` | 318 | `(BadDsn, ValueError)` | log.warning + return | `init_sentry` | INTENTIONAL |
 | `backend/observability/sentry.py` | 221 | `Exception` | pass + raise | `wrapper` | INTENTIONAL |
 | `backend/observability/sentry.py` | 230 | `Exception` | pass | `wrapper` | INTENTIONAL |
-| `backend/oneroster.py` | 446 | `Exception` | log.debug | `get_oneroster_config` | UNCATEGORIZED |
-| `backend/oneroster.py` | 423 | `Exception` | log.debug | `get_oneroster_config` | UNCATEGORIZED |
-| `backend/oneroster.py` | 203 | `Exception` | log.info | `fetch_roster` | UNCATEGORIZED |
-| `backend/oneroster.py` | 435 | `Exception` | pass | `get_oneroster_config` | UNCATEGORIZED |
+| `backend/oneroster.py` | 446 | `Exception` | log.debug | `get_oneroster_config` | INTENTIONAL |
+| `backend/oneroster.py` | 423 | `Exception` | log.debug | `get_oneroster_config` | INTENTIONAL |
+| `backend/oneroster.py` | 203 | `Exception` | log.info | `fetch_roster` | INTENTIONAL |
+| `backend/oneroster.py` | 435 | `Exception` | pass | `get_oneroster_config` | INTENTIONAL |
 | `backend/retry.py` | 91 | `(ValueError, TypeError)` | pass | `get_retry_delay` | INTENTIONAL |
 | `backend/retry.py` | 147 | `Exception` | log.error + log.warning + raise | `with_retry` | INTENTIONAL |
 | `backend/roster_sync.py` | 18 | `Exception` | return | `_get_supabase` | INTENTIONAL |
@@ -289,10 +289,10 @@
 | `backend/routes/clever_routes.py` | 392 | `Exception` | log.warning | `clever_callback` | INTENTIONAL |
 | `backend/routes/clever_routes.py` | 603 | `Exception` | append + log.error | `clever_apply_accommodations` | INTENTIONAL |
 | `backend/routes/clever_routes.py` | 672 | `Exception` | log.error | `clever_delete_data` | NEEDS_ALERT |
-| `backend/routes/district_routes.py` | 82 | `Exception` | log.warning + return | `_clear_old_provider_data` | UNCATEGORIZED |
-| `backend/routes/district_routes.py` | 128 | `Exception` | log.warning | `_clear_old_provider_data` | UNCATEGORIZED |
-| `backend/routes/district_routes.py` | 138 | `Exception` | pass | `_clear_old_provider_data` | UNCATEGORIZED |
-| `backend/routes/district_routes.py` | 429 | `Exception` | log.warning + return | `district_test_connection` | UNCATEGORIZED |
+| `backend/routes/district_routes.py` | 82 | `Exception` | log.warning + return | `_clear_old_provider_data` | NEEDS_ALERT |
+| `backend/routes/district_routes.py` | 128 | `Exception` | log.warning | `_clear_old_provider_data` | NEEDS_ALERT |
+| `backend/routes/district_routes.py` | 138 | `Exception` | pass | `_clear_old_provider_data` | NEEDS_ALERT |
+| `backend/routes/district_routes.py` | 429 | `Exception` | log.warning + return | `district_test_connection` | INTENTIONAL |
 | `backend/routes/district_routes.py` | 149 | `OSError` | pass | `_clear_old_provider_data` | INTENTIONAL |
 | `backend/routes/document_routes.py` | 107 | `ImportError` | append + return | `_parse_docx` | UNCATEGORIZED |
 | `backend/routes/document_routes.py` | 201 | `ImportError` | return | `_parse_pdf` | UNCATEGORIZED |
@@ -578,10 +578,10 @@
 | `backend/services/assistant_tools_assessments.py` | 23 | `Exception` | return | `_get_supabase` | UNCATEGORIZED |
 | `backend/services/assistant_tools_assessments.py` | 59 | `Exception` | log.exception + return | `list_published_assessments_tool` | INTENTIONAL |
 | `backend/services/assistant_tools_assessments.py` | 172 | `Exception` | log.exception + return | `query_assessment_results` | INTENTIONAL |
-| `backend/services/assistant_tools_automation.py` | 14 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/services/assistant_tools_automation.py` | 17 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/services/assistant_tools_automation.py` | 105 | `Exception` | pass | `list_automations_tool` | UNCATEGORIZED |
-| `backend/services/assistant_tools_automation.py` | 192 | `Exception` | pass | `run_automation_tool` | UNCATEGORIZED |
+| `backend/services/assistant_tools_automation.py` | 14 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/services/assistant_tools_automation.py` | 17 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/services/assistant_tools_automation.py` | 105 | `Exception` | pass | `list_automations_tool` | LEGACY |
+| `backend/services/assistant_tools_automation.py` | 192 | `Exception` | pass | `run_automation_tool` | LEGACY |
 | `backend/services/assistant_tools_behavior.py` | 78 | `Exception` | append + log.error + log.info + log.warning | `_load_behavior_events` | INTENTIONAL |
 | `backend/services/assistant_tools_behavior.py` | 188 | `Exception` | return | `_load_settings` | LEGACY |
 | `backend/services/assistant_tools_behavior.py` | 198 | `Exception` | return | `_load_parent_contacts` | NEEDS_ALERT |
@@ -695,10 +695,10 @@
 | `backend/services/document_generator.py` | 553 | `Exception` | other | `create_document_docx` | LEGACY |
 | `backend/services/document_generator.py` | 567 | `Exception` | other | `create_document_docx` | LEGACY |
 | `backend/services/document_generator.py` | 579 | `Exception` | other | `create_document_docx` | LEGACY |
-| `backend/services/elevenlabs_service.py` | 17 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/services/elevenlabs_service.py` | 204 | `Exception` | pass | `close` | UNCATEGORIZED |
-| `backend/services/elevenlabs_service.py` | 259 | `Exception` | pass | `_on_message` | UNCATEGORIZED |
-| `backend/services/elevenlabs_service.py` | 227 | `Exception` | other | `_keepalive_loop` | UNCATEGORIZED |
+| `backend/services/elevenlabs_service.py` | 17 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/services/elevenlabs_service.py` | 204 | `Exception` | pass | `close` | INTENTIONAL |
+| `backend/services/elevenlabs_service.py` | 259 | `Exception` | pass | `_on_message` | INTENTIONAL |
+| `backend/services/elevenlabs_service.py` | 227 | `Exception` | other | `_keepalive_loop` | INTENTIONAL |
 | `backend/services/email_service.py` | 21 | `ImportError` | print | `<module>` | UNCATEGORIZED |
 | `backend/services/email_service.py` | 133 | `Exception` | print + return | `send_email` | UNCATEGORIZED |
 | `backend/services/grading_service.py` | 129 | `Exception` | log.debug | `load_teacher_config` | UNCATEGORIZED |
@@ -752,9 +752,9 @@
 | `backend/services/portal_grading.py` | 626 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
 | `backend/services/portal_grading.py` | 340 | `Exception` | pass | `run_portal_grading_thread` | LEGACY |
 | `backend/services/portal_grading.py` | 496 | `ValueError` | pass | `run_portal_grading_thread` | INTENTIONAL |
-| `backend/services/seo_service.py` | 28 | `ImportError` | return | `_get_anthropic_client` | UNCATEGORIZED |
-| `backend/services/seo_service.py` | 50 | `json.JSONDecodeError` | return | `_call_haiku` | UNCATEGORIZED |
-| `backend/services/seo_service.py` | 52 | `Exception` | return | `_call_haiku` | UNCATEGORIZED |
+| `backend/services/seo_service.py` | 28 | `ImportError` | return | `_get_anthropic_client` | INTENTIONAL |
+| `backend/services/seo_service.py` | 50 | `json.JSONDecodeError` | return | `_call_haiku` | INTENTIONAL |
+| `backend/services/seo_service.py` | 52 | `Exception` | return | `_call_haiku` | INTENTIONAL |
 | `backend/services/slide_generator.py` | 281 | `Exception` | log.warning | `generate_slide_images` | UNCATEGORIZED |
 | `backend/services/stem_grading.py` | 42 | `(ValueError, TypeError)` | pass | `_normalize_math_input` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 69 | `Exception` | pass | `_normalize_math_input` | INTENTIONAL |
@@ -771,9 +771,9 @@
 | `backend/services/visualization.py` | 608 | `Exception` | other | `create_function_graph` | UNCATEGORIZED |
 | `backend/services/worksheet_generator.py` | 233 | `Exception` | other | `_embed_visual` | UNCATEGORIZED |
 | `backend/staging.py` | 98 | `(json.JSONDecodeError, OSError)` | pass | `_load_manifest` | INTENTIONAL |
-| `backend/staging.py` | 145 | `OSError` | other | `stage_files` | UNCATEGORIZED |
-| `backend/staging.py` | 204 | `OSError` | other | `stage_files` | UNCATEGORIZED |
-| `backend/staging.py` | 192 | `OSError` | other | `stage_files` | UNCATEGORIZED |
+| `backend/staging.py` | 145 | `OSError` | other | `stage_files` | INTENTIONAL |
+| `backend/staging.py` | 204 | `OSError` | other | `stage_files` | INTENTIONAL |
+| `backend/staging.py` | 192 | `OSError` | other | `stage_files` | INTENTIONAL |
 | `backend/staging.py` | 233 | `OSError` | pass | `stage_files` | INTENTIONAL |
 | `backend/storage.py` | 139 | `Exception` | log.warning + return | `_file_load` | INTENTIONAL |
 | `backend/storage.py` | 159 | `Exception` | log.error + return | `_file_save` | INTENTIONAL |
