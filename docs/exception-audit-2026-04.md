@@ -25,9 +25,9 @@
 | `backend/accommodations.py` | 28 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/accommodations.py` | 268 | `Exception` | print | `load_presets` | NEEDS_ALERT |
 | `backend/accommodations.py` | 363 | `Exception` | print | `load_student_accommodations` | NEEDS_ALERT |
-| `backend/api_keys.py` | 43 | `(ImportError, RuntimeError)` | return | `_get_district_id` | UNCATEGORIZED |
-| `backend/api_keys.py` | 91 | `Exception` | pass | `get_api_key` | UNCATEGORIZED |
-| `backend/api_keys.py` | 124 | `Exception` | other | `resolve_keys_for_teacher` | UNCATEGORIZED |
+| `backend/api_keys.py` | 43 | `(ImportError, RuntimeError)` | return | `_get_district_id` | INTENTIONAL |
+| `backend/api_keys.py` | 91 | `Exception` | pass | `get_api_key` | NEEDS_ALERT |
+| `backend/api_keys.py` | 124 | `Exception` | other | `resolve_keys_for_teacher` | NEEDS_ALERT |
 | `backend/app.py` | 38 | `ImportError` | pass + return | `<module>` | INTENTIONAL |
 | `backend/app.py` | 59 | `ImportError` | return | `<module>` | INTENTIONAL |
 | `backend/app.py` | 74 | `ImportError` | other | `<module>` | INTENTIONAL |
@@ -253,11 +253,11 @@
 | `backend/routes/assistant_routes.py` | 1647 | `Exception` | pass | `generate` | LEGACY |
 | `backend/routes/assistant_routes.py` | 1655 | `Exception` | pass | `generate` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 1796 | `Exception` | pass | `generate` | INTENTIONAL |
-| `backend/routes/auth_routes.py` | 68 | `Exception` | return | `approve_user_route` | UNCATEGORIZED |
+| `backend/routes/auth_routes.py` | 68 | `Exception` | return | `approve_user_route` | INTENTIONAL |
 | `backend/routes/auth_routes.py` | 80 | `Exception` | log.error + return | `approve_user_route` | INTENTIONAL |
 | `backend/routes/auth_routes.py` | 122 | `Exception` | log.error + return | `approval_status` | INTENTIONAL |
-| `backend/routes/auth_routes.py` | 218 | `Exception` | log.error | `notify_signup_route` | UNCATEGORIZED |
-| `backend/routes/auth_routes.py` | 179 | `Exception` | log.warning | `notify_signup_route` | UNCATEGORIZED |
+| `backend/routes/auth_routes.py` | 218 | `Exception` | log.error | `notify_signup_route` | INTENTIONAL |
+| `backend/routes/auth_routes.py` | 179 | `Exception` | log.warning | `notify_signup_route` | INTENTIONAL |
 | `backend/routes/automation_routes.py` | 95 | `json.JSONDecodeError` | pass | `_read_runner_output` | INTENTIONAL |
 | `backend/routes/automation_routes.py` | 114 | `json.JSONDecodeError` | pass | `_read_picker_output` | INTENTIONAL |
 | `backend/routes/automation_routes.py` | 141 | `Exception` | pass | `list_automations` | LEGACY |
@@ -294,9 +294,9 @@
 | `backend/routes/district_routes.py` | 138 | `Exception` | pass | `_clear_old_provider_data` | NEEDS_ALERT |
 | `backend/routes/district_routes.py` | 429 | `Exception` | log.warning + return | `district_test_connection` | INTENTIONAL |
 | `backend/routes/district_routes.py` | 149 | `OSError` | pass | `_clear_old_provider_data` | INTENTIONAL |
-| `backend/routes/document_routes.py` | 107 | `ImportError` | append + return | `_parse_docx` | UNCATEGORIZED |
-| `backend/routes/document_routes.py` | 201 | `ImportError` | return | `_parse_pdf` | UNCATEGORIZED |
-| `backend/routes/document_routes.py` | 91 | `Exception` | pass | `_parse_docx` | UNCATEGORIZED |
+| `backend/routes/document_routes.py` | 107 | `ImportError` | append + return | `_parse_docx` | INTENTIONAL |
+| `backend/routes/document_routes.py` | 201 | `ImportError` | return | `_parse_pdf` | INTENTIONAL |
+| `backend/routes/document_routes.py` | 91 | `Exception` | pass | `_parse_docx` | LEGACY |
 | `backend/routes/email_routes.py` | 136 | `ImportError` | return | `send_emails` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 138 | `Exception` | log.exception + return | `send_emails` | INTENTIONAL |
 | `backend/routes/email_routes.py` | 164 | `Exception` | log.exception + return | `test_email` | INTENTIONAL |
@@ -370,14 +370,14 @@
 | `backend/routes/lesson_routes.py` | 78 | `Exception` | log.exception + return | `save_lesson` | INTENTIONAL |
 | `backend/routes/lesson_routes.py` | 194 | `Exception` | log.exception + return | `delete_lesson` | INTENTIONAL |
 | `backend/routes/lesson_routes.py` | 142 | `Exception` | pass | `list_lessons` | LEGACY |
-| `backend/routes/lti_routes.py` | 124 | `ValueError` | log.warning + return | `lti_launch` | UNCATEGORIZED |
+| `backend/routes/lti_routes.py` | 124 | `ValueError` | log.warning + return | `lti_launch` | INTENTIONAL |
 | `backend/routes/lti_routes.py` | 353 | `Exception` | log.error + return | `lti_sync_grades` | INTENTIONAL |
 | `backend/routes/notebooklm_routes.py` | 100 | `Exception` | log.exception + return | `nlm_login` | INTENTIONAL |
 | `backend/routes/notebooklm_routes.py` | 207 | `Exception` | log.exception + return | `nlm_create_notebook` | INTENTIONAL |
 | `backend/routes/notebooklm_routes.py` | 506 | `Exception` | log.exception + return | `share_material` | INTENTIONAL |
 | `backend/routes/notebooklm_routes.py` | 558 | `Exception` | log.exception + return | `serve_shared_media` | INTENTIONAL |
-| `backend/routes/notebooklm_routes.py` | 29 | `ImportError` | other | `_check_nlm_available` | UNCATEGORIZED |
-| `backend/routes/notebooklm_routes.py` | 195 | `OSError` | log.warning | `nlm_create_notebook` | UNCATEGORIZED |
+| `backend/routes/notebooklm_routes.py` | 29 | `ImportError` | other | `_check_nlm_available` | INTENTIONAL |
+| `backend/routes/notebooklm_routes.py` | 195 | `OSError` | log.warning | `nlm_create_notebook` | LEGACY |
 | `backend/routes/oneroster_routes.py` | 123 | `Exception` | log.warning + return | `test_connection` | INTENTIONAL |
 | `backend/routes/oneroster_routes.py` | 157 | `Exception` | pass | `sync_roster` | LEGACY |
 | `backend/routes/oneroster_routes.py` | 178 | `Exception` | log.error + return | `sync_roster` | INTENTIONAL |
@@ -488,9 +488,9 @@
 | `backend/routes/stripe_routes.py` | 118 | `Exception` | log.exception + return | `subscription_status` | INTENTIONAL |
 | `backend/routes/stripe_routes.py` | 156 | `Exception` | log.exception + return | `create_checkout_session` | INTENTIONAL |
 | `backend/routes/stripe_routes.py` | 181 | `Exception` | log.exception + return | `create_portal_session` | INTENTIONAL |
-| `backend/routes/stripe_routes.py` | 205 | `stripe.error.SignatureVerificationError` | return | `stripe_webhook` | UNCATEGORIZED |
+| `backend/routes/stripe_routes.py` | 205 | `stripe.error.SignatureVerificationError` | return | `stripe_webhook` | INTENTIONAL |
 | `backend/routes/stripe_routes.py` | 207 | `Exception` | log.error + return | `stripe_webhook` | INTENTIONAL |
-| `backend/routes/stripe_routes.py` | 261 | `Exception` | pass | `_sync_subscription_metadata` | UNCATEGORIZED |
+| `backend/routes/stripe_routes.py` | 261 | `Exception` | pass | `_sync_subscription_metadata` | NEEDS_ALERT |
 | `backend/routes/student_account_routes.py` | 78 | `Exception` | log.warning + return | `_spawn_grading_thread_safe` | INTENTIONAL |
 | `backend/routes/student_account_routes.py` | 160 | `Exception` | log.exception + return | `create_class` | INTENTIONAL |
 | `backend/routes/student_account_routes.py` | 179 | `Exception` | log.exception + return | `list_classes` | INTENTIONAL |
@@ -540,13 +540,13 @@
 | `backend/routes/student_portal_routes.py` | 1331 | `Exception` | log.exception + return | `set_content_tags` | INTENTIONAL |
 | `backend/routes/student_portal_routes.py` | 787 | `Exception` | raise + return | `submit_assessment` | INTENTIONAL |
 | `backend/routes/student_portal_routes.py` | 365 | `Exception` | pass | `list_saved_assessments` | INTENTIONAL |
-| `backend/routes/sync_routes.py` | 32 | `Exception` | return | `get_supabase` | UNCATEGORIZED |
+| `backend/routes/sync_routes.py` | 32 | `Exception` | return | `get_supabase` | INTENTIONAL |
 | `backend/routes/sync_routes.py` | 136 | `Exception` | log.exception + return | `_discover_teachers` | INTENTIONAL |
-| `backend/routes/sync_routes.py` | 145 | `Exception` | log.warning | `_save_cursor` | UNCATEGORIZED |
+| `backend/routes/sync_routes.py` | 145 | `Exception` | log.warning | `_save_cursor` | LEGACY |
 | `backend/routes/sync_routes.py` | 239 | `Exception` | log.exception + return | `_sync_one_teacher` | INTENTIONAL |
-| `backend/scripts/populate_fl_standards.py` | 177 | `requests.RequestException` | print + return | `fetch_ixl_page` | UNCATEGORIZED |
-| `backend/scripts/populate_fl_standards.py` | 415 | `Exception` | print | `enrich_batch` | UNCATEGORIZED |
-| `backend/scripts/populate_fl_standards.py` | 315 | `ValueError` | append | `_code_sort_key` | UNCATEGORIZED |
+| `backend/scripts/populate_fl_standards.py` | 177 | `requests.RequestException` | print + return | `fetch_ixl_page` | INTENTIONAL |
+| `backend/scripts/populate_fl_standards.py` | 415 | `Exception` | print | `enrich_batch` | INTENTIONAL |
+| `backend/scripts/populate_fl_standards.py` | 315 | `ValueError` | append | `_code_sort_key` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 32 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 140 | `(ValueError, TypeError)` | return | `_safe_int_score` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 242 | `Exception` | return | `_load_results` | LEGACY |
@@ -571,11 +571,11 @@
 | `backend/services/assistant_tools.py` | 693 | `Exception` | pass | `_load_roster` | LEGACY |
 | `backend/services/assistant_tools.py` | 974 | `(ValueError, TypeError)` | other | `execute_tool` | INTENTIONAL |
 | `backend/services/assistant_tools.py` | 546 | `Exception` | pass | `_load_saved_lessons` | LEGACY |
-| `backend/services/assistant_tools_ai.py` | 113 | `ImportError` | return | `_get_anthropic_client` | UNCATEGORIZED |
-| `backend/services/assistant_tools_ai.py` | 135 | `json.JSONDecodeError` | return | `_call_haiku` | UNCATEGORIZED |
-| `backend/services/assistant_tools_ai.py` | 137 | `Exception` | return | `_call_haiku` | UNCATEGORIZED |
+| `backend/services/assistant_tools_ai.py` | 113 | `ImportError` | return | `_get_anthropic_client` | INTENTIONAL |
+| `backend/services/assistant_tools_ai.py` | 135 | `json.JSONDecodeError` | return | `_call_haiku` | INTENTIONAL |
+| `backend/services/assistant_tools_ai.py` | 137 | `Exception` | return | `_call_haiku` | INTENTIONAL |
 | `backend/services/assistant_tools_ai.py` | 312 | `json.JSONDecodeError` | pass | `generate_iep_progress_notes` | INTENTIONAL |
-| `backend/services/assistant_tools_assessments.py` | 23 | `Exception` | return | `_get_supabase` | UNCATEGORIZED |
+| `backend/services/assistant_tools_assessments.py` | 23 | `Exception` | return | `_get_supabase` | INTENTIONAL |
 | `backend/services/assistant_tools_assessments.py` | 59 | `Exception` | log.exception + return | `list_published_assessments_tool` | INTENTIONAL |
 | `backend/services/assistant_tools_assessments.py` | 172 | `Exception` | log.exception + return | `query_assessment_results` | INTENTIONAL |
 | `backend/services/assistant_tools_automation.py` | 14 | `ImportError` | other | `<module>` | INTENTIONAL |
@@ -591,21 +591,21 @@
 | `backend/services/assistant_tools_behavior.py` | 865 | `Exception` | pass | `send_behavior_email` | NEEDS_ALERT |
 | `backend/services/assistant_tools_behavior.py` | 108 | `Exception` | log.error | `_load_behavior_events` | NEEDS_ALERT |
 | `backend/services/assistant_tools_behavior.py` | 139 | `Exception` | pass | `_load_behavior_events` | INTENTIONAL |
-| `backend/services/assistant_tools_communication.py` | 395 | `Exception` | pass | `generate_parent_conference_notes` | UNCATEGORIZED |
+| `backend/services/assistant_tools_communication.py` | 395 | `Exception` | pass | `generate_parent_conference_notes` | NEEDS_ALERT |
 | `backend/services/assistant_tools_data.py` | 16 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/assistant_tools_data.py` | 68 | `Exception` | return | `_load_memories` | LEGACY |
 | `backend/services/assistant_tools_data.py` | 127 | `Exception` | return | `_load_calendar` | INTENTIONAL |
 | `backend/services/assistant_tools_data.py` | 19 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/assistant_tools_data.py` | 152 | `Exception` | pass | `_load_email_config` | LEGACY |
-| `backend/services/assistant_tools_edtech.py` | 331 | `ImportError` | return | `generate_kahoot_quiz` | UNCATEGORIZED |
-| `backend/services/assistant_tools_edtech.py` | 478 | `ImportError` | return | `generate_nearpod_questions` | UNCATEGORIZED |
+| `backend/services/assistant_tools_edtech.py` | 331 | `ImportError` | return | `generate_kahoot_quiz` | INTENTIONAL |
+| `backend/services/assistant_tools_edtech.py` | 478 | `ImportError` | return | `generate_nearpod_questions` | INTENTIONAL |
 | `backend/services/assistant_tools_grading.py` | 29 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/assistant_tools_grading.py` | 88 | `Exception` | other | `_scan_submission_folder` | INTENTIONAL |
 | `backend/services/assistant_tools_grading.py` | 854 | `Exception` | other | `scan_submissions_folder` | INTENTIONAL |
 | `backend/services/assistant_tools_grading.py` | 32 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/assistant_tools_grading.py` | 837 | `Exception` | pass | `scan_submissions_folder` | INTENTIONAL |
-| `backend/services/assistant_tools_planning.py` | 191 | `Exception` | return | `_get_standards_for_lesson` | UNCATEGORIZED |
-| `backend/services/assistant_tools_planning.py` | 724 | `ImportError` | return | `generate_sub_plans` | UNCATEGORIZED |
+| `backend/services/assistant_tools_planning.py` | 191 | `Exception` | return | `_get_standards_for_lesson` | INTENTIONAL |
+| `backend/services/assistant_tools_planning.py` | 724 | `ImportError` | return | `generate_sub_plans` | INTENTIONAL |
 | `backend/services/assistant_tools_reports.py` | 34 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/assistant_tools_reports.py` | 804 | `ImportError` | return | `_parse_curriculum_map_for_dates` | INTENTIONAL |
 | `backend/services/assistant_tools_reports.py` | 811 | `Exception` | return | `_parse_curriculum_map_for_dates` | INTENTIONAL |
@@ -645,7 +645,7 @@
 | `backend/services/assistant_tools_reports.py` | 2562 | `OSError` | pass | `confirm_and_send` | INTENTIONAL |
 | `backend/services/assistant_tools_reports.py` | 2581 | `OSError` | pass | `confirm_and_send` | INTENTIONAL |
 | `backend/services/assistant_tools_reports.py` | 2598 | `OSError` | pass | `_clear_behavior_pending` | INTENTIONAL |
-| `backend/services/assistant_tools_stem.py` | 221 | `(TypeError, ValueError)` | return | `handle_grade_coordinates` | UNCATEGORIZED |
+| `backend/services/assistant_tools_stem.py` | 221 | `(TypeError, ValueError)` | return | `handle_grade_coordinates` | INTENTIONAL |
 | `backend/services/assistant_tools_student.py` | 428 | `Exception` | log.warning + return | `_delete_student_supabase` | NEEDS_ALERT |
 | `backend/services/assistant_tools_student.py` | 522 | `Exception` | append | `_execute_student_removal` | LEGACY |
 | `backend/services/assistant_tools_student.py` | 548 | `Exception` | append | `_execute_student_removal` | LEGACY |
@@ -674,7 +674,7 @@
 | `backend/services/assistant_tools_student.py` | 990 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
 | `backend/services/assistant_tools_student.py` | 1007 | `Exception` | pass | `import_student_data` | NEEDS_ALERT |
 | `backend/services/assistant_tools_student.py` | 479 | `Exception` | append | `_execute_student_removal` | INTENTIONAL |
-| `backend/services/correction_patterns.py` | 15 | `ImportError` | other | `<module>` | UNCATEGORIZED |
+| `backend/services/correction_patterns.py` | 15 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/services/document_generator.py` | 53 | `(ValueError, TypeError)` | return | `_hex_to_rgb` | INTENTIONAL |
 | `backend/services/document_generator.py` | 81 | `Exception` | pass | `load_style` | LEGACY |
 | `backend/services/document_generator.py` | 91 | `(ValueError, TypeError)` | other | `load_style` | INTENTIONAL |
@@ -699,14 +699,14 @@
 | `backend/services/elevenlabs_service.py` | 204 | `Exception` | pass | `close` | INTENTIONAL |
 | `backend/services/elevenlabs_service.py` | 259 | `Exception` | pass | `_on_message` | INTENTIONAL |
 | `backend/services/elevenlabs_service.py` | 227 | `Exception` | other | `_keepalive_loop` | INTENTIONAL |
-| `backend/services/email_service.py` | 21 | `ImportError` | print | `<module>` | UNCATEGORIZED |
-| `backend/services/email_service.py` | 133 | `Exception` | print + return | `send_email` | UNCATEGORIZED |
-| `backend/services/grading_service.py` | 129 | `Exception` | log.debug | `load_teacher_config` | UNCATEGORIZED |
-| `backend/services/grading_service.py` | 250 | `Exception` | log.error | `grade_student_submission` | UNCATEGORIZED |
+| `backend/services/email_service.py` | 21 | `ImportError` | print | `<module>` | INTENTIONAL |
+| `backend/services/email_service.py` | 133 | `Exception` | print + return | `send_email` | INTENTIONAL |
+| `backend/services/grading_service.py` | 129 | `Exception` | log.debug | `load_teacher_config` | LEGACY |
+| `backend/services/grading_service.py` | 250 | `Exception` | log.error | `grade_student_submission` | INTENTIONAL |
 | `backend/services/grading_service.py` | 85 | `ValueError` | pass | `grade_deterministic_question` | INTENTIONAL |
-| `backend/services/mathpix_ocr.py` | 115 | `requests.exceptions.Timeout` | return | `image_to_latex` | UNCATEGORIZED |
-| `backend/services/mathpix_ocr.py` | 123 | `requests.exceptions.HTTPError` | return | `image_to_latex` | UNCATEGORIZED |
-| `backend/services/mathpix_ocr.py` | 133 | `Exception` | return | `image_to_latex` | UNCATEGORIZED |
+| `backend/services/mathpix_ocr.py` | 115 | `requests.exceptions.Timeout` | return | `image_to_latex` | INTENTIONAL |
+| `backend/services/mathpix_ocr.py` | 123 | `requests.exceptions.HTTPError` | return | `image_to_latex` | INTENTIONAL |
+| `backend/services/mathpix_ocr.py` | 133 | `Exception` | return | `image_to_latex` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 66 | `ImportError` | return | `_get_default_storage_path` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 106 | `ImportError` | raise | `login_browser` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 169 | `Exception` | pass | `cancel_login` | INTENTIONAL |
@@ -718,10 +718,10 @@
 | `backend/services/notebooklm_service.py` | 799 | `Exception` | append | `run_generation_thread` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 259 | `Exception` | pass | `cleanup_expired_materials` | NEEDS_ALERT |
 | `backend/services/notebooklm_service.py` | 783 | `Exception` | append + raise | `run_generation_thread` | INTENTIONAL |
-| `backend/services/oneroster_gradebook.py` | 95 | `Exception` | append + log.warning | `post_results` | UNCATEGORIZED |
-| `backend/services/openai_tts_service.py` | 20 | `ImportError` | other | `<module>` | UNCATEGORIZED |
-| `backend/services/openai_tts_service.py` | 216 | `queue.Empty` | other | `_worker_loop` | UNCATEGORIZED |
-| `backend/services/openai_tts_service.py` | 248 | `Exception` | log.error | `_worker_loop` | UNCATEGORIZED |
+| `backend/services/oneroster_gradebook.py` | 95 | `Exception` | append + log.warning | `post_results` | NEEDS_ALERT |
+| `backend/services/openai_tts_service.py` | 20 | `ImportError` | other | `<module>` | INTENTIONAL |
+| `backend/services/openai_tts_service.py` | 216 | `queue.Empty` | other | `_worker_loop` | INTENTIONAL |
+| `backend/services/openai_tts_service.py` | 248 | `Exception` | log.error | `_worker_loop` | LEGACY |
 | `backend/services/outlook_sender.py` | 140 | `Exception` | raise | `navigate_to_outlook` | INTENTIONAL |
 | `backend/services/outlook_sender.py` | 152 | `Exception` | pass | `navigate_to_outlook` | LEGACY |
 | `backend/services/outlook_sender.py` | 81 | `Exception` | pass | `navigate_to_outlook` | NEEDS_ALERT |
@@ -755,7 +755,7 @@
 | `backend/services/seo_service.py` | 28 | `ImportError` | return | `_get_anthropic_client` | INTENTIONAL |
 | `backend/services/seo_service.py` | 50 | `json.JSONDecodeError` | return | `_call_haiku` | INTENTIONAL |
 | `backend/services/seo_service.py` | 52 | `Exception` | return | `_call_haiku` | INTENTIONAL |
-| `backend/services/slide_generator.py` | 281 | `Exception` | log.warning | `generate_slide_images` | UNCATEGORIZED |
+| `backend/services/slide_generator.py` | 281 | `Exception` | log.warning | `generate_slide_images` | LEGACY |
 | `backend/services/stem_grading.py` | 42 | `(ValueError, TypeError)` | pass | `_normalize_math_input` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 69 | `Exception` | pass | `_normalize_math_input` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 75 | `Exception` | pass | `_normalize_math_input` | INTENTIONAL |
@@ -768,8 +768,8 @@
 | `backend/services/stem_grading.py` | 49 | `(ValueError, TypeError)` | pass | `_normalize_math_input` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 173 | `ValueError` | pass | `check_math_equivalence` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 207 | `(TypeError, ValueError)` | pass | `check_math_equivalence` | INTENTIONAL |
-| `backend/services/visualization.py` | 608 | `Exception` | other | `create_function_graph` | UNCATEGORIZED |
-| `backend/services/worksheet_generator.py` | 233 | `Exception` | other | `_embed_visual` | UNCATEGORIZED |
+| `backend/services/visualization.py` | 608 | `Exception` | other | `create_function_graph` | INTENTIONAL |
+| `backend/services/worksheet_generator.py` | 233 | `Exception` | other | `_embed_visual` | LEGACY |
 | `backend/staging.py` | 98 | `(json.JSONDecodeError, OSError)` | pass | `_load_manifest` | INTENTIONAL |
 | `backend/staging.py` | 145 | `OSError` | other | `stage_files` | INTENTIONAL |
 | `backend/staging.py` | 204 | `OSError` | other | `stage_files` | INTENTIONAL |
@@ -794,14 +794,14 @@
 | `backend/student_history.py` | 20 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/student_history.py` | 30 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/student_history.py` | 79 | `Exception` | pass | `load_student_history` | NEEDS_ALERT |
-| `backend/supabase_resilient.py` | 74 | `AttributeError` | return | `_classify_operation` | UNCATEGORIZED |
-| `backend/supabase_resilient.py` | 134 | `AttributeError` | other | `_resilient_execute` | UNCATEGORIZED |
+| `backend/supabase_resilient.py` | 74 | `AttributeError` | return | `_classify_operation` | INTENTIONAL |
+| `backend/supabase_resilient.py` | 134 | `AttributeError` | other | `_resilient_execute` | INTENTIONAL |
 | `backend/supabase_resilient.py` | 155 | `Exception` | log.error + log.warning + raise | `_resilient_execute` | INTENTIONAL |
 | `backend/utils/audit.py` | 38 | `Exception` | pass | `audit_log` | NEEDS_ALERT |
 | `backend/utils/audit.py` | 56 | `Exception` | pass | `audit_log` | NEEDS_ALERT |
 | `backend/utils/audit.py` | 30 | `(ImportError, RuntimeError)` | other | `audit_log` | INTENTIONAL |
 | `backend/utils/audit.py` | 45 | `ImportError` | other | `audit_log` | INTENTIONAL |
-| `backend/utils/auth_decorators.py` | 48 | `Exception` | other | `wrapper` | UNCATEGORIZED |
+| `backend/utils/auth_decorators.py` | 48 | `Exception` | other | `wrapper` | LEGACY |
 | `backend/utils/errors.py` | 28 | `Exception` | log.exception + return | `wrapper` | INTENTIONAL |
-| `backend/utils/logging_utils.py` | 16 | `RuntimeError` | other | `format` | UNCATEGORIZED |
-| `backend/utils/logging_utils.py` | 32 | `RuntimeError` | other | `format` | UNCATEGORIZED |
+| `backend/utils/logging_utils.py` | 16 | `RuntimeError` | other | `format` | INTENTIONAL |
+| `backend/utils/logging_utils.py` | 32 | `RuntimeError` | other | `format` | INTENTIONAL |
