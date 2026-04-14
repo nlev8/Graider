@@ -247,6 +247,7 @@ def get_audit_logs(limit: int = 100):
             return logs[::-1]  # Newest first
     except Exception as e:
         print(f"Error reading audit logs: {e}")
+        sentry_sdk.capture_exception(e)
         return []
 
 
@@ -399,8 +400,8 @@ def load_saved_results(teacher_id='local-dev'):
                     if cleaned != sn:
                         r['student_name'] = cleaned
                 return results
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return []
 
 def save_results(results, teacher_id='local-dev'):
@@ -413,6 +414,7 @@ def save_results(results, teacher_id='local-dev'):
                 json.dump(results, f, indent=2)
         except Exception as e:
             print(f"Error saving results: {e}")
+            sentry_sdk.capture_exception(e)
 
 # ── Per-teacher grading state (dict-of-dicts) ────────────────
 _grading_states = {}   # teacher_id -> state dict
@@ -2006,6 +2008,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 grading_state["log"].append("  Audit trail saved")
             except Exception as e:
                 grading_state["log"].append(f"  Audit trail error: {str(e)}")
+                sentry_sdk.capture_exception(e)
 
         grading_state["log"].append("")
         grading_state["log"].append("=" * 50)
@@ -2291,6 +2294,7 @@ def _remove_from_master_csv(result):
                 writer.writerows(filtered)
     except Exception as e:
         print(f"Could not remove from master_grades.csv: {e}")
+        sentry_sdk.capture_exception(e)
 
 
 def _sync_approval_to_master_csv(result, approval_status):
@@ -2345,6 +2349,7 @@ def _sync_approval_to_master_csv(result, approval_status):
                 writer.writerows(rows)
     except Exception as e:
         print(f"Could not sync approval to master_grades.csv: {e}")
+        sentry_sdk.capture_exception(e)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2741,8 +2746,8 @@ def export_individual_student_data():
             with open(accomm_file, 'r') as f:
                 all_acc = json.load(f)
             student_accommodations = all_acc.get(safe_id) or all_acc.get(matched_id or '')
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     export["accommodations"] = student_accommodations
 
     # 4. ELL data
@@ -2753,8 +2758,8 @@ def export_individual_student_data():
             with open(ell_file, 'r') as f:
                 all_ell = json.load(f)
             ell_data = all_ell.get(safe_id) or all_ell.get(matched_id or '')
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     export["ell_data"] = ell_data
 
     # 5. Parent contacts
@@ -2765,8 +2770,8 @@ def export_individual_student_data():
             with open(contacts_file, 'r') as f:
                 all_contacts = json.load(f)
             parent_contacts = all_contacts.get(safe_id) or all_contacts.get(matched_id or '')
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     export["parent_contacts"] = parent_contacts
 
     record_count = len(student_results) + (1 if history else 0) + (1 if student_accommodations else 0) + (1 if ell_data else 0) + (1 if parent_contacts else 0)
@@ -2868,6 +2873,7 @@ def export_individual_student_data():
         doc.build(elements)
     except Exception as e:
         pdf_path = None
+        sentry_sdk.capture_exception(e)
         print(f"PDF generation error: {e}")
 
     # Open folder (macOS local dev only)
@@ -3041,8 +3047,8 @@ def import_individual_student_data():
             try:
                 with open(ell_file, 'r') as f:
                     all_ell = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
         all_ell[student_id] = ell_data
         os.makedirs(os.path.dirname(ell_file), exist_ok=True)
         with open(ell_file, 'w') as f:
@@ -3057,8 +3063,8 @@ def import_individual_student_data():
             try:
                 with open(contacts_file, 'r') as f:
                     all_contacts = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
         all_contacts[student_id] = parent_contacts
         os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
         with open(contacts_file, 'w') as f:
@@ -3093,6 +3099,7 @@ def import_individual_student_data():
                         writer.writerows(rows)
         except Exception as e:
             print(f"Warning: Could not add student to roster: {e}")
+            sentry_sdk.capture_exception(e)
 
     audit_log("IMPORT_STUDENT_DATA", f"Imported data for student (name redacted), sections: {imported}")
 

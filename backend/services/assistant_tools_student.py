@@ -340,7 +340,8 @@ def _find_all_student_files(student_name, dirs):
                             matches.append((display_name, filepath, label))
                             seen_files.add(filepath)
                             break  # found in this file, move to next
-            except Exception:
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
                 continue
     return matches
 
@@ -496,6 +497,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
             results.append({"source": label, "removed": removed, "remaining": remaining})
         except Exception as e:
             errors.append({"source": label, "error": "Failed to remove from roster"})
+            sentry_sdk.capture_exception(e)
 
     # --- Derive student ID for file-based lookups ---
     roster = _load_roster()
@@ -523,6 +525,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
             results.append({"source": "grading_results", "removed": results_removed})
     except Exception as e:
         errors.append({"source": "grading_results", "error": "Failed to remove grading results"})
+        sentry_sdk.capture_exception(e)
 
     # --- Remove from master_grades.csv ---
     try:
@@ -549,6 +552,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                 results.append({"source": f"master_csv ({os.path.basename(os.path.dirname(master_file))})", "removed": csv_removed})
     except Exception as e:
         errors.append({"source": "master_csv", "error": "Failed to remove from master grades"})
+        sentry_sdk.capture_exception(e)
 
     # --- Delete student history file ---
     try:
@@ -558,6 +562,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
             results.append({"source": "student_history", "removed": 1})
     except Exception as e:
         errors.append({"source": "student_history", "error": "Failed to remove student history"})
+        sentry_sdk.capture_exception(e)
 
     # --- Remove from accommodations ---
     try:
@@ -575,6 +580,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                 results.append({"source": "accommodations", "removed": len(removed_keys)})
     except Exception as e:
         errors.append({"source": "accommodations", "error": "Failed to remove accommodations"})
+        sentry_sdk.capture_exception(e)
 
     # --- Remove from parent contacts ---
     try:
@@ -592,6 +598,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                 results.append({"source": "parent_contacts", "removed": len(removed_keys)})
     except Exception as e:
         errors.append({"source": "parent_contacts", "error": "Failed to remove parent contacts"})
+        sentry_sdk.capture_exception(e)
 
     # --- Remove from ELL data ---
     try:
@@ -609,6 +616,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                 results.append({"source": "ell_data", "removed": len(removed_keys)})
     except Exception as e:
         errors.append({"source": "ell_data", "error": "Failed to remove ELL data"})
+        sentry_sdk.capture_exception(e)
 
     # --- Cascade delete from Supabase ---
     supabase_msg = _delete_student_supabase(matched_name)
@@ -1038,6 +1046,7 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
                         writer.writerows(rows)
         except Exception as e:
             print(f"Warning: Could not add student to roster: {e}")
+            sentry_sdk.capture_exception(e)
 
     total = imported["results"] + sum(1 for v in [imported["history"], imported["accommodations"], imported["ell"], imported["contacts"]] if v)
     return {

@@ -398,6 +398,7 @@ def update_result():
                 )
             except Exception as e:
                 import logging
+                sentry_sdk.capture_exception(e)
                 logging.getLogger(__name__).warning("Failed to record correction: %s", e)
 
     return jsonify({
@@ -1388,8 +1389,8 @@ def _build_student_name_lookup():
                     name = parse_student_name(row)
                     if student_id and name:
                         id_to_name[student_id] = name
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     # Also try period CSVs
     periods_dir = os.path.expanduser("~/.graider_data/periods")
@@ -1404,8 +1405,8 @@ def _build_student_name_lookup():
                             name = parse_student_name(row)
                             if student_id and name:
                                 id_to_name[student_id] = name
-                except Exception:
-                    pass
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
 
     return id_to_name
 

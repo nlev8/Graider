@@ -152,8 +152,9 @@ def navigate_to_outlook(page, context, district, email, password):
         page.get_by_role("button", name="New mail").wait_for(
             state="visible", timeout=30000
         )
-    except Exception:
+    except Exception as e:
         pass  # Continue anyway — UI might use different labels
+        sentry_sdk.capture_exception(e)
     page.wait_for_timeout(2000)
 
     return page

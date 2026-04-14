@@ -16,6 +16,7 @@ from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn, nsdecls
 from docx.oxml import parse_xml
+import sentry_sdk
 
 
 DOCUMENTS_DIR = os.path.expanduser("~/Downloads/Graider/Documents")
@@ -78,8 +79,8 @@ def load_style(style_name):
         for key, val in saved.items():
             if key in style and val is not None:
                 style[key] = val
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # Coerce numeric fields to proper types (JSON or AI tools may pass strings)
     _int_keys = {"title_font_size", "body_font_size"}
@@ -335,8 +336,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                 font_size = block.get("font_size", 20)
                 img = render_latex(latex, font_size=font_size)
                 add_image_to_docx(doc, img, width_inches=4)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Math image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "number_line":
             try:
@@ -350,8 +352,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=6)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Number line image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "coordinate_plane":
             try:
@@ -365,8 +368,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Coordinate plane image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "graph":
             try:
@@ -406,8 +410,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     doc.add_paragraph(f"[Unknown graph type: {graph_type}]")
                     continue
                 add_image_to_docx(doc, img, width_inches=5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Graph image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "box_plot":
             try:
@@ -419,8 +424,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Box plot image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "shape":
             try:
@@ -444,8 +450,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     doc.add_paragraph(f"[Unknown shape type: {shape_type}]")
                     continue
                 add_image_to_docx(doc, img, width_inches=4)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Shape image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "function_graph":
             try:
@@ -460,8 +467,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Function graph image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "circle":
             try:
@@ -476,8 +484,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=4)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Circle image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "polygon":
             try:
@@ -491,8 +500,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=4)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Polygon image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "histogram":
             try:
@@ -507,8 +517,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Histogram image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "pie_chart":
             try:
@@ -522,8 +533,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Pie chart image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "dot_plot":
             try:
@@ -538,8 +550,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Dot plot image generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "stem_and_leaf":
             try:
@@ -550,8 +563,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=4)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Stem-and-leaf plot generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type == "venn_diagram":
             try:
@@ -564,8 +578,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     blank=block.get("blank", False),
                 )
                 add_image_to_docx(doc, img, width_inches=4.5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Venn diagram generation failed]")
+                sentry_sdk.capture_exception(e)
 
         elif block_type in ("protractor", "angle_protractor"):
             try:
@@ -576,8 +591,9 @@ def create_document_docx(filepath, title, content_blocks, style):
                     title=block.get("title"),
                 )
                 add_image_to_docx(doc, img, width_inches=3.5)
-            except Exception:
+            except Exception as e:
                 doc.add_paragraph("[Protractor image generation failed]")
+                sentry_sdk.capture_exception(e)
 
     doc.save(filepath)
 

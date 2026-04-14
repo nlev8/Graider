@@ -26,6 +26,7 @@ def _is_supabase_configured():
 
 # ── Supabase client (canonical import) ────────────────────────
 from backend.supabase_client import get_supabase as _get_supabase
+import sentry_sdk
 
 
 # ── File path mapping ─────────────────────────────────────────
@@ -316,7 +317,8 @@ def _file_load_student_history(student_id):
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return None
 
 
@@ -575,6 +577,7 @@ def sync_all_to_cloud(teacher_id):
                 _sb_save(key, {"headers": headers, "rows": rows}, teacher_id)
             except Exception as e:
                 logger.warning("Failed to sync period CSV %s: %s", key, e)
+                sentry_sdk.capture_exception(e)
 
     # Sync resources
     resource_keys = _file_list_keys('resource:')
@@ -598,8 +601,8 @@ def sync_all_to_cloud(teacher_id):
                         history = json.load(fh)
                     _sb_save_student_history(teacher_id, student_id, history)
                     synced_history += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
     summary['student_history'] = f"{synced_history} synced"
 
     return summary

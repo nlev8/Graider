@@ -24,6 +24,7 @@ from backend.retry import with_retry
 
 _logger = logging.getLogger(__name__)
 from pathlib import Path
+import sentry_sdk
 
 # Import multipass grading for text-based question types
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -1024,8 +1025,9 @@ def grade_math_equation(question, answer):
             return {'correct': True, 'feedback': 'Correct!'}
         else:
             return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
-    except Exception:
+    except Exception as e:
         # Fallback to string comparison
+        sentry_sdk.capture_exception(e)
         if str(answer_val).strip() == str(correct_answer).strip():
             return {'correct': True, 'feedback': 'Correct!'}
         else:

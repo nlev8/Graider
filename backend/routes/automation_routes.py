@@ -139,8 +139,8 @@ def list_automations():
                 "step_count": len(wf.get("steps", [])),
                 "updated_at": wf.get("updated_at", ""),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return jsonify({"workflows": workflows})
 
 
@@ -213,8 +213,8 @@ def list_templates():
                     "step_count": len(wf.get("steps", [])),
                     "is_template": True,
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
     return jsonify({"templates": templates})
 
 
@@ -234,8 +234,8 @@ def get_template(template_id):
                 wf = json.load(f)
             if wf.get("id") == template_id:
                 return jsonify(wf)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return jsonify({"error": "Template not found"}), 404
 
 

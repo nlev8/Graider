@@ -6,6 +6,7 @@ Contains helper functions used by multiple grading paths
 """
 import json
 import logging
+import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,7 @@ def load_teacher_config(teacher_id):
             teacher_config["grading_style"] = rubric_data.get("gradingStyle", "standard")
     except Exception as e:
         logger.debug("Failed to load teacher config for %s: %s", teacher_id, e)
+        sentry_sdk.capture_exception(e)
 
     return teacher_config
 

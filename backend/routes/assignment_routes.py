@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.retry import with_retry
+import sentry_sdk
 
 _logger = logging.getLogger(__name__)
 
@@ -62,8 +63,9 @@ def save_assignment_config():
             try:
                 with open(filepath, 'r') as f:
                     existing = json.load(f)
-            except (json.JSONDecodeError, Exception):
+            except (json.JSONDecodeError, Exception) as e:
                 existing = {}
+                sentry_sdk.capture_exception(e)
 
         # Merge: existing fields are preserved, incoming data overwrites
         merged = {**existing, **data}
@@ -213,8 +215,9 @@ def list_assignments():
                         "dueDate": data.get("dueDate", ""),
                         "latePenalty": data.get("latePenalty", {}),
                     }
-            except Exception:
+            except Exception as e:
                 assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": "", "dueDate": "", "latePenalty": {}}
+                sentry_sdk.capture_exception(e)
 
     files_with_mtime.sort(key=lambda x: x[1], reverse=True)
     assignments = [name for name, _ in files_with_mtime]

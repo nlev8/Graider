@@ -447,8 +447,8 @@ def get_portal_submissions():
                 'id', count='exact'
             ).eq('teacher_id', teacher_id).eq('status', 'pending').execute()
             pending_count = pending_conf.count or 0
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
         return jsonify({"submissions": results, "pending_confirmations": pending_count})
     except Exception as e:
@@ -982,8 +982,8 @@ def check_student_session():
                     "name": cls.data[0].get('name', ''),
                     "subject": cls.data[0].get('subject', ''),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
         return jsonify({
             "valid": True,

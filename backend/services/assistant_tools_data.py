@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 
 from backend.utils.compliance import require_teacher_id
+import sentry_sdk
 
 # Import storage abstraction
 try:
@@ -65,7 +66,8 @@ def _load_memories(teacher_id='local-dev'):
         with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data if isinstance(data, list) else []
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return []
 
 
@@ -149,8 +151,8 @@ def _load_email_config():
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return {}
 
 

@@ -464,8 +464,8 @@ def _get_ell_language(student_id: str) -> Optional[str]:
         lang = entry.get("language")
         if lang and lang != "none":
             return lang
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
     return None
 
 
