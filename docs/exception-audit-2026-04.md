@@ -88,24 +88,24 @@
 | `backend/app.py` | 975 | `Exception` | pass | `_run_grading_thread_inner` | INTENTIONAL |
 | `backend/app.py` | 1528 | `Exception` | pass | `grade_single_file` | INTENTIONAL |
 | `backend/app.py` | 308 | `Exception` | other | `load_support_documents_for_grading` | INTENTIONAL |
-| `backend/auth.py` | 30 | `Exception` | return | `load_clever_links` | UNCATEGORIZED |
-| `backend/auth.py` | 45 | `Exception` | other | `save_clever_link` | UNCATEGORIZED |
-| `backend/auth.py` | 146 | `jwt.ExpiredSignatureError` | return | `validate_token` | UNCATEGORIZED |
-| `backend/auth.py` | 148 | `jwt.InvalidTokenError` | return | `validate_token` | UNCATEGORIZED |
-| `backend/auth.py` | 132 | `jwt.ExpiredSignatureError` | return | `validate_token` | UNCATEGORIZED |
-| `backend/auth.py` | 134 | `jwt.InvalidTokenError` | log.warning | `validate_token` | UNCATEGORIZED |
-| `backend/auth.py` | 36 | `(FileNotFoundError, json.JSONDecodeError)` | return | `load_clever_links` | UNCATEGORIZED |
-| `backend/auth.py` | 248 | `Exception` | log.warning | `check_auth` | UNCATEGORIZED |
-| `backend/clever.py` | 46 | `Exception` | pass | `get_clever_config` | UNCATEGORIZED |
+| `backend/auth.py` | 30 | `Exception` | return | `load_clever_links` | NEEDS_ALERT |
+| `backend/auth.py` | 45 | `Exception` | other | `save_clever_link` | NEEDS_ALERT |
+| `backend/auth.py` | 146 | `jwt.ExpiredSignatureError` | return | `validate_token` | INTENTIONAL |
+| `backend/auth.py` | 148 | `jwt.InvalidTokenError` | return | `validate_token` | INTENTIONAL |
+| `backend/auth.py` | 132 | `jwt.ExpiredSignatureError` | return | `validate_token` | INTENTIONAL |
+| `backend/auth.py` | 134 | `jwt.InvalidTokenError` | log.warning | `validate_token` | INTENTIONAL |
+| `backend/auth.py` | 36 | `(FileNotFoundError, json.JSONDecodeError)` | return | `load_clever_links` | INTENTIONAL |
+| `backend/auth.py` | 248 | `Exception` | log.warning | `check_auth` | LEGACY |
+| `backend/clever.py` | 46 | `Exception` | pass | `get_clever_config` | LEGACY |
 | `backend/clever.py` | 109 | `httpx.HTTPError` | log.error + return | `exchange_code_for_token` | INTENTIONAL |
 | `backend/clever.py` | 152 | `httpx.HTTPError` | log.error + return | `get_clever_user` | INTENTIONAL |
 | `backend/clever.py` | 184 | `httpx.HTTPError` | log.warning + raise | `_clever_get_with_retry` | INTENTIONAL |
-| `backend/clever.py` | 545 | `(json.JSONDecodeError, ValueError)` | other | `persist_parent_contacts` | UNCATEGORIZED |
-| `backend/clever.py` | 231 | `httpx.HTTPError` | log.error | `sync_roster` | UNCATEGORIZED |
-| `backend/clever.py` | 245 | `httpx.HTTPError` | log.warning | `sync_roster` | UNCATEGORIZED |
-| `backend/clever.py` | 361 | `(json.JSONDecodeError, ValueError)` | other | `persist_roster_as_csv` | UNCATEGORIZED |
-| `backend/clever.py` | 404 | `(json.JSONDecodeError, ValueError)` | other | `persist_roster_as_csv` | UNCATEGORIZED |
-| `backend/clever.py` | 217 | `httpx.HTTPError` | log.error | `sync_roster` | UNCATEGORIZED |
+| `backend/clever.py` | 545 | `(json.JSONDecodeError, ValueError)` | other | `persist_parent_contacts` | INTENTIONAL |
+| `backend/clever.py` | 231 | `httpx.HTTPError` | log.error | `sync_roster` | NEEDS_ALERT |
+| `backend/clever.py` | 245 | `httpx.HTTPError` | log.warning | `sync_roster` | NEEDS_ALERT |
+| `backend/clever.py` | 361 | `(json.JSONDecodeError, ValueError)` | other | `persist_roster_as_csv` | INTENTIONAL |
+| `backend/clever.py` | 404 | `(json.JSONDecodeError, ValueError)` | other | `persist_roster_as_csv` | INTENTIONAL |
+| `backend/clever.py` | 217 | `httpx.HTTPError` | log.error | `sync_roster` | NEEDS_ALERT |
 | `backend/lti.py` | 236 | `jwt.ExpiredSignatureError` | raise | `validate_launch_jwt` | INTENTIONAL |
 | `backend/lti.py` | 238 | `jwt.InvalidAudienceError` | raise | `validate_launch_jwt` | INTENTIONAL |
 | `backend/lti.py` | 240 | `jwt.InvalidIssuerError` | raise | `validate_launch_jwt` | INTENTIONAL |
@@ -193,19 +193,19 @@
 | `backend/routes/assignment_player_routes.py` | 1544 | `ValueError` | other | `grade_venn_diagram` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 1092 | `(ValueError, TypeError)` | other | `grade_data_table` | INTENTIONAL |
 | `backend/routes/assignment_player_routes.py` | 1173 | `Exception` | other | `grade_function_graph` | INTENTIONAL |
-| `backend/routes/assignment_routes.py` | 22 | `ImportError` | other | `<module>` | UNCATEGORIZED |
+| `backend/routes/assignment_routes.py` | 22 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 77 | `Exception` | log.exception + return | `save_assignment_config` | INTENTIONAL |
-| `backend/routes/assignment_routes.py` | 155 | `json.JSONDecodeError` | return | `generate_model_answers` | UNCATEGORIZED |
+| `backend/routes/assignment_routes.py` | 155 | `json.JSONDecodeError` | return | `generate_model_answers` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 157 | `Exception` | log.exception + return | `generate_model_answers` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 248 | `Exception` | log.exception + return | `load_assignment` | INTENTIONAL |
-| `backend/routes/assignment_routes.py` | 427 | `ImportError` | return | `_export_docx` | UNCATEGORIZED |
+| `backend/routes/assignment_routes.py` | 427 | `ImportError` | return | `_export_docx` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 429 | `Exception` | log.exception + return | `_export_docx` | INTENTIONAL |
-| `backend/routes/assignment_routes.py` | 531 | `ImportError` | return | `_export_pdf` | UNCATEGORIZED |
+| `backend/routes/assignment_routes.py` | 531 | `ImportError` | return | `_export_pdf` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 533 | `Exception` | log.exception + return | `_export_pdf` | INTENTIONAL |
-| `backend/routes/assignment_routes.py` | 25 | `ImportError` | other | `<module>` | UNCATEGORIZED |
+| `backend/routes/assignment_routes.py` | 25 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/routes/assignment_routes.py` | 271 | `Exception` | log.exception + return | `delete_assignment` | INTENTIONAL |
-| `backend/routes/assignment_routes.py` | 216 | `Exception` | other | `list_assignments` | UNCATEGORIZED |
-| `backend/routes/assignment_routes.py` | 65 | `(json.JSONDecodeError, Exception)` | other | `save_assignment_config` | UNCATEGORIZED |
+| `backend/routes/assignment_routes.py` | 216 | `Exception` | other | `list_assignments` | LEGACY |
+| `backend/routes/assignment_routes.py` | 65 | `(json.JSONDecodeError, Exception)` | other | `save_assignment_config` | LEGACY |
 | `backend/routes/assistant_routes.py` | 27 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 32 | `ImportError` | other | `<module>` | INTENTIONAL |
 | `backend/routes/assistant_routes.py` | 37 | `ImportError` | other | `<module>` | INTENTIONAL |
@@ -707,16 +707,16 @@
 | `backend/services/mathpix_ocr.py` | 115 | `requests.exceptions.Timeout` | return | `image_to_latex` | UNCATEGORIZED |
 | `backend/services/mathpix_ocr.py` | 123 | `requests.exceptions.HTTPError` | return | `image_to_latex` | UNCATEGORIZED |
 | `backend/services/mathpix_ocr.py` | 133 | `Exception` | return | `image_to_latex` | UNCATEGORIZED |
-| `backend/services/notebooklm_service.py` | 66 | `ImportError` | return | `_get_default_storage_path` | UNCATEGORIZED |
+| `backend/services/notebooklm_service.py` | 66 | `ImportError` | return | `_get_default_storage_path` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 106 | `ImportError` | raise | `login_browser` | INTENTIONAL |
-| `backend/services/notebooklm_service.py` | 169 | `Exception` | pass | `cancel_login` | UNCATEGORIZED |
-| `backend/services/notebooklm_service.py` | 173 | `Exception` | pass | `cancel_login` | UNCATEGORIZED |
+| `backend/services/notebooklm_service.py` | 169 | `Exception` | pass | `cancel_login` | INTENTIONAL |
+| `backend/services/notebooklm_service.py` | 173 | `Exception` | pass | `cancel_login` | INTENTIONAL |
 | `backend/services/notebooklm_service.py` | 192 | `(json.JSONDecodeError, IOError)` | pass | `get_generation_state` | INTENTIONAL |
-| `backend/services/notebooklm_service.py` | 810 | `Exception` | pass | `run_generation_thread` | UNCATEGORIZED |
+| `backend/services/notebooklm_service.py` | 810 | `Exception` | pass | `run_generation_thread` | NEEDS_ALERT |
 | `backend/services/notebooklm_service.py` | 234 | `(json.JSONDecodeError, IOError)` | pass | `cleanup_stale_states` | INTENTIONAL |
-| `backend/services/notebooklm_service.py` | 502 | `Exception` | print | `_create_notebook_with_sources` | UNCATEGORIZED |
-| `backend/services/notebooklm_service.py` | 799 | `Exception` | append | `run_generation_thread` | UNCATEGORIZED |
-| `backend/services/notebooklm_service.py` | 259 | `Exception` | pass | `cleanup_expired_materials` | UNCATEGORIZED |
+| `backend/services/notebooklm_service.py` | 502 | `Exception` | print | `_create_notebook_with_sources` | LEGACY |
+| `backend/services/notebooklm_service.py` | 799 | `Exception` | append | `run_generation_thread` | INTENTIONAL |
+| `backend/services/notebooklm_service.py` | 259 | `Exception` | pass | `cleanup_expired_materials` | NEEDS_ALERT |
 | `backend/services/notebooklm_service.py` | 783 | `Exception` | append + raise | `run_generation_thread` | INTENTIONAL |
 | `backend/services/oneroster_gradebook.py` | 95 | `Exception` | append + log.warning | `post_results` | UNCATEGORIZED |
 | `backend/services/openai_tts_service.py` | 20 | `ImportError` | other | `<module>` | UNCATEGORIZED |
@@ -757,14 +757,14 @@
 | `backend/services/seo_service.py` | 52 | `Exception` | return | `_call_haiku` | UNCATEGORIZED |
 | `backend/services/slide_generator.py` | 281 | `Exception` | log.warning | `generate_slide_images` | UNCATEGORIZED |
 | `backend/services/stem_grading.py` | 42 | `(ValueError, TypeError)` | pass | `_normalize_math_input` | INTENTIONAL |
-| `backend/services/stem_grading.py` | 69 | `Exception` | pass | `_normalize_math_input` | UNCATEGORIZED |
-| `backend/services/stem_grading.py` | 75 | `Exception` | pass | `_normalize_math_input` | UNCATEGORIZED |
-| `backend/services/stem_grading.py` | 101 | `Exception` | pass | `_compare_numeric_forms` | UNCATEGORIZED |
+| `backend/services/stem_grading.py` | 69 | `Exception` | pass | `_normalize_math_input` | INTENTIONAL |
+| `backend/services/stem_grading.py` | 75 | `Exception` | pass | `_normalize_math_input` | INTENTIONAL |
+| `backend/services/stem_grading.py` | 101 | `Exception` | pass | `_compare_numeric_forms` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 115 | `(TypeError, ValueError)` | pass | `_compare_numeric_forms` | INTENTIONAL |
-| `backend/services/stem_grading.py` | 143 | `ImportError` | return | `check_math_equivalence` | UNCATEGORIZED |
-| `backend/services/stem_grading.py` | 217 | `Exception` | return | `check_math_equivalence` | UNCATEGORIZED |
+| `backend/services/stem_grading.py` | 143 | `ImportError` | return | `check_math_equivalence` | INTENTIONAL |
+| `backend/services/stem_grading.py` | 217 | `Exception` | return | `check_math_equivalence` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 345 | `ValueError` | pass | `check_cell_value` | INTENTIONAL |
-| `backend/services/stem_grading.py` | 514 | `(ValueError, TypeError)` | append | `grade_coordinate_question` | UNCATEGORIZED |
+| `backend/services/stem_grading.py` | 514 | `(ValueError, TypeError)` | append | `grade_coordinate_question` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 49 | `(ValueError, TypeError)` | pass | `_normalize_math_input` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 173 | `ValueError` | pass | `check_math_equivalence` | INTENTIONAL |
 | `backend/services/stem_grading.py` | 207 | `(TypeError, ValueError)` | pass | `check_math_equivalence` | INTENTIONAL |
