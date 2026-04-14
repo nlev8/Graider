@@ -1,6 +1,7 @@
 """Shared authentication decorators for route handlers."""
 import functools
 from flask import g, jsonify
+import sentry_sdk
 
 
 def require_teacher(f):
@@ -45,8 +46,9 @@ def require_admin(f):
         try:
             from backend.storage import load
             admin_role = load(f"admin_role:{user_id}", "system")
-        except Exception:
+        except Exception as e:
             admin_role = None
+            sentry_sdk.capture_exception(e)
         if not admin_role:
             return jsonify({"error": "Admin access required"}), 403
         g.teacher_id = user_id

@@ -16,6 +16,7 @@ from backend.supabase_client import get_supabase as _get_supabase
 from backend.utils.auth_decorators import require_teacher, require_admin
 from backend.utils.errors import handle_route_errors
 from backend.utils.audit import audit_log
+import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ def _discover_teachers(admin_role):
         _discover_via_sis(admin_role, teacher_map)
     except Exception as e:
         logger.warning("SIS teacher discovery failed: %s", e)
+        sentry_sdk.capture_exception(e)
 
     # Layer 2: Manual assignments
     for entry in admin_role.get("manual_teachers", []):
@@ -126,6 +128,7 @@ def _discover_teachers(admin_role):
             _discover_fallback(teacher_map)
         except Exception as e:
             logger.warning("Fallback teacher discovery failed: %s", e)
+            sentry_sdk.capture_exception(e)
 
     # Enrich with counts
     teachers = list(teacher_map.values())
@@ -309,6 +312,7 @@ def _enrich_teachers(teachers):
 
         except Exception as e:
             logger.warning("Failed to enrich teacher %s: %s", uid, e)
+            sentry_sdk.capture_exception(e)
             t.setdefault("classes_count", 0)
             t.setdefault("students_count", 0)
             t.setdefault("assessments_count", 0)
@@ -389,6 +393,7 @@ def admin_overview():
 
         except Exception as e:
             logger.warning("Overview aggregation error for teacher %s: %s", tid, e)
+            sentry_sdk.capture_exception(e)
 
     # Compute average and distribution
     if all_scores:
@@ -475,6 +480,7 @@ def admin_teacher_summary(teacher_id):
 
     except Exception as e:
         logger.warning("Teacher summary error for %s: %s", teacher_id, e)
+        sentry_sdk.capture_exception(e)
 
     audit_log("ADMIN_VIEW_TEACHER_SUMMARY", f"Viewed summary for teacher={teacher_id}",
               user="admin", teacher_id=g.teacher_id)
@@ -509,6 +515,7 @@ def admin_activity():
                 all_entries.append(entry)
         except Exception as e:
             logger.warning("Activity fetch error for teacher %s: %s", tid, e)
+            sentry_sdk.capture_exception(e)
 
     # Sort by timestamp descending and limit to 50
     all_entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)

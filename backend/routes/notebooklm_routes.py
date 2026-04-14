@@ -10,6 +10,7 @@ import threading
 from flask import Blueprint, request, jsonify, send_file, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 _logger = logging.getLogger(__name__)
 
@@ -192,8 +193,9 @@ def nlm_create_notebook():
                 with open(save_path, "w", encoding="utf-8") as f:
                     f.write(text)
                 support_doc_paths.append(save_path)
-            except OSError:
+            except OSError as e:
                 _logger.warning("Failed to write planner doc: %s", safe_name)
+                sentry_sdk.capture_exception(e)
 
     title = "Graider: " + plan.get("title", "Lesson Plan")
 

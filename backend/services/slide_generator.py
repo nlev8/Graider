@@ -22,6 +22,7 @@ import os
 from io import BytesIO
 
 import google.generativeai as genai
+import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +281,7 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
 
         except Exception as e:
             # Individual image failure — slide renders as text-only (graceful degradation)
+            sentry_sdk.capture_exception(e)
             logger.warning("Image generation failed for slide %d (will render text-only): %s", slide_index, e)
             # Do NOT retry — $0.04 loss is acceptable vs double-charging
 

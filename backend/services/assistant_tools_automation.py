@@ -8,6 +8,7 @@ import re
 from datetime import datetime
 
 from backend.utils.compliance import require_teacher_id
+import sentry_sdk
 
 try:
     from backend.storage import load as storage_load, save as storage_save
@@ -102,8 +103,8 @@ def list_automations_tool(teacher_id='local-dev', **kwargs):
                 "description": wf.get("description", ""),
                 "step_count": len(wf.get("steps", [])),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     if not workflows:
         return {"message": "No automations saved yet. I can create one for you - just describe what you want to automate."}
     return {"automations": workflows, "count": len(workflows)}
@@ -189,8 +190,8 @@ def run_automation_tool(name, teacher_id='local-dev', **kwargs):
                     "step_count": len(wf.get("steps", [])),
                     "message": "Found automation '" + wf["name"] + "'. Switch to the Automations tab and click the Run button to start it.",
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return {"found": False, "error": "No automation matching '" + name + "' found. Use create_automation to make one."}
 
 

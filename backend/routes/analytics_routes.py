@@ -124,6 +124,7 @@ def _fetch_assessment_analytics(source):
         }
     except Exception as _e:
         _logger.warning("Error fetching assessment analytics: %s", str(_e))
+        sentry_sdk.capture_exception(_e)
     return assessment_stats, assessment_category_summary
 
 
@@ -352,8 +353,8 @@ def _load_valid_assignment_names():
                 for alias in config.get('aliases', []):
                     if alias:
                         valid_names.add(_normalize_assignment_name(alias))
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     return valid_names
 
@@ -735,8 +736,8 @@ def export_district_report():
                 categories["completeness"].append(int(bd.get("completeness", 0) or 0))
                 categories["writing"].append(int(bd.get("writing_quality", 0) or 0))
                 categories["effort"].append(int(bd.get("effort_engagement", 0) or 0))
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     # Fall back to master_grades.csv if no results in storage
     if not all_grades:

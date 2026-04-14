@@ -153,6 +153,7 @@ def get_students_from_period_file(filepath):
                             students.append({"first": first, "last": last, "full": name, "id": student_id})
     except Exception as e:
         print(f"Error reading period file {filepath}: {e}")
+        sentry_sdk.capture_exception(e)
 
     return students
 
@@ -346,8 +347,8 @@ def list_rosters():
                 with open(os.path.join(ROSTERS_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     rosters.append(metadata)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
     return jsonify({"rosters": rosters})
 
 
@@ -490,6 +491,7 @@ def list_periods():
                     periods.append(metadata)
             except Exception as e:
                 print(f"Error loading cloud period metadata {key}: {e}")
+                sentry_sdk.capture_exception(e)
         if periods:
             return jsonify({"periods": periods})
 
@@ -509,6 +511,7 @@ def list_periods():
                         periods.append(metadata)
                 except Exception as e:
                     print(f"Error loading period metadata {f}: {e}")
+                    sentry_sdk.capture_exception(e)
     return jsonify({"periods": periods})
 
 
@@ -654,8 +657,8 @@ def list_documents():
                 with open(os.path.join(DOCUMENTS_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     documents.append(metadata)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
     return jsonify({"documents": documents})
 
 
@@ -1264,8 +1267,8 @@ def get_all_student_accommodations():
                             name = s.get("full") or ((s.get("first", "") + " " + s.get("last", "")).strip())
                             if name:
                                 id_to_name[sid] = name
-                except Exception:
-                    pass
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
 
     # Enrich with preset details for display
     enriched = {}

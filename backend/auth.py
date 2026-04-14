@@ -250,6 +250,7 @@ def init_auth(app):
                             return None  # Allow request
                 except Exception as e:
                     logger.warning("Admin API approval fallback failed: %s", str(e))
+                    sentry_sdk.capture_exception(e)
 
                 return jsonify({
                     'error': 'Account pending approval',

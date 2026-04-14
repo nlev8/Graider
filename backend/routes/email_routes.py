@@ -282,8 +282,8 @@ def export_outlook_emails():
             emailer = GraiderEmailer()
             if not teacher_name or teacher_name == 'Your Teacher':
                 teacher_name = emailer.config.get('teacher_name', teacher_name)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
         emails = []
         no_contact = []
@@ -1162,8 +1162,8 @@ def _load_confirmed_filenames():
         try:
             with open(CONFIRMATIONS_FILE, 'r') as f:
                 return set(json.load(f))
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return set()
 
 
@@ -1175,6 +1175,7 @@ def _save_confirmed_filenames(filenames_set):
             json.dump(sorted(filenames_set), f, indent=2)
     except Exception as e:
         print(f"Error saving confirmations file: {e}")
+        sentry_sdk.capture_exception(e)
 
 
 @email_bp.route('/api/mark-confirmations-sent-file', methods=['POST'])

@@ -423,8 +423,8 @@ def get_roster_for_behavior():
                     meta = json.load(fh)
                 csv_name = f.replace('.meta.json', '')
                 period_meta[csv_name] = meta
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
     for f in sorted(os.listdir(PERIODS_DIR)):
         if not f.endswith('.csv'):
@@ -452,7 +452,7 @@ def get_roster_for_behavior():
                             "student_id": student_id,
                             "period": period_name,
                         })
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     return jsonify(roster)

@@ -240,7 +240,8 @@ def _load_results(teacher_id='local-dev'):
     try:
         with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return []
 
 
@@ -507,8 +508,8 @@ def _load_standards():
             if isinstance(data, list):
                 return data
             return data.get('standards', [])
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return []
 
 
@@ -544,8 +545,8 @@ def _load_saved_lessons(teacher_id='local-dev'):
                             "unit": unit_dir,
                             "standards": data.get('standards', []),
                         })
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
     return lessons
 
 
@@ -671,8 +672,8 @@ def _load_roster(teacher_id='local-dev'):
                             })
                             if student_id:
                                 seen_ids.add(student_id)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
     # --- Phase 2: Clever roster CSVs from ROSTERS_DIR ---
     if os.path.exists(ROSTERS_DIR):
@@ -691,8 +692,8 @@ def _load_roster(teacher_id='local-dev'):
                     period_name = section.get('name', f.replace('.json', ''))
                     for sid in section.get('students', []):
                         clever_student_periods.setdefault(sid, []).append(period_name)
-                except Exception:
-                    pass
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
 
         for f in sorted(os.listdir(ROSTERS_DIR)):
             if not f.endswith('.csv'):
@@ -723,8 +724,8 @@ def _load_roster(teacher_id='local-dev'):
                                 "course_codes": [],
                             })
                         seen_ids.add(student_id)
-            except Exception:
-                pass
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
 
     return roster
 
@@ -741,7 +742,8 @@ def _load_parent_contacts(teacher_id='local-dev'):
     try:
         with open(PARENT_CONTACTS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return {}
 
 
@@ -784,8 +786,8 @@ def _load_saved_assignments(teacher_id='local-dev'):
                 "norm": _normalize_assignment_name(title),
                 "aliases": _collect_aliases(data, data.get('aliases', [])),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return saved
 
 
@@ -829,7 +831,8 @@ def _load_memories(teacher_id='local-dev'):
         with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data if isinstance(data, list) else []
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return []
 
 
@@ -850,8 +853,8 @@ def _load_email_config():
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     return {}
 
 

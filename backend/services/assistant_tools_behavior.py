@@ -187,7 +187,8 @@ def _load_settings():
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return {}
 
 
@@ -198,8 +199,8 @@ def _load_parent_contacts():
         with open(PARENT_CONTACTS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        return []
         sentry_sdk.capture_exception(e)
+        return []
 
 
 # ═══════════════════════════════════════════════════════

@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+import sentry_sdk
 
 _logger = logging.getLogger(__name__)
 
@@ -88,8 +89,8 @@ def _parse_docx(file_data, filename):
             # Check document properties for title
             if doc.core_properties.title:
                 doc_title = doc.core_properties.title
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
         # If no metadata title, use first heading or first paragraph
         if not doc_title and plain_text:

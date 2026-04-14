@@ -21,6 +21,7 @@ from backend.services.document_generator import (
     _parse_markdown_runs, load_style, DEFAULT_STYLE, _apply_style_to_heading
 )
 from backend.services.visualization import add_image_to_docx
+import sentry_sdk
 
 
 WORKSHEETS_DIR = os.path.expanduser("~/Downloads/Graider/Worksheets")
@@ -230,8 +231,9 @@ def _embed_visual(doc, visual):
                 title=visual.get('title', '')
             )
             add_image_to_docx(doc, img_data, width_inches=3.5)
-    except Exception:
+    except Exception as e:
         doc.add_paragraph("[Visual failed to render]")
+        sentry_sdk.capture_exception(e)
 
 
 def _add_graider_table(doc, header_text, graider_tag, points, style, height_twips,

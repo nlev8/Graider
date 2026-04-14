@@ -126,6 +126,72 @@ PR_A_EXPECTED_CAPTURES = {
 }
 
 
+PR_B_EXPECTED_CAPTURES = {
+    "backend/accommodations.py": 8,
+    "backend/app.py": 17,
+    "backend/auth.py": 3,
+    "backend/routes/analytics_routes.py": 4,
+    "backend/routes/automation_routes.py": 4,
+    "backend/routes/behavior_routes.py": 6,
+    "backend/routes/email_routes.py": 11,
+    "backend/routes/grading_routes.py": 12,
+    "backend/routes/settings_routes.py": 7,
+    "backend/routes/student_account_routes.py": 3,
+    "backend/services/assistant_tools.py": 13,
+    "backend/services/assistant_tools_behavior.py": 4,
+    "backend/services/assistant_tools_reports.py": 5,
+    "backend/services/assistant_tools_student.py": 21,
+    "backend/services/outlook_sender.py": 5,
+}
+
+
+def test_pr_b_legacy_captures_meet_floor():
+    """PR-b adds capture to 60+ additional LEGACY rows across 15 files.
+    Count-floor assertion: each file has at least the expected total
+    (includes captures from PR-0 + PR-a where applicable)."""
+    failures = []
+    for path, expected in PR_B_EXPECTED_CAPTURES.items():
+        src = _file(path)
+        count = src.count("sentry_sdk.capture_exception")
+        if count < expected:
+            failures.append(f"{path}: {count} < {expected}")
+    assert not failures, "\n".join(failures)
+
+
+def test_no_dead_capture_sites_in_backend():
+    """Guard against insert-after-terminator dead captures. A
+    `sentry_sdk.capture_exception(...)` that sits after `return`,
+    `continue`, `break`, or `raise` inside the same except body is
+    unreachable — Codex Gate 3 on PR-b caught 9 of these from the
+    mechanical patcher. This test pins that the final tree has none."""
+    import ast as _ast
+    dead = []
+    for src_file in ROOT.joinpath("backend").rglob("*.py"):
+        try:
+            tree = _ast.parse(src_file.read_text())
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.ExceptHandler):
+                continue
+            seen_terminator = False
+            for stmt in node.body:
+                if seen_terminator:
+                    if (isinstance(stmt, _ast.Expr)
+                            and isinstance(stmt.value, _ast.Call)
+                            and isinstance(stmt.value.func, _ast.Attribute)
+                            and stmt.value.func.attr == "capture_exception"):
+                        dead.append(f"{src_file}:{stmt.lineno}")
+                if isinstance(stmt,
+                              (_ast.Return, _ast.Continue,
+                               _ast.Break, _ast.Raise)):
+                    seen_terminator = True
+    assert not dead, (
+        "Dead capture sites (unreachable after return/continue/break/raise):\n"
+        + "\n".join(dead)
+    )
+
+
 def test_pr_a_non_sis_files_have_expected_captures():
     """PR-a: each non-SIS NEEDS_ALERT file must import sentry_sdk and
     contain at least the expected number of capture_exception calls

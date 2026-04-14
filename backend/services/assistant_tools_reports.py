@@ -1829,7 +1829,8 @@ def get_recent_lessons(unit_name=None, teacher_id='local-dev'):
                     "standards_covered": list(set(all_standards)),
                     "saved_at": data.get("_saved_at", ""),
                 })
-            except Exception:
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
                 continue
 
     if not lessons:
@@ -1896,8 +1897,8 @@ def get_calendar(start_date=None, end_date=None, teacher_id='local-dev'):
             if not lessons:
                 result["note"] = ("No lessons scheduled for this period. Curriculum map data shows what should be covered. "
                                   "Also check uploaded reference documents in your system context for additional details.")
-    except Exception:
-        pass
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
 
     return result
 
@@ -2120,8 +2121,8 @@ def save_assignment_config(title, document_text=None, questions=None, totalPoint
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 existing = json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     # Merge updates
     existing["title"] = title
