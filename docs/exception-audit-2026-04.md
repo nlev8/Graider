@@ -266,15 +266,15 @@
 | `backend/routes/automation_routes.py` | 56 | `Exception` | pass | `_cleanup_subprocesses` | UNCATEGORIZED |
 | `backend/routes/automation_routes.py` | 215 | `Exception` | pass | `list_templates` | UNCATEGORIZED |
 | `backend/routes/automation_routes.py` | 59 | `Exception` | pass | `_cleanup_subprocesses` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 172 | `Exception` | log.debug | `get_behavior_data` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 268 | `(ValueError, TypeError)` | other | `get_behavior_events` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 287 | `Exception` | log.debug | `get_behavior_events` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 361 | `Exception` | return | `debug_behavior_data` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 378 | `Exception` | other | `debug_behavior_data` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 387 | `Exception` | other | `debug_behavior_data` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 450 | `Exception` | pass | `get_roster_for_behavior` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 202 | `Exception` | pass | `get_behavior_data` | UNCATEGORIZED |
-| `backend/routes/behavior_routes.py` | 421 | `Exception` | pass | `get_roster_for_behavior` | UNCATEGORIZED |
+| `backend/routes/behavior_routes.py` | 172 | `Exception` | log.debug | `get_behavior_data` | NEEDS_ALERT |
+| `backend/routes/behavior_routes.py` | 268 | `(ValueError, TypeError)` | other | `get_behavior_events` | INTENTIONAL |
+| `backend/routes/behavior_routes.py` | 287 | `Exception` | log.debug | `get_behavior_events` | NEEDS_ALERT |
+| `backend/routes/behavior_routes.py` | 361 | `Exception` | return | `debug_behavior_data` | INTENTIONAL |
+| `backend/routes/behavior_routes.py` | 378 | `Exception` | other | `debug_behavior_data` | NEEDS_ALERT |
+| `backend/routes/behavior_routes.py` | 387 | `Exception` | other | `debug_behavior_data` | NEEDS_ALERT |
+| `backend/routes/behavior_routes.py` | 450 | `Exception` | pass | `get_roster_for_behavior` | LEGACY |
+| `backend/routes/behavior_routes.py` | 202 | `Exception` | pass | `get_behavior_data` | INTENTIONAL |
+| `backend/routes/behavior_routes.py` | 421 | `Exception` | pass | `get_roster_for_behavior` | LEGACY |
 | `backend/routes/classlink_routes.py` | 92 | `Exception` | log.warning | `_link_classlink_account` | NEEDS_ALERT |
 | `backend/routes/classlink_routes.py` | 106 | `Exception` | return | `_resolve_classlink_user_id` | INTENTIONAL |
 | `backend/routes/classlink_routes.py` | 226 | `Exception` | log.exception + return | `classlink_callback` | INTENTIONAL |
