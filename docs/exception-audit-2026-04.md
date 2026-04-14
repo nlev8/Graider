@@ -782,7 +782,7 @@
 | `backend/storage.py` | 263 | `Exception` | log.error + return | `_sb_save` | INTENTIONAL |
 | `backend/storage.py` | 282 | `Exception` | log.error + return | `_sb_delete` | INTENTIONAL |
 | `backend/storage.py` | 301 | `Exception` | log.error + return | `_sb_list_keys` | INTENTIONAL |
-| `backend/storage.py` | 319 | `Exception` | return | `_file_load_student_history` | INTENTIONAL |
+| `backend/storage.py` | 319 | `Exception` | return | `_file_load_student_history` | LEGACY |
 | `backend/storage.py` | 332 | `Exception` | log.error + return | `_file_save_student_history` | INTENTIONAL |
 | `backend/storage.py` | 353 | `Exception` | log.error + return | `_sb_load_student_history` | INTENTIONAL |
 | `backend/storage.py` | 373 | `Exception` | log.error + return | `_sb_save_student_history` | INTENTIONAL |
