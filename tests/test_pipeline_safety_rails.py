@@ -162,6 +162,53 @@ def test_pipeline_lazy_imports_all_resolve():
             sys.path.remove("backend")
 
 
+def test_rubric_formatter_extraction_smoke():
+    """Phase 3a PR4 extracted format_rubric_for_prompt from pipeline.py's
+    nested scope into backend/services/rubric_formatting.py. This test:
+
+    1. Imports the function from its new canonical location (the same path
+       portal_grading.py:380 now uses — this was a broken import on main
+       since the function was always nested).
+    2. Calls it with a sample rubric dict to confirm the extracted body
+       still produces a formatted prompt string (no behavior drift from
+       the dedent / extraction).
+    3. Confirms None-return for empty rubric (the early-return branch).
+    """
+    sys.path.insert(0, "backend")
+    try:
+        # The exact import path portal_grading.py:380 uses post-PR4
+        from backend.services.rubric_formatting import format_rubric_for_prompt
+
+        # Empty rubric → None per the early-return branch
+        assert format_rubric_for_prompt(None) is None
+        assert format_rubric_for_prompt({}) is None
+        assert format_rubric_for_prompt({"categories": []}) is None
+
+        # Real rubric → formatted prompt string with key markers
+        rubric = {
+            "categories": [
+                {"name": "Content", "weight": 40, "description": "Accuracy"},
+                {"name": "Mechanics", "weight": 30, "description": "Grammar"},
+                {"name": "Organization", "weight": 30, "description": "Structure"},
+            ],
+            "generous": True,
+        }
+        result = format_rubric_for_prompt(rubric)
+        assert isinstance(result, str)
+        assert "GRADING RUBRIC" in result
+        assert "Total Points: 100" in result  # 40 + 30 + 30
+        assert "CONTENT" in result  # name uppercased
+        assert "ENCOURAGING and GENEROUS" in result  # generous=True branch
+
+        # Strict mode flips the style line
+        rubric_strict = {**rubric, "generous": False}
+        strict_result = format_rubric_for_prompt(rubric_strict)
+        assert "Grade strictly" in strict_result
+    finally:
+        if "backend" in sys.path:
+            sys.path.remove("backend")
+
+
 def test_pipeline_global_refs_all_resolve():
     """AST / bytecode completeness guard: every name referenced via LOAD_GLOBAL
     inside _run_grading_thread_inner (and its nested functions) must resolve
