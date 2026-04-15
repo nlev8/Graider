@@ -117,7 +117,7 @@ Question dicts get mutated with aliases like `column_headers`→`headers`, `corr
 ### Gotcha #3 — 6-phase ordering is behaviorally significant
 `_post_process_assignment` runs in strict order (classify → hydrate → validate → project filter → quality validation → auto-fix → enforce count → normalize points). Earlier phases set fields later phases depend on.
 
-**Fix:** Preserve ordering exactly. The orchestrator moves as a single unit in PR1. PR3's golden tests exercise the full chain, not individual phases, to catch any accidental reorder.
+**Fix:** Preserve ordering exactly. `_post_process_assignment` body stays byte-identical — only its *location* changes (moves to the service module in PR5 after all its callees have migrated). PR3's golden tests exercise the full chain, not individual phases, to catch any accidental reorder.
 
 ### Gotcha #4 — Tests may import planner_routes directly
 Some existing tests may use `from backend.routes.planner_routes import _hydrate_question` or similar. Extraction breaks those imports unless the shim forwards them.
