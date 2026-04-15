@@ -127,7 +127,8 @@ PR_A_EXPECTED_CAPTURES = {
 
 PR_B_EXPECTED_CAPTURES = {
     "backend/accommodations.py": 8,
-    "backend/app.py": 17,
+    "backend/app.py": 15,  # 2 moved to backend/grading/state.py in Phase 3a PR2
+    "backend/grading/state.py": 2,
     "backend/auth.py": 3,
     "backend/routes/analytics_routes.py": 4,
     "backend/routes/automation_routes.py": 4,

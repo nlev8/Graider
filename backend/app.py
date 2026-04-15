@@ -373,117 +373,20 @@ def _sanitize_student_name(name):
     return name
 
 
-def load_saved_results(teacher_id='local-dev'):
-    """Load results from storage (Supabase in prod, file locally)."""
-    if storage_load:
-        data = storage_load('results', teacher_id)
-        if data and isinstance(data, list):
-            for r in data:
-                if 'graded_at' not in r:
-                    r['graded_at'] = None
-                # Sanitize corrupted student names (filename leaking into name)
-                sn = r.get('student_name', '')
-                cleaned = _sanitize_student_name(sn)
-                if cleaned != sn:
-                    r['student_name'] = cleaned
-            return data
-    # Fallback to direct file read
-    if os.path.exists(RESULTS_FILE):
-        try:
-            with open(RESULTS_FILE, 'r') as f:
-                results = json.load(f)
-                for r in results:
-                    if 'graded_at' not in r:
-                        r['graded_at'] = None
-                    sn = r.get('student_name', '')
-                    cleaned = _sanitize_student_name(sn)
-                    if cleaned != sn:
-                        r['student_name'] = cleaned
-                return results
-        except Exception as e:
-            sentry_sdk.capture_exception(e)
-    return []
-
-def save_results(results, teacher_id='local-dev'):
-    """Save results to storage (dual-write: file + Supabase)."""
-    if storage_save:
-        storage_save('results', results, teacher_id)
-    else:
-        try:
-            with open(RESULTS_FILE, 'w') as f:
-                json.dump(results, f, indent=2)
-        except Exception as e:
-            print(f"Error saving results: {e}")
-            sentry_sdk.capture_exception(e)
-
-# ── Per-teacher grading state (dict-of-dicts) ────────────────
-_grading_states = {}   # teacher_id -> state dict
-_grading_locks = {}    # teacher_id -> Lock
-_states_meta_lock = threading.Lock()
-
-
-def _create_default_state(teacher_id='local-dev'):
-    """Create a fresh grading state dict for a teacher."""
-    return {
-        "is_running": False,
-        "stop_requested": False,
-        "progress": 0,
-        "total": 0,
-        "current_file": "",
-        "log": [],
-        "results": load_saved_results(teacher_id),
-        "complete": False,
-        "error": None,
-        "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
-        "cost_limit": 0,
-        "cost_warning_pct": 80,
-        "cost_limit_hit": False,
-        "cost_warning_sent": False,
-    }
-
-
-def _get_state(teacher_id='local-dev'):
-    """Get (or lazily create) the grading state dict for a teacher."""
-    if teacher_id not in _grading_states:
-        with _states_meta_lock:
-            if teacher_id not in _grading_states:
-                _grading_states[teacher_id] = _create_default_state(teacher_id)
-                _grading_locks[teacher_id] = threading.Lock()
-    return _grading_states[teacher_id]
-
-
-def _get_lock(teacher_id='local-dev'):
-    """Get (or lazily create) the grading lock for a teacher."""
-    _get_state(teacher_id)  # ensure state+lock exist
-    return _grading_locks[teacher_id]
-
-
-def _update_state(teacher_id='local-dev', **kwargs):
-    """Thread-safe grading_state update for a specific teacher."""
-    with _get_lock(teacher_id):
-        _get_state(teacher_id).update(kwargs)
-
-
-def reset_state(teacher_id='local-dev', clear_results=False):
-    """Reset grading state for a specific teacher."""
-    state = _get_state(teacher_id)
-    with _get_lock(teacher_id):
-        state.update({
-            "is_running": False,
-            "stop_requested": False,
-            "progress": 0,
-            "total": 0,
-            "current_file": "",
-            "log": [],
-            "results": [] if clear_results else state.get("results", []),
-            "complete": False,
-            "error": None,
-            "session_cost": {"total_cost": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_api_calls": 0},
-            "cost_limit": 0,
-            "cost_warning_pct": 80,
-            "cost_limit_hit": False,
-            "cost_warning_sent": False,
-        })
+# Phase 3a PR2: state moved to backend/grading/state.py
+# Re-export for backwards compat until PR4 migrates consumers.
+from grading.state import (
+    load_saved_results,
+    save_results,
+    _grading_states,
+    _grading_locks,
+    _states_meta_lock,
+    _create_default_state,
+    _get_state,
+    _get_lock,
+    _update_state,
+    reset_state,
+)
 
 
 # ══════════════════════════════════════════════════════════════
