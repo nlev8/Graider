@@ -127,8 +127,9 @@ PR_A_EXPECTED_CAPTURES = {
 
 PR_B_EXPECTED_CAPTURES = {
     "backend/accommodations.py": 8,
-    "backend/app.py": 15,  # 2 moved to backend/grading/state.py in Phase 3a PR2
+    "backend/app.py": 12,  # 3 moved to backend/grading/pipeline.py in Phase 3a PR3 (was 15, -2 to state in PR2, -3 here)
     "backend/grading/state.py": 2,
+    "backend/grading/pipeline.py": 3,  # Phase 3a PR3: 3 captures moved from app.py
     "backend/auth.py": 3,
     "backend/routes/analytics_routes.py": 4,
     "backend/routes/automation_routes.py": 4,
