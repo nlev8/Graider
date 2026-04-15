@@ -52,6 +52,64 @@ from grading.state import _get_state, _get_lock, save_results
 
 
 # ---------------------------------------------------------------------------
+# Constants copied byte-identical from backend/app.py (can't import because
+# app.py imports pipeline via shim → circular).
+# ---------------------------------------------------------------------------
+DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
+
+
+# ---------------------------------------------------------------------------
+# _check_batch_calibration — MOVED from backend/app.py:398-441 (byte-identical
+# body). Only caller was _run_grading_thread_inner below, so the definition
+# moves with its consumer. Removed from app.py to avoid stale duplicate.
+# ---------------------------------------------------------------------------
+def _check_batch_calibration(results: list) -> dict:
+    """Check if grading results have anomalous distribution.
+
+    Runs after a full class is graded to catch systematic issues.
+    Returns dict with calibrated flag and any concerns.
+    """
+    raw_scores = [r.get("score", 0) for r in results
+                  if r.get("letter_grade") not in ("ERROR", "MANUAL REVIEW", "INCOMPLETE")]
+    # Safely coerce scores to float (AI may return strings like "85")
+    scores = []
+    for s in raw_scores:
+        try:
+            scores.append(float(s))
+        except (ValueError, TypeError):
+            pass
+    if len(scores) < 5:
+        return {"calibrated": True, "concerns": []}
+
+    import statistics
+    mean = statistics.mean(scores)
+    stdev = statistics.stdev(scores) if len(scores) > 1 else 0
+    ai_flagged = sum(1 for r in results
+                     if r.get("ai_detection", {}).get("flag") in ("possible", "likely")
+                     or r.get("plagiarism_detection", {}).get("flag") in ("possible", "likely"))
+
+    concerns = []
+    if mean > 95:
+        concerns.append(f"Mean score is {mean:.0f} — unusually high, grading may be too lenient")
+    elif mean < 55:
+        concerns.append(f"Mean score is {mean:.0f} — unusually low, check rubric or extraction")
+
+    if stdev < 5 and len(scores) > 10:
+        concerns.append(f"Standard deviation is only {stdev:.1f} — scores are suspiciously uniform")
+
+    if ai_flagged > len(results) * 0.3:
+        concerns.append(f"{ai_flagged}/{len(results)} flagged for AI/plagiarism — detection may be oversensitive")
+
+    return {
+        "calibrated": len(concerns) == 0,
+        "mean": round(mean, 1),
+        "stdev": round(stdev, 1),
+        "concerns": concerns,
+        "ai_flagged_count": ai_flagged
+    }
+
+
+# ---------------------------------------------------------------------------
 # load_support_documents_for_grading — byte-identical copy from app.py:258.
 # Reproduced here so pipeline.py is self-contained (app.py imports pipeline,
 # so pipeline cannot import app without a circular dependency).

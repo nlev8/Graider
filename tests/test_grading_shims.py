@@ -78,3 +78,32 @@ def test_grading_pipeline_module_is_canonical():
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
+
+
+def test_pipeline_runtime_smoke():
+    """Regression guard: exercise the code paths that previously NameError'd
+    at runtime because DOCUMENTS_DIR and _check_batch_calibration were only
+    defined in backend/app.py, not in the extracted pipeline module.
+
+    Module-import alone doesn't catch these — they only fire when a specific
+    code path inside _run_grading_thread_inner actually executes. This test
+    calls the helpers directly to verify name resolution.
+    """
+    sys.path.insert(0, "backend")
+    try:
+        from grading import pipeline
+        # Module-level symbols that _run_grading_thread_inner needs at runtime
+        assert hasattr(pipeline, "DOCUMENTS_DIR"), "pipeline.DOCUMENTS_DIR must exist"
+        assert hasattr(pipeline, "_check_batch_calibration"), "pipeline._check_batch_calibration must exist"
+
+        # Exercise load_support_documents_for_grading to prove DOCUMENTS_DIR
+        # resolves without NameError when the function body reads it.
+        result = pipeline.load_support_documents_for_grading("NonExistentSubject")
+        assert isinstance(result, str)
+
+        # Exercise _check_batch_calibration fast-path (empty results → early return)
+        calib = pipeline._check_batch_calibration([])
+        assert calib == {"calibrated": True, "concerns": []}
+    finally:
+        if "backend" in sys.path:
+            sys.path.remove("backend")
