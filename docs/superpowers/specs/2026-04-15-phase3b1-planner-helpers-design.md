@@ -15,7 +15,7 @@ Reduce `backend/routes/planner_routes.py` from **8104 → ~5950 LOC** (−27%) b
 ## Non-goals
 
 - **No route splitting.** The 25 `@planner_bp.route` handlers stay in `planner_routes.py`. Phase 3b2+ concern.
-- **No internal pipeline decomposition.** The 6-phase `_post_process_assignment` sequence + 14 hydrators move intact; splitting them is a later concern with real unit tests.
+- **No internal pipeline decomposition.** The 6-phase `_post_process_assignment` sequence + 12 hydrators move intact; splitting them is a later concern with real unit tests.
 - **No behavior fixes.** Any latent bugs discovered during the move are documented, not fixed, unless they block the extraction.
 
 ## Hard constraints
@@ -142,9 +142,9 @@ Beyond standard workflow (branch + CI + Codex gates):
 | PR | Moves | Net planner_routes.py delta | Risk |
 |---|---|---|---|
 | PR1 (scaffolding) | 9 pipeline functions (~300 LOC) | −300 | Low — byte-identical move + shim |
-| PR2 (hydrators) | 14 sub-hydrators + ~10 text/geometry utils (~1400 LOC) | −1400 | Medium — large move but pure functions |
+| PR2 (hydrators) | `_hydrate_question` dispatcher + 12 sub-hydrators + `_infer_editable_columns` + ~10 text/geometry utils (~1400 LOC) | −1400 | Medium — large move but pure functions |
 | PR3 (quality + golden tests) | 3 quality functions (~150 LOC) + new golden test file | −150 | Medium — golden tests lock the contract |
-| PR4 (auto-fix + cost) | `_auto_fix_flagged_questions` (~120 LOC) + cost tracking (~50 LOC) + signature refactor | −170 | HIGH — only PR with non-byte-identical change (context refactor). Route call sites must pass user_id/client explicitly. |
+| PR4 (auto-fix refactor) | `_auto_fix_flagged_questions` (~120 LOC) + signature refactor | −120 | HIGH — only PR with non-byte-identical change (context refactor). Route call sites must pass user_id/client explicitly. |
 | PR5 (cleanup + prompts) | Prompt builders (~70 LOC) + shim removal | −70 | Low — drop-in path rewrites |
 
 **Final planner_routes.py size estimate:** ~5950 LOC (standards loading, support doc loading, all 25 route handlers, route-local helpers).
@@ -156,7 +156,7 @@ Beyond standard workflow (branch + CI + Codex gates):
 Rev 1 chose option (a) over (b) routes-only and (c) both. Codex reasoning:
 1. `_post_process_assignment` reused across 4 handlers — already a shared service, wrong file location
 2. Route-first split would force new blueprints to import from a still-monolithic helper module — wrong dependency direction
-3. The 14-hydrator pipeline is the highest-risk surface — isolating it first delivers the most architectural value per LOC
+3. The 12-hydrator pipeline is the highest-risk surface — isolating it first delivers the most architectural value per LOC
 4. Helpers have shared mutation semantics that a service boundary would codify; routes are loosely coupled
 
 Codex-endorsed 5-PR sequence + 5 risk callouts incorporated above.
