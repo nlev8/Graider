@@ -252,7 +252,7 @@ def _safe_generate_feedback(**kwargs):
 def _safe_save_results(results, teacher_id):
     """Persist results to teacher storage; capture to Sentry on failure."""
     try:
-        from backend.app import save_results
+        from backend.grading.state import save_results
         save_results(results, teacher_id)
     except Exception as e:
         logger.error("Failed to save result to teacher storage: %s", e)
@@ -377,7 +377,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         # Add rubric prompt if available
         rubric = teacher_config.get("rubric")
         if rubric and rubric.get("categories"):
-            from backend.app import format_rubric_for_prompt
+            from backend.services.rubric_formatting import format_rubric_for_prompt
             rubric_prompt = format_rubric_for_prompt(rubric)
             if rubric_prompt:
                 ai_notes += f"\n{rubric_prompt}"
@@ -560,7 +560,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         # Use per-teacher lock to prevent race conditions with concurrent submissions.
         # Outer try catches load/lock failures; inner _safe_save_results covers save_results.
         try:
-            from backend.app import load_saved_results, _get_lock
+            from backend.grading.state import load_saved_results, _get_lock
             with _get_lock(teacher_id):
                 results = load_saved_results(teacher_id)
                 results.append(result_record)

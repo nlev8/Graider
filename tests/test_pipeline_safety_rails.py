@@ -1,83 +1,12 @@
-"""Temporary shim guard for Phase 3a transition.
+"""Permanent safety rails for backend/grading/pipeline.py.
 
-Pins that backend.app continues to re-export state helpers from
-backend.grading.state during PR2 and PR3. Deleted in PR4 when all
-consumers have migrated to the canonical import paths.
+Carried forward from the transitional tests/test_grading_shims.py
+(deleted in Phase 3a PR4). These 4 tests guard against bug classes we
+actually hit during the Phase 3a refactor and will catch future
+NameError / ImportError / branch-coverage regressions in pipeline.py
+without needing real grading fixtures or API keys.
 """
-import importlib
 import sys
-
-
-def test_backend_app_reexports_grading_state_helpers():
-    """During Phase 3a transition, `from backend.app import _get_state, ...`
-    must still resolve. Protects portal_grading.py, assistant_tools_student.py,
-    email_routes.py."""
-    sys.path.insert(0, "backend")
-    try:
-        import app as backend_app
-        importlib.reload(backend_app)
-        for name in (
-            "_get_state", "_get_lock", "_update_state", "reset_state",
-            "_create_default_state", "_grading_states", "_grading_locks",
-            "load_saved_results", "save_results",
-        ):
-            assert hasattr(backend_app, name), f"backend.app must re-export {name!r}"
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
-
-
-def test_grading_state_module_is_canonical():
-    """Canonical import path for PR4 consumers."""
-    sys.path.insert(0, "backend")
-    try:
-        from grading import state as grading_state
-        for name in (
-            "_get_state", "_get_lock", "_update_state", "reset_state",
-            "_create_default_state", "_grading_states", "_grading_locks",
-            "load_saved_results", "save_results",
-        ):
-            assert hasattr(grading_state, name), f"backend.grading.state must define {name!r}"
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
-
-
-def test_backend_app_reexports_grading_thread_and_pipeline_helpers():
-    """Phase 3a PR3: thread wrapper + inner pipeline live in
-    backend.grading.thread / backend.grading.pipeline. app.py keeps
-    re-export shim for both until PR4."""
-    sys.path.insert(0, "backend")
-    try:
-        import app as backend_app
-        importlib.reload(backend_app)
-        for name in ("run_grading_thread", "_run_grading_thread_inner"):
-            assert hasattr(backend_app, name), f"backend.app must re-export {name!r}"
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
-
-
-def test_grading_thread_module_is_canonical():
-    """Canonical path for thread wrapper."""
-    sys.path.insert(0, "backend")
-    try:
-        from grading import thread as grading_thread
-        assert hasattr(grading_thread, "run_grading_thread")
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
-
-
-def test_grading_pipeline_module_is_canonical():
-    """Canonical path for inner pipeline."""
-    sys.path.insert(0, "backend")
-    try:
-        from grading import pipeline as grading_pipeline
-        assert hasattr(grading_pipeline, "_run_grading_thread_inner")
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
 
 
 def test_pipeline_runtime_smoke():
@@ -145,7 +74,6 @@ def test_check_batch_calibration_branch_coverage():
         assert any("unusually low" in c for c in r["concerns"])
 
         # Low stdev with 10+ scores → uniform-score concern
-        # Use scores in [60, 100] (valid mean range) but bunched tight
         uniform = [{"score": 80 + (i % 3), "letter_grade": "B"} for i in range(12)]
         r = fn(uniform)
         assert any("suspiciously uniform" in c for c in r["concerns"])
@@ -164,45 +92,6 @@ def test_check_batch_calibration_branch_coverage():
         stringy = [{"score": "85", "letter_grade": "B"} for _ in range(5)]
         r = fn(stringy)
         assert r["calibrated"] is True or "unusually" not in "".join(r["concerns"])
-    finally:
-        if "backend" in sys.path:
-            sys.path.remove("backend")
-
-
-def test_grading_state_dict_is_singleton():
-    """Safety rail: `_grading_states` must be the SAME dict object whether
-    accessed via the backend.app shim re-export OR the canonical
-    backend.grading.state path. If Python ends up with two separate module
-    instances in sys.modules under different dotted paths (the exact bug
-    we hit in PR1 with routes.settings_routes), the two imports would
-    return DIFFERENT dict objects — writes from one consumer would never
-    be visible to another, silently losing grading results.
-    """
-    sys.path.insert(0, "backend")
-    try:
-        # Via the app.py shim (what consumers importing from backend.app see)
-        import app as backend_app
-        via_shim = backend_app._grading_states
-
-        # Via the canonical module path (what PR4 consumers will migrate to)
-        from grading.state import _grading_states as via_canonical
-
-        # MUST be the same object, not just equal. Equality is too weak —
-        # two empty dicts compare equal but are distinct instances.
-        assert via_shim is via_canonical, (
-            "backend.app._grading_states and backend.grading.state._grading_states "
-            "are DIFFERENT objects — sys.modules has duplicate module instances. "
-            "This would cause silent data loss between shim consumers and "
-            "canonical-path consumers."
-        )
-
-        # Same for the lock registry — another shared mutable state
-        via_shim_lock = backend_app._states_meta_lock
-        from grading.state import _states_meta_lock as via_canonical_lock
-        assert via_shim_lock is via_canonical_lock, (
-            "_states_meta_lock is not shared across shim/canonical paths. "
-            "Concurrent grading threads could race undetected."
-        )
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
@@ -268,6 +157,53 @@ def test_pipeline_lazy_imports_all_resolve():
             f"These would raise ImportError at runtime when the branch that "
             f"imports them executes (even though module-level imports pass)."
         )
+    finally:
+        if "backend" in sys.path:
+            sys.path.remove("backend")
+
+
+def test_rubric_formatter_extraction_smoke():
+    """Phase 3a PR4 extracted format_rubric_for_prompt from pipeline.py's
+    nested scope into backend/services/rubric_formatting.py. This test:
+
+    1. Imports the function from its new canonical location (the same path
+       portal_grading.py:380 now uses — this was a broken import on main
+       since the function was always nested).
+    2. Calls it with a sample rubric dict to confirm the extracted body
+       still produces a formatted prompt string (no behavior drift from
+       the dedent / extraction).
+    3. Confirms None-return for empty rubric (the early-return branch).
+    """
+    sys.path.insert(0, "backend")
+    try:
+        # The exact import path portal_grading.py:380 uses post-PR4
+        from backend.services.rubric_formatting import format_rubric_for_prompt
+
+        # Empty rubric → None per the early-return branch
+        assert format_rubric_for_prompt(None) is None
+        assert format_rubric_for_prompt({}) is None
+        assert format_rubric_for_prompt({"categories": []}) is None
+
+        # Real rubric → formatted prompt string with key markers
+        rubric = {
+            "categories": [
+                {"name": "Content", "weight": 40, "description": "Accuracy"},
+                {"name": "Mechanics", "weight": 30, "description": "Grammar"},
+                {"name": "Organization", "weight": 30, "description": "Structure"},
+            ],
+            "generous": True,
+        }
+        result = format_rubric_for_prompt(rubric)
+        assert isinstance(result, str)
+        assert "GRADING RUBRIC" in result
+        assert "Total Points: 100" in result  # 40 + 30 + 30
+        assert "CONTENT" in result  # name uppercased
+        assert "ENCOURAGING and GENEROUS" in result  # generous=True branch
+
+        # Strict mode flips the style line
+        rubric_strict = {**rubric, "generous": False}
+        strict_result = format_rubric_for_prompt(rubric_strict)
+        assert "Grade strictly" in strict_result
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")

@@ -512,7 +512,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
     # --- Remove grading results from in-memory state + storage ---
     results_removed = 0
     try:
-        from backend.app import _get_state, save_results
+        from backend.grading.state import _get_state, save_results
         grading_state = _get_state(teacher_id)
         original_count = len(grading_state.get("results", []))
         grading_state["results"] = [
@@ -677,7 +677,7 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
     # Count grading results for this student
     results_count = 0
     try:
-        from backend.app import _get_state
+        from backend.grading.state import _get_state
         grading_state = _get_state(teacher_id)
         results_count = sum(
             1 for r in grading_state.get("results", [])

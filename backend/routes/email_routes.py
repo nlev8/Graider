@@ -1099,7 +1099,7 @@ def pending_confirmations():
         # Load confirmed filenames
         confirmed_filenames = _load_confirmed_filenames()
         try:
-            from backend.app import _get_state
+            from backend.grading.state import _get_state
             teacher_id = getattr(g, 'user_id', 'local-dev')
             state = _get_state(teacher_id)
             if state and state.get("results"):
