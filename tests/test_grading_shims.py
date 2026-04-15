@@ -169,6 +169,110 @@ def test_check_batch_calibration_branch_coverage():
             sys.path.remove("backend")
 
 
+def test_grading_state_dict_is_singleton():
+    """Safety rail: `_grading_states` must be the SAME dict object whether
+    accessed via the backend.app shim re-export OR the canonical
+    backend.grading.state path. If Python ends up with two separate module
+    instances in sys.modules under different dotted paths (the exact bug
+    we hit in PR1 with routes.settings_routes), the two imports would
+    return DIFFERENT dict objects — writes from one consumer would never
+    be visible to another, silently losing grading results.
+    """
+    sys.path.insert(0, "backend")
+    try:
+        # Via the app.py shim (what consumers importing from backend.app see)
+        import app as backend_app
+        via_shim = backend_app._grading_states
+
+        # Via the canonical module path (what PR4 consumers will migrate to)
+        from grading.state import _grading_states as via_canonical
+
+        # MUST be the same object, not just equal. Equality is too weak —
+        # two empty dicts compare equal but are distinct instances.
+        assert via_shim is via_canonical, (
+            "backend.app._grading_states and backend.grading.state._grading_states "
+            "are DIFFERENT objects — sys.modules has duplicate module instances. "
+            "This would cause silent data loss between shim consumers and "
+            "canonical-path consumers."
+        )
+
+        # Same for the lock registry — another shared mutable state
+        via_shim_lock = backend_app._states_meta_lock
+        from grading.state import _states_meta_lock as via_canonical_lock
+        assert via_shim_lock is via_canonical_lock, (
+            "_states_meta_lock is not shared across shim/canonical paths. "
+            "Concurrent grading threads could race undetected."
+        )
+    finally:
+        if "backend" in sys.path:
+            sys.path.remove("backend")
+
+
+def test_pipeline_lazy_imports_all_resolve():
+    """Safety rail: `_run_grading_thread_inner` performs ~20 lazy imports
+    inside its body (e.g., `from assignment_grader import grade_multipass`).
+    Module-level imports are already covered by the AST global-refs test;
+    these INLINE imports only fire when a specific code path executes,
+    so a broken import path could slip past unit tests and surface only
+    during a real grading run.
+
+    AST-walks every `Import` / `ImportFrom` node inside the function and
+    every nested function, then uses importlib.util.find_spec to verify
+    each referenced module is discoverable on the configured sys.path.
+    """
+    import ast
+    import importlib.util
+
+    sys.path.insert(0, "backend")
+    try:
+        from grading import pipeline
+
+        source = open(pipeline.__file__).read()
+        tree = ast.parse(source)
+
+        # Find _run_grading_thread_inner
+        target_fn = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "_run_grading_thread_inner":
+                target_fn = node
+                break
+        assert target_fn is not None, "_run_grading_thread_inner not found in pipeline.py"
+
+        # Collect every module name referenced by Import/ImportFrom inside
+        # the function (including nested functions).
+        modules_to_resolve = set()
+        for node in ast.walk(target_fn):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    modules_to_resolve.add(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.level > 0:
+                    # Relative import (e.g., `from .foo import bar`) —
+                    # skip; these are relative to the containing package.
+                    continue
+                if node.module:
+                    modules_to_resolve.add(node.module)
+
+        unresolved = []
+        for mod in sorted(modules_to_resolve):
+            try:
+                spec = importlib.util.find_spec(mod)
+                if spec is None:
+                    unresolved.append(mod)
+            except (ModuleNotFoundError, ValueError, ImportError):
+                unresolved.append(mod)
+
+        assert not unresolved, (
+            f"pipeline._run_grading_thread_inner has lazy imports that don't "
+            f"resolve on the current sys.path: {unresolved}\n"
+            f"These would raise ImportError at runtime when the branch that "
+            f"imports them executes (even though module-level imports pass)."
+        )
+    finally:
+        if "backend" in sys.path:
+            sys.path.remove("backend")
+
+
 def test_pipeline_global_refs_all_resolve():
     """AST / bytecode completeness guard: every name referenced via LOAD_GLOBAL
     inside _run_grading_thread_inner (and its nested functions) must resolve
