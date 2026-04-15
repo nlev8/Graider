@@ -30,6 +30,7 @@ After all five PRs:
 - Function bodies byte-identical for PRs 1, 2, 3, and 5. PR4 is the sole exception (explicit-context signature refactor).
 - No Clever/ClassLink/OneRoster/roster_sync/oneroster_gradebook file modifications.
 - App boots: `python -c "from backend.app import app; print(len(app.url_map._rules))"` returns ≥ 250.
+- **PRs must merge sequentially: PR1 → PR2 → PR3 → PR4 → PR5.** Each PR's shim block references names from all prior PRs; merging a PR before its predecessor would leave `planner_routes.py` with import errors at module load. Every task branches from `main` AFTER the previous PR has been merged (see Step N.1 in each task). Do not parallelize PRs.
 
 ---
 
