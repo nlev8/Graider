@@ -2048,18 +2048,11 @@ STANDARD CLASS GRADING EXPECTATIONS:
 
 
 # ══════════════════════════════════════════════════════════════
-# REGISTER MODULAR ROUTES
-# ══════════════════════════════════════════════════════════════
-
-from routes import register_routes
-register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
-
-
-# ══════════════════════════════════════════════════════════════
 # GRACEFUL SHUTDOWN — Stop grading threads on SIGTERM
 # ══════════════════════════════════════════════════════════════
 
 import signal
+from routes import register_routes
 
 def _handle_sigterm(signum, frame):
     """Graceful shutdown: stop any running grading thread before exit."""
@@ -2070,7 +2063,21 @@ def _handle_sigterm(signum, frame):
             _logger.info("  Requested stop for teacher %s", teacher_id)
     # Let gunicorn handle the actual process exit
 
-signal.signal(signal.SIGTERM, _handle_sigterm)
+
+def init_app(app):
+    """Imperative initialization wiring for the Flask app.
+
+    Called exactly once at module load (below). Factored out as a named
+    function so Phase 3a PR2+ can reason about the initialization seam.
+    """
+    register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
+
+# Call initializer at the original register_routes/SIGTERM location
+# (mid-file, before remaining module-level @app.route decorators) so
+# module-level side-effect ordering is preserved exactly as main.
+init_app(app)
 
 
 # ══════════════════════════════════════════════════════════════
