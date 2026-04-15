@@ -35,8 +35,9 @@ Reduce `backend/routes/planner_routes.py` from **8104 → ~5950 LOC** (−27%) b
 ### Post-processing pipeline (the 6-phase sequence at `planner_routes.py:192-221`)
 - `_post_process_assignment` (orchestrator)
 - `_classify_question_type` (Phase 1)
-- `_hydrate_question` (Phase 2 dispatcher) + 14 sub-hydrators:
-  - `_hydrate_matching`, `_hydrate_geometry`, `_hydrate_data_table`, `_hydrate_box_plot`, `_hydrate_dot_plot`, `_hydrate_stem_and_leaf`, `_hydrate_transformations`, `_hydrate_fraction_model`, `_hydrate_unit_circle`, `_hydrate_protractor`, `_hydrate_grid_match`, `_hydrate_inline_dropdown`, `_infer_editable_columns`
+- `_hydrate_question` (Phase 2 dispatcher) + 12 sub-hydrators + 1 inference helper:
+  - `_hydrate_matching`, `_hydrate_geometry`, `_hydrate_data_table`, `_hydrate_box_plot`, `_hydrate_dot_plot`, `_hydrate_stem_and_leaf`, `_hydrate_transformations`, `_hydrate_fraction_model`, `_hydrate_unit_circle`, `_hydrate_protractor`, `_hydrate_grid_match`, `_hydrate_inline_dropdown`
+  - `_infer_editable_columns` (called by `_hydrate_data_table`)
 - `_validate_question` (Phase 3)
 - `_is_project_question` (Phase 3b filter)
 - `_validate_question_quality` + `_check_question_quality` (Phase 3c)
@@ -52,7 +53,7 @@ Reduce `backend/routes/planner_routes.py` from **8104 → ~5950 LOC** (−27%) b
 - `_build_subject_boundary_prompt`, `_build_section_categories_prompt`
 
 ### Cost tracking
-- `_extract_usage`, `_record_planner_cost` (**may stay in planner_routes if tightly coupled to Flask `g`, see Gotcha #3**)
+- `_extract_usage`, `_record_planner_cost` — pure functions, no Flask `g` coupling (Codex verified lines 42-88). Safe to move without context refactor.
 
 ### NOT moved (stay in planner_routes.py)
 - `load_standards`, `_get_standards_map`, `_load_standards_file`, `_grade_matches`, `_extract_grade_from_code` — standards loading is scope-ish but tied to route-specific config loading. Deferred to Phase 3b2.
@@ -65,17 +66,21 @@ Reduce `backend/routes/planner_routes.py` from **8104 → ~5950 LOC** (−27%) b
 
 **Incremental 5-PR sequence with import shims, following the Phase 3a playbook:**
 
-### PR1 — Core pipeline scaffolding
-Create `backend/services/assignment_post_processing.py`. Move the 6-phase orchestrator + entry-point pipeline functions: `_post_process_assignment`, `_classify_question_type`, `_validate_question`, `_hydrate_question` (dispatcher only; sub-hydrators still in planner_routes), `_enforce_question_count`, `_normalize_points`, `_count_questions`, `_merge_usage`, `_build_question_count_instruction`. Add re-export shim in planner_routes.py so `_post_process_assignment` etc. remain callable at the old path.
+### PR1 — Core pipeline scaffolding (dispatcher stays in planner_routes)
+Create `backend/services/assignment_post_processing.py`. Move the 6-phase orchestrator + entry-point pipeline functions that do NOT call hydrator sub-functions: `_post_process_assignment`, `_classify_question_type`, `_validate_question`, `_enforce_question_count`, `_normalize_points`, `_count_questions`, `_merge_usage`, `_build_question_count_instruction`, `_extract_usage`, `_record_planner_cost` (pure cost-tracking helpers per Codex — no Flask coupling, safe to move now).
 
-### PR2 — Hydrators + text/geometry utilities
-Move all 14 sub-hydrators (`_hydrate_matching`, `_hydrate_geometry`, etc.) + the geometry/text utility suite (`_detect_*`, `_extract_*`, `_infer_*`, `_looks_like_*`, `_split_markdown_table`, `_compute_geometry_answer`). Pipeline dispatcher in the service now calls local versions; shim still re-exports to planner_routes.
+**`_hydrate_question` stays in planner_routes.py for PR1** — its body dispatches into the 12 sub-hydrators (which don't move until PR2). Moving it now would force the service module to import sub-hydrators FROM planner_routes, and planner_routes imports the service via shim — that's a cycle. `_post_process_assignment` in the service calls `_hydrate_question` via the shim until PR2 pulls both together.
+
+Add re-export shim in planner_routes.py so `_post_process_assignment`, `_classify_question_type`, etc. remain callable at the old path.
+
+### PR2 — Hydrator dispatcher + all sub-hydrators + text/geometry utilities
+Move `_hydrate_question` dispatcher together with all 12 sub-hydrators (`_hydrate_matching`, `_hydrate_geometry`, `_hydrate_data_table`, etc.), `_infer_editable_columns`, and the geometry/text utility suite (`_detect_*`, `_extract_*` except `_infer_editable_columns`, `_looks_like_*`, `_is_identification_question`, `_infer_shape_answer`, `_split_markdown_table`, `_compute_geometry_answer`). Breaks the PR1 cycle: dispatcher and its callees now co-located in the service. Shim continues re-exporting to planner_routes.
 
 ### PR3 — Quality validation + project filter + golden tests
 Move `_is_project_question`, `_validate_question_quality`, `_check_question_quality`. **ADD golden tests** that pin the 6-phase ordering end-to-end with known-input/known-output fixtures (Codex Gotcha #3). These tests lock the extraction contract before the riskiest PRs land.
 
-### PR4 — Auto-fix with explicit context + cost tracking
-Move `_auto_fix_flagged_questions` behind a refactored signature that takes `user_id` and `client` as explicit parameters instead of pulling from Flask `g` and `backend.api_keys` (Codex Gotcha #1). Route call sites updated to pass the context. Also move `_extract_usage` and `_record_planner_cost` — if they also touch Flask `g`, apply the same explicit-context pattern.
+### PR4 — Auto-fix with explicit context
+Move `_auto_fix_flagged_questions` behind a refactored signature that takes `user_id` and `client` as explicit parameters instead of pulling from Flask `g` and `backend.api_keys` (Codex Gotcha #1). Route call sites updated to pass the context. This is the ONLY non-byte-identical PR — the signature change is the risk surface; PR3's golden tests + handler smoke test guard the behavior.
 
 ### PR5 — Shim removal + prompt builders + consumer migration
 Move `_build_subject_boundary_prompt` and `_build_section_categories_prompt` (pure functions). Migrate all route handler call sites in planner_routes.py to import directly from `backend.services.assignment_post_processing`. Remove the re-export shim.
@@ -107,9 +112,11 @@ Some existing tests may use `from backend.routes.planner_routes import _hydrate_
 **Fix:** The re-export shim in planner_routes.py (PRs 1-4) keeps these tests green. PR5 migrates test imports to the canonical path before removing the shim. `grep -rn "from backend.routes.planner_routes import _" tests/` will enumerate the affected tests.
 
 ### Gotcha #5 — Route-side assumptions about post-pipeline state
-Handlers like `generate_lesson_plan`, `generate_assignment_from_lesson`, `generate_assessment`, `regenerate_questions` read warning fields (`warning`, `warning_severity`) and assume specific numbering/points state after `_enforce_question_count` and `_normalize_points` have run.
+`generate_assessment` specifically reads `warning` / `warning_severity` after `_post_process_assignment` (lines 6235-6250) and assumes specific numbering/points state after `_enforce_question_count` and `_normalize_points` have run. Other callers of the full pipeline (`generate_lesson_plan`, `generate_assignment_from_lesson`) are less exposed to these specific fields.
 
-**Fix:** Those handlers' tests (if they exist) exercise the round trip. If no coverage exists, add a handler-level smoke test in PR3 that calls `_post_process_assignment` via the route's code path and asserts warning fields + total-points invariants.
+Note: `regenerate_questions` (lines 7257-7260) does NOT run the full pipeline — it calls classify/hydrate/validate only, so the warning-field invariants above do not apply there.
+
+**Fix:** Add a handler-level smoke test in PR3 that calls `_post_process_assignment` via `generate_assessment`'s code path and asserts `warning` / `warning_severity` fields + total-points invariants. Plus a lightweight smoke for `regenerate_questions` to pin its three-phase-only usage.
 
 ---
 
