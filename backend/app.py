@@ -2052,6 +2052,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
 # ══════════════════════════════════════════════════════════════
 
 import signal
+from routes import register_routes
 
 def _handle_sigterm(signum, frame):
     """Graceful shutdown: stop any running grading thread before exit."""
@@ -2066,13 +2067,17 @@ def _handle_sigterm(signum, frame):
 def init_app(app):
     """Imperative initialization wiring for the Flask app.
 
-    Called exactly once at module load (below) AFTER all decorators have
-    attached. Factored out as a named function so Phase 3a PR2+ can
-    reason about the initialization seam.
+    Called exactly once at module load (below). Factored out as a named
+    function so Phase 3a PR2+ can reason about the initialization seam.
     """
-    from routes import register_routes
     register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
     signal.signal(signal.SIGTERM, _handle_sigterm)
+
+
+# Call initializer at the original register_routes/SIGTERM location
+# (mid-file, before remaining module-level @app.route decorators) so
+# module-level side-effect ordering is preserved exactly as main.
+init_app(app)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -3498,12 +3503,6 @@ def serve_static(path):
     if os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     return send_from_directory(app.static_folder, 'index.html')
-
-
-# Call initializer AFTER all module-level decorators have attached.
-# Per Phase 3a PR1 design: init_app() wires up blueprints + SIGTERM and
-# must run after ALL @app.route decorators above have attached to `app`.
-init_app(app)
 
 
 # ══════════════════════════════════════════════════════════════
