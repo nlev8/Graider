@@ -373,22 +373,13 @@ def _sanitize_student_name(name):
     return name
 
 
-# Phase 3a PR2+PR3: state + thread + pipeline moved to backend/grading/.
-# Re-export for backwards compat until PR4 migrates consumers.
-from grading.state import (
-    load_saved_results,
-    save_results,
-    _grading_states,
-    _grading_locks,
-    _states_meta_lock,
-    _create_default_state,
-    _get_state,
-    _get_lock,
-    _update_state,
-    reset_state,
-)
+# Grading state + thread live in backend/grading/ (Phase 3a).
+# app.py imports only the names it uses directly:
+#   - init_app() passes _get_state, run_grading_thread, reset_state, _get_lock
+#     to register_routes(...)
+#   - _handle_sigterm walks _grading_states to stop running grading threads
+from grading.state import _get_state, _get_lock, reset_state, _grading_states
 from grading.thread import run_grading_thread
-from grading.pipeline import _run_grading_thread_inner
 
 
 # ══════════════════════════════════════════════════════════════

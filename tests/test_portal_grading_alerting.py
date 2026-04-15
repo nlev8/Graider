@@ -48,15 +48,11 @@ def test_save_result_failure_captures_to_sentry():
     """portal_grading.py line 499 region: save_results() throws ->
     must capture_exception, not silently swallow.
 
-    Inject a mock backend.app into sys.modules because the real module
-    has app-wide import side effects (route registration) that fail
-    in a bare pytest process."""
-    import sys
+    Patch at the canonical import path (backend.grading.state) used by
+    _safe_save_results after PR4 migration off the backend.app shim."""
     from backend.services import portal_grading
 
-    mock_app = MagicMock()
-    mock_app.save_results.side_effect = RuntimeError("save boom")
-    with patch.dict(sys.modules, {"backend.app": mock_app}), \
+    with patch("backend.grading.state.save_results", side_effect=RuntimeError("save boom")), \
          patch("backend.services.portal_grading.sentry_sdk") as mock_sentry:
         portal_grading._safe_save_results([{"x": 1}], "teacher-123")
         mock_sentry.capture_exception.assert_called_once()
