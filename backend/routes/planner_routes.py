@@ -38,60 +38,23 @@ except ImportError:
     except ImportError:
         storage_save = None
 
-# Re-export PR1+PR2 helpers extracted to backend/services/assignment_post_processing.py
+# ── Phase 3b1 PR5: shim removed. Post-processing pipeline lives in ──────────
+# backend/services/assignment_post_processing.py. Import only the names this
+# module still calls directly (names only reached INSIDE the moved orchestrator
+# do not need to be re-imported here).
 from backend.services.assignment_post_processing import (
-    # PR1 (existing — keep)
-    _validate_question,
-    _enforce_question_count,
-    _count_questions,
-    _build_question_count_instruction,
-    _normalize_points,
-    _merge_usage,
-    _extract_usage,
-    _record_planner_cost,
     PLANNER_COSTS_FILE,
-    _REQUIRED_FIELDS,
-    _DEFAULT_POINTS,
-    # PR2 (new)
+    _build_question_count_instruction,
+    _build_section_categories_prompt,
+    _build_subject_boundary_prompt,
     _classify_question_type,
-    _TRUSTED_AI_TYPES,
-    _ALL_GEOMETRY_TYPES,
+    _extract_usage,
     _hydrate_question,
-    _hydrate_matching,
-    _hydrate_geometry,
-    _GEOMETRY_DEFAULTS,
-    _infer_editable_columns,
-    _ANALYSIS_PATTERN,
-    _CALC_KEYWORDS,
-    _FORMULA_RE,
-    _hydrate_data_table,
-    _hydrate_box_plot,
-    _hydrate_dot_plot,
-    _hydrate_stem_and_leaf,
-    _hydrate_transformations,
-    _hydrate_fraction_model,
-    _hydrate_unit_circle,
-    _hydrate_protractor,
-    _hydrate_grid_match,
-    _hydrate_inline_dropdown,
-    _SHAPE_KEYWORDS,
-    _POLYGON_SIDES,
-    _MODE_KEYWORDS,
-    _detect_primary_shape,
-    _detect_mode,
-    _is_identification_question,
-    _infer_shape_answer,
-    _looks_like_graphing_question,
-    _extract_equations_from_text,
+    _merge_usage,
+    _post_process_assignment,
+    _record_planner_cost,
     _split_markdown_table,
-    _extract_dimensions_from_text,
-    _extract_pythagorean_sides,
-    _compute_geometry_answer,
-    # PR3
-    _is_project_question,
-    _PROJECT_KEYWORDS,
-    _validate_question_quality,
-    _check_question_quality,
+    _validate_question,
 )
 
 GEOMETRY_SUBTYPES = {
@@ -101,153 +64,11 @@ GEOMETRY_SUBTYPES = {
 }
 
 
-def _build_subject_boundary_prompt(subject, grade, standard_codes=None):
-    """Build mandatory subject/grade boundary constraint for AI prompts."""
-    if not subject or not grade:
-        return ''
-
-    valid_codes_line = ''
-    if standard_codes:
-        valid_codes_line = (
-            f"\n- Valid standard codes for this assessment: {', '.join(standard_codes)}"
-            f"\n- ONLY use these exact standard codes in question 'standard' fields"
-        )
-
-    return f"""
-SUBJECT BOUNDARY CONSTRAINT (MANDATORY — VIOLATIONS WILL BE REJECTED):
-This content is EXCLUSIVELY for {subject} at grade {grade} level.
-- EVERY question MUST directly test {subject} content knowledge
-- EVERY question's "standard" field MUST reference one of the provided standards{valid_codes_line}
-- Ensure vocabulary and cognitive complexity are appropriate for grade {grade}
-- Do NOT generate questions that primarily test a different subject area
-- Cross-disciplinary skills (reading a graph, writing an explanation) are acceptable ONLY when they serve {subject} content
-- Questions violating these constraints will be automatically detected and regenerated
-"""
-
-
-def _build_section_categories_prompt(categories, subject='', question_type_counts=None):
-    """Build AI prompt section describing which assessment sections to generate."""
-    if not categories or not any(categories.values()):
-        return "Generate standard sections: Multiple Choice and Short Answer."
-
-    section_map = {
-        'multiple_choice': {
-            'name': 'Multiple Choice',
-            'instruction': 'Generate standard multiple choice questions with 4 options (A-D). Use type "multiple_choice".',
-        },
-        'short_answer': {
-            'name': 'Short Answer / Gridded Response',
-            'instruction': 'Generate short answer questions requiring 1-3 sentence responses or numeric answers. Use type "short_answer".',
-        },
-        'math_computation': {
-            'name': 'Math Computation',
-            'instruction': 'Generate math computation questions (solve equations, evaluate expressions, simplify). Use type "math_equation". Include the equation in the question text.',
-        },
-        'geometry_visual': {
-            'name': 'Geometry & Measurement',
-            'instruction': 'Generate geometry questions with interactive visuals. Use question_type "geometry" and include shape_type, dimensions, and measurement_type fields. Supported shapes: rectangle, triangle, circle, trapezoid, parallelogram, cylinder, cone, sphere, prism. Students interact with shape renderers — do NOT ask them to draw.',
-        },
-        'graphing': {
-            'name': 'Graphing & Coordinate Plane',
-            'instruction': 'Generate questions using interactive graphs. Use question_type "function_graph" (with x_range, y_range, correct_expressions as equation strings) for graphing lines/functions/systems. Use "coordinate_plane" (with min_val, max_val, points_to_plot as [x,y] pairs) for plotting points. Use "number_line" (with min_val, max_val, points_to_plot) for number lines. ALWAYS set the correct question_type and include all data fields — the system renders graphs programmatically from these fields.',
-        },
-        'data_analysis': {
-            'name': 'Data Analysis',
-            'instruction': 'Generate data analysis questions with interactive visuals. Use question_type "data_table" (with column_headers, row_labels, expected_data), "box_plot" (with data array, labels), "dot_plot" (with min_val/max_val/step, correct_dots), "stem_and_leaf" (with data, stems, correct_leaves), "bar_chart" (with chart_data). ALWAYS set the correct question_type and include all data fields.',
-        },
-        'extended_writing': {
-            'name': 'Extended Writing / Essay',
-            'instruction': 'Generate extended response questions requiring paragraph-length analysis with evidence. Use type "extended_response". Include a detailed rubric.',
-        },
-        'vocabulary': {
-            'name': 'Vocabulary / Matching',
-            'instruction': 'Generate vocabulary matching questions. Use type "matching" with terms and definitions arrays.',
-        },
-        'true_false': {
-            'name': 'True / False',
-            'instruction': 'Generate true/false statement evaluation questions. Use type "true_false".',
-        },
-        'florida_fast': {
-            'name': 'FL FAST Item Types',
-            'instruction': 'Generate Florida FAST-style items. Use "multiselect" (select all that apply with options array and correct indices array), "multi_part" (compound Part A/B with parts array where each part has its own question_type, options, answer, and points), "grid_match" (matrix matching with row_labels, column_labels, and correct 2D one-hot array), "inline_dropdown" (cloze with {0},{1} placeholders in question text and dropdowns array with options and correct index). These mirror the actual FAST test format.',
-        },
-    }
-
-    enabled = [k for k, v in categories.items() if v]
-    lines = ["ALLOWED section types (use ONLY the ones relevant to the topic/standards):"]
-    for i, key in enumerate(enabled, 1):
-        info = section_map.get(key, {})
-        count = (question_type_counts or {}).get(key, 0)
-        if count and count > 0:
-            lines.append("  - " + info.get('name', key) + " (EXACTLY " + str(count) + " questions): " + info.get('instruction', ''))
-        else:
-            lines.append("  - " + info.get('name', key) + ": " + info.get('instruction', ''))
-
-    disabled = [k for k, v in categories.items() if not v]
-    if disabled:
-        disabled_names = [section_map.get(k, {}).get('name', k) for k in disabled]
-        lines.append(f"\nNEVER include these section types: {', '.join(disabled_names)}")
-
-    lines.append("\nIMPORTANT: Only use section types that are relevant to the ACTUAL TOPIC being assessed.")
-    lines.append("Do NOT force a section type just because it is allowed — e.g., do NOT add a Geometry section to a statistics/data topic, do NOT add Data Analysis to a pure algebra topic.")
-    lines.append("Every question must directly relate to the standards and topic. Never generate filler questions from unrelated math domains.")
-    lines.append("Organize the assignment into separate sections, each with its own 'name', 'instructions', and 'questions' array.")
-    return '\n'.join(lines)
-
-
-def _post_process_assignment(assignment, target_question_count=None, target_total_points=None,
-                             subject=None, grade=None, valid_standard_codes=None):
-    """Unified 6-phase deterministic post-processing pipeline.
-
-    Phase 1: _classify_question_type — assigns question_type from text/structure
-    Phase 2: _hydrate_question — populates rendering fields (dimensions, answers, etc.)
-    Phase 3: _validate_question — downgrades broken questions to short_answer
-    Phase 3b: _filter_project_questions — removes project/activity prompts
-    Phase 3c: _validate_question_quality — flags problematic questions
-    Phase 4: _enforce_question_count — trims/pads to target (if provided)
-    Phase 5: _normalize_points — ensures points sum correctly
-    """
-    if not assignment or not isinstance(assignment, dict):
-        return assignment, None
-    for section in assignment.get('sections', []):
-        for q in section.get('questions', []):
-            _classify_question_type(q, section)   # Phase 1: Deterministic type
-            _hydrate_question(q)                   # Phase 2: Populate fields
-            _validate_question(q)                  # Phase 3: Downgrade if broken
-    # Phase 3b: Strip questions that are projects/activities (not answerable in portal)
-    for section in assignment.get('sections', []):
-        section['questions'] = [
-            q for q in section.get('questions', [])
-            if not _is_project_question(q)
-        ]
-    # Remove empty sections left after filtering
-    assignment['sections'] = [
-        s for s in assignment.get('sections', [])
-        if s.get('questions')
-    ]
-    # Phase 3c: Validate question quality (deterministic + optional AI fix)
-    warnings = _validate_question_quality(assignment, subject=subject, grade=grade,
-                                          valid_standard_codes=valid_standard_codes)
-    if warnings:
-        _auto_fix_flagged_questions(assignment, warnings, subject=subject, grade=grade,
-                                    valid_standard_codes=valid_standard_codes)
-    extra_usage = None
-    # Phase 4: Enforce question count (if target given)
-    if target_question_count is not None:
-        assignment, extra_usage = _enforce_question_count(assignment, target_question_count)
-    # Phase 5: Normalize points (always runs)
-    _normalize_points(assignment, target_total_points)
-    return assignment, extra_usage
-
-
-# ── Phase 3b1 PR3: Quality validation moved to backend/services/assignment_post_processing.py ──
-# _PROJECT_KEYWORDS, _is_project_question, _validate_question_quality, _check_question_quality
-# are re-exported via the shim block near the top of this file.
-# The theorem regex patterns below are module-level compilations that remain in planner_routes.py.
+# ── Phase 3c orphan patterns (defined but not currently referenced) ─────────
+# Patterns for common theorem setups to detect over-determined or inconsistent
+# values. Retained at module level to preserve prior compilation semantics.
 import re as _re
 
-# ── Phase 3c orphan patterns (defined but not currently referenced) ─────────
-# Patterns for common theorem setups to detect over-determined or inconsistent values
 _TANGENT_SECANT_RE = _re.compile(
     r'tangent.*(?:external|outside).*?(\d+(?:\.\d+)?).*?(?:whole|secant).*?(\d+(?:\.\d+)?)',
     _re.IGNORECASE | _re.DOTALL,
@@ -262,15 +83,12 @@ _PYTHAGOREAN_RE = _re.compile(
 )
 
 
-def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
-                                valid_standard_codes=None):
-    """Flask-aware adapter for the service's _auto_fix_flagged_questions.
+def _get_openai_context():
+    """Extract user_id + OpenAI client for the post-processing pipeline.
 
-    Pulls user_id from Flask g and instantiates the OpenAI client from
-    backend.api_keys. Delegates to the pure service function with
-    explicit context. Preserves the behavior of the original:
-    - Missing/stub api_key → silent return
-    - Exception in setup → print non-fatal message, return
+    Pulls user_id from Flask g and instantiates the OpenAI client from the
+    caller's configured API key. Returns (None, None) on any failure so
+    the pipeline runs deterministically and silently skips AI auto-fix.
     """
     try:
         from openai import OpenAI
@@ -278,21 +96,11 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
         user_id = getattr(g, 'user_id', 'local-dev')
         api_key = get_api_key('openai', user_id)
         if not api_key or api_key.startswith('your-'):
-            return
-        client = OpenAI(api_key=api_key)
+            return None, None
+        return user_id, OpenAI(api_key=api_key)
     except Exception as e:
-        print(f"Auto-fix quality check failed (non-fatal): {e}")
-        return
-
-    # Delegate to pure service function with injected context
-    from backend.services.assignment_post_processing import (
-        _auto_fix_flagged_questions as _service_auto_fix,
-    )
-    _service_auto_fix(
-        assignment, warnings, subject=subject, grade=grade,
-        valid_standard_codes=valid_standard_codes,
-        user_id=user_id, client=client,
-    )
+        print(f"OpenAI context unavailable (non-fatal): {e}")
+        return None, None
 
 
 planner_bp = Blueprint('planner', __name__)
@@ -1419,10 +1227,12 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
                 if content_type == 'Assignment':
                     target_q = config.get('totalQuestions', 10)
                     lp_std_codes = [s.split(':')[0].strip() for s in selected_standards if ':' in s]
+                    _ctx_uid, _ctx_client = _get_openai_context()
                     plan, extra_usage = _post_process_assignment(
                         plan, target_q, target_total_points=100,
                         subject=config.get('subject'), grade=config.get('grade'),
-                        valid_standard_codes=lp_std_codes if lp_std_codes else None)
+                        valid_standard_codes=lp_std_codes if lp_std_codes else None,
+                        user_id=_ctx_uid, client=_ctx_client)
                     if extra_usage:
                         for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
                             total_usage[k] += extra_usage.get(k, 0)
@@ -1456,10 +1266,12 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
         if content_type == 'Assignment':
             target_q = config.get('totalQuestions', 10)
             lp_std_codes = [s.split(':')[0].strip() for s in selected_standards if ':' in s]
+            _ctx_uid, _ctx_client = _get_openai_context()
             plan, extra_usage = _post_process_assignment(
                 plan, target_q, target_total_points=100,
                 subject=config.get('subject'), grade=config.get('grade'),
-                valid_standard_codes=lp_std_codes if lp_std_codes else None)
+                valid_standard_codes=lp_std_codes if lp_std_codes else None,
+                user_id=_ctx_uid, client=_ctx_client)
         else:
             extra_usage = None
             # Strip stray sections/questions from non-assignment types so
@@ -2115,9 +1927,11 @@ Make the questions specific to the lesson content. Include a variety of question
         content = completion.choices[0].message.content
         assignment = json.loads(content)
         target_q = config.get('totalQuestions', 10)
+        _ctx_uid, _ctx_client = _get_openai_context()
         assignment, extra_usage = _post_process_assignment(
             assignment, target_q, target_total_points=100,
-            subject=config.get('subject'), grade=config.get('grade'))
+            subject=config.get('subject'), grade=config.get('grade'),
+            user_id=_ctx_uid, client=_ctx_client)
         # Embed context for portal grading (so AI grading has full 18-factor access)
         assignment['grade_level'] = config.get('grade', config.get('grade_level', '7'))
         assignment['subject'] = config.get('subject', 'General')
@@ -4393,10 +4207,12 @@ Generate a complete assessment in this JSON format:
 
         content = completion.choices[0].message.content
         assessment = json.loads(content)
+        _ctx_uid, _ctx_client = _get_openai_context()
         assessment, _ = _post_process_assignment(
             assessment, target_total_points=total_points,
             subject=config.get('subject'), grade=config.get('grade'),
-            valid_standard_codes=input_standard_codes)
+            valid_standard_codes=input_standard_codes,
+            user_id=_ctx_uid, client=_ctx_client)
 
         # Collect any quality warnings attached to questions
         quality_warnings = []

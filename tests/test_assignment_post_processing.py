@@ -194,16 +194,12 @@ def test_check_question_quality_missing_answer_gated_by_question_type():
 def test_pipeline_ast_global_refs_all_resolve():
     """AST bound-name completeness guard on _post_process_assignment.
 
-    During PRs 1-4 _post_process_assignment still lives in planner_routes.py.
-    After PR5 it moves to the service module. This test passes either way
-    by trying both import paths.
+    Post-PR5 the orchestrator lives in the service module. Every
+    LOAD_GLOBAL reference in its bytecode must resolve to a name in
+    the service module's namespace or builtins.
     """
-    try:
-        import backend.services.assignment_post_processing as module
-        _post_process_assignment = module._post_process_assignment
-    except AttributeError:
-        import backend.routes.planner_routes as module
-        _post_process_assignment = module._post_process_assignment
+    import backend.services.assignment_post_processing as module
+    _post_process_assignment = module._post_process_assignment
 
     def collect_global_refs(code):
         refs = set()

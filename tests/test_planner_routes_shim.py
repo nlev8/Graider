@@ -1,60 +1,28 @@
-"""Phase 3b1 PR1+PR2 shim guard tests.
+"""Phase 3b1 PR5 — permanent service-module contract tests.
 
-Verifies that:
-1. All PR1 (8 functions + 3 constants) re-export correctly from planner_routes.
-2. The canonical source (assignment_post_processing) exports PR1 names directly.
-3. PR1 functions actually execute without NameError.
-4. All LOAD_GLOBAL references in the service module resolve at import time.
-5. All PR2 (25 functions + 9 constants) re-export correctly from planner_routes.
-6. The canonical source exports PR2 names directly.
-7. _classify_question_type (PR2 risk driver) executes without NameError.
+After PR5 the transitional shim in `backend/routes/planner_routes.py` is
+removed; the post-processing pipeline lives entirely in
+`backend/services/assignment_post_processing.py`.
+
+The tests in this file are the permanent safety rails that outlive the
+shim:
+
+1. PR1 helpers execute at runtime — guards against silent NameError
+   regressions from future rearrangement of the service module.
+2. Every bound-name reference in every function defined in the service
+   module resolves to a module-global or builtin — AST-level completeness
+   guard that would have caught the PR1 scope bug.
+3. `_auto_fix_flagged_questions` in the service module retains its
+   explicit-context signature (`*, user_id, client`). Flask context
+   extraction lives in `planner_routes._get_openai_context()` and is
+   passed into `_post_process_assignment` at each route-handler call site.
 """
 import types
 import dis
 import builtins
 
 
-# ── Test 1: planner_routes re-exports all PR1 names ──────────────────────
-
-def test_planner_routes_reexports_pr1_leaf_helpers():
-    import backend.routes.planner_routes as pr
-
-    # 8 functions
-    assert callable(pr._extract_usage)
-    assert callable(pr._record_planner_cost)
-    assert callable(pr._validate_question)
-    assert callable(pr._build_question_count_instruction)
-    assert callable(pr._count_questions)
-    assert callable(pr._enforce_question_count)
-    assert callable(pr._merge_usage)
-    assert callable(pr._normalize_points)
-
-    # 3 constants
-    assert isinstance(pr.PLANNER_COSTS_FILE, str)
-    assert isinstance(pr._REQUIRED_FIELDS, dict)
-    assert isinstance(pr._DEFAULT_POINTS, dict)
-
-
-# ── Test 2: canonical source exports the same names ───────────────────────
-
-def test_assignment_post_processing_module_is_canonical():
-    import backend.services.assignment_post_processing as svc
-
-    assert callable(svc._extract_usage)
-    assert callable(svc._record_planner_cost)
-    assert callable(svc._validate_question)
-    assert callable(svc._build_question_count_instruction)
-    assert callable(svc._count_questions)
-    assert callable(svc._enforce_question_count)
-    assert callable(svc._merge_usage)
-    assert callable(svc._normalize_points)
-
-    assert isinstance(svc.PLANNER_COSTS_FILE, str)
-    assert isinstance(svc._REQUIRED_FIELDS, dict)
-    assert isinstance(svc._DEFAULT_POINTS, dict)
-
-
-# ── Test 3: functions actually execute without NameError ──────────────────
+# ── Test 1: PR1 leaf helpers still execute cleanly via service module ────
 
 def test_pr1_helpers_execute_without_nameerror(tmp_path):
     from backend.services.assignment_post_processing import (
@@ -105,7 +73,7 @@ def test_pr1_helpers_execute_without_nameerror(tmp_path):
         svc.PLANNER_COSTS_FILE = original
 
 
-# ── Test 4: AST bound-name completeness ───────────────────────────────────
+# ── Test 2: AST bound-name completeness for the entire service module ────
 
 def test_service_module_global_refs_all_resolve():
     """Walk every function defined in assignment_post_processing via dis, verify all
@@ -138,179 +106,46 @@ def test_service_module_global_refs_all_resolve():
     assert unresolved == [], f"Unresolved LOAD_GLOBAL references: {unresolved}"
 
 
-# ── Test 5: planner_routes re-exports all PR2 names ───────────────────────
+# ── Test 3: explicit-context contract for auto-fix + orchestrator ────────
 
-def test_planner_routes_reexports_pr2_names():
-    """All 25 PR2 functions + 9 PR2 constants must be importable via planner_routes."""
-    import re as _re
-    import backend.routes.planner_routes as pr
-
-    # 25 functions
-    functions = [
-        '_classify_question_type',
-        '_hydrate_question',
-        '_hydrate_matching',
-        '_hydrate_geometry',
-        '_infer_editable_columns',
-        '_hydrate_data_table',
-        '_hydrate_box_plot',
-        '_hydrate_dot_plot',
-        '_hydrate_stem_and_leaf',
-        '_hydrate_transformations',
-        '_hydrate_fraction_model',
-        '_hydrate_unit_circle',
-        '_hydrate_protractor',
-        '_hydrate_grid_match',
-        '_hydrate_inline_dropdown',
-        '_detect_primary_shape',
-        '_detect_mode',
-        '_is_identification_question',
-        '_infer_shape_answer',
-        '_looks_like_graphing_question',
-        '_extract_equations_from_text',
-        '_split_markdown_table',
-        '_extract_dimensions_from_text',
-        '_extract_pythagorean_sides',
-        '_compute_geometry_answer',
-    ]
-    for name in functions:
-        obj = getattr(pr, name, None)
-        assert callable(obj), f"{name} not callable on planner_routes"
-
-    # 9 constants
-    assert isinstance(pr._TRUSTED_AI_TYPES, frozenset)
-    assert isinstance(pr._ANALYSIS_PATTERN, _re.Pattern)
-    assert isinstance(pr._CALC_KEYWORDS, _re.Pattern)
-    assert isinstance(pr._FORMULA_RE, _re.Pattern)
-    assert isinstance(pr._SHAPE_KEYWORDS, list)
-    assert isinstance(pr._POLYGON_SIDES, dict)
-    assert isinstance(pr._MODE_KEYWORDS, list)
-    assert isinstance(pr._ALL_GEOMETRY_TYPES, set)
-    assert isinstance(pr._GEOMETRY_DEFAULTS, dict)
-
-
-# ── Test 6: canonical path exports same PR2 names ─────────────────────────
-
-def test_pr2_canonical_path_importable():
-    """All PR2 names must be importable directly from assignment_post_processing."""
-    import re as _re
-    import backend.services.assignment_post_processing as svc
-
-    functions = [
-        '_classify_question_type',
-        '_hydrate_question',
-        '_hydrate_matching',
-        '_hydrate_geometry',
-        '_infer_editable_columns',
-        '_hydrate_data_table',
-        '_hydrate_box_plot',
-        '_hydrate_dot_plot',
-        '_hydrate_stem_and_leaf',
-        '_hydrate_transformations',
-        '_hydrate_fraction_model',
-        '_hydrate_unit_circle',
-        '_hydrate_protractor',
-        '_hydrate_grid_match',
-        '_hydrate_inline_dropdown',
-        '_detect_primary_shape',
-        '_detect_mode',
-        '_is_identification_question',
-        '_infer_shape_answer',
-        '_looks_like_graphing_question',
-        '_extract_equations_from_text',
-        '_split_markdown_table',
-        '_extract_dimensions_from_text',
-        '_extract_pythagorean_sides',
-        '_compute_geometry_answer',
-    ]
-    for name in functions:
-        obj = getattr(svc, name, None)
-        assert callable(obj), f"{name} not callable on service module"
-
-    # 9 constants
-    assert isinstance(svc._TRUSTED_AI_TYPES, frozenset)
-    assert isinstance(svc._ANALYSIS_PATTERN, _re.Pattern)
-    assert isinstance(svc._CALC_KEYWORDS, _re.Pattern)
-    assert isinstance(svc._FORMULA_RE, _re.Pattern)
-    assert isinstance(svc._SHAPE_KEYWORDS, list)
-    assert isinstance(svc._POLYGON_SIDES, dict)
-    assert isinstance(svc._MODE_KEYWORDS, list)
-    assert isinstance(svc._ALL_GEOMETRY_TYPES, set)
-    assert isinstance(svc._GEOMETRY_DEFAULTS, dict)
-
-
-# ── Test 7: PR2 risk driver _classify_question_type executes ──────────────
-
-def test_pr2_classify_executes_without_nameerror():
-    """Guard against the PR1 scope bug: _classify_question_type must resolve
-    all its 5 callees (_is_identification_question, _detect_primary_shape,
-    _detect_mode, _looks_like_graphing_question, _extract_equations_from_text)
-    at runtime. This test would have caught the PR1 scope error if the function
-    had been wrongly moved alone."""
-    from backend.services.assignment_post_processing import _classify_question_type
-
-    q = {"question": "Solve for x: 2x + 4 = 10", "answer": "3"}
-    # Function mutates q in place and returns None; just verify it runs without error.
-    result = _classify_question_type(q)
-    assert result is None
-    assert 'question_type' in q
-
-
-# ── Test 8: planner_routes re-exports all PR3 names ───────────────────────
-
-def test_planner_routes_reexports_pr3_names():
-    """All 3 PR3 functions + 1 PR3 constant must be importable via planner_routes."""
-    import re as _re
-    import backend.routes.planner_routes as pr
-
-    # 3 functions
-    assert callable(pr._is_project_question)
-    assert callable(pr._validate_question_quality)
-    assert callable(pr._check_question_quality)
-
-    # 1 constant
-    assert isinstance(pr._PROJECT_KEYWORDS, _re.Pattern)
-
-
-# ── Test 9: canonical path exports same PR3 names ─────────────────────────
-
-def test_pr3_canonical_path_importable():
-    """All PR3 names must be importable directly from assignment_post_processing."""
-    import re as _re
-    import backend.services.assignment_post_processing as svc
-
-    # 3 functions
-    assert callable(svc._is_project_question)
-    assert callable(svc._validate_question_quality)
-    assert callable(svc._check_question_quality)
-
-    # 1 constant
-    assert isinstance(svc._PROJECT_KEYWORDS, _re.Pattern)
-
-
-# ── Test 10: PR4 service/adapter split ────────────────────────────────────
-
-def test_pr4_auto_fix_has_service_and_adapter():
-    """PR4: service module has explicit-context signature; planner_routes has Flask adapter."""
+def test_auto_fix_and_orchestrator_explicit_context_contract():
+    """Service module exposes explicit-context kwargs; Flask extraction lives in routes."""
     import inspect
     from backend.services.assignment_post_processing import (
-        _auto_fix_flagged_questions as service_fn,
+        _auto_fix_flagged_questions,
+        _post_process_assignment,
     )
-    from backend.routes.planner_routes import (
-        _auto_fix_flagged_questions as adapter_fn,
-    )
+    from backend.routes.planner_routes import _get_openai_context
 
-    # Service function: keyword-only user_id + client params
-    service_sig = inspect.signature(service_fn)
-    assert 'user_id' in service_sig.parameters
-    assert 'client' in service_sig.parameters
-    assert service_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
-    assert service_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
+    # _auto_fix_flagged_questions: keyword-only user_id + client, both default to None
+    # (None → silent-return guard; matches prior adapter's missing-api-key semantics).
+    fix_sig = inspect.signature(_auto_fix_flagged_questions)
+    assert fix_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert fix_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert fix_sig.parameters['user_id'].default is None
+    assert fix_sig.parameters['client'].default is None
 
-    # Adapter function: NO user_id/client in signature (pulls from Flask g internally)
-    adapter_sig = inspect.signature(adapter_fn)
-    assert 'user_id' not in adapter_sig.parameters
-    assert 'client' not in adapter_sig.parameters
+    # _post_process_assignment: keyword-only user_id + client pass-through
+    pp_sig = inspect.signature(_post_process_assignment)
+    assert pp_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert pp_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert pp_sig.parameters['user_id'].default is None
+    assert pp_sig.parameters['client'].default is None
 
-    # They are NOT the same object — adapter wraps service
-    assert service_fn is not adapter_fn
+    # _get_openai_context is the route-side Flask extraction helper
+    ctx_sig = inspect.signature(_get_openai_context)
+    assert len(ctx_sig.parameters) == 0  # zero-arg helper returns (user_id, client)
+
+    # Service module has NO Flask imports in _auto_fix_flagged_questions body
+    import dis
+    fix_globals = {
+        instr.argval for instr in dis.get_instructions(_auto_fix_flagged_questions)
+        if instr.opname == 'LOAD_GLOBAL'
+    }
+    assert 'g' not in fix_globals
+    assert 'flask' not in fix_globals
+
+    # Prompt builders remain reachable via planner_routes for legacy test imports.
+    import backend.routes.planner_routes as pr
+    assert callable(pr._build_subject_boundary_prompt)
+    assert callable(pr._build_section_categories_prompt)
