@@ -100,7 +100,10 @@ CREATE TABLE IF NOT EXISTS student_submissions (
     time_taken_seconds INTEGER,
     submitted_at TIMESTAMPTZ DEFAULT now(),
     graded_at TIMESTAMPTZ,
-    attempt_number INTEGER DEFAULT 1
+    attempt_number INTEGER DEFAULT 1,
+    grading_task_id TEXT,
+    grading_started_at TIMESTAMPTZ,
+    error_message TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_submissions_student ON student_submissions(student_id);
