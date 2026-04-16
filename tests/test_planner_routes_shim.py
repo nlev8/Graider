@@ -53,7 +53,7 @@ def test_assignment_post_processing_module_is_canonical():
 
 # ── Test 3: functions actually execute without NameError ──────────────────
 
-def test_pr1_helpers_execute_without_nameerror():
+def test_pr1_helpers_execute_without_nameerror(tmp_path):
     from backend.services.assignment_post_processing import (
         _validate_question,
         _count_questions,
@@ -62,6 +62,7 @@ def test_pr1_helpers_execute_without_nameerror():
         _normalize_points,
         _merge_usage,
         _extract_usage,
+        _record_planner_cost,
     )
 
     # _validate_question — passes through without downgrade (has no required fields)
@@ -90,6 +91,15 @@ def test_pr1_helpers_execute_without_nameerror():
 
     # _extract_usage — None input → None
     assert _extract_usage(None) is None
+
+    # _record_planner_cost — writes to tmp file, verify no NameError
+    import backend.services.assignment_post_processing as svc
+    original = svc.PLANNER_COSTS_FILE
+    svc.PLANNER_COSTS_FILE = str(tmp_path / "planner_costs.json")
+    try:
+        _record_planner_cost({"input_tokens": 10, "output_tokens": 5, "cost": 0.001, "total_tokens": 15})
+    finally:
+        svc.PLANNER_COSTS_FILE = original
 
 
 # ── Test 4: AST bound-name completeness ───────────────────────────────────
