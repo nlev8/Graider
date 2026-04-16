@@ -69,24 +69,35 @@ Reduce `backend/routes/planner_routes.py` from **8104 → ~5950 LOC** (−27%) b
 ### PR1 — Leaf helpers only (no cross-references to unmoved code)
 Create `backend/services/assignment_post_processing.py`. Move ONLY helpers whose bodies do not reference any function staying in planner_routes.py:
 
-- `_classify_question_type` (pure classifier, no sub-calls)
-- `_validate_question` (pure validator, no sub-calls)
+- `_validate_question` (pure validator — uses `_REQUIRED_FIELDS` constant, moves together)
 - `_enforce_question_count`, `_count_questions`, `_build_question_count_instruction` (Phase 4 trio — self-contained)
-- `_normalize_points` (Phase 5 — pure math on points)
+- `_normalize_points` (Phase 5 — pure math on points, uses `_DEFAULT_POINTS` constant, moves together)
 - `_merge_usage` (pure dict merge)
-- `_extract_usage`, `_record_planner_cost` (pure cost-tracking helpers per Codex — no Flask coupling, safe to move now)
+- `_extract_usage`, `_record_planner_cost` (pure cost-tracking helpers per Codex — no Flask coupling; `PLANNER_COSTS_FILE` constant moves together)
 
-**Deferred to later PRs to avoid service↔route import cycles:**
+**Constants moved with their sole consumers (3):** `PLANNER_COSTS_FILE`, `_REQUIRED_FIELDS`, `_DEFAULT_POINTS`.
+
+**`_classify_question_type` deferred to PR2** — AST analysis (2026-04-15 pre-execution check, confirmed by Codex + Gemini) showed it calls 5 PR2 functions (`_is_identification_question`, `_detect_primary_shape`, `_detect_mode`, `_looks_like_graphing_question`, `_extract_equations_from_text`) and references `_ALL_GEOMETRY_TYPES` constant. Moving it alone creates NameError-at-call-time in the service module.
+
+**Also deferred to later PRs to avoid service↔route import cycles:**
 - `_post_process_assignment` — orchestrator calls `_hydrate_question` (moves PR2), `_validate_question_quality` (moves PR3), `_auto_fix_flagged_questions` (moves PR4). Stays in planner_routes.py until **PR5** when all callees have migrated.
 - `_hydrate_question` — dispatcher calls 12 sub-hydrators (move PR2 together).
 
 Add re-export shim in planner_routes.py so the moved functions remain callable at the old path for any tests that import directly from planner_routes.
 
-### PR2 — Hydrator dispatcher + all sub-hydrators + text/geometry utilities
-Move `_hydrate_question` dispatcher together with all 12 sub-hydrators (`_hydrate_matching`, `_hydrate_geometry`, `_hydrate_data_table`, etc.), `_infer_editable_columns`, and the geometry/text utility suite (`_detect_*`, `_extract_*` except `_infer_editable_columns`, `_looks_like_*`, `_is_identification_question`, `_infer_shape_answer`, `_split_markdown_table`, `_compute_geometry_answer`). Breaks the PR1 cycle: dispatcher and its callees now co-located in the service. Shim continues re-exporting to planner_routes.
+**Safety rails added in PR1:**
+- AST bound-name completeness test for service module (walks `LOAD_GLOBAL` bytecode, asserts all resolve — catches the NameError class automatically for all future PRs).
+- Execution-based shim test (calls each moved function with minimal input, not just `callable()` assertion).
+
+### PR2 — Classifier + hydrator dispatcher + all sub-hydrators + text/geometry utilities
+Move `_classify_question_type` (deferred from PR1 — now co-located with its 5 callees) together with `_hydrate_question` dispatcher, all 12 sub-hydrators (`_hydrate_matching`, `_hydrate_geometry`, `_hydrate_data_table`, etc.), `_infer_editable_columns`, and the geometry/text utility suite (`_detect_*`, `_extract_*` except `_infer_editable_columns`, `_looks_like_*`, `_is_identification_question`, `_infer_shape_answer`, `_split_markdown_table`, `_compute_geometry_answer`). Dispatcher and its callees now co-located in the service. Shim continues re-exporting to planner_routes.
+
+**Constants moved with their consumers (9):** `_TRUSTED_AI_TYPES`, `_ALL_GEOMETRY_TYPES`, `_SHAPE_KEYWORDS`, `_POLYGON_SIDES`, `_MODE_KEYWORDS`, `_ANALYSIS_PATTERN`, `_CALC_KEYWORDS`, `_FORMULA_RE`, `_GEOMETRY_DEFAULTS`.
 
 ### PR3 — Quality validation + project filter + golden tests
 Move `_is_project_question`, `_validate_question_quality`, `_check_question_quality`. **ADD golden tests** that pin the 6-phase ordering end-to-end with known-input/known-output fixtures (Codex Gotcha #3). These tests lock the extraction contract before the riskiest PRs land.
+
+**Constant moved with its consumer (1):** `_PROJECT_KEYWORDS`.
 
 ### PR4 — Auto-fix with explicit context
 Move `_auto_fix_flagged_questions` behind a refactored signature that takes `user_id` and `client` as explicit parameters instead of pulling from Flask `g` and `backend.api_keys` (Codex Gotcha #1). Route call sites updated to pass the context. This is the ONLY non-byte-identical PR — the signature change is the risk surface; PR3's golden tests + handler smoke test guard the behavior.
@@ -155,9 +166,9 @@ Beyond standard workflow (branch + CI + Codex gates):
 
 | PR | Moves | Net planner_routes.py delta | Risk |
 |---|---|---|---|
-| PR1 (leaf helpers) | 9 pure helpers (`_classify_question_type`, `_validate_question`, `_enforce_question_count`, `_count_questions`, `_build_question_count_instruction`, `_normalize_points`, `_merge_usage`, `_extract_usage`, `_record_planner_cost`) ~250 LOC | −250 | Low — byte-identical move + shim; no cross-refs to unmoved code |
-| PR2 (hydrators) | `_hydrate_question` dispatcher + 12 sub-hydrators + `_infer_editable_columns` + ~10 text/geometry utils (~1400 LOC) | −1400 | Medium — large move but pure functions |
-| PR3 (quality + golden tests) | 3 quality functions (`_is_project_question`, `_validate_question_quality`, `_check_question_quality`) ~150 LOC + new golden test file + handler smoke | −150 | Medium — tests lock the contract before the risky PR4 |
+| PR1 (leaf helpers) | 8 pure helpers (`_validate_question`, `_enforce_question_count`, `_count_questions`, `_build_question_count_instruction`, `_normalize_points`, `_merge_usage`, `_extract_usage`, `_record_planner_cost`) + 3 constants (`PLANNER_COSTS_FILE`, `_REQUIRED_FIELDS`, `_DEFAULT_POINTS`) ~220 LOC | −220 | Low — byte-identical move + shim + AST completeness test; no cross-refs to unmoved code |
+| PR2 (classifier + hydrators) | `_classify_question_type` + `_hydrate_question` dispatcher + 12 sub-hydrators + `_infer_editable_columns` + ~10 text/geometry utils + 9 constants (`_TRUSTED_AI_TYPES`, `_ALL_GEOMETRY_TYPES`, `_SHAPE_KEYWORDS`, `_POLYGON_SIDES`, `_MODE_KEYWORDS`, `_ANALYSIS_PATTERN`, `_CALC_KEYWORDS`, `_FORMULA_RE`, `_GEOMETRY_DEFAULTS`) ~1430 LOC | −1430 | Medium — large move but pure functions; classifier co-located with its 5 callees |
+| PR3 (quality + golden tests) | 3 quality functions (`_is_project_question`, `_validate_question_quality`, `_check_question_quality`) + 1 constant (`_PROJECT_KEYWORDS`) ~150 LOC + new golden test file + handler smoke | −150 | Medium — tests lock the contract before the risky PR4 |
 | PR4 (auto-fix refactor) | `_auto_fix_flagged_questions` (~120 LOC) + signature refactor | −120 | HIGH — ONLY non-byte-identical PR (explicit context refactor). Route call sites must pass user_id/client explicitly. |
 | PR5 (orchestrator + cleanup) | `_post_process_assignment` orchestrator (~30 LOC — safe to move now that all callees are in the service) + `_build_subject_boundary_prompt` + `_build_section_categories_prompt` (~95 LOC) + shim removal + consumer migration | −125 | Low — drop-in path rewrites, no new cycles |
 

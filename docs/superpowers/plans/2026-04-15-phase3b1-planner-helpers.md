@@ -38,22 +38,26 @@ After all five PRs:
 
 **Files:**
 - Create: `backend/services/assignment_post_processing.py`
-- Modify: `backend/routes/planner_routes.py` (remove 9 helpers, add shim imports)
+- Modify: `backend/routes/planner_routes.py` (remove 8 helpers + 3 constants, add shim imports)
 - Create: `tests/test_planner_routes_shim.py`
 
-### Moved in PR1 (9 leaf helpers, no cross-refs to unmoved code)
+### Moved in PR1 (8 leaf helpers + 3 constants, no cross-refs to unmoved code)
 
-| Function | Current line | Role |
+| Name | Current line | Role |
 |---|---|---|
-| `_classify_question_type` | 744 | Phase 1 of pipeline — pure dict classifier |
 | `_validate_question` | 879 | Phase 3 — pure dict validator |
+| `_REQUIRED_FIELDS` | 850 | Constant — required-field map for `_validate_question` |
 | `_enforce_question_count` | 1905 | Phase 4a — count enforcement |
 | `_count_questions` | 1897 | Count helper (pure) |
 | `_build_question_count_instruction` | 1883 | Prompt fragment builder (pure) |
 | `_normalize_points` | 1977 | Phase 5 — points math (pure) |
+| `_DEFAULT_POINTS` | 1962 | Constant — default point values for `_normalize_points` |
 | `_merge_usage` | 1944 | Usage dict merge (pure) |
 | `_extract_usage` | 42 | Cost extraction (pure) |
 | `_record_planner_cost` | 59 | Cost logging (pure) |
+| `PLANNER_COSTS_FILE` | 56 | Constant — file path for `_record_planner_cost` |
+
+**`_classify_question_type` deferred to PR2** — calls 5 PR2 functions (`_is_identification_question`, `_detect_primary_shape`, `_detect_mode`, `_looks_like_graphing_question`, `_extract_equations_from_text`) + uses `_ALL_GEOMETRY_TYPES`. Confirmed by AST analysis + Codex + Gemini review (2026-04-15).
 
 ### Steps
 
@@ -88,19 +92,25 @@ Spec: docs/superpowers/specs/2026-04-15-phase3b1-planner-helpers-design.md
 # (Subagent: inspect each moved function's body; copy minimum imports.)
 ```
 
-- [ ] **Step 1.3: Move the 9 leaf helpers byte-identical**
+- [ ] **Step 1.3: Move the 8 leaf helpers + 3 constants byte-identical**
 
-For each of the 9 functions in the table above:
-1. Read the function body from `backend/routes/planner_routes.py` at the listed line.
-2. Copy the body into `backend/services/assignment_post_processing.py` (preserve comments, whitespace, and docstrings exactly).
-3. Remove the function from `planner_routes.py`.
+For each of the 8 functions AND 3 constants in the table above:
+1. Read the function/constant body from `backend/routes/planner_routes.py` at the listed line.
+2. Copy into `backend/services/assignment_post_processing.py` (preserve comments, whitespace, and docstrings exactly).
+3. Remove from `planner_routes.py`.
+
+Constants must move WITH their sole consumer (same PR — not deferred):
+- `PLANNER_COSTS_FILE` (L56) → moves with `_record_planner_cost`
+- `_REQUIRED_FIELDS` (L850) → moves with `_validate_question`
+- `_DEFAULT_POINTS` (L1962) → moves with `_normalize_points`
 
 Add required imports at the top of the new service module. For each function, check what it references:
-- `_classify_question_type`: uses `re` (already likely imported for text matching)
-- `_validate_question`: uses basic dict ops
-- `_normalize_points`: uses `math.isclose` or similar — check the body
-- `_extract_usage`, `_record_planner_cost`: may use `logging` or `print`
+- `_validate_question`: uses `_REQUIRED_FIELDS` (moved together), basic dict ops
+- `_normalize_points`: uses `_DEFAULT_POINTS` (moved together), basic math
+- `_extract_usage`: uses `MODEL_PRICING` (imported from `assignment_grader`)
+- `_record_planner_cost`: uses `PLANNER_COSTS_FILE` (moved together), `os`, `json`, `time`
 - `_count_questions`: pure dict iteration
+- `_enforce_question_count`: calls `_count_questions` (same PR)
 
 - [ ] **Step 1.4: Add re-export shim in `backend/routes/planner_routes.py`**
 
@@ -112,7 +122,6 @@ At the TOP of `planner_routes.py` (after existing imports but before `planner_bp
 # from backend.routes.planner_routes. Shim deleted in PR5 after all consumers
 # migrate to the canonical path.
 from backend.services.assignment_post_processing import (
-    _classify_question_type,
     _validate_question,
     _enforce_question_count,
     _count_questions,
@@ -121,19 +130,25 @@ from backend.services.assignment_post_processing import (
     _merge_usage,
     _extract_usage,
     _record_planner_cost,
+    PLANNER_COSTS_FILE,
+    _REQUIRED_FIELDS,
+    _DEFAULT_POINTS,
 )
 ```
 
-- [ ] **Step 1.5: Write shim guard test**
+- [ ] **Step 1.5: Write shim guard test + execution-based test + AST completeness test**
 
 Create `/Users/alexc/Downloads/Graider/tests/test_planner_routes_shim.py`:
 
 ```python
-"""Transitional shim guard for Phase 3b1.
+"""Transitional shim guard + safety rails for Phase 3b1.
 
 Pins that backend.routes.planner_routes continues to re-export the helpers
 moved to backend.services.assignment_post_processing across PRs 1-4.
 Deleted in PR5 when shim is removed.
+
+Also includes execution-based tests (not just callable() checks) and
+AST bound-name completeness test for the service module.
 """
 import sys
 
@@ -143,7 +158,6 @@ def test_planner_routes_reexports_pr1_leaf_helpers():
     sys.path.insert(0, "backend")
     try:
         from routes.planner_routes import (
-            _classify_question_type,
             _validate_question,
             _enforce_question_count,
             _count_questions,
@@ -152,13 +166,19 @@ def test_planner_routes_reexports_pr1_leaf_helpers():
             _merge_usage,
             _extract_usage,
             _record_planner_cost,
+            PLANNER_COSTS_FILE,
+            _REQUIRED_FIELDS,
+            _DEFAULT_POINTS,
         )
         for fn in (
-            _classify_question_type, _validate_question, _enforce_question_count,
+            _validate_question, _enforce_question_count,
             _count_questions, _build_question_count_instruction, _normalize_points,
             _merge_usage, _extract_usage, _record_planner_cost,
         ):
             assert callable(fn)
+        assert isinstance(PLANNER_COSTS_FILE, str)
+        assert isinstance(_REQUIRED_FIELDS, dict)
+        assert isinstance(_DEFAULT_POINTS, dict)
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
@@ -169,7 +189,6 @@ def test_assignment_post_processing_module_is_canonical():
     sys.path.insert(0, "backend")
     try:
         from services.assignment_post_processing import (
-            _classify_question_type,
             _validate_question,
             _enforce_question_count,
             _count_questions,
@@ -180,7 +199,7 @@ def test_assignment_post_processing_module_is_canonical():
             _record_planner_cost,
         )
         for fn in (
-            _classify_question_type, _validate_question, _enforce_question_count,
+            _validate_question, _enforce_question_count,
             _count_questions, _build_question_count_instruction, _normalize_points,
             _merge_usage, _extract_usage, _record_planner_cost,
         ):
@@ -188,16 +207,97 @@ def test_assignment_post_processing_module_is_canonical():
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
+
+
+def test_pr1_helpers_execute_without_nameerror():
+    """Execute each PR1 helper with minimal input — catches NameError bombs.
+
+    callable(fn) only checks that the function object exists. This test
+    actually CALLS each function to ensure LOAD_GLOBAL instructions in
+    the function body resolve (the exact bug class Phase 3a PR3 had with
+    DOCUMENTS_DIR and _check_batch_calibration).
+    """
+    from backend.services.assignment_post_processing import (
+        _validate_question,
+        _enforce_question_count,
+        _count_questions,
+        _build_question_count_instruction,
+        _normalize_points,
+        _merge_usage,
+        _extract_usage,
+    )
+
+    # _validate_question — pass a minimal question dict
+    q = {"question_type": "short_answer", "question": "test"}
+    _validate_question(q)
+
+    # _count_questions — empty assignment
+    assert _count_questions({}) == 0
+    assert _count_questions({"sections": [{"questions": [{"q": 1}]}]}) == 1
+
+    # _build_question_count_instruction — minimal config
+    result = _build_question_count_instruction({"totalQuestions": 5})
+    assert "5" in result
+
+    # _enforce_question_count — empty assignment
+    a, u = _enforce_question_count({"sections": []}, 10)
+    assert u is None
+
+    # _normalize_points — empty assignment
+    _normalize_points({"sections": []})
+
+    # _merge_usage — empty + empty
+    assert _merge_usage(None, None) is None
+    assert _merge_usage(None, {"cost": 1}) == {"cost": 1}
+
+    # _extract_usage — None completion
+    assert _extract_usage(None) is None
+
+
+def test_service_module_global_refs_all_resolve():
+    """AST bound-name completeness for assignment_post_processing.py.
+
+    Walks LOAD_GLOBAL bytecode instructions across all functions in the
+    service module. Asserts every referenced name resolves to the module's
+    namespace, a Python builtin, or a known external import. Catches the
+    entire NameError bug class automatically on every future edit.
+
+    Same pattern as Phase 3a's test_pipeline_global_refs_all_resolve.
+    """
+    import dis
+    import types
+    import builtins
+    import importlib
+    mod = importlib.import_module("backend.services.assignment_post_processing")
+
+    mod_names = set(dir(mod))
+    builtin_names = set(dir(builtins))
+
+    # Allowlist for names that are resolved via other mechanisms
+    # (e.g., lazy imports inside function bodies, or names injected at runtime)
+    ALLOWLIST = set()
+
+    missing = []
+    for name, obj in vars(mod).items():
+        if not isinstance(obj, types.FunctionType):
+            continue
+        for instr in dis.get_instructions(obj):
+            if instr.opname in ("LOAD_GLOBAL", "LOAD_ATTR") and instr.opname == "LOAD_GLOBAL":
+                ref = instr.argval
+                if ref not in mod_names and ref not in builtin_names and ref not in ALLOWLIST:
+                    missing.append(f"{name}() -> {ref}")
+
+    assert not missing, f"Unresolved globals in service module: {missing}"
 ```
 
-- [ ] **Step 1.6: Run shim tests — expect both pass**
+- [ ] **Step 1.6: Run shim + safety tests — expect all 4 pass**
 
 ```bash
 source venv/bin/activate
 python -m pytest tests/test_planner_routes_shim.py -v
 ```
 
-Expected: 2 passed.
+Expected: 4 passed (reexports, canonical, execution, AST completeness).
 
 - [ ] **Step 1.7: Run SIS suite + full suite**
 
@@ -213,8 +313,11 @@ Expected: SIS 180/180; full suite passes; coverage ≥ 32%.
 Ask Codex to verify:
 1. Only `backend/routes/planner_routes.py`, `backend/services/assignment_post_processing.py`, `tests/test_planner_routes_shim.py` changed.
 2. Each moved function body byte-identical (scripted AST diff).
-3. Shim imports all 9 names.
-4. No Clever/ClassLink/OneRoster file modifications.
+3. Each moved constant byte-identical.
+4. Shim imports all 8 functions + 3 constants (11 names total).
+5. No Clever/ClassLink/OneRoster file modifications.
+6. AST completeness test passes (no unresolved LOAD_GLOBAL).
+7. Execution-based test passes (no NameError on actual calls).
 
 Address any HOLD, re-verify, then proceed.
 
@@ -222,52 +325,62 @@ Address any HOLD, re-verify, then proceed.
 
 ```bash
 git add backend/routes/planner_routes.py backend/services/assignment_post_processing.py tests/test_planner_routes_shim.py
-git commit -m "refactor: extract 9 leaf helpers to assignment_post_processing (Phase 3b1 PR1)"
+git commit -m "refactor: extract 8 leaf helpers + 3 constants to assignment_post_processing (Phase 3b1 PR1)"
 git push origin feat/phase3b1-pr1-leaf-helpers
-gh pr create --title "refactor: Phase 3b1 PR1 — leaf helpers" --body "PR1 of 5. 9 leaf helpers moved byte-identical; shim keeps backwards-compat."
+gh pr create --title "refactor: Phase 3b1 PR1 — leaf helpers" --body "PR1 of 5. 8 leaf helpers + 3 constants moved byte-identical; shim keeps backwards-compat. Includes AST completeness + execution-based safety tests."
 ```
 
 Wait for CI green + user merge signoff.
 
 ---
 
-## Task 2 (PR2): Hydrators + geometry/text utilities
+## Task 2 (PR2): Classifier + hydrators + geometry/text utilities
 
 **Files:**
-- Modify: `backend/services/assignment_post_processing.py` (add dispatcher + sub-hydrators + utils)
-- Modify: `backend/routes/planner_routes.py` (remove the functions; extend shim)
+- Modify: `backend/services/assignment_post_processing.py` (add classifier + dispatcher + sub-hydrators + utils + 9 constants)
+- Modify: `backend/routes/planner_routes.py` (remove the functions + constants; extend shim)
 - Modify: `tests/test_planner_routes_shim.py` (add shim guards for new names)
 
 ### Moved in PR2
 
-`_hydrate_question` dispatcher (line 892) + 12 sub-hydrators + `_infer_editable_columns` + 10 text/geometry utilities:
+`_classify_question_type` (deferred from PR1) + `_hydrate_question` dispatcher (line 892) + 12 sub-hydrators + `_infer_editable_columns` + 10 text/geometry utilities + 9 constants:
 
-| Function | Current line |
-|---|---|
-| `_hydrate_question` | 892 |
-| `_hydrate_matching` | 1007 |
-| `_hydrate_geometry` | 1071 |
-| `_infer_editable_columns` | 1107 |
-| `_hydrate_data_table` | 1167 |
-| `_hydrate_box_plot` | 1224 |
-| `_hydrate_dot_plot` | 1251 |
-| `_hydrate_stem_and_leaf` | 1266 |
-| `_hydrate_transformations` | 1286 |
-| `_hydrate_fraction_model` | 1334 |
-| `_hydrate_unit_circle` | 1348 |
-| `_hydrate_protractor` | 1386 |
-| `_hydrate_grid_match` | 1406 |
-| `_hydrate_inline_dropdown` | 1418 |
-| `_detect_primary_shape` | 1496 |
-| `_detect_mode` | 1542 |
-| `_is_identification_question` | 1551 |
-| `_infer_shape_answer` | 1566 |
-| `_looks_like_graphing_question` | 1591 |
-| `_extract_equations_from_text` | 1606 |
-| `_split_markdown_table` | 1639 |
-| `_extract_dimensions_from_text` | 1698 |
-| `_extract_pythagorean_sides` | 1793 |
-| `_compute_geometry_answer` | 2027 |
+| Name | Current line | Type |
+|---|---|---|
+| `_classify_question_type` | 744 | Phase 1 classifier (deferred from PR1 — needs its 5 callees below) |
+| `_TRUSTED_AI_TYPES` | 735 | Constant — trusted AI type set for `_classify_question_type` |
+| `_ALL_GEOMETRY_TYPES` | 1488 | Constant — geometry type set (shared by classifier + hydrator) |
+| `_hydrate_question` | 892 | Phase 2 dispatcher |
+| `_hydrate_matching` | 1007 | Sub-hydrator |
+| `_hydrate_geometry` | 1071 | Sub-hydrator |
+| `_GEOMETRY_DEFAULTS` | 1866 | Constant — default geometry dimensions |
+| `_infer_editable_columns` | 1107 | Helper for `_hydrate_data_table` |
+| `_ANALYSIS_PATTERN` | 1093 | Constant — regex for `_hydrate_data_table` |
+| `_CALC_KEYWORDS` | 1098 | Constant — keywords for `_infer_editable_columns` |
+| `_FORMULA_RE` | 1102 | Constant — regex for `_infer_editable_columns` |
+| `_hydrate_data_table` | 1167 | Sub-hydrator |
+| `_hydrate_box_plot` | 1224 | Sub-hydrator |
+| `_hydrate_dot_plot` | 1251 | Sub-hydrator |
+| `_hydrate_stem_and_leaf` | 1266 | Sub-hydrator |
+| `_hydrate_transformations` | 1286 | Sub-hydrator |
+| `_hydrate_fraction_model` | 1334 | Sub-hydrator |
+| `_hydrate_unit_circle` | 1348 | Sub-hydrator |
+| `_hydrate_protractor` | 1386 | Sub-hydrator |
+| `_hydrate_grid_match` | 1406 | Sub-hydrator |
+| `_hydrate_inline_dropdown` | 1418 | Sub-hydrator |
+| `_SHAPE_KEYWORDS` | 1431 | Constant — shape detection keywords |
+| `_POLYGON_SIDES` | 1464 | Constant — polygon side mappings |
+| `_MODE_KEYWORDS` | 1469 | Constant — mode detection keywords |
+| `_detect_primary_shape` | 1496 | Geometry text util |
+| `_detect_mode` | 1542 | Geometry text util |
+| `_is_identification_question` | 1551 | Geometry text util |
+| `_infer_shape_answer` | 1566 | Geometry text util |
+| `_looks_like_graphing_question` | 1591 | Graphing text util |
+| `_extract_equations_from_text` | 1606 | Graphing text util |
+| `_split_markdown_table` | 1639 | Text util |
+| `_extract_dimensions_from_text` | 1698 | Geometry text util |
+| `_extract_pythagorean_sides` | 1793 | Geometry text util |
+| `_compute_geometry_answer` | 2027 | Geometry text util |
 
 ### Steps
 
@@ -280,10 +393,12 @@ git checkout -b feat/phase3b1-pr2-hydrators
 
 - [ ] **Step 2.2: Move the dispatcher + sub-hydrators + utilities byte-identical**
 
-For each function in the table above:
+For each function AND constant in the table above:
 1. Read the body from `backend/routes/planner_routes.py` at the listed line.
 2. Append to `backend/services/assignment_post_processing.py` (preserve everything exactly).
 3. Remove from `planner_routes.py`.
+
+Constants must move WITH their consumer functions (same PR). 9 constants total in PR2.
 
 Add any new imports at the top of the service module (`re`, `math`, etc.) that these functions need but PR1 helpers didn't.
 
@@ -294,7 +409,6 @@ Update the shim import block introduced in PR1:
 ```python
 from backend.services.assignment_post_processing import (
     # PR1
-    _classify_question_type,
     _validate_question,
     _enforce_question_count,
     _count_questions,
@@ -303,11 +417,21 @@ from backend.services.assignment_post_processing import (
     _merge_usage,
     _extract_usage,
     _record_planner_cost,
+    PLANNER_COSTS_FILE,
+    _REQUIRED_FIELDS,
+    _DEFAULT_POINTS,
     # PR2
+    _classify_question_type,
+    _TRUSTED_AI_TYPES,
+    _ALL_GEOMETRY_TYPES,
     _hydrate_question,
     _hydrate_matching,
     _hydrate_geometry,
+    _GEOMETRY_DEFAULTS,
     _infer_editable_columns,
+    _ANALYSIS_PATTERN,
+    _CALC_KEYWORDS,
+    _FORMULA_RE,
     _hydrate_data_table,
     _hydrate_box_plot,
     _hydrate_dot_plot,
@@ -318,6 +442,9 @@ from backend.services.assignment_post_processing import (
     _hydrate_protractor,
     _hydrate_grid_match,
     _hydrate_inline_dropdown,
+    _SHAPE_KEYWORDS,
+    _POLYGON_SIDES,
+    _MODE_KEYWORDS,
     _detect_primary_shape,
     _detect_mode,
     _is_identification_question,
@@ -376,17 +503,19 @@ Expected: all pass; SIS 180/180; coverage ≥ 32%.
 
 Ask Codex:
 1. Only 3 files changed (planner_routes, service, shim test).
-2. Each of the 24 moved function bodies byte-identical.
-3. `_hydrate_question` dispatcher now calls sub-hydrators in its own module (no cycle).
-4. No SIS files touched.
+2. Each of the 25 moved function bodies + 9 constants byte-identical.
+3. `_classify_question_type` now co-located with its 5 callees (no cross-module NameError).
+4. `_hydrate_question` dispatcher now calls sub-hydrators in its own module (no cycle).
+5. No SIS files touched.
+6. AST completeness test still passes with expanded module.
 
 - [ ] **Step 2.7: Commit, push, open PR**
 
 ```bash
 git add backend/routes/planner_routes.py backend/services/assignment_post_processing.py tests/test_planner_routes_shim.py
-git commit -m "refactor: extract hydrators + geometry/text utils (Phase 3b1 PR2)"
+git commit -m "refactor: extract classifier + hydrators + geometry/text utils (Phase 3b1 PR2)"
 git push origin feat/phase3b1-pr2-hydrators
-gh pr create --title "refactor: Phase 3b1 PR2 — hydrators + utils" --body "PR2 of 5. 24 functions moved byte-identical."
+gh pr create --title "refactor: Phase 3b1 PR2 — classifier + hydrators + utils" --body "PR2 of 5. 25 functions + 9 constants moved byte-identical. _classify_question_type co-located with its 5 callees."
 ```
 
 ---
@@ -401,11 +530,12 @@ gh pr create --title "refactor: Phase 3b1 PR2 — hydrators + utils" --body "PR2
 
 ### Moved in PR3
 
-| Function | Current line |
-|---|---|
-| `_is_project_question` | 257 |
-| `_validate_question_quality` | 280 |
-| `_check_question_quality` | 322 |
+| Name | Current line | Type |
+|---|---|---|
+| `_is_project_question` | 257 | Quality filter function |
+| `_PROJECT_KEYWORDS` | 240 | Constant — project detection keywords for `_is_project_question` |
+| `_validate_question_quality` | 280 | Quality validation orchestrator |
+| `_check_question_quality` | 322 | Quality check implementation |
 
 ### Steps
 
@@ -416,17 +546,18 @@ git checkout main && git pull origin main
 git checkout -b feat/phase3b1-pr3-quality-goldens
 ```
 
-- [ ] **Step 3.2: Move 3 quality functions byte-identical**
+- [ ] **Step 3.2: Move 3 quality functions + 1 constant byte-identical**
 
-Same pattern as PR1/PR2: copy each body from planner_routes.py, paste into assignment_post_processing.py, delete from planner_routes.py.
+Same pattern as PR1/PR2: copy each body from planner_routes.py, paste into assignment_post_processing.py, delete from planner_routes.py. `_PROJECT_KEYWORDS` constant moves with `_is_project_question`.
 
 - [ ] **Step 3.3: Extend shim**
 
-Add 3 more names to the shim import block:
+Add 4 more names to the shim import block:
 
 ```python
     # PR3
     _is_project_question,
+    _PROJECT_KEYWORDS,
     _validate_question_quality,
     _check_question_quality,
 ```
