@@ -108,8 +108,13 @@ def test_pr1_helpers_execute_without_nameerror(tmp_path):
 # ── Test 4: AST bound-name completeness ───────────────────────────────────
 
 def test_service_module_global_refs_all_resolve():
-    """Walk every function in assignment_post_processing via dis, verify all
-    LOAD_GLOBAL instructions resolve to a name in the module's namespace or builtins."""
+    """Walk every function defined in assignment_post_processing via dis, verify all
+    LOAD_GLOBAL instructions resolve to a name in the module's namespace or builtins.
+
+    Only functions whose __module__ matches the service module are inspected —
+    imported helpers like `with_retry` reference names in *their* module's namespace,
+    not ours, and would produce spurious failures.
+    """
     import backend.services.assignment_post_processing as svc
 
     builtin_names = set(dir(builtins))
@@ -119,6 +124,10 @@ def test_service_module_global_refs_all_resolve():
     for attr_name in dir(svc):
         obj = getattr(svc, attr_name)
         if not callable(obj) or not isinstance(obj, types.FunctionType):
+            continue
+        # Skip functions imported from other modules — they resolve their globals
+        # in their own module namespace, not ours.
+        if getattr(obj, '__module__', None) != svc.__name__:
             continue
         for instr in dis.get_instructions(obj):
             if instr.opname == 'LOAD_GLOBAL':
@@ -277,3 +286,31 @@ def test_pr3_canonical_path_importable():
 
     # 1 constant
     assert isinstance(svc._PROJECT_KEYWORDS, _re.Pattern)
+
+
+# ── Test 10: PR4 service/adapter split ────────────────────────────────────
+
+def test_pr4_auto_fix_has_service_and_adapter():
+    """PR4: service module has explicit-context signature; planner_routes has Flask adapter."""
+    import inspect
+    from backend.services.assignment_post_processing import (
+        _auto_fix_flagged_questions as service_fn,
+    )
+    from backend.routes.planner_routes import (
+        _auto_fix_flagged_questions as adapter_fn,
+    )
+
+    # Service function: keyword-only user_id + client params
+    service_sig = inspect.signature(service_fn)
+    assert 'user_id' in service_sig.parameters
+    assert 'client' in service_sig.parameters
+    assert service_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert service_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
+
+    # Adapter function: NO user_id/client in signature (pulls from Flask g internally)
+    adapter_sig = inspect.signature(adapter_fn)
+    assert 'user_id' not in adapter_sig.parameters
+    assert 'client' not in adapter_sig.parameters
+
+    # They are NOT the same object — adapter wraps service
+    assert service_fn is not adapter_fn
