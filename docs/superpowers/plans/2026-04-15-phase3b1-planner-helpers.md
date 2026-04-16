@@ -492,6 +492,19 @@ def test_planner_routes_reexports_pr2_hydrators():
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
+
+
+def test_pr2_canonical_path_importable():
+    """PR2-moved names must also be importable via canonical service path."""
+    from backend.services.assignment_post_processing import (
+        _classify_question_type,
+        _TRUSTED_AI_TYPES, _ALL_GEOMETRY_TYPES,
+        _hydrate_question, _hydrate_matching, _hydrate_geometry,
+        _detect_primary_shape, _detect_mode, _is_identification_question,
+    )
+    assert callable(_classify_question_type)
+    assert callable(_hydrate_question)
+    assert isinstance(_TRUSTED_AI_TYPES, frozenset)
 ```
 
 - [ ] **Step 2.5: Run tests + SIS + full suite**
