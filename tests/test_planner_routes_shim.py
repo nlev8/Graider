@@ -245,3 +245,35 @@ def test_pr2_classify_executes_without_nameerror():
     result = _classify_question_type(q)
     assert result is None
     assert 'question_type' in q
+
+
+# ── Test 8: planner_routes re-exports all PR3 names ───────────────────────
+
+def test_planner_routes_reexports_pr3_names():
+    """All 3 PR3 functions + 1 PR3 constant must be importable via planner_routes."""
+    import re as _re
+    import backend.routes.planner_routes as pr
+
+    # 3 functions
+    assert callable(pr._is_project_question)
+    assert callable(pr._validate_question_quality)
+    assert callable(pr._check_question_quality)
+
+    # 1 constant
+    assert isinstance(pr._PROJECT_KEYWORDS, _re.Pattern)
+
+
+# ── Test 9: canonical path exports same PR3 names ─────────────────────────
+
+def test_pr3_canonical_path_importable():
+    """All PR3 names must be importable directly from assignment_post_processing."""
+    import re as _re
+    import backend.services.assignment_post_processing as svc
+
+    # 3 functions
+    assert callable(svc._is_project_question)
+    assert callable(svc._validate_question_quality)
+    assert callable(svc._check_question_quality)
+
+    # 1 constant
+    assert isinstance(svc._PROJECT_KEYWORDS, _re.Pattern)
