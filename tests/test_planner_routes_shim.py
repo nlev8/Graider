@@ -12,9 +12,10 @@ shim:
 2. Every bound-name reference in every function defined in the service
    module resolves to a module-global or builtin — AST-level completeness
    guard that would have caught the PR1 scope bug.
-3. The adapter/service pair for `_auto_fix_flagged_questions` keeps its
-   expected shape (service has explicit-context signature; adapter in
-   planner_routes has the Flask-coupled signature).
+3. `_auto_fix_flagged_questions` in the service module retains its
+   explicit-context signature (`*, user_id, client`). Flask context
+   extraction lives in `planner_routes._get_openai_context()` and is
+   passed into `_post_process_assignment` at each route-handler call site.
 """
 import types
 import dis
@@ -105,29 +106,36 @@ def test_service_module_global_refs_all_resolve():
     assert unresolved == [], f"Unresolved LOAD_GLOBAL references: {unresolved}"
 
 
-# ── Test 3: adapter/service pair for _auto_fix_flagged_questions ─────────
+# ── Test 3: explicit-context contract for auto-fix + orchestrator ────────
 
-def test_pr4_auto_fix_has_service_and_adapter():
-    """Service module has explicit-context signature; planner_routes has Flask adapter."""
+def test_auto_fix_and_orchestrator_explicit_context_contract():
+    """Service module exposes explicit-context kwargs; Flask extraction lives in routes."""
     import inspect
     from backend.services.assignment_post_processing import (
-        _auto_fix_flagged_questions as service_fn,
+        _auto_fix_flagged_questions,
+        _post_process_assignment,
     )
-    from backend.routes.planner_routes import (
-        _auto_fix_flagged_questions as adapter_fn,
-    )
+    from backend.routes.planner_routes import _get_openai_context
 
-    # Service function: keyword-only user_id + client params
-    service_sig = inspect.signature(service_fn)
-    assert 'user_id' in service_sig.parameters
-    assert 'client' in service_sig.parameters
-    assert service_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
-    assert service_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
+    # _auto_fix_flagged_questions: keyword-only user_id + client
+    fix_sig = inspect.signature(_auto_fix_flagged_questions)
+    assert fix_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert fix_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
 
-    # Adapter function: NO user_id/client in signature (pulls from Flask g internally)
-    adapter_sig = inspect.signature(adapter_fn)
-    assert 'user_id' not in adapter_sig.parameters
-    assert 'client' not in adapter_sig.parameters
+    # _post_process_assignment: keyword-only user_id + client pass-through
+    pp_sig = inspect.signature(_post_process_assignment)
+    assert pp_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert pp_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
 
-    # They are NOT the same object — adapter wraps service
-    assert service_fn is not adapter_fn
+    # _get_openai_context is the route-side Flask extraction helper
+    ctx_sig = inspect.signature(_get_openai_context)
+    assert len(ctx_sig.parameters) == 0  # zero-arg helper returns (user_id, client)
+
+    # Service module has NO Flask imports in _auto_fix_flagged_questions body
+    import dis
+    fix_globals = {
+        instr.argval for instr in dis.get_instructions(_auto_fix_flagged_questions)
+        if instr.opname == 'LOAD_GLOBAL'
+    }
+    assert 'g' not in fix_globals
+    assert 'flask' not in fix_globals

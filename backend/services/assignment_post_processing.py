@@ -1866,40 +1866,18 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
     Uses gpt-4o-mini to review and fix problematic questions in a single batch.
     Only called when deterministic checks flag issues.
 
-    Explicit-context signature (PR4): callers pass `user_id` and an OpenAI
-    `client` instance — preferred path, zero Flask coupling.
-
-    Fallback (PR5): when `_post_process_assignment` (also in this module)
-    calls this byte-identically without user_id/client, fall back to pulling
-    from Flask `g` and building a client from `backend.api_keys`. This keeps
-    the orchestrator body unchanged while preserving production behavior.
-    If neither explicit args nor a live Flask context provide a usable key,
-    the function silently returns (matches the old adapter's behavior).
+    Pure service function — zero Flask coupling. Callers MUST pass `user_id`
+    and an OpenAI `client` instance. If either is missing, the function
+    silently returns (no auto-fix possible without AI context).
     """
     # Collect questions with errors (not just warnings)
     error_items = [w for w in warnings if w['severity'] == 'error']
     if not error_items:
         return  # Only auto-fix errors; warnings are shown to teacher
 
-    # PR5 fallback: when called from the byte-identical _post_process_assignment
-    # (co-located in this module) without user_id/client, derive them from
-    # Flask g + backend.api_keys. Silently return on any failure so the
-    # grading pipeline never crashes on an auto-fix setup issue.
+    # Without explicit context we cannot call the AI — silent return.
     if user_id is None or client is None:
-        try:
-            from flask import g as _flask_g
-            from backend.api_keys import get_api_key as _get_api_key
-            from openai import OpenAI as _OpenAI
-            if user_id is None:
-                user_id = getattr(_flask_g, 'user_id', 'local-dev')
-            if client is None:
-                api_key = _get_api_key('openai', user_id)
-                if not api_key or api_key.startswith('your-'):
-                    return
-                client = _OpenAI(api_key=api_key)
-        except Exception as e:
-            print(f"Auto-fix quality check failed (non-fatal): {e}")
-            return
+        return
 
     # Build batch for AI review
     batch = []
@@ -2091,7 +2069,8 @@ def _build_section_categories_prompt(categories, subject='', question_type_count
 
 
 def _post_process_assignment(assignment, target_question_count=None, target_total_points=None,
-                             subject=None, grade=None, valid_standard_codes=None):
+                             subject=None, grade=None, valid_standard_codes=None, *,
+                             user_id=None, client=None):
     """Unified 6-phase deterministic post-processing pipeline.
 
     Phase 1: _classify_question_type — assigns question_type from text/structure
@@ -2101,6 +2080,10 @@ def _post_process_assignment(assignment, target_question_count=None, target_tota
     Phase 3c: _validate_question_quality — flags problematic questions
     Phase 4: _enforce_question_count — trims/pads to target (if provided)
     Phase 5: _normalize_points — ensures points sum correctly
+
+    Pass `user_id` + `client` to enable AI-powered auto-fix when quality
+    warnings fire. Omit them to skip auto-fix (callers without an AI
+    context still get the rest of the pipeline).
     """
     if not assignment or not isinstance(assignment, dict):
         return assignment, None
@@ -2125,7 +2108,8 @@ def _post_process_assignment(assignment, target_question_count=None, target_tota
                                           valid_standard_codes=valid_standard_codes)
     if warnings:
         _auto_fix_flagged_questions(assignment, warnings, subject=subject, grade=grade,
-                                    valid_standard_codes=valid_standard_codes)
+                                    valid_standard_codes=valid_standard_codes,
+                                    user_id=user_id, client=client)
     extra_usage = None
     # Phase 4: Enforce question count (if target given)
     if target_question_count is not None:

@@ -83,15 +83,12 @@ _PYTHAGOREAN_RE = _re.compile(
 )
 
 
-def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
-                                valid_standard_codes=None):
-    """Flask-aware adapter for the service's _auto_fix_flagged_questions.
+def _get_openai_context():
+    """Extract user_id + OpenAI client for the post-processing pipeline.
 
-    Pulls user_id from Flask g and instantiates the OpenAI client from
-    backend.api_keys. Delegates to the pure service function with
-    explicit context. Preserves the behavior of the original:
-    - Missing/stub api_key → silent return
-    - Exception in setup → print non-fatal message, return
+    Pulls user_id from Flask g and instantiates the OpenAI client from the
+    caller's configured API key. Returns (None, None) on any failure so
+    the pipeline runs deterministically and silently skips AI auto-fix.
     """
     try:
         from openai import OpenAI
@@ -99,21 +96,11 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
         user_id = getattr(g, 'user_id', 'local-dev')
         api_key = get_api_key('openai', user_id)
         if not api_key or api_key.startswith('your-'):
-            return
-        client = OpenAI(api_key=api_key)
+            return None, None
+        return user_id, OpenAI(api_key=api_key)
     except Exception as e:
-        print(f"Auto-fix quality check failed (non-fatal): {e}")
-        return
-
-    # Delegate to pure service function with injected context
-    from backend.services.assignment_post_processing import (
-        _auto_fix_flagged_questions as _service_auto_fix,
-    )
-    _service_auto_fix(
-        assignment, warnings, subject=subject, grade=grade,
-        valid_standard_codes=valid_standard_codes,
-        user_id=user_id, client=client,
-    )
+        print(f"OpenAI context unavailable (non-fatal): {e}")
+        return None, None
 
 
 planner_bp = Blueprint('planner', __name__)
@@ -1240,10 +1227,12 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
                 if content_type == 'Assignment':
                     target_q = config.get('totalQuestions', 10)
                     lp_std_codes = [s.split(':')[0].strip() for s in selected_standards if ':' in s]
+                    _ctx_uid, _ctx_client = _get_openai_context()
                     plan, extra_usage = _post_process_assignment(
                         plan, target_q, target_total_points=100,
                         subject=config.get('subject'), grade=config.get('grade'),
-                        valid_standard_codes=lp_std_codes if lp_std_codes else None)
+                        valid_standard_codes=lp_std_codes if lp_std_codes else None,
+                        user_id=_ctx_uid, client=_ctx_client)
                     if extra_usage:
                         for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
                             total_usage[k] += extra_usage.get(k, 0)
@@ -1277,10 +1266,12 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
         if content_type == 'Assignment':
             target_q = config.get('totalQuestions', 10)
             lp_std_codes = [s.split(':')[0].strip() for s in selected_standards if ':' in s]
+            _ctx_uid, _ctx_client = _get_openai_context()
             plan, extra_usage = _post_process_assignment(
                 plan, target_q, target_total_points=100,
                 subject=config.get('subject'), grade=config.get('grade'),
-                valid_standard_codes=lp_std_codes if lp_std_codes else None)
+                valid_standard_codes=lp_std_codes if lp_std_codes else None,
+                user_id=_ctx_uid, client=_ctx_client)
         else:
             extra_usage = None
             # Strip stray sections/questions from non-assignment types so
@@ -1936,9 +1927,11 @@ Make the questions specific to the lesson content. Include a variety of question
         content = completion.choices[0].message.content
         assignment = json.loads(content)
         target_q = config.get('totalQuestions', 10)
+        _ctx_uid, _ctx_client = _get_openai_context()
         assignment, extra_usage = _post_process_assignment(
             assignment, target_q, target_total_points=100,
-            subject=config.get('subject'), grade=config.get('grade'))
+            subject=config.get('subject'), grade=config.get('grade'),
+            user_id=_ctx_uid, client=_ctx_client)
         # Embed context for portal grading (so AI grading has full 18-factor access)
         assignment['grade_level'] = config.get('grade', config.get('grade_level', '7'))
         assignment['subject'] = config.get('subject', 'General')
@@ -4214,10 +4207,12 @@ Generate a complete assessment in this JSON format:
 
         content = completion.choices[0].message.content
         assessment = json.loads(content)
+        _ctx_uid, _ctx_client = _get_openai_context()
         assessment, _ = _post_process_assignment(
             assessment, target_total_points=total_points,
             subject=config.get('subject'), grade=config.get('grade'),
-            valid_standard_codes=input_standard_codes)
+            valid_standard_codes=input_standard_codes,
+            user_id=_ctx_uid, client=_ctx_client)
 
         # Collect any quality warnings attached to questions
         quality_warnings = []

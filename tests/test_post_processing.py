@@ -293,7 +293,7 @@ class TestPostProcessAssignment:
     """Full pipeline e2e (mocking AI-dependent phases)."""
 
     @patch('backend.services.assignment_post_processing._validate_question_quality', return_value=[])
-    @patch('backend.routes.planner_routes._auto_fix_flagged_questions')
+    @patch('backend.services.assignment_post_processing._auto_fix_flagged_questions')
     def test_mc_question_full_pipeline(self, mock_fix, mock_validate):
         assignment = {
             'sections': [{
@@ -311,7 +311,7 @@ class TestPostProcessAssignment:
         assert q['points'] == _DEFAULT_POINTS['multiple_choice']
 
     @patch('backend.services.assignment_post_processing._validate_question_quality', return_value=[])
-    @patch('backend.routes.planner_routes._auto_fix_flagged_questions')
+    @patch('backend.services.assignment_post_processing._auto_fix_flagged_questions')
     def test_project_question_filtered_out(self, mock_fix, mock_validate):
         assignment = {
             'sections': [{
@@ -328,7 +328,7 @@ class TestPostProcessAssignment:
         assert 'infographic' not in questions[0]['question']
 
     @patch('backend.services.assignment_post_processing._validate_question_quality', return_value=[])
-    @patch('backend.routes.planner_routes._auto_fix_flagged_questions')
+    @patch('backend.services.assignment_post_processing._auto_fix_flagged_questions')
     def test_empty_section_removed_after_filtering(self, mock_fix, mock_validate):
         assignment = {
             'sections': [
@@ -357,14 +357,14 @@ class TestPostProcessAssignment:
         assert extra is None
 
     @patch('backend.services.assignment_post_processing._validate_question_quality', return_value=[])
-    @patch('backend.routes.planner_routes._auto_fix_flagged_questions')
+    @patch('backend.services.assignment_post_processing._auto_fix_flagged_questions')
     def test_empty_assignment_no_sections(self, mock_fix, mock_validate):
         assignment = {'sections': []}
         result, _ = _post_process_assignment(assignment)
         assert result['sections'] == []
 
     @patch('backend.services.assignment_post_processing._validate_question_quality', return_value=[])
-    @patch('backend.routes.planner_routes._auto_fix_flagged_questions')
+    @patch('backend.services.assignment_post_processing._auto_fix_flagged_questions')
     def test_multiple_sections_mixed_types(self, mock_fix, mock_validate):
         assignment = {
             'sections': [
