@@ -460,29 +460,35 @@ from backend.services.assignment_post_processing import (
 
 - [ ] **Step 2.4: Extend `tests/test_planner_routes_shim.py`**
 
-Add a new test asserting all 24 PR2 names are importable via shim AND from canonical path:
+Add a new test asserting all 25 PR2 functions + 9 constants are importable via shim AND from canonical path:
 
 ```python
 def test_planner_routes_reexports_pr2_hydrators():
-    """PR2-moved hydrators + utils remain importable via the shim."""
+    """PR2-moved classifier + hydrators + utils + constants remain importable via the shim."""
     import sys
     sys.path.insert(0, "backend")
     try:
         from routes.planner_routes import (
+            _classify_question_type,
+            _TRUSTED_AI_TYPES, _ALL_GEOMETRY_TYPES,
             _hydrate_question, _hydrate_matching, _hydrate_geometry,
-            _infer_editable_columns, _hydrate_data_table, _hydrate_box_plot,
+            _GEOMETRY_DEFAULTS,
+            _infer_editable_columns, _ANALYSIS_PATTERN, _CALC_KEYWORDS, _FORMULA_RE,
+            _hydrate_data_table, _hydrate_box_plot,
             _hydrate_dot_plot, _hydrate_stem_and_leaf, _hydrate_transformations,
             _hydrate_fraction_model, _hydrate_unit_circle, _hydrate_protractor,
             _hydrate_grid_match, _hydrate_inline_dropdown,
+            _SHAPE_KEYWORDS, _POLYGON_SIDES, _MODE_KEYWORDS,
             _detect_primary_shape, _detect_mode, _is_identification_question,
             _infer_shape_answer, _looks_like_graphing_question,
             _extract_equations_from_text, _split_markdown_table,
             _extract_dimensions_from_text, _extract_pythagorean_sides,
             _compute_geometry_answer,
         )
-        # All must be callable
-        for fn in (_hydrate_question, _hydrate_matching, _hydrate_geometry):
+        for fn in (_classify_question_type, _hydrate_question, _hydrate_matching, _hydrate_geometry):
             assert callable(fn)
+        assert isinstance(_TRUSTED_AI_TYPES, frozenset)
+        assert isinstance(_ALL_GEOMETRY_TYPES, (set, frozenset))
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
@@ -1027,9 +1033,9 @@ Update memory: `/Users/alexc/.claude/projects/-Users-alexc-Downloads-Graider/mem
 
 **1. Spec coverage:**
 - Hard constraint "byte-identical for PRs 1, 2, 3, 5; PR4 exception" → reflected in Task 4 Step 4.2-4.4 + other tasks' byte-identical reminders.
-- 9-helper PR1 → Task 1.
-- 24-function PR2 (dispatcher + 12 sub-hydrators + `_infer_editable_columns` + 10 utils) → Task 2 table.
-- 3-function PR3 + golden tests + handler smoke → Task 3 Steps 3.2, 3.4.
+- 8-function + 3-constant PR1 → Task 1. (`_classify_question_type` deferred to PR2 per scope correction.)
+- 25-function + 9-constant PR2 (classifier + dispatcher + 12 sub-hydrators + `_infer_editable_columns` + 10 utils) → Task 2 table.
+- 3-function + 1-constant PR3 + golden tests + handler smoke → Task 3 Steps 3.2, 3.4.
 - PR4 explicit-context refactor → Task 4 full.
 - PR5 orchestrator + prompt builders + shim removal → Task 5 full.
 - Gotcha #1 (Flask-coupled auto-fix) → Task 4.
