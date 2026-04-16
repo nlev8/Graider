@@ -1471,3 +1471,381 @@ def _compute_geometry_answer(qt, q):
                 return opp / math.sin(theta_rad)
 
     return None  # Unsupported (shape, mode) pair
+
+
+# ── PR3: Quality Validation (project filter + quality checks) ─────────────
+# Phase 3b1 PR3 additions. Moved byte-identical from backend/routes/planner_routes.py.
+
+
+# ── Phase 3b: Project/activity question filter ──────────────────────────────
+import re as _re
+
+_PROJECT_KEYWORDS = _re.compile(
+    r'\b('
+    r'create\s+(a|an|the)\s+(infographic|poster|brochure|pamphlet|flyer|diorama|model|presentation|slideshow|video|song|rap|skit|collage|mural|display|exhibit|portfolio|scrapbook|comic|storyboard)'
+    r'|design\s+(a|an|the)\s+(infographic|poster|brochure|pamphlet|flyer|project|presentation|website|app)'
+    r'|using\s+(canva|google\s+slides?|powerpoint|prezi|piktochart|adobe|imovie|tinkercad|scratch|desmos|geogebra)'
+    r'|submit\s+(the|your|a|an)\s+(infographic|poster|project|presentation|video|recording|physical)'
+    r'|build\s+(a|an)\s+(model|diorama|prototype|display)'
+    r'|perform\s+(a|an)\s+(skit|presentation|demonstration)'
+    r'|collaborate\s+with\s+(your|a)\s+(partner|group|classmates?|team)'
+    r'|work\s+with\s+(your|a)\s+(partner|group|classmates?|team)\s+to'
+    r'|present\s+(your|the)\s+(findings|project|work|results)\s+to\s+(the\s+)?class'
+    r'|record\s+(a|yourself|your)\s+(video|audio|presentation|screencast)'
+    r')\b',
+    _re.IGNORECASE,
+)
+
+
+def _is_project_question(q):
+    """Return True if the question is a project/activity that can't be answered in the portal."""
+    text = q.get('question', '')
+    return bool(_PROJECT_KEYWORDS.search(text))
+
+
+# ── Phase 3c: Question quality validation ─────────────────────────────────
+
+
+def _validate_question_quality(assignment, subject=None, grade=None, valid_standard_codes=None):
+    """Phase 3c: Run deterministic quality checks on every question.
+
+    Returns a list of warning dicts: [{section_idx, question_idx, issue, severity}]
+    Attaches 'warning' and 'warning_severity' fields to flagged questions.
+    Also removes duplicate questions (identical question text).
+    """
+    warnings = []
+
+    # ── Deduplication: remove questions with identical text ──
+    seen_texts = set()
+    for section in assignment.get('sections', []):
+        unique_questions = []
+        for q in section.get('questions', []):
+            text = (q.get('question', '') or '').strip().lower()
+            if text and text in seen_texts:
+                # Skip duplicate — don't even include it
+                continue
+            if text:
+                seen_texts.add(text)
+            unique_questions.append(q)
+        section['questions'] = unique_questions
+
+    for sIdx, section in enumerate(assignment.get('sections', [])):
+        for qIdx, q in enumerate(section.get('questions', [])):
+            issues = _check_question_quality(q, subject=subject, grade=grade,
+                                             valid_standard_codes=valid_standard_codes)
+            if issues:
+                # Use the most severe issue as the primary warning
+                worst = max(issues, key=lambda i: 0 if i['severity'] == 'warning' else 1)
+                q['warning'] = worst['issue']
+                q['warning_severity'] = worst['severity']
+                for issue in issues:
+                    warnings.append({
+                        'section_idx': sIdx,
+                        'question_idx': qIdx,
+                        'issue': issue['issue'],
+                        'severity': issue['severity'],
+                    })
+    return warnings
+
+
+def _check_question_quality(q, subject=None, grade=None, valid_standard_codes=None):
+    """Run Tier A deterministic checks on a single question. Returns list of issues."""
+    issues = []
+    qt = q.get('question_type', q.get('type', 'short_answer'))
+    text = q.get('question', '')
+
+    # Check 1: Removed — point values are corrected by _normalize_points (Phase 5).
+    # Flagging here produced confusing "Auto-fixed: Invalid point value" warnings
+    # on questions whose points were already corrected by the time the user sees them.
+
+    # Check 2: Answer exists for non-essay/extended types
+    non_answer_types = {'essay', 'extended_response', 'multi_part'}
+    if qt not in non_answer_types:
+        answer = q.get('answer')
+        if answer is None or answer == '' or answer == []:
+            issues.append({'issue': 'Missing answer key', 'severity': 'warning'})
+
+    # Check 3: MC answer matches one of the options
+    if qt == 'multiple_choice' and q.get('options') and q.get('answer'):
+        answer = str(q['answer']).strip()
+        options = q.get('options', [])
+        option_texts = [str(o).strip() for o in options]
+        # Check both direct match and letter-prefix match (e.g., "B" matches "B) ...")
+        matched = False
+        for opt_text in option_texts:
+            if answer == opt_text or opt_text.startswith(answer + ')') or opt_text.startswith(answer + '.'):
+                matched = True
+                break
+        # Also check if answer is a letter A-D and we have that many options
+        if not matched and len(answer) == 1 and answer.upper() in 'ABCDEFGH':
+            idx = ord(answer.upper()) - ord('A')
+            if 0 <= idx < len(options):
+                matched = True
+        if not matched:
+            issues.append({'issue': 'Answer does not match any option', 'severity': 'error'})
+
+    # Check 4: Over-determined math problems (more givens than needed)
+    if qt in ('math_equation', 'geometry', 'short_answer', 'triangle', 'circle',
+              'rectangle', 'trapezoid', 'regular_polygon'):
+        numbers = _re.findall(r'\b\d+(?:\.\d+)?\b', text)
+        # More than 5 distinct numeric values in a single question is suspicious
+        distinct_nums = set(numbers)
+        if len(distinct_nums) > 5:
+            issues.append({
+                'issue': f'Potentially over-determined: {len(distinct_nums)} numeric values given',
+                'severity': 'warning',
+            })
+
+    # Check 5: Tangent-secant consistency check
+    if 'tangent' in text.lower() and ('secant' in text.lower() or 'external' in text.lower()):
+        numbers = [float(n) for n in _re.findall(r'\b\d+(?:\.\d+)?\b', text)]
+        if len(numbers) >= 3:
+            # t² = external × whole — check if any triplet satisfies this
+            from itertools import combinations
+            found_valid = False
+            for combo in combinations(numbers, 3):
+                a, b, c = sorted(combo)
+                # Check t² = ext × whole in all permutations
+                if (abs(a * a - b * c) < 0.5 or abs(b * b - a * c) < 0.5
+                        or abs(c * c - a * b) < 0.5):
+                    found_valid = True
+                    break
+            if not found_valid and len(numbers) >= 3:
+                issues.append({
+                    'issue': 'Given values may not satisfy tangent-secant theorem (t² = external × whole)',
+                    'severity': 'warning',
+                })
+
+    # Check 6: Pythagorean theorem consistency
+    if _re.search(r'\b(right\s+triangle|hypotenuse)\b', text, _re.IGNORECASE):
+        numbers = [float(n) for n in _re.findall(r'\b\d+(?:\.\d+)?\b', text)]
+        if len(numbers) >= 3:
+            from itertools import combinations
+            found_valid = False
+            for combo in combinations(numbers, 3):
+                a, b, c = sorted(combo)
+                if abs(a * a + b * b - c * c) < 0.5:
+                    found_valid = True
+                    break
+            if not found_valid:
+                issues.append({
+                    'issue': 'Given values may not satisfy Pythagorean theorem (a² + b² = c²)',
+                    'severity': 'warning',
+                })
+
+    # Check 7: Mixing 3D physical with 2D geometry
+    _3d_words = _re.compile(
+        r'\b(tower|cable|pole|building|ladder|wall|ground|shadow|height of the)\b', _re.IGNORECASE
+    )
+    _2d_theorems = _re.compile(
+        r'\b(inscribed angle|central angle|chord[- ]chord|tangent[- ]secant|secant[- ]secant|'
+        r'arc length|sector area|power of a point)\b', _re.IGNORECASE
+    )
+    if _3d_words.search(text) and _2d_theorems.search(text):
+        issues.append({
+            'issue': 'Mixes 3D physical scenario with 2D circle theorem — may confuse students',
+            'severity': 'warning',
+        })
+
+    # ── ELA / Reading checks ──────────────────────────────────────────────
+
+    # Check 8: Question references a passage/text but none is included
+    _PASSAGE_REF_RE = _re.compile(
+        r'\b(according to the (passage|text|article|excerpt|author|narrator|speaker|poem|story)'
+        r'|refer(ring)? to the (passage|text|reading|excerpt|article)'
+        r'|based on the (passage|text|reading|excerpt|article)'
+        r'|in the (passage|text|excerpt|article|poem|story) above'
+        r'|re-?read (the |this )?(passage|text|excerpt|paragraph|stanza)'
+        r'|the (passage|text|excerpt|article|poem|story) (states|describes|suggests|implies|reveals|shows|demonstrates|indicates|mentions)'
+        r'|use (textual |)evidence from the (passage|text|reading)'
+        r'|cite evidence from the (passage|text))\b',
+        _re.IGNORECASE,
+    )
+    if _PASSAGE_REF_RE.search(text):
+        # A question referencing a passage should have substantial text embedding it.
+        # Heuristic: if the question is under 300 chars, the passage is almost certainly
+        # not included inline — it's a dangling reference.
+        if len(text) < 300:
+            issues.append({
+                'issue': 'References a passage/text but no passage appears to be included in the question',
+                'severity': 'error',
+            })
+
+    # Check 9: "Read the following" but passage is too short to be real
+    _READ_FOLLOWING_RE = _re.compile(
+        r'\b(read the following|read this)\s+(passage|text|excerpt|article|poem|paragraph|story)',
+        _re.IGNORECASE,
+    )
+    if _READ_FOLLOWING_RE.search(text):
+        # Split on the directive to find the passage portion
+        parts = _READ_FOLLOWING_RE.split(text, maxsplit=1)
+        # The passage body is everything after the "read the following passage" phrase
+        passage_body = parts[-1] if len(parts) > 1 else ''
+        # Strip any trailing question portion (often after a blank line or question mark)
+        passage_lines = passage_body.split('\n')
+        passage_content = '\n'.join(
+            ln for ln in passage_lines
+            if not _re.match(r'^\s*(question|what |how |why |which |where |when |who |identify|explain|describe|analyze|compare|evaluate)', ln, _re.IGNORECASE)
+        ).strip()
+        if len(passage_content) < 80:
+            issues.append({
+                'issue': 'Says "read the following" but the included passage is too short or missing',
+                'severity': 'warning',
+            })
+
+    # Check 10: Quotation/citation without attribution
+    _QUOTE_RE = _re.compile(r'[""\u201c].{15,}?[""\u201d]')
+    _ATTRIBUTION_RE = _re.compile(
+        r'\b(according to|written by|by [A-Z]|from ["\u201c]|—\s*[A-Z]|\(\w+,?\s*\d{4}\))\b',
+        _re.IGNORECASE,
+    )
+    if _QUOTE_RE.search(text) and not _ATTRIBUTION_RE.search(text):
+        # Only flag for ELA-style questions (not math word problems that might quote a scenario)
+        if qt in ('short_answer', 'extended_response', 'essay', 'multiple_choice'):
+            # Check the quote isn't just a math expression or short phrase
+            quote_match = _QUOTE_RE.search(text)
+            quoted_text = quote_match.group(0) if quote_match else ''
+            if len(quoted_text) > 40:  # Substantial quote, not a term definition
+                issues.append({
+                    'issue': 'Contains a substantial quotation without clear attribution (author/source)',
+                    'severity': 'warning',
+                })
+
+    # ── Science checks ─────────────────────────────────────────────────────
+
+    # Check 11: Mixed unit systems (metric + imperial in same question)
+    _METRIC_UNITS = _re.compile(
+        r'\b(\d+(?:\.\d+)?)\s*'
+        r'(meters?|m\b|centimeters?|cm\b|millimeters?|mm\b|kilometers?|km\b'
+        r'|grams?|g\b|kilograms?|kg\b|milligrams?|mg\b'
+        r'|liters?|L\b|milliliters?|mL\b'
+        r'|degrees?\s*[Cc]elsius|°C'
+        r'|newtons?|N\b|joules?|J\b|watts?|W\b|pascals?|Pa\b)',
+        _re.IGNORECASE,
+    )
+    _IMPERIAL_UNITS = _re.compile(
+        r'\b(\d+(?:\.\d+)?)\s*'
+        r'(feet|ft\b|foot|inches|in\b|inch|yards?|yd\b|miles?\b|mi\b'
+        r'|pounds?|lbs?\b|ounces?|oz\b|tons?\b'
+        r'|gallons?|gal\b|quarts?|qt\b|pints?\b|cups?\b|fl\.?\s*oz'
+        r'|degrees?\s*[Ff]ahrenheit|°F)',
+        _re.IGNORECASE,
+    )
+    has_metric = _METRIC_UNITS.search(text)
+    has_imperial = _IMPERIAL_UNITS.search(text)
+    # Mixed units are a problem UNLESS the question is explicitly about conversion
+    _CONVERSION_HINT = _re.compile(
+        r'\b(convert|conversion|equivalent|how many .+ in|express .+ in|change .+ to)\b',
+        _re.IGNORECASE,
+    )
+    if has_metric and has_imperial and not _CONVERSION_HINT.search(text):
+        issues.append({
+            'issue': 'Mixes metric and imperial units — use one system or make it a conversion problem',
+            'severity': 'warning',
+        })
+
+    # Check 12: Physically impossible values for common quantities
+    _IMPOSSIBLE_CHECKS = [
+        # (pattern to find value+unit, validation function, issue message)
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Cc]elsius|°C)\b'),
+            lambda v: v < -273.15,
+            'Temperature below absolute zero ({val}°C)',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Ff]ahrenheit|°F)\b'),
+            lambda v: v < -459.67,
+            'Temperature below absolute zero ({val}°F)',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:kg|kilograms?|g|grams?|mg|milligrams?|lbs?|pounds?|oz|ounces?)\b', _re.IGNORECASE),
+            lambda v: v < 0,
+            'Negative mass ({val}) — mass cannot be negative',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:m/s|km/h|mph|ft/s)\b', _re.IGNORECASE),
+            lambda v: v < 0,
+            'Negative speed ({val}) — speed is a scalar and cannot be negative',
+        ),
+        (
+            _re.compile(r'\bpH\s+(?:of\s+)?(-?\d+(?:\.\d+)?)\b', _re.IGNORECASE),
+            lambda v: v < 0 or v > 14,
+            'pH value {val} is outside valid range (0-14)',
+        ),
+        (
+            _re.compile(r'(\d+(?:\.\d+)?)\s*%\s*(?:concentration|efficiency|probability|chance|yield)\b', _re.IGNORECASE),
+            lambda v: v > 100,
+            'Percentage value {val}% exceeds 100%',
+        ),
+    ]
+    for pattern, is_invalid, msg_template in _IMPOSSIBLE_CHECKS:
+        match = pattern.search(text)
+        if match:
+            try:
+                val = float(match.group(1))
+                if is_invalid(val):
+                    issues.append({
+                        'issue': msg_template.format(val=match.group(1)),
+                        'severity': 'error',
+                    })
+            except (ValueError, IndexError):
+                pass
+
+    # Check 13: Science question references a diagram/figure/lab setup not provided
+    _FIGURE_REF_RE = _re.compile(
+        r'\b(refer to (the |)(figure|diagram|graph|chart|table|image|picture|illustration|lab setup|model|map)'
+        r'|(figure|diagram|graph|chart|table|image|illustration)\s+(above|below|on the right|on the left|shown)'
+        r'|see (the |)(figure|diagram|graph|chart) (\d+|[A-Z])'
+        r'|use the (data|graph|chart|diagram|figure|table) (provided|shown|above|below))\b',
+        _re.IGNORECASE,
+    )
+    if _FIGURE_REF_RE.search(text):
+        # For data_table type, the table data is in structured fields — that's fine
+        if qt not in ('data_table', 'box_plot', 'dot_plot', 'stem_and_leaf',
+                       'bar_chart', 'coordinate_plane', 'function_graph'):
+            # Check if there's structured visual data attached
+            has_visual_data = any(q.get(f) for f in [
+                'chart_data', 'data', 'expected_data', 'column_headers',
+                'original_vertices', 'points_to_plot',
+            ])
+            if not has_visual_data and len(text) < 500:
+                issues.append({
+                    'issue': 'References a figure/diagram/graph but no visual data is included in the question',
+                    'severity': 'error',
+                })
+
+    # Check 14: data_table with empty or placeholder expected_data
+    if qt == 'data_table':
+        expected = q.get('expected_data', [])
+        if not expected:
+            issues.append({
+                'issue': 'Data table has no expected_data — table will appear empty',
+                'severity': 'error',
+            })
+        elif expected:
+            # Check if all cells are empty/placeholder
+            all_empty = all(
+                all(cell == '' or cell is None for cell in row)
+                for row in expected
+            )
+            if all_empty:
+                issues.append({
+                    'issue': 'Data table expected_data contains only empty values — no correct answers provided',
+                    'severity': 'error',
+                })
+
+    # CHECK 15: Off-subject detection via standards validation
+    if valid_standard_codes and q.get('standard'):
+        q_standard = q['standard'].strip()
+        if q_standard and q_standard not in valid_standard_codes:
+            # Check prefix match (e.g., "SC.6.E" matches "SC.6.E.7.1")
+            prefix_match = any(q_standard.startswith(code) or code.startswith(q_standard)
+                               for code in valid_standard_codes)
+            if not prefix_match:
+                issues.append({
+                    'issue': f'Off-subject: standard "{q_standard}" is not in the selected '
+                             f'{subject or "subject"} standards for grade {grade or "this grade"}',
+                    'severity': 'error',
+                })
+
+    return issues
