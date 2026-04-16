@@ -117,15 +117,20 @@ def test_auto_fix_and_orchestrator_explicit_context_contract():
     )
     from backend.routes.planner_routes import _get_openai_context
 
-    # _auto_fix_flagged_questions: keyword-only user_id + client
+    # _auto_fix_flagged_questions: keyword-only user_id + client, both default to None
+    # (None → silent-return guard; matches prior adapter's missing-api-key semantics).
     fix_sig = inspect.signature(_auto_fix_flagged_questions)
     assert fix_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
     assert fix_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert fix_sig.parameters['user_id'].default is None
+    assert fix_sig.parameters['client'].default is None
 
     # _post_process_assignment: keyword-only user_id + client pass-through
     pp_sig = inspect.signature(_post_process_assignment)
     assert pp_sig.parameters['user_id'].kind == inspect.Parameter.KEYWORD_ONLY
     assert pp_sig.parameters['client'].kind == inspect.Parameter.KEYWORD_ONLY
+    assert pp_sig.parameters['user_id'].default is None
+    assert pp_sig.parameters['client'].default is None
 
     # _get_openai_context is the route-side Flask extraction helper
     ctx_sig = inspect.signature(_get_openai_context)
@@ -139,3 +144,8 @@ def test_auto_fix_and_orchestrator_explicit_context_contract():
     }
     assert 'g' not in fix_globals
     assert 'flask' not in fix_globals
+
+    # Prompt builders remain reachable via planner_routes for legacy test imports.
+    import backend.routes.planner_routes as pr
+    assert callable(pr._build_subject_boundary_prompt)
+    assert callable(pr._build_section_categories_prompt)
