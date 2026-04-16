@@ -40,7 +40,11 @@ CREATE TABLE IF NOT EXISTS submissions (
     percentage NUMERIC(5,2),
     time_taken_seconds INTEGER,
     submitted_at TIMESTAMPTZ DEFAULT NOW(),
-    graded_at TIMESTAMPTZ
+    graded_at TIMESTAMPTZ,
+    status TEXT DEFAULT 'queued',
+    grading_task_id TEXT,
+    grading_started_at TIMESTAMPTZ,
+    error_message TEXT
 );
 
 -- Indexes for submissions
@@ -150,3 +154,24 @@ VALUES (
     'Test Teacher'
 );
 */
+
+-- ============================================
+-- Phase 4.1 Celery migration (2026-04-16)
+-- ============================================
+ALTER TABLE submissions
+    ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'queued',
+    ADD COLUMN IF NOT EXISTS grading_task_id TEXT,
+    ADD COLUMN IF NOT EXISTS grading_started_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS error_message TEXT;
+
+ALTER TABLE student_submissions
+    ADD COLUMN IF NOT EXISTS grading_task_id TEXT,
+    ADD COLUMN IF NOT EXISTS grading_started_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS error_message TEXT;
+
+-- Backfill status on existing submissions rows
+UPDATE submissions SET status = 'queued' WHERE status IS NULL;
+
+-- Index for reclaim queries
+CREATE INDEX IF NOT EXISTS idx_submissions_status_started
+    ON submissions (status, grading_started_at);
