@@ -3,6 +3,8 @@
 Extracted from backend/routes/planner_routes.py during Phase 3b1.
 PR1: leaf helpers with no cross-refs to unmoved code.
 PR2: classifier + hydrators + geometry/text utilities.
+PR3: quality validators + project filter.
+PR4: explicit-context _auto_fix_flagged_questions (Flask-decoupled).
 Spec: docs/superpowers/specs/2026-04-15-phase3b1-planner-helpers-design.md
 """
 import os
@@ -15,6 +17,7 @@ import re
 # Import MODEL_PRICING for token cost tracking
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from assignment_grader import MODEL_PRICING
+from backend.retry import with_retry
 
 
 def _extract_usage(completion, model="gpt-4o"):
@@ -1849,3 +1852,114 @@ def _check_question_quality(q, subject=None, grade=None, valid_standard_codes=No
                 })
 
     return issues
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PR4: _auto_fix_flagged_questions with explicit-context signature
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
+                                valid_standard_codes=None, *, user_id, client):
+    """Attempt AI-powered fixes for flagged questions.
+
+    Uses gpt-4o-mini to review and fix problematic questions in a single batch.
+    Only called when deterministic checks flag issues.
+
+    This is the pure service version — no Flask dependency. The caller
+    (adapter in planner_routes.py) is responsible for extracting user_id
+    and instantiating the OpenAI client from g.user_id + backend.api_keys.
+    """
+    # Collect questions with errors (not just warnings)
+    error_items = [w for w in warnings if w['severity'] == 'error']
+    if not error_items:
+        return  # Only auto-fix errors; warnings are shown to teacher
+
+    # Build batch for AI review
+    batch = []
+    for w in error_items:
+        s = assignment.get('sections', [])[w['section_idx']]
+        q = s.get('questions', [])[w['question_idx']]
+        batch.append({
+            'index': len(batch),
+            'section_idx': w['section_idx'],
+            'question_idx': w['question_idx'],
+            'question': q.get('question', ''),
+            'question_type': q.get('question_type', 'short_answer'),
+            'answer': q.get('answer', ''),
+            'options': q.get('options', []),
+            'issue': w['issue'],
+        })
+
+    if not batch or len(batch) > 20:
+        return  # Skip if too many — something else is wrong
+
+    try:
+        subject_constraint = ''
+        if subject and grade:
+            standards_hint = ''
+            if valid_standard_codes:
+                standards_hint = f"\n- Valid standard codes: {', '.join(valid_standard_codes[:10])}"
+            subject_constraint = f"""
+CRITICAL SUBJECT CONSTRAINT:
+- All fixed questions MUST be for {subject} at grade {grade} level{standards_hint}
+- If a question was flagged as off-subject, REPLACE it entirely with a {subject} question
+  that maps to one of the valid standard codes above
+"""
+
+        prompt = f"""Review these {len(batch)} questions that were flagged for issues.
+For each, provide a corrected version. Return JSON array:
+[{{"index": 0, "fixed_question": "corrected question text", "fixed_answer": "corrected answer", "fixed_options": ["A) ...", ...] or null, "fixed_standard": "standard code or null"}}]
+{subject_constraint}
+Flagged questions:
+{json.dumps(batch, indent=2)}
+
+Rules:
+- Fix mathematical inconsistencies so given values are correct
+- For MC questions, ensure the answer matches one option
+- Keep the same difficulty level and topic
+- If flagged as off-subject, replace with an on-subject question for the correct standard
+- Return ONLY the JSON array, no other text"""
+
+        completion = with_retry(
+            lambda: client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You fix assessment questions. Return valid JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+            ),
+            label="auto_fix_flagged_questions",
+        )
+
+        content = completion.choices[0].message.content
+        result = json.loads(content)
+        fixes = result if isinstance(result, list) else result.get('fixes', result.get('questions', []))
+
+        # Apply fixes
+        for fix in fixes:
+            idx = fix.get('index')
+            if idx is None or idx >= len(batch):
+                continue
+            item = batch[idx]
+            s = assignment.get('sections', [])[item['section_idx']]
+            q = s.get('questions', [])[item['question_idx']]
+            if fix.get('fixed_question'):
+                q['question'] = fix['fixed_question']
+            if fix.get('fixed_answer'):
+                q['answer'] = fix['fixed_answer']
+            if fix.get('fixed_options') and isinstance(fix['fixed_options'], list):
+                q['options'] = fix['fixed_options']
+            if fix.get('fixed_standard'):
+                q['standard'] = fix['fixed_standard']
+            # Update warning to indicate it was auto-fixed
+            q['warning'] = f"Auto-fixed: {item['issue']}"
+            q['warning_severity'] = 'info'
+
+        usage = _extract_usage(completion, "gpt-4o-mini")
+        _record_planner_cost(usage)
+
+    except Exception as e:
+        print(f"Auto-fix quality check failed (non-fatal): {e}")
