@@ -1860,20 +1860,46 @@ def _check_question_quality(q, subject=None, grade=None, valid_standard_codes=No
 
 
 def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
-                                valid_standard_codes=None, *, user_id, client):
+                                valid_standard_codes=None, *, user_id=None, client=None):
     """Attempt AI-powered fixes for flagged questions.
 
     Uses gpt-4o-mini to review and fix problematic questions in a single batch.
     Only called when deterministic checks flag issues.
 
-    This is the pure service version — no Flask dependency. The caller
-    (adapter in planner_routes.py) is responsible for extracting user_id
-    and instantiating the OpenAI client from g.user_id + backend.api_keys.
+    Explicit-context signature (PR4): callers pass `user_id` and an OpenAI
+    `client` instance — preferred path, zero Flask coupling.
+
+    Fallback (PR5): when `_post_process_assignment` (also in this module)
+    calls this byte-identically without user_id/client, fall back to pulling
+    from Flask `g` and building a client from `backend.api_keys`. This keeps
+    the orchestrator body unchanged while preserving production behavior.
+    If neither explicit args nor a live Flask context provide a usable key,
+    the function silently returns (matches the old adapter's behavior).
     """
     # Collect questions with errors (not just warnings)
     error_items = [w for w in warnings if w['severity'] == 'error']
     if not error_items:
         return  # Only auto-fix errors; warnings are shown to teacher
+
+    # PR5 fallback: when called from the byte-identical _post_process_assignment
+    # (co-located in this module) without user_id/client, derive them from
+    # Flask g + backend.api_keys. Silently return on any failure so the
+    # grading pipeline never crashes on an auto-fix setup issue.
+    if user_id is None or client is None:
+        try:
+            from flask import g as _flask_g
+            from backend.api_keys import get_api_key as _get_api_key
+            from openai import OpenAI as _OpenAI
+            if user_id is None:
+                user_id = getattr(_flask_g, 'user_id', 'local-dev')
+            if client is None:
+                api_key = _get_api_key('openai', user_id)
+                if not api_key or api_key.startswith('your-'):
+                    return
+                client = _OpenAI(api_key=api_key)
+        except Exception as e:
+            print(f"Auto-fix quality check failed (non-fatal): {e}")
+            return
 
     # Build batch for AI review
     batch = []
@@ -1963,3 +1989,147 @@ Rules:
 
     except Exception as e:
         print(f"Auto-fix quality check failed (non-fatal): {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PR5: Orchestrator + prompt builders (moved byte-identical from planner_routes)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _build_subject_boundary_prompt(subject, grade, standard_codes=None):
+    """Build mandatory subject/grade boundary constraint for AI prompts."""
+    if not subject or not grade:
+        return ''
+
+    valid_codes_line = ''
+    if standard_codes:
+        valid_codes_line = (
+            f"\n- Valid standard codes for this assessment: {', '.join(standard_codes)}"
+            f"\n- ONLY use these exact standard codes in question 'standard' fields"
+        )
+
+    return f"""
+SUBJECT BOUNDARY CONSTRAINT (MANDATORY — VIOLATIONS WILL BE REJECTED):
+This content is EXCLUSIVELY for {subject} at grade {grade} level.
+- EVERY question MUST directly test {subject} content knowledge
+- EVERY question's "standard" field MUST reference one of the provided standards{valid_codes_line}
+- Ensure vocabulary and cognitive complexity are appropriate for grade {grade}
+- Do NOT generate questions that primarily test a different subject area
+- Cross-disciplinary skills (reading a graph, writing an explanation) are acceptable ONLY when they serve {subject} content
+- Questions violating these constraints will be automatically detected and regenerated
+"""
+
+
+def _build_section_categories_prompt(categories, subject='', question_type_counts=None):
+    """Build AI prompt section describing which assessment sections to generate."""
+    if not categories or not any(categories.values()):
+        return "Generate standard sections: Multiple Choice and Short Answer."
+
+    section_map = {
+        'multiple_choice': {
+            'name': 'Multiple Choice',
+            'instruction': 'Generate standard multiple choice questions with 4 options (A-D). Use type "multiple_choice".',
+        },
+        'short_answer': {
+            'name': 'Short Answer / Gridded Response',
+            'instruction': 'Generate short answer questions requiring 1-3 sentence responses or numeric answers. Use type "short_answer".',
+        },
+        'math_computation': {
+            'name': 'Math Computation',
+            'instruction': 'Generate math computation questions (solve equations, evaluate expressions, simplify). Use type "math_equation". Include the equation in the question text.',
+        },
+        'geometry_visual': {
+            'name': 'Geometry & Measurement',
+            'instruction': 'Generate geometry questions with interactive visuals. Use question_type "geometry" and include shape_type, dimensions, and measurement_type fields. Supported shapes: rectangle, triangle, circle, trapezoid, parallelogram, cylinder, cone, sphere, prism. Students interact with shape renderers — do NOT ask them to draw.',
+        },
+        'graphing': {
+            'name': 'Graphing & Coordinate Plane',
+            'instruction': 'Generate questions using interactive graphs. Use question_type "function_graph" (with x_range, y_range, correct_expressions as equation strings) for graphing lines/functions/systems. Use "coordinate_plane" (with min_val, max_val, points_to_plot as [x,y] pairs) for plotting points. Use "number_line" (with min_val, max_val, points_to_plot) for number lines. ALWAYS set the correct question_type and include all data fields — the system renders graphs programmatically from these fields.',
+        },
+        'data_analysis': {
+            'name': 'Data Analysis',
+            'instruction': 'Generate data analysis questions with interactive visuals. Use question_type "data_table" (with column_headers, row_labels, expected_data), "box_plot" (with data array, labels), "dot_plot" (with min_val/max_val/step, correct_dots), "stem_and_leaf" (with data, stems, correct_leaves), "bar_chart" (with chart_data). ALWAYS set the correct question_type and include all data fields.',
+        },
+        'extended_writing': {
+            'name': 'Extended Writing / Essay',
+            'instruction': 'Generate extended response questions requiring paragraph-length analysis with evidence. Use type "extended_response". Include a detailed rubric.',
+        },
+        'vocabulary': {
+            'name': 'Vocabulary / Matching',
+            'instruction': 'Generate vocabulary matching questions. Use type "matching" with terms and definitions arrays.',
+        },
+        'true_false': {
+            'name': 'True / False',
+            'instruction': 'Generate true/false statement evaluation questions. Use type "true_false".',
+        },
+        'florida_fast': {
+            'name': 'FL FAST Item Types',
+            'instruction': 'Generate Florida FAST-style items. Use "multiselect" (select all that apply with options array and correct indices array), "multi_part" (compound Part A/B with parts array where each part has its own question_type, options, answer, and points), "grid_match" (matrix matching with row_labels, column_labels, and correct 2D one-hot array), "inline_dropdown" (cloze with {0},{1} placeholders in question text and dropdowns array with options and correct index). These mirror the actual FAST test format.',
+        },
+    }
+
+    enabled = [k for k, v in categories.items() if v]
+    lines = ["ALLOWED section types (use ONLY the ones relevant to the topic/standards):"]
+    for i, key in enumerate(enabled, 1):
+        info = section_map.get(key, {})
+        count = (question_type_counts or {}).get(key, 0)
+        if count and count > 0:
+            lines.append("  - " + info.get('name', key) + " (EXACTLY " + str(count) + " questions): " + info.get('instruction', ''))
+        else:
+            lines.append("  - " + info.get('name', key) + ": " + info.get('instruction', ''))
+
+    disabled = [k for k, v in categories.items() if not v]
+    if disabled:
+        disabled_names = [section_map.get(k, {}).get('name', k) for k in disabled]
+        lines.append(f"\nNEVER include these section types: {', '.join(disabled_names)}")
+
+    lines.append("\nIMPORTANT: Only use section types that are relevant to the ACTUAL TOPIC being assessed.")
+    lines.append("Do NOT force a section type just because it is allowed — e.g., do NOT add a Geometry section to a statistics/data topic, do NOT add Data Analysis to a pure algebra topic.")
+    lines.append("Every question must directly relate to the standards and topic. Never generate filler questions from unrelated math domains.")
+    lines.append("Organize the assignment into separate sections, each with its own 'name', 'instructions', and 'questions' array.")
+    return '\n'.join(lines)
+
+
+def _post_process_assignment(assignment, target_question_count=None, target_total_points=None,
+                             subject=None, grade=None, valid_standard_codes=None):
+    """Unified 6-phase deterministic post-processing pipeline.
+
+    Phase 1: _classify_question_type — assigns question_type from text/structure
+    Phase 2: _hydrate_question — populates rendering fields (dimensions, answers, etc.)
+    Phase 3: _validate_question — downgrades broken questions to short_answer
+    Phase 3b: _filter_project_questions — removes project/activity prompts
+    Phase 3c: _validate_question_quality — flags problematic questions
+    Phase 4: _enforce_question_count — trims/pads to target (if provided)
+    Phase 5: _normalize_points — ensures points sum correctly
+    """
+    if not assignment or not isinstance(assignment, dict):
+        return assignment, None
+    for section in assignment.get('sections', []):
+        for q in section.get('questions', []):
+            _classify_question_type(q, section)   # Phase 1: Deterministic type
+            _hydrate_question(q)                   # Phase 2: Populate fields
+            _validate_question(q)                  # Phase 3: Downgrade if broken
+    # Phase 3b: Strip questions that are projects/activities (not answerable in portal)
+    for section in assignment.get('sections', []):
+        section['questions'] = [
+            q for q in section.get('questions', [])
+            if not _is_project_question(q)
+        ]
+    # Remove empty sections left after filtering
+    assignment['sections'] = [
+        s for s in assignment.get('sections', [])
+        if s.get('questions')
+    ]
+    # Phase 3c: Validate question quality (deterministic + optional AI fix)
+    warnings = _validate_question_quality(assignment, subject=subject, grade=grade,
+                                          valid_standard_codes=valid_standard_codes)
+    if warnings:
+        _auto_fix_flagged_questions(assignment, warnings, subject=subject, grade=grade,
+                                    valid_standard_codes=valid_standard_codes)
+    extra_usage = None
+    # Phase 4: Enforce question count (if target given)
+    if target_question_count is not None:
+        assignment, extra_usage = _enforce_question_count(assignment, target_question_count)
+    # Phase 5: Normalize points (always runs)
+    _normalize_points(assignment, target_total_points)
+    return assignment, extra_usage
