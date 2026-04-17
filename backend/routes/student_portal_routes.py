@@ -22,6 +22,29 @@ from backend.services.grading_service import grade_deterministic_question, grade
 from backend.observability import critical_path
 
 
+def _spawn_thread_grading(submission_id, assessment, answers, student_info,
+                         teacher_config, teacher_id, supabase_table,
+                         student_accommodations):
+    """Legacy thread-based portal grading spawn.
+
+    Kept as a callable for (a) the Celery enqueue-failure fallback path and
+    (b) the default path when CELERY_PORTAL_GRADING is off. Preserves
+    run_portal_grading_thread's full 8-arg contract including accommodations.
+
+    Phase 4.1 PR3 will delete the call site in this route (class-based
+    student_account_routes.py still uses threads, so the helper stays).
+    """
+    import threading
+    from backend.services.portal_grading import run_portal_grading_thread
+    thread = threading.Thread(
+        target=run_portal_grading_thread,
+        args=(submission_id, assessment, answers, student_info,
+              teacher_config, teacher_id, supabase_table, student_accommodations),
+        daemon=True,
+    )
+    thread.start()
+
+
 def generate_join_code():
     """Generate a unique 6-character join code (e.g., 'ABC123')."""
     chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -798,30 +821,61 @@ def submit_assessment(code):
 
         # Spawn multipass grading thread for written questions
         if needs_multipass:
-            from backend.services.portal_grading import run_portal_grading_thread
             from backend.services.grading_service import load_teacher_config
+
+            # Hoist context values that both the Celery path and the thread
+            # fallback need. Before Phase 4.1 these were constructed inline
+            # inside the threading.Thread(...) spawn.
             teacher_id = assessment_data.get("teacher_id") or ""
             teacher_config = load_teacher_config(teacher_id)
+            student_info = {"student_name": student_name, "student_id": "", "email": ""}
+            student_accommodations = assessment_data.get("settings", {}).get("student_accommodations", {})
 
-            # Get student accommodations from published assessment settings
-            published_accommodations = assessment_data.get("settings", {}).get("student_accommodations", {})
+            # Phase 4.1: feature-flag gated Celery enqueue + thread fallback.
+            # Flag is read at request time (no caching) so a Railway env-var
+            # update + rolling restart flips behavior cleanly.
+            use_celery = os.getenv('CELERY_PORTAL_GRADING', '0') == '1'
 
-            import threading
-            thread = threading.Thread(
-                target=run_portal_grading_thread,
-                args=(
-                    submission_id,
-                    assessment,
-                    answers,
-                    {"student_name": student_name, "student_id": "", "email": ""},
-                    teacher_config,
-                    teacher_id,
-                    "submissions",
-                ),
-                kwargs={"student_accommodations": published_accommodations},
-                daemon=True,
-            )
-            thread.start()
+            if use_celery:
+                from backend.tasks.grading_tasks import grade_portal_submission
+                # Enqueue-failure fallback — broker outage degrades to the
+                # legacy thread path so the student doesn't lose their
+                # submission. Catch ONLY known broker-communication failures:
+                #   - kombu.exceptions.OperationalError: Kombu's wrapped
+                #     connection failure (redis down, auth, network)
+                #   - kombu.exceptions.ConnectionError: transport-layer
+                #     errors (NOT Python's builtin ConnectionError)
+                # Do NOT catch bare Exception — programming bugs
+                # (serialization, missing decorator) must surface loudly.
+                import kombu.exceptions
+                try:
+                    district_id = getattr(g, 'district_id', None)
+                    user_id = getattr(g, 'user_id', None)
+                except RuntimeError:
+                    district_id = None
+                    user_id = None
+                try:
+                    grade_portal_submission.delay(
+                        submission_id,
+                        teacher_id,
+                        'submissions',
+                        district_id=district_id,
+                        user_id=user_id,
+                    )
+                except (kombu.exceptions.OperationalError,
+                        kombu.exceptions.ConnectionError) as e:
+                    import sentry_sdk
+                    with sentry_sdk.push_scope() as scope:
+                        scope.set_tag('celery_enqueue_failure', True)
+                        scope.level = 'warning'
+                        sentry_sdk.capture_exception(e)
+                    _spawn_thread_grading(submission_id, assessment, answers,
+                                          student_info, teacher_config, teacher_id,
+                                          'submissions', student_accommodations)
+            else:
+                _spawn_thread_grading(submission_id, assessment, answers,
+                                      student_info, teacher_config, teacher_id,
+                                      'submissions', student_accommodations)
 
             # Mark results as partially graded for frontend
             results["grading_status"] = "partial"
