@@ -21,11 +21,22 @@ _initialized = False
 
 # PII field names scrubbed from stack frame locals.
 # Keep this list in sync with docs/observability.md § "Known noise sources".
+#
+# Primary defense against PII leakage in Sentry events is `include_local_variables=False`
+# in sentry_sdk.init() (below) — when disabled, frames carry no vars at all, so this
+# allowlist becomes belt-and-suspenders for any future flag flip. Keep it comprehensive
+# anyway: if someone re-enables local var capture for a debugging session, these names
+# still get scrubbed.
 _PII_LOCAL_NAMES = frozenset({
+    # Originals (Phase 1 observability work)
     "student_name", "student_email", "answers", "draft_answers",
     "student_id_number", "submission_row", "results", "feedback",
     "first_name", "last_name", "row", "s", "sdata", "assessment",
     "assessment_content", "student_row", "assessment_data",
+    # Roster + assistant tool locals (assistant_tools.py:705-728, assistant_tools_student.py:498-528)
+    "first", "last", "display_name", "student_id", "grade",
+    "matched_name", "matched_id", "safe_id", "roster", "grading_state",
+    "rname", "entry", "eml", "name", "student",
 })
 
 # Query-param name fragments whose presence indicates a secret.
@@ -234,7 +245,7 @@ def critical_path(fn):
     return wrapper
 
 
-def init_sentry() -> None:
+def init_sentry(environment: str = 'web') -> None:
     """Initialize Sentry if SENTRY_DSN is set; hard no-op otherwise.
 
     Reads configuration from environment variables:
@@ -244,6 +255,13 @@ def init_sentry() -> None:
                                      CI, and tests stay silent.
       - RAILWAY_GIT_COMMIT_SHA     — Railway build-time env var. Used as
                                      the Sentry release tag (short form).
+
+    Args:
+      environment: 'web' (default) uses FlaskIntegration — used by the
+                   gunicorn web process on startup. 'worker' swaps in
+                   CeleryIntegration instead — called from worker_process_init
+                   in backend/celery_app.py so each forked worker gets the
+                   right integration. All other Sentry behaviour is identical.
 
     Configuration (hardcoded — intentional, not env-driven):
       - environment="production"   — if/when staging is added, it gets
@@ -283,8 +301,13 @@ def init_sentry() -> None:
 
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.flask import FlaskIntegration
         import werkzeug.exceptions as wex
+        if environment == 'worker':
+            from sentry_sdk.integrations.celery import CeleryIntegration
+            integration = CeleryIntegration()
+        else:
+            from sentry_sdk.integrations.flask import FlaskIntegration
+            integration = FlaskIntegration(transaction_style="endpoint")
     except ImportError as exc:
         logger.warning("sentry-sdk unavailable; Sentry disabled: %s", exc)
         _initialized = True
@@ -305,7 +328,13 @@ def init_sentry() -> None:
             release=release,
             traces_sample_rate=0.0,
             send_default_pii=False,
-            integrations=[FlaskIntegration(transaction_style="endpoint")],
+            # FERPA: drop all stack-frame locals from events. Without this,
+            # Sentry's default is to include frame `vars` at capture time,
+            # which leaks student names / SIS IDs / answers anywhere in the
+            # grading and roster code paths (assistant_tools.py, portal_grading.py,
+            # etc.). Scrubbing by allowlist is defense in depth on top of this.
+            include_local_variables=False,
+            integrations=[integration],
             before_send=before_send,
             ignore_errors=[
                 wex.BadRequest,
@@ -326,4 +355,4 @@ def init_sentry() -> None:
         return
 
     _initialized = True
-    logger.info("Sentry initialized (release=%s)", release)
+    logger.info("Sentry initialized (release=%s, environment=%s)", release, environment)

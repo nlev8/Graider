@@ -18,9 +18,8 @@ def test_pipeline_runtime_smoke():
     code path inside _run_grading_thread_inner actually executes. This test
     calls the helpers directly to verify name resolution.
     """
-    sys.path.insert(0, "backend")
     try:
-        from grading import pipeline
+        from backend.grading import pipeline
         # Module-level symbols that _run_grading_thread_inner needs at runtime
         assert hasattr(pipeline, "DOCUMENTS_DIR"), "pipeline.DOCUMENTS_DIR must exist"
         assert hasattr(pipeline, "_check_batch_calibration"), "pipeline._check_batch_calibration must exist"
@@ -41,9 +40,8 @@ def test_pipeline_runtime_smoke():
 def test_check_batch_calibration_branch_coverage():
     """Exercise every branch of _check_batch_calibration so future refactors
     can't silently break one without the test catching it."""
-    sys.path.insert(0, "backend")
     try:
-        from grading import pipeline
+        from backend.grading import pipeline
         fn = pipeline._check_batch_calibration
 
         # Fast path: < 5 graded results (after filtering ERROR/etc)
@@ -112,9 +110,8 @@ def test_pipeline_lazy_imports_all_resolve():
     import ast
     import importlib.util
 
-    sys.path.insert(0, "backend")
     try:
-        from grading import pipeline
+        from backend.grading import pipeline
 
         source = open(pipeline.__file__).read()
         tree = ast.parse(source)
@@ -174,7 +171,6 @@ def test_rubric_formatter_extraction_smoke():
        the dedent / extraction).
     3. Confirms None-return for empty rubric (the early-return branch).
     """
-    sys.path.insert(0, "backend")
     try:
         # The exact import path portal_grading.py:380 uses post-PR4
         from backend.services.rubric_formatting import format_rubric_for_prompt
@@ -226,9 +222,8 @@ def test_pipeline_global_refs_all_resolve():
     import builtins
     import dis
 
-    sys.path.insert(0, "backend")
     try:
-        from grading import pipeline
+        from backend.grading import pipeline
 
         def collect_global_refs(code):
             """Walk a code object and every nested code object, yielding
