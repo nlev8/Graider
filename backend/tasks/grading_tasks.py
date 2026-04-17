@@ -127,6 +127,40 @@ def grade_portal_submission(
         _logger.warning("Submission not found for grading: %s", submission_id)
         return
 
+    # Guard against partial context: if published_assessments fetch failed
+    # (captured to Sentry by fetch_submission_full_context) we'd end up with
+    # assessment=None. The sync function would dereference `.get(...)` on None,
+    # hit its outer except, and mark the row grading_failed. Better to short-
+    # circuit with a clear log + Sentry signal than to silently corrupt the
+    # submission status.
+    if not ctx.get('assessment'):
+        _logger.error(
+            "grade_portal_submission: assessment unavailable for submission %s (published_assessments fetch likely failed). Aborting task.",
+            submission_id,
+        )
+        sentry_sdk.capture_message(
+            f"grade_portal_submission: no assessment for submission {submission_id}",
+            level='error',
+        )
+        # Mark row as failed so ops can re-enqueue once the root cause is fixed
+        try:
+            from backend.services.portal_grading import _safe_update_submission
+            from backend.supabase_client import get_supabase
+            sb = get_supabase()
+            if sb:
+                _safe_update_submission(
+                    sb,
+                    submission_id,
+                    {
+                        'status': 'failed',
+                        'error_message': 'Assessment content unavailable at grading time',
+                    },
+                    table_name=supabase_table,
+                )
+        except Exception:
+            pass
+        return
+
     grade_portal_submission_sync(
         submission_id=submission_id,
         assessment=ctx['assessment'],

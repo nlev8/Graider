@@ -350,6 +350,23 @@ def _is_stale_claim(started_at_iso, minutes=15):
     Phase 4.1 PR2 subtask 3a: treat unparseable/None timestamps as stale so a
     malformed row never permanently blocks reclaim. Default TTL matches the
     Celery task soft-timeout ceiling.
+
+    KNOWN GAP (address before flipping CELERY_PORTAL_GRADING=1 in prod):
+    If a worker dies AFTER claiming a row but BEFORE writing 'graded', Celery
+    redelivers the message (acks_late + reject_on_worker_lost). The redelivered
+    task gets a new task_id and sees the dead claim as non-stale (< 15 min),
+    so it SKIPs the work. Submission gets stuck at status='grading_in_progress'
+    until manual SQL reclaim:
+
+        UPDATE submissions
+        SET status='queued', grading_task_id=NULL, grading_started_at=NULL
+        WHERE status='grading_in_progress'
+          AND grading_started_at < now() - interval '30 minutes';
+
+    Fix options (not in PR2):
+      - Shorten TTL to 2x expected runtime (e.g., 2 min for typical grading)
+      - Check Celery active-worker list to detect dead task_ids
+      - On redelivery, ALWAYS reclaim (Celery doesn't redeliver live tasks)
     """
     if not started_at_iso:
         return True
