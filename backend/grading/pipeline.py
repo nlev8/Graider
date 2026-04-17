@@ -48,7 +48,7 @@ except ImportError:
             return ""
 
 # State helpers from canonical grading.state module
-from grading.state import _get_state, _get_lock, save_results
+from backend.grading.state import _get_state, _get_lock, save_results
 from backend.services.rubric_formatting import format_rubric_for_prompt
 
 

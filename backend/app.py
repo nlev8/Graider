@@ -378,8 +378,8 @@ def _sanitize_student_name(name):
 #   - init_app() passes _get_state, run_grading_thread, reset_state, _get_lock
 #     to register_routes(...)
 #   - _handle_sigterm walks _grading_states to stop running grading threads
-from grading.state import _get_state, _get_lock, reset_state, _grading_states
-from grading.thread import run_grading_thread
+from backend.grading.state import _get_state, _get_lock, reset_state, _grading_states
+from backend.grading.thread import run_grading_thread
 
 
 # ══════════════════════════════════════════════════════════════
