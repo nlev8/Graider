@@ -245,7 +245,7 @@ def critical_path(fn):
     return wrapper
 
 
-def init_sentry() -> None:
+def init_sentry(environment: str = 'web') -> None:
     """Initialize Sentry if SENTRY_DSN is set; hard no-op otherwise.
 
     Reads configuration from environment variables:
@@ -255,6 +255,13 @@ def init_sentry() -> None:
                                      CI, and tests stay silent.
       - RAILWAY_GIT_COMMIT_SHA     — Railway build-time env var. Used as
                                      the Sentry release tag (short form).
+
+    Args:
+      environment: 'web' (default) uses FlaskIntegration — used by the
+                   gunicorn web process on startup. 'worker' swaps in
+                   CeleryIntegration instead — called from worker_process_init
+                   in backend/celery_app.py so each forked worker gets the
+                   right integration. All other Sentry behaviour is identical.
 
     Configuration (hardcoded — intentional, not env-driven):
       - environment="production"   — if/when staging is added, it gets
@@ -294,8 +301,13 @@ def init_sentry() -> None:
 
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.flask import FlaskIntegration
         import werkzeug.exceptions as wex
+        if environment == 'worker':
+            from sentry_sdk.integrations.celery import CeleryIntegration
+            integration = CeleryIntegration()
+        else:
+            from sentry_sdk.integrations.flask import FlaskIntegration
+            integration = FlaskIntegration(transaction_style="endpoint")
     except ImportError as exc:
         logger.warning("sentry-sdk unavailable; Sentry disabled: %s", exc)
         _initialized = True
@@ -322,7 +334,7 @@ def init_sentry() -> None:
             # grading and roster code paths (assistant_tools.py, portal_grading.py,
             # etc.). Scrubbing by allowlist is defense in depth on top of this.
             include_local_variables=False,
-            integrations=[FlaskIntegration(transaction_style="endpoint")],
+            integrations=[integration],
             before_send=before_send,
             ignore_errors=[
                 wex.BadRequest,
@@ -343,4 +355,4 @@ def init_sentry() -> None:
         return
 
     _initialized = True
-    logger.info("Sentry initialized (release=%s)", release)
+    logger.info("Sentry initialized (release=%s, environment=%s)", release, environment)
