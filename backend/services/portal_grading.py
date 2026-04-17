@@ -412,8 +412,12 @@ def fetch_submission_full_context(supabase_table, submission_id, teacher_id):
                 assessment = a_row.data.get('assessment') or a_row.data.get('content')
                 published_settings = a_row.data.get('settings') or {}
         except Exception as e:
-            logger.warning("fetch_submission_full_context: published_assessments fetch "
-                           "failed for %s: %s", data.get('assessment_id'), e)
+            # Capture so broker/schema failures surface instead of looking
+            # like "no accommodations." Matches the _fetch_submission_row
+            # pattern fixed in Subtask 3b.
+            logger.error("Failed to fetch published_assessments %s: %s",
+                         data.get('assessment_id'), str(e))
+            sentry_sdk.capture_exception(e)
     if assessment is None:
         assessment = data.get('assessment') or data.get('content')
 

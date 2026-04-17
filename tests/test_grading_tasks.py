@@ -175,3 +175,40 @@ def test_fetch_submission_full_context_none_when_no_sb():
     from backend.services.portal_grading import fetch_submission_full_context
     with patch('backend.supabase_client.get_supabase', return_value=None):
         assert fetch_submission_full_context('submissions', 'sub-1', 't-1') is None
+
+
+def test_fetch_submission_full_context_captures_published_assessments_errors_to_sentry():
+    """When the published_assessments lookup raises, we capture to Sentry
+    and continue with fallback accommodations path (not silently swallow)."""
+    from backend.services.portal_grading import fetch_submission_full_context
+
+    sub_row = MagicMock()
+    sub_row.data = {
+        'id': 'sub-1',
+        'assessment_id': 'a-1',
+        'answers': {},
+        'student_name': 'Test',
+        'accommodations': {'iep': True},  # class-based fallback source
+    }
+
+    class FakeTable:
+        def __init__(self, name): self.name = name
+        def select(self, *a, **k): return self
+        def eq(self, *a, **k): return self
+        def single(self): return self
+        def execute(self):
+            if self.name == 'submissions':
+                return sub_row
+            raise RuntimeError('published_assessments unreachable')
+    class FakeSB:
+        def table(self, name): return FakeTable(name)
+
+    with patch('backend.supabase_client.get_supabase', return_value=FakeSB()):
+        with patch('backend.services.grading_service.load_teacher_config', return_value={}):
+            with patch('backend.services.portal_grading.sentry_sdk.capture_exception') as mock_cap:
+                ctx = fetch_submission_full_context('submissions', 'sub-1', 'teacher-1')
+
+    assert ctx is not None  # fetch did not fail overall
+    assert mock_cap.called  # Sentry captured the published_assessments error
+    # Fallback accommodations came from data.get('accommodations')
+    assert ctx['student_accommodations'] == {'iep': True}

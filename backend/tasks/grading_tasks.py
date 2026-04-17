@@ -10,6 +10,9 @@ from backend.celery_app import celery_app
 _logger = logging.getLogger(__name__)
 
 
+# Reserved for future use — kept so callers importing this symbol don't break
+# if/when transient-retry gets wired up. Currently not raised anywhere; see
+# the decorator comment below for why auto-retry is not active in PR2.
 class TransientError(Exception):
     """Transient failures that Celery should retry (OpenAI 5xx, Supabase 503)."""
 
@@ -47,15 +50,25 @@ class PortalGradingTask(Task):
             pass
 
 
+# Retry semantics (Phase 4.1 PR2):
+#   Durability — acks_late=True ensures the broker redelivers the message if
+#   the worker dies mid-task. That's the primary defense against Railway
+#   deploys and worker crashes.
+#
+#   Transient retry (e.g., OpenAI 5xx) is NOT wired up in this PR. The pure
+#   function grade_portal_submission_sync has a blanket `except Exception`
+#   that captures to Sentry and returns normally — nothing bubbles to Celery's
+#   retry classifier. Adding `autoretry_for=...` here would be dead config.
+#
+#   If future work wants auto-retry on transient AI failures, hoist transient
+#   classification inside grade_portal_submission_sync and re-raise a
+#   TransientError above the blanket catch. Then add autoretry_for,
+#   retry_backoff, max_retries, retry_backoff_max to this decorator.
 @celery_app.task(
     base=PortalGradingTask,
     name='grading.portal_submission',
     bind=True,
     acks_late=True,
-    autoretry_for=(TransientError, TimeoutError, ConnectionError),
-    retry_backoff=True,
-    retry_backoff_max=300,
-    max_retries=3,
     time_limit=900,
     soft_time_limit=840,
 )
