@@ -27,6 +27,28 @@ celery_app.conf.result_backend = None  # Supabase row is source of truth
 celery_app.conf.worker_send_task_events = True
 celery_app.conf.task_send_sent_event = True
 
+# Durability settings — required for PR2's row-level dedup to work.
+#
+# task_acks_late=True:
+#   Broker acknowledges the message only AFTER the task function returns
+#   (or is handled by an exception handler). Without this, messages are
+#   acked on delivery — a worker SIGKILL or OOM mid-grade would silently
+#   drop the task, and the row-level dedup columns (grading_task_id +
+#   grading_started_at) never get a chance to reclaim the submission.
+#
+# task_reject_on_worker_lost=True:
+#   When a worker dies mid-task (Railway OOM kill, SIGKILL, segfault),
+#   Celery's default is to *implicitly ack* the task to avoid poison-pill
+#   loops. That defeats acks_late for the worker-lost case specifically.
+#   Rejecting instead re-queues the task for redelivery.
+#
+# The pair is safe because Phase 4.1 PR0 added grading_task_id +
+# grading_started_at to submissions and student_submissions. PR2's task
+# body claims the row idempotently via these columns, so redelivery cannot
+# double-grade the same submission.
+celery_app.conf.task_acks_late = True
+celery_app.conf.task_reject_on_worker_lost = True
+
 celery_app.autodiscover_tasks(['backend.tasks'])
 
 

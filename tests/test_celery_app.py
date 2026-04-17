@@ -40,6 +40,27 @@ def test_celery_app_no_result_backend(celery_env):
     assert celery_app.conf.result_backend is None
 
 
+def test_celery_app_durability_settings(celery_env):
+    """Worker crash durability — PR2's row-level dedup only works if the
+    message survives a worker SIGKILL. Both flags must be set.
+
+    - task_acks_late: broker acks after task completion, not on delivery.
+    - task_reject_on_worker_lost: worker-death case re-queues instead of
+      implicit-ack (Celery's poison-pill-safe default would silently drop).
+    """
+    from backend.celery_app import celery_app
+    assert celery_app.conf.task_acks_late is True, (
+        "task_acks_late must be True so worker SIGKILL/OOM mid-grade redelivers "
+        "the message. Without it, the Phase 4.1 row-level dedup columns "
+        "(grading_task_id + grading_started_at) never get a chance to reclaim."
+    )
+    assert celery_app.conf.task_reject_on_worker_lost is True, (
+        "task_reject_on_worker_lost must be True. Celery's default for lost "
+        "workers is implicit-ack to avoid poison-pill loops — that defeats "
+        "acks_late in exactly the Railway-OOM scenario we care about."
+    )
+
+
 def test_stub_task_registered(celery_env):
     from backend.celery_app import celery_app
     # Trigger autodiscover
