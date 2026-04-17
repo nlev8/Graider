@@ -21,11 +21,22 @@ _initialized = False
 
 # PII field names scrubbed from stack frame locals.
 # Keep this list in sync with docs/observability.md § "Known noise sources".
+#
+# Primary defense against PII leakage in Sentry events is `include_local_variables=False`
+# in sentry_sdk.init() (below) — when disabled, frames carry no vars at all, so this
+# allowlist becomes belt-and-suspenders for any future flag flip. Keep it comprehensive
+# anyway: if someone re-enables local var capture for a debugging session, these names
+# still get scrubbed.
 _PII_LOCAL_NAMES = frozenset({
+    # Originals (Phase 1 observability work)
     "student_name", "student_email", "answers", "draft_answers",
     "student_id_number", "submission_row", "results", "feedback",
     "first_name", "last_name", "row", "s", "sdata", "assessment",
     "assessment_content", "student_row", "assessment_data",
+    # Roster + assistant tool locals (assistant_tools.py:705-728, assistant_tools_student.py:498-528)
+    "first", "last", "display_name", "student_id", "grade",
+    "matched_name", "matched_id", "safe_id", "roster", "grading_state",
+    "rname", "entry", "eml", "name", "student",
 })
 
 # Query-param name fragments whose presence indicates a secret.
@@ -317,6 +328,12 @@ def init_sentry(environment: str = 'web') -> None:
             release=release,
             traces_sample_rate=0.0,
             send_default_pii=False,
+            # FERPA: drop all stack-frame locals from events. Without this,
+            # Sentry's default is to include frame `vars` at capture time,
+            # which leaks student names / SIS IDs / answers anywhere in the
+            # grading and roster code paths (assistant_tools.py, portal_grading.py,
+            # etc.). Scrubbing by allowlist is defense in depth on top of this.
+            include_local_variables=False,
             integrations=[integration],
             before_send=before_send,
             ignore_errors=[
