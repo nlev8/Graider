@@ -45,7 +45,7 @@ def _get_district_id() -> str:
         return ''
 
 
-def get_api_key(provider: str, teacher_id: str | None = None) -> str:
+def get_api_key(provider: str, teacher_id: str | None = None, *, district_id: str | None = None) -> str:
     """Get an API key for a provider.
 
     Resolution order:
@@ -53,6 +53,13 @@ def get_api_key(provider: str, teacher_id: str | None = None) -> str:
       2. Per-teacher stored keys (Supabase or file)
       3. District-level keys (Clever districts provide their own API keys)
       4. Environment variable fallback
+
+    Args:
+        provider: 'openai', 'anthropic', or 'gemini'
+        teacher_id: Teacher UUID (for per-teacher BYOK lookup)
+        district_id: Explicit district ID. If None, falls back to
+            `_get_district_id()` (Flask `g.district_id`). Celery workers
+            (no Flask context) MUST pass this explicitly.
     """
     provider = provider.lower()
     env_var = _ENV_MAP.get(provider)
@@ -73,10 +80,10 @@ def get_api_key(provider: str, teacher_id: str | None = None) -> str:
         if val:
             return val
 
-    # 3. Check district-level keys
-    district_id = _get_district_id()
-    if district_id:
-        district_keys = _load_district_keys(district_id)
+    # 3. Check district-level keys — explicit kwarg wins; otherwise fall back to flask.g
+    effective_district_id = district_id if district_id is not None else _get_district_id()
+    if effective_district_id:
+        district_keys = _load_district_keys(effective_district_id)
         val = district_keys.get(provider, '')
         if val:
             return val
@@ -110,15 +117,21 @@ def clear_thread_keys():
     _thread_keys.set(None)
 
 
-def resolve_keys_for_teacher(teacher_id: str) -> dict:
+def resolve_keys_for_teacher(teacher_id: str, *, district_id: str | None = None) -> dict:
     """Pre-resolve all 3 provider keys for a teacher, with district + env fallback.
 
     Returns dict like {'openai': 'sk-...', 'anthropic': 'sk-...', 'gemini': 'AI...'}
     Used to snapshot keys before spawning grading thread.
+
+    Args:
+        teacher_id: Teacher UUID
+        district_id: Explicit district ID. If None, falls back to
+            `_get_district_id()` (Flask `g.district_id`). Celery workers
+            (no Flask context) MUST pass this explicitly.
     """
     user_keys = _load_user_keys(teacher_id) if teacher_id and teacher_id != 'local-dev' else {}
-    district_id = _get_district_id()
-    district_keys = _load_district_keys(district_id) if district_id else {}
+    effective_district_id = district_id if district_id is not None else _get_district_id()
+    district_keys = _load_district_keys(effective_district_id) if effective_district_id else {}
     try:
         from backend.storage import load as _storage_load
         district_admin_keys = _storage_load("district:ai_keys", "system") or {}
