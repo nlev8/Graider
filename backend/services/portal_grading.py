@@ -200,14 +200,19 @@ def _score_to_letter(score):
 
 def build_result_record(student_name, student_id, assignment_title, score,
                         total_possible, period, feedback, breakdown,
-                        per_question_scores):
+                        per_question_scores, *, submission_id: str | None = None):
     """Build a result record in the exact format analytics expects.
 
     This format matches what the folder-based grading produces so Results tab
     and Analytics work without modification.
+
+    Phase 4.1 PR2: added keyword-only `submission_id` for Celery idempotent upsert.
+    When None (legacy callers), the key is omitted from the returned record so the
+    record shape is unchanged. When provided, `_upsert_result_by_submission_id`
+    uses it to de-duplicate across Celery retries.
     """
     percentage = round((score / total_possible * 100) if total_possible > 0 else 0)
-    return {
+    record = {
         "student_name": student_name,
         "student_id": student_id,
         "assignment": assignment_title,
@@ -222,6 +227,9 @@ def build_result_record(student_name, student_id, assignment_title, score,
         "per_question_scores": per_question_scores,
         "breakdown": breakdown,
     }
+    if submission_id:
+        record["submission_id"] = submission_id
+    return record
 
 
 # ══════════════════════════════════════════════════════════════
@@ -257,6 +265,26 @@ def _safe_save_results(results, teacher_id):
     except Exception as e:
         logger.error("Failed to save result to teacher storage: %s", e)
         sentry_sdk.capture_exception(e)
+
+
+def _upsert_result_by_submission_id(existing_results, new_record):
+    """Phase 4.1 PR2: idempotent upsert of a teacher result record.
+
+    If new_record has a `submission_id`, remove any existing record with the same
+    submission_id before appending. Records without submission_id (legacy) append
+    unconditionally — safe, just not de-duped.
+
+    Returns a NEW list (pure function — does not mutate the input).
+    Safe to call on every Celery retry: multiple retries of the same task
+    converge on exactly one record per submission_id.
+    """
+    submission_id = new_record.get('submission_id')
+    if submission_id:
+        filtered = [r for r in existing_results if r.get('submission_id') != submission_id]
+    else:
+        filtered = list(existing_results)
+    filtered.append(new_record)
+    return filtered
 
 
 def _safe_update_submission(sb, submission_id, update_fields,
@@ -554,6 +582,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
             feedback=feedback_text,
             breakdown=breakdown,
             per_question_scores=per_question_scores,
+            submission_id=submission_id,
         )
 
         # Save to teacher's results storage (for Results tab + Analytics)
@@ -563,7 +592,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
             from backend.grading.state import load_saved_results, _get_lock
             with _get_lock(teacher_id):
                 results = load_saved_results(teacher_id)
-                results.append(result_record)
+                results = _upsert_result_by_submission_id(results, result_record)  # Phase 4.1 PR2: idempotent upsert
                 _safe_save_results(results, teacher_id)
         except Exception as e:
             logger.error("Failed to load/lock for result save: %s", str(e))
