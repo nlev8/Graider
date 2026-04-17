@@ -147,14 +147,17 @@ def navigate_to_outlook(page, context, district, email, password):
                 "Failed to reach Outlook. URL: " + page.url
             )
 
-    # Wait for Outlook UI to be interactive (New mail button)
+    # Wait for Outlook UI to be interactive (New mail button).
+    # This is an expected-fallback path — Outlook localizes its button labels
+    # and UI variants, so "New mail" may not match in every session. The caller
+    # proceeds regardless; no Sentry capture (was previously paging ops on
+    # every login with a benign label-mismatch).
     try:
         page.get_by_role("button", name="New mail").wait_for(
             state="visible", timeout=30000
         )
-    except Exception as e:
-        pass  # Continue anyway — UI might use different labels
-        sentry_sdk.capture_exception(e)
+    except Exception:
+        pass
     page.wait_for_timeout(2000)
 
     return page

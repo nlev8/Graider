@@ -142,7 +142,10 @@ PR_B_EXPECTED_CAPTURES = {
     "backend/services/assistant_tools_behavior.py": 4,
     "backend/services/assistant_tools_reports.py": 5,
     "backend/services/assistant_tools_student.py": 21,
-    "backend/services/outlook_sender.py": 5,
+    # Phase 4 review cleanup: 5 -> 4. Removed the capture at
+    # navigate_to_outlook's "New mail" wait_for fallback — that is an
+    # expected label-mismatch path, not an error worth paging ops on.
+    "backend/services/outlook_sender.py": 4,
 }
 
 
