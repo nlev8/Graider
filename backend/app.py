@@ -378,7 +378,7 @@ def _sanitize_student_name(name):
 #   - init_app() passes _get_state, run_grading_thread, reset_state, _get_lock
 #     to register_routes(...)
 #   - _handle_sigterm walks _grading_states to stop running grading threads
-from backend.grading.state import _get_state, _get_lock, reset_state, _grading_states
+from backend.grading.state import _get_state, _get_lock, reset_state, _grading_states, _states_meta_lock
 from backend.grading.thread import run_grading_thread
 
 
@@ -401,9 +401,18 @@ import signal
 from routes import register_routes
 
 def _handle_sigterm(signum, frame):
-    """Graceful shutdown: stop any running grading thread before exit."""
+    """Graceful shutdown: stop any running grading thread before exit.
+
+    Snapshots _grading_states under _states_meta_lock before iterating —
+    _get_state() mutates the dict under the same lock, so iterating the
+    raw dict while a concurrent submission creates a new teacher entry
+    would raise ``RuntimeError: dictionary changed size during iteration``
+    and abort shutdown partway through.
+    """
     _logger.info("SIGTERM received — requesting grading thread stop")
-    for teacher_id, state in _grading_states.items():
+    with _states_meta_lock:
+        snapshot = list(_grading_states.items())
+    for teacher_id, state in snapshot:
         if state.get("is_running"):
             state["stop_requested"] = True
             _logger.info("  Requested stop for teacher %s", teacher_id)
@@ -413,11 +422,17 @@ def _handle_sigterm(signum, frame):
 def init_app(app):
     """Imperative initialization wiring for the Flask app.
 
-    Called exactly once at module load (below). Factored out as a named
-    function so Phase 3a PR2+ can reason about the initialization seam.
+    Idempotent: a second call is a no-op. Flask raises
+    ``AssertionError: View function mapping is overwriting...`` if
+    ``register_routes`` runs twice on the same app, so the guard prevents
+    subtle breakage if any future caller invokes init_app again (e.g., a
+    test fixture that re-wires an existing app instead of building fresh).
     """
+    if getattr(app, '_graider_initialized', False):
+        return
     register_routes(app, _get_state, run_grading_thread, reset_state, _get_lock)
     signal.signal(signal.SIGTERM, _handle_sigterm)
+    app._graider_initialized = True
 
 
 # Call initializer at the original register_routes/SIGTERM location

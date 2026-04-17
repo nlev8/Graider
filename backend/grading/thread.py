@@ -25,12 +25,15 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
     # Resolve per-teacher state for try/finally
     state = _get_state(teacher_id)
 
-    # BYOK: Set per-user API keys in contextvars for this thread + child workers
+    # BYOK: Set per-user API keys in contextvars for this thread + child workers.
+    # set_thread_keys() is moved INSIDE the try/finally so a partial or raising
+    # set (e.g., malformed dict) still triggers clear_thread_keys() on exit —
+    # guarding the contextvar from leaking across pooled workers in any future
+    # thread-pool reuse.
     from backend.api_keys import set_thread_keys, clear_thread_keys
-    if user_api_keys:
-        set_thread_keys(user_api_keys)
-
     try:
+        if user_api_keys:
+            set_thread_keys(user_api_keys)
         _run_grading_thread_inner(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style, teacher_id)
     finally:
         clear_thread_keys()
