@@ -70,8 +70,17 @@ def test_stub_task_registered(celery_env):
     assert 'grading.portal_submission' in celery_app.tasks
 
 
-def test_stub_task_runs_in_eager_mode(celery_env):
-    """Stub task should log and return when run synchronously via apply()."""
+def test_task_registered_and_callable_in_eager_mode(celery_env):
+    """Phase 4.1 PR2 subtask 3b: the real task returns None (Supabase row is
+    source of truth). Verify the task is registered, reachable in eager mode,
+    and succeeds when its downstream context fetch is stubbed out.
+
+    This replaces PR1's test_stub_task_runs_in_eager_mode, which asserted the
+    stub-return shape (`{'status': 'stub', ...}`). The real task no longer
+    returns that dict — it delegates to grade_portal_submission_sync and
+    returns None.
+    """
+    from unittest.mock import patch
     from backend.celery_app import celery_app
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = True
@@ -79,12 +88,17 @@ def test_stub_task_runs_in_eager_mode(celery_env):
     try:
         import backend.tasks.grading_tasks  # noqa: F401
         from backend.tasks.grading_tasks import grade_portal_submission
-        result = grade_portal_submission.apply(
-            args=['test-submission-id', 'test-teacher-id', 'submissions']
-        )
+        assert 'grading.portal_submission' in celery_app.tasks
+
+        # Stub out the downstream fetch so the task returns cleanly without
+        # needing a live Supabase client.
+        with patch(
+            'backend.services.portal_grading.fetch_submission_full_context',
+            return_value=None,
+        ):
+            result = grade_portal_submission.apply(
+                args=['test-submission-id', 'test-teacher-id', 'submissions']
+            )
         assert result.successful()
-        payload = result.get()
-        assert payload['status'] == 'stub'
-        assert payload['submission_id'] == 'test-submission-id'
     finally:
         celery_app.conf.task_always_eager = False

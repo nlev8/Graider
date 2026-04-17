@@ -313,13 +313,19 @@ def _fetch_submission_row(sb, supabase_table, submission_id):
 
     Phase 4.1 PR2 subtask 3a: row-level dedup helper for the Celery path.
     Returns None on any error so the caller can treat it as "no claim found".
+
+    Subtask 3b code-review follow-up: capture exceptions to Sentry so
+    broker/schema failures surface instead of silently looking like "no
+    row found". Matches the pattern used in _safe_update_submission.
     """
     if not sb or not submission_id:
         return None
     try:
         result = sb.table(supabase_table).select('*').eq('id', submission_id).single().execute()
         return result.data
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to fetch submission row %s: %s", submission_id, e)
+        sentry_sdk.capture_exception(e)
         return None
 
 
@@ -353,6 +359,100 @@ def _is_stale_claim(started_at_iso, minutes=15):
         return started < datetime.now(timezone.utc) - timedelta(minutes=minutes)
     except (ValueError, TypeError, AttributeError):
         return True  # unparseable → stale
+
+
+def fetch_submission_full_context(supabase_table, submission_id, teacher_id):
+    """Re-fetch submission + assessment + teacher config + accommodations from Supabase.
+
+    Phase 4.1 PR2 subtask 3b: used by the Celery task to rebuild full grading
+    context without a Flask session. Returns None if the submission is not
+    found or Supabase is unavailable so the task can return early.
+
+    Accommodations source:
+      - The `submissions` table does NOT have a `student_accommodations` column
+        (verified against backend/database/supabase_schema.sql and the Phase 4.1
+        PR0 additive migration — only status/grading_task_id/grading_started_at/
+        error_message were added).
+      - The canonical source for join-code path is
+        `published_assessments.settings.student_accommodations`, mirroring the
+        existing inline extraction at backend/routes/student_portal_routes.py:807
+        (`published_accommodations = assessment_data.get("settings", {}).get("student_accommodations", {})`).
+      - For Phase 4.1b class-based path, `student_submissions.accommodations`
+        MAY exist — handle gracefully as a fallback.
+    """
+    from backend.supabase_client import get_supabase
+    from backend.services.grading_service import load_teacher_config
+
+    sb = get_supabase()
+    if not sb or not submission_id:
+        return None
+    try:
+        row = sb.table(supabase_table).select('*').eq('id', submission_id).single().execute()
+    except Exception as e:
+        logger.error("fetch_submission_full_context: submission fetch failed %s: %s",
+                     submission_id, e)
+        sentry_sdk.capture_exception(e)
+        return None
+    if not row or not getattr(row, 'data', None):
+        return None
+    data = row.data
+
+    # Load assessment — join-code path uses assessment_id → published_assessments;
+    # class-based path stores assessment inline on the row. Handle both.
+    # Capture the full published_assessments row so we can pull `settings`
+    # for accommodations below (join-code path only).
+    assessment = None
+    published_settings = {}
+    if data.get('assessment_id'):
+        try:
+            a_row = sb.table('published_assessments').select('*').eq(
+                'id', data['assessment_id']
+            ).single().execute()
+            if a_row and getattr(a_row, 'data', None):
+                assessment = a_row.data.get('assessment') or a_row.data.get('content')
+                published_settings = a_row.data.get('settings') or {}
+        except Exception as e:
+            logger.warning("fetch_submission_full_context: published_assessments fetch "
+                           "failed for %s: %s", data.get('assessment_id'), e)
+    if assessment is None:
+        assessment = data.get('assessment') or data.get('content')
+
+    teacher_config = load_teacher_config(teacher_id)
+
+    # Student accommodations resolution order:
+    #   1. published_assessments.settings.student_accommodations (join-code canonical)
+    #   2. submission row's `accommodations` column (class-based 4.1b-forward)
+    #   3. None → pipeline falls through to the "no accommodations" path
+    # We do NOT read data.get('student_accommodations') because that column
+    # does not exist on the submissions table.
+    student_accommodations = (
+        published_settings.get('student_accommodations')
+        or data.get('accommodations')
+        or None
+    )
+
+    # student_info must satisfy both:
+    #   - test contract (ctx['student_info']['name'])
+    #   - grade_portal_submission_sync consumer (reads 'student_name')
+    # So populate both keys.
+    student_name = data.get('student_name')
+    student_email = data.get('student_email')
+    student_id = data.get('student_id')
+    student_info = {
+        'name': student_name,
+        'email': student_email,
+        'student_name': student_name,
+        'student_email': student_email,
+        'student_id': student_id,
+    }
+
+    return {
+        'assessment': assessment,
+        'answers': data.get('answers') or {},
+        'student_info': student_info,
+        'teacher_config': teacher_config,
+        'student_accommodations': student_accommodations,
+    }
 
 
 def grade_portal_submission_sync(
