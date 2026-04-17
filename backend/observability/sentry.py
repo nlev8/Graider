@@ -177,7 +177,20 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
 
     user = event.setdefault("user", {})
     if isinstance(user, dict):
-        user["id"] = _resolve_user_id()
+        # Preserve an explicitly-set user.id when it already looks like our
+        # scrubber format (12-char hex) — Celery workers set_user({"id": sha256(uid)[:12]})
+        # before raising, and without this branch `_resolve_user_id()` would
+        # overwrite with "anonymous" (no Flask context in the worker process),
+        # losing task-level attribution.
+        #
+        # The format check (12 hex chars) is the guard: any non-matching value
+        # still gets replaced, so raw emails / PII that somehow reached user.id
+        # don't survive into Sentry Cloud.
+        pre_set = user.get("id")
+        if isinstance(pre_set, str) and len(pre_set) == 12 and all(c in "0123456789abcdef" for c in pre_set):
+            pass  # keep the explicit hashed attribution
+        else:
+            user["id"] = _resolve_user_id()
         user.pop("email", None)
         user.pop("username", None)
         user.pop("ip_address", None)

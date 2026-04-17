@@ -129,3 +129,56 @@ def test_scrubber_masks_new_pii_names():
         )
     # Non-PII retained as-is
     assert frame_vars["retry_count"] == 3
+
+
+def test_scrubber_preserves_preset_hashed_user_id():
+    """Celery workers set_user with sha256[:12] before raising; scrubber must
+    preserve that rather than overwrite with _resolve_user_id()'s "anonymous"
+    (which is what happens when there's no Flask context in a worker process).
+
+    Without this branch, task-level user attribution is useless — every Celery
+    event shows user.id="anonymous".
+    """
+    import hashlib
+    from backend.observability.sentry import before_send
+
+    hashed = hashlib.sha256(b"teacher-xyz").hexdigest()[:12]
+    event = {
+        "exception": {"values": [{"type": "RuntimeError", "value": "test"}]},
+        "user": {"id": hashed},  # simulates task's sentry_sdk.set_user call
+    }
+    result = before_send(event, {})
+    assert result is not None
+    assert result["user"]["id"] == hashed, (
+        f"Expected hashed id {hashed!r} to be preserved; got {result['user']['id']!r}"
+    )
+
+
+def test_scrubber_replaces_non_hash_preset_user_id():
+    """Defense in depth: if something non-hashed (raw email, username) somehow
+    reached user.id, scrubber still replaces it so PII can't survive into
+    Sentry Cloud through this channel.
+    """
+    from backend.observability.sentry import before_send
+
+    event = {
+        "exception": {"values": [{"type": "RuntimeError", "value": "test"}]},
+        "user": {"id": "teacher@example.com"},  # raw email — must not survive
+    }
+    result = before_send(event, {})
+    assert result is not None
+    assert result["user"]["id"] != "teacher@example.com"
+    # Expect the anonymous fallback since there's no Flask context
+    assert result["user"]["id"] == "anonymous"
+
+
+def test_scrubber_replaces_preset_id_with_wrong_length():
+    """13-char string looks hex but wrong length — still replaced."""
+    from backend.observability.sentry import before_send
+
+    event = {
+        "exception": {"values": [{"type": "RuntimeError", "value": "test"}]},
+        "user": {"id": "abcdef1234567"},  # 13 chars, valid hex, wrong length
+    }
+    result = before_send(event, {})
+    assert result["user"]["id"] == "anonymous"
