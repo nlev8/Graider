@@ -351,22 +351,30 @@ def _is_stale_claim(started_at_iso, minutes=15):
     malformed row never permanently blocks reclaim. Default TTL matches the
     Celery task soft-timeout ceiling.
 
-    KNOWN GAP (address before flipping CELERY_PORTAL_GRADING=1 in prod):
-    If a worker dies AFTER claiming a row but BEFORE writing 'graded', Celery
-    redelivers the message (acks_late + reject_on_worker_lost). The redelivered
-    task gets a new task_id and sees the dead claim as non-stale (< 15 min),
-    so it SKIPs the work. Submission gets stuck at status='grading_in_progress'
-    until manual SQL reclaim:
+    WORKER-LOSS REDELIVERY (pinned by tests in test_grading_tasks.py):
+    Celery's acks_late + reject_on_worker_lost redelivery preserves the
+    original message body, including the task_id (embedded as `id` in the
+    message body and `correlation_id` in headers — see celery/app/amqp.py
+    as_task_v2). So when a worker dies mid-grade and the broker redelivers,
+    the redelivered task's self.request.id == the claim's grading_task_id.
+    The dedup branch `current_task == task_id` fires and grading PROCEEDS
+    on the redelivered run (see grade_portal_submission_sync:536). No
+    worker-loss gap exists for the default Celery redelivery path.
 
+    This TTL is therefore a BACKSTOP — it covers edge cases the task_id
+    equality branch doesn't:
+      - Manual re-enqueue from ops with a newly-minted task_id
+      - Hypothetical future code that calls self.retry(task_id=...) with
+        a different id (Celery 5.x default retry preserves task_id; don't
+        change this without re-examining the dedup contract)
+      - Schema/data corruption where grading_task_id is null-ish but
+        status is 'grading_in_progress'
+
+    Manual reclaim SQL (use only when the TTL doesn't fire in time):
         UPDATE submissions
         SET status='queued', grading_task_id=NULL, grading_started_at=NULL
         WHERE status='grading_in_progress'
           AND grading_started_at < now() - interval '30 minutes';
-
-    Fix options (not in PR2):
-      - Shorten TTL to 2x expected runtime (e.g., 2 min for typical grading)
-      - Check Celery active-worker list to detect dead task_ids
-      - On redelivery, ALWAYS reclaim (Celery doesn't redeliver live tasks)
     """
     if not started_at_iso:
         return True
