@@ -821,7 +821,6 @@ def submit_assessment(code):
 
         # Spawn multipass grading thread for written questions
         if needs_multipass:
-            from backend.services.portal_grading import run_portal_grading_thread  # noqa: F401 (keep import symbol stable)
             from backend.services.grading_service import load_teacher_config
 
             # Hoist context values that both the Celery path and the thread
@@ -852,7 +851,7 @@ def submit_assessment(code):
                 try:
                     district_id = getattr(g, 'district_id', None)
                     user_id = getattr(g, 'user_id', None)
-                except (RuntimeError, ImportError):
+                except RuntimeError:
                     district_id = None
                     user_id = None
                 try:
@@ -866,11 +865,10 @@ def submit_assessment(code):
                 except (kombu.exceptions.OperationalError,
                         kombu.exceptions.ConnectionError) as e:
                     import sentry_sdk
-                    sentry_sdk.capture_message(
-                        f"Celery enqueue failed, falling back to thread: {e}",
-                        level='warning',
-                        tags={'celery_enqueue_failure': True},
-                    )
+                    with sentry_sdk.push_scope() as scope:
+                        scope.set_tag('celery_enqueue_failure', True)
+                        scope.level = 'warning'
+                        sentry_sdk.capture_exception(e)
                     _spawn_thread_grading(submission_id, assessment, answers,
                                           student_info, teacher_config, teacher_id,
                                           'submissions', student_accommodations)
