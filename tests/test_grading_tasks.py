@@ -212,3 +212,78 @@ def test_fetch_submission_full_context_captures_published_assessments_errors_to_
     assert mock_cap.called  # Sentry captured the published_assessments error
     # Fallback accommodations came from data.get('accommodations')
     assert ctx['student_accommodations'] == {'iep': True}
+
+
+def test_fetch_submission_full_context_normalizes_student_id_on_submissions_table():
+    """Join-code path: the `submissions` table has NO student_id column. The
+    legacy thread spawn in student_portal_routes hard-codes student_id=""
+    (empty string) when building student_info. fetch_submission_full_context
+    must match that contract to avoid divergence between the Celery and
+    thread code paths (consumers like load_student_history(teacher_id, id)
+    would see None vs "" depending on path otherwise).
+    """
+    sub_row = MagicMock()
+    sub_row.data = {
+        'id': 'sub-1',
+        'assessment_id': 'a-1',
+        'answers': {},
+        'student_name': 'Ana',
+        # Note: no student_id — submissions table has no such column
+    }
+    pub_row = MagicMock()
+    pub_row.data = {'id': 'a-1', 'assessment': {'questions': []}, 'settings': {}}
+
+    class FakeTable:
+        def __init__(self, name): self.name = name
+        def select(self, *a, **k): return self
+        def eq(self, *a, **k): return self
+        def single(self): return self
+        def execute(self):
+            return sub_row if self.name == 'submissions' else pub_row
+    class FakeSB:
+        def table(self, name): return FakeTable(name)
+
+    from backend.services.portal_grading import fetch_submission_full_context
+    with patch('backend.supabase_client.get_supabase', return_value=FakeSB()):
+        with patch('backend.services.grading_service.load_teacher_config', return_value={}):
+            ctx = fetch_submission_full_context('submissions', 'sub-1', 'teacher-1')
+
+    assert ctx is not None
+    # CRITICAL parity check: empty string, NOT None
+    assert ctx['student_info']['student_id'] == ''
+    assert isinstance(ctx['student_info']['student_id'], str)
+
+
+def test_fetch_submission_full_context_preserves_student_id_on_student_submissions_table():
+    """Class-based path: the `student_submissions` table DOES have real
+    student_ids. Normalization only applies to the join-code `submissions`
+    table — class-based path keeps whatever the row has.
+    """
+    sub_row = MagicMock()
+    sub_row.data = {
+        'id': 'sub-1',
+        'assessment_id': 'a-1',
+        'answers': {},
+        'student_name': 'Ana',
+        'student_id': 'real-student-id-42',
+    }
+    pub_row = MagicMock()
+    pub_row.data = {'id': 'a-1', 'assessment': {'questions': []}, 'settings': {}}
+
+    class FakeTable:
+        def __init__(self, name): self.name = name
+        def select(self, *a, **k): return self
+        def eq(self, *a, **k): return self
+        def single(self): return self
+        def execute(self):
+            return sub_row if self.name == 'student_submissions' else pub_row
+    class FakeSB:
+        def table(self, name): return FakeTable(name)
+
+    from backend.services.portal_grading import fetch_submission_full_context
+    with patch('backend.supabase_client.get_supabase', return_value=FakeSB()):
+        with patch('backend.services.grading_service.load_teacher_config', return_value={}):
+            ctx = fetch_submission_full_context('student_submissions', 'sub-1', 'teacher-1')
+
+    assert ctx is not None
+    assert ctx['student_info']['student_id'] == 'real-student-id-42'

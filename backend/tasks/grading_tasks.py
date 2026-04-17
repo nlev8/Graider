@@ -20,9 +20,21 @@ class TransientError(Exception):
 class PortalGradingTask(Task):
     """Base task class with on_failure hook for terminal 'failed' state.
 
-    Called by Celery after max_retries is exhausted (autoretry path) OR on an
-    un-retriable exception. Marks the submission row 'failed' so teacher
-    dashboards observe the terminal state instead of a stuck 'grading_in_progress'.
+    Fires only on exceptions that escape to Celery's framework layer:
+      - SoftTimeLimitExceeded (after 14 min — BaseException subclass, not caught
+        by grade_portal_submission_sync's blanket `except Exception`)
+      - TimeLimitExceeded (after 15 min — hard kill)
+      - Celery framework errors (worker shutdown during task, serialization
+        failures, etc.)
+
+    This does NOT fire on grading pipeline errors — those are swallowed inside
+    grade_portal_submission_sync's outer try/except, captured to Sentry, and
+    leave the submission row with whatever partial state was written. If a
+    future PR hoists transient-error classification above that blanket catch
+    (adding autoretry_for back), on_failure will also fire on retry exhaustion.
+
+    Marks the submission row 'failed' so teacher dashboards observe a
+    terminal state instead of a stuck 'grading_in_progress' claim.
     """
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):

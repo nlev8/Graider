@@ -439,9 +439,21 @@ def fetch_submission_full_context(supabase_table, submission_id, teacher_id):
     #   - test contract (ctx['student_info']['name'])
     #   - grade_portal_submission_sync consumer (reads 'student_name')
     # So populate both keys.
+    #
+    # student_id normalization: the join-code path's thread spawn in
+    # student_portal_routes.py builds student_info with student_id="" (empty
+    # string, not None) — the `submissions` table has no student_id column at
+    # all, so the thread path has always treated it as unknown. For parity,
+    # normalize student_id to empty string when reading from `submissions`
+    # so downstream consumers like load_student_history(teacher_id, student_id)
+    # see the same input regardless of code path. Class-based path
+    # (`student_submissions` table) keeps whatever the row has.
     student_name = data.get('student_name')
     student_email = data.get('student_email')
-    student_id = data.get('student_id')
+    if supabase_table == 'submissions':
+        student_id = ''
+    else:
+        student_id = data.get('student_id') or ''
     student_info = {
         'name': student_name,
         'email': student_email,
