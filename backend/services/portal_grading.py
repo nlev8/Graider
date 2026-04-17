@@ -308,12 +308,72 @@ def _safe_update_submission(sb, submission_id, update_fields,
         sentry_sdk.capture_exception(e)
 
 
-@critical_path
-def run_portal_grading_thread(submission_id, assessment, answers, student_info,
-                              teacher_config, teacher_id,
-                              supabase_table="student_submissions",
-                              student_accommodations=None):
-    """Background thread that runs the full multipass grading pipeline on a portal submission.
+def _fetch_submission_row(sb, supabase_table, submission_id):
+    """Fetch the submission row; return dict or None.
+
+    Phase 4.1 PR2 subtask 3a: row-level dedup helper for the Celery path.
+    Returns None on any error so the caller can treat it as "no claim found".
+    """
+    if not sb or not submission_id:
+        return None
+    try:
+        result = sb.table(supabase_table).select('*').eq('id', submission_id).single().execute()
+        return result.data
+    except Exception:
+        return None
+
+
+def _claim_submission_for_grading(sb, supabase_table, submission_id, task_id):
+    """Row-level claim. Sets status='grading_in_progress' + grading_task_id + grading_started_at.
+
+    Phase 4.1 PR2 subtask 3a: row-level dedup helper for the Celery path.
+    Uses _safe_update_submission so Sentry capture + logging are consistent.
+    """
+    if not sb or not submission_id:
+        return
+    _safe_update_submission(sb, submission_id, {
+        'status': 'grading_in_progress',
+        'grading_task_id': task_id,
+        'grading_started_at': datetime.now(timezone.utc).isoformat(),
+    }, table_name=supabase_table)
+
+
+def _is_stale_claim(started_at_iso, minutes=15):
+    """True if started_at is older than `minutes` ago (reclaim allowed).
+
+    Phase 4.1 PR2 subtask 3a: treat unparseable/None timestamps as stale so a
+    malformed row never permanently blocks reclaim. Default TTL matches the
+    Celery task soft-timeout ceiling.
+    """
+    if not started_at_iso:
+        return True
+    from datetime import timedelta
+    try:
+        started = datetime.fromisoformat(started_at_iso.replace('Z', '+00:00'))
+        return started < datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    except (ValueError, TypeError, AttributeError):
+        return True  # unparseable → stale
+
+
+def grade_portal_submission_sync(
+    submission_id,
+    assessment,
+    answers,
+    student_info,
+    teacher_config,
+    teacher_id,
+    supabase_table="student_submissions",
+    student_accommodations=None,
+    *,
+    task_id=None,
+    district_id=None,
+    user_id=None,
+):
+    """Pure grading function — no Flask context required.
+
+    Phase 4.1 PR2 subtask 3a: extracted body of run_portal_grading_thread.
+    Accepts all dependencies as explicit parameters so the Celery task can
+    call it without a Flask request context.
 
     Args:
         submission_id: Supabase ID of the submission record
@@ -323,26 +383,37 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         teacher_config: Dict with global_ai_notes, grade_level, subject, grading_style,
                        rubric, ai_model, period
         teacher_id: Teacher's user ID for results storage
-        supabase_table: Which table to update — "submissions" for join-code,
-                       "student_submissions" for class-based
+        supabase_table: "submissions" for join-code, "student_submissions" for class-based
+        student_accommodations: Embedded accommodations dict from published content
+        task_id: Celery task id; when set enables row-level dedup claim. None for
+            the legacy thread path (skips dedup).
+        district_id: District context for api_keys lookup (passed through explicitly
+            so no Flask g access is required).
+        user_id: Acting user id (reserved for future audit). Currently unused by
+            the grading body but accepted for parity with the Celery call site.
     """
-    # Register this thread for graceful shutdown tracking
-    current_thread = threading.current_thread()
-    _active_threads.add(current_thread)
+    from backend.supabase_client import get_supabase
+    sb = get_supabase()
+
+    # Row-level dedup (Celery path only — task_id=None skips this entirely)
+    if task_id and submission_id:
+        current = _fetch_submission_row(sb, supabase_table, submission_id)
+        if current and current.get('status') == 'grading_in_progress':
+            current_task = current.get('grading_task_id')
+            if current_task == task_id:
+                pass  # same task retrying — proceed (idempotent re-run)
+            elif not _is_stale_claim(current.get('grading_started_at')):
+                logger.info(
+                    "Submission %s already being graded by task %s — skipping",
+                    submission_id, current_task,
+                )
+                return  # another live worker owns it — skip
+            # else: stale → fall through to reclaim
+        _claim_submission_for_grading(sb, supabase_table, submission_id, task_id)
+
     try:
         logger.info("Portal grading started: submission=%s student=%s",
                     submission_id, student_info.get("student_name", ""))
-
-        if _shutdown_event.is_set():
-            logger.info("Shutdown in progress — skipping grading for submission %s", submission_id)
-            try:
-                from backend.supabase_client import get_supabase
-                sb = get_supabase()
-                if sb and submission_id:
-                    sb.table(supabase_table).update({"status": "grading_deferred"}).eq("id", submission_id).execute()
-            except Exception:
-                pass
-            return
 
         # Build AI instruction string with all grading factors
         accommodation_prompt = ""
@@ -423,10 +494,11 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
         written_questions = [q for q in all_questions if q.get("type", "multiple_choice") in WRITTEN_TYPES]
         ai_model = teacher_config.get("ai_model", "gpt-4o-mini")
 
-        # Set API keys for this thread
+        # Set API keys for this thread — pass district_id explicitly so the
+        # resolver doesn't need to reach into flask.g on the Celery path.
         try:
             from backend.api_keys import set_thread_keys, resolve_keys_for_teacher
-            keys = resolve_keys_for_teacher(teacher_id)
+            keys = resolve_keys_for_teacher(teacher_id, district_id=district_id)
             if keys:
                 set_thread_keys(keys)
         except Exception:
@@ -598,10 +670,9 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
             logger.error("Failed to load/lock for result save: %s", str(e))
             sentry_sdk.capture_exception(e)
 
-        # Update Supabase submission record with full grading
+        # Update Supabase submission record with full grading (single write includes
+        # status='graded' so teacher dashboards and retry-detection both observe it).
         standards_mastery = _build_standards_mastery(per_question_scores)
-        from backend.supabase_client import get_supabase
-        sb = get_supabase()
         _safe_update_submission(sb, submission_id, {
             "results": {
                 "questions": per_question_scores,
@@ -639,14 +710,14 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                     submission_id, student_info.get("student_name", ""), total_score, total_possible)
 
     except Exception as e:
-        logger.error("Portal grading thread failed: %s", str(e))
-        # Page via BetterStack: @critical_path tags only ESCAPING exceptions,
-        # and this outer except swallows. Capture explicitly before cleanup.
+        logger.error("Portal grading failed: %s", str(e))
+        # Page via BetterStack: the wrapper's @critical_path tags only ESCAPING
+        # exceptions, and this outer except swallows. Capture explicitly before
+        # cleanup. (Celery callers re-raise after their own capture; this keeps
+        # thread-path parity.)
         sentry_sdk.capture_exception(e)
         # Update submission status to grading_failed so it doesn't stay in 'partial' forever
         try:
-            from backend.supabase_client import get_supabase
-            sb = get_supabase()
             if sb and submission_id:
                 sb.table(supabase_table).update({
                     "status": "grading_failed",
@@ -654,6 +725,60 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                 logger.info("Marked submission %s as grading_failed", submission_id)
         except Exception:
             pass
+
+
+@critical_path
+def run_portal_grading_thread(submission_id, assessment, answers, student_info,
+                              teacher_config, teacher_id,
+                              supabase_table="student_submissions",
+                              student_accommodations=None):
+    """Phase 4.1 PR2 subtask 3a: thin wrapper that preserves the original signature.
+
+    Class-based path (student_account_routes) and the join-code thread fallback
+    (student_portal_routes + the future Celery-enqueue fallback) keep using this
+    entry point unchanged. Responsibilities retained in the wrapper:
+      - _active_threads lifecycle tracking (for graceful SIGTERM handling)
+      - _shutdown_event check (skip grading if Railway is redeploying)
+      - Extract user_id + district_id from flask.g and pass them explicitly
+
+    The actual grading pipeline lives in grade_portal_submission_sync, which
+    has no Flask dependencies so the Celery task body (subtask 3b) can call it
+    directly.
+    """
+    current_thread = threading.current_thread()
+    _active_threads.add(current_thread)
+    try:
+        if _shutdown_event.is_set():
+            logger.info("Shutdown in progress — skipping grading for submission %s", submission_id)
+            try:
+                from backend.supabase_client import get_supabase
+                sb = get_supabase()
+                if sb and submission_id:
+                    sb.table(supabase_table).update({"status": "grading_deferred"}).eq("id", submission_id).execute()
+            except Exception:
+                pass
+            return
+
+        try:
+            from flask import g as _flask_g
+            user_id = getattr(_flask_g, 'user_id', None)
+            district_id = getattr(_flask_g, 'district_id', None)
+        except (RuntimeError, ImportError):
+            user_id = None
+            district_id = None
+
+        grade_portal_submission_sync(
+            submission_id=submission_id,
+            assessment=assessment,
+            answers=answers,
+            student_info=student_info,
+            teacher_config=teacher_config,
+            teacher_id=teacher_id,
+            supabase_table=supabase_table,
+            student_accommodations=student_accommodations,
+            task_id=None,  # legacy thread path skips row-level dedup
+            district_id=district_id,
+            user_id=user_id,
+        )
     finally:
-        # Cleanup thread tracking
         _active_threads.discard(current_thread)
