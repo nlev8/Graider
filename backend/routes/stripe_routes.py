@@ -9,6 +9,7 @@ import stripe
 from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.extensions import limiter
 
 stripe_bp = Blueprint('stripe', __name__)
 _logger = logging.getLogger(__name__)
@@ -185,11 +186,17 @@ def create_portal_session():
 
 
 @stripe_bp.route('/api/stripe/webhook', methods=['POST'])
+@limiter.limit("100 per minute")
 @handle_route_errors
 def stripe_webhook():
     """
     Handle Stripe webhook events. PUBLIC endpoint (no JWT).
     Verified via Stripe-Signature header.
+
+    Rate-limited at 100/min per IP (Phase 4.6) as belt-and-suspenders
+    defense against signature-validation brute force. Stripe's own
+    webhook retry cadence is <=5/min per event; 100/min leaves generous
+    headroom for legitimate Stripe IP ranges.
     """
     if not _init_stripe():
         return jsonify({"error": "Stripe not configured"}), 500
