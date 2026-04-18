@@ -34,6 +34,7 @@ from .assessment_results_routes import assessment_results_bp
 from .district_routes import district_bp
 from .admin_routes import admin_bp
 from .sync_routes import sync_bp
+from .debug_routes import debug_bp  # TEMP — remove after rate-limiter investigation
 
 
 def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, get_lock_fn=None):
@@ -70,6 +71,7 @@ def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, 
     app.register_blueprint(district_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(sync_bp)
+    app.register_blueprint(debug_bp)  # TEMP — remove after rate-limiter investigation
 
 
 __all__ = [
