@@ -18,6 +18,7 @@ _logger = logging.getLogger(__name__)
 
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.extensions import limiter
 from backend.services.grading_service import grade_deterministic_question, grade_student_submission, grade_instant_only
 from backend.observability import critical_path
 
@@ -617,11 +618,15 @@ def delete_published_assessment(code):
 # ============ Student Endpoints ============
 
 @student_portal_bp.route('/api/student/join/<code>', methods=['GET'])
+@limiter.limit("30 per minute")
 @handle_route_errors
 def get_assessment_for_student(code):
     """
     Get assessment details for a student joining with a code.
     Returns assessment without answers for student to take.
+
+    Rate-limited at 30/min per IP (Phase 4.6) to prevent join-code
+    enumeration attacks. Typical student traffic is <5/min per IP.
     """
     try:
         db = get_supabase()
@@ -718,6 +723,7 @@ def get_assessment_for_student(code):
 
 
 @student_portal_bp.route('/api/student/submit/<code>', methods=['POST'])
+@limiter.limit("10 per minute")
 @handle_route_errors
 @critical_path
 def submit_assessment(code):
