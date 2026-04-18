@@ -84,6 +84,7 @@ PUBLIC_EXACT = [
     '/api/student/session',     # Session validation (uses X-Student-Token)
     '/api/student/dashboard',   # Student dashboard (uses X-Student-Token, not JWT)
     '/api/student/shared-media', # Shared media access (public via join code)
+    '/api/_debug/limiter',      # TEMP rate-limit diagnostic (X-Debug-Secret gated) — remove after investigation
 ]
 
 # Student endpoints that use prefix matching (X-Student-Token auth, not JWT)
