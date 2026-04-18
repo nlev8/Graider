@@ -3,31 +3,51 @@ Temporary debug routes — TO BE DELETED after investigation completes.
 
 Added 2026-04-17 to diagnose why flask-limiter rate limits aren't firing
 in production (see session memory + PR #89 Codex+Explore cross-check).
-Gated with @require_admin so only district admins can hit it.
+
+Gated by a shared-secret header (X-Debug-Secret matching the
+DEBUG_ENDPOINT_SECRET env var) rather than @require_admin because the
+admin decorator requires a JWT bearer token that's awkward to pass
+from a browser address bar. Shared-secret lets the operator curl once
+and move on.
 
 Remove this file + its registration in backend/routes/__init__.py after
-the rate-limit investigation is resolved.
+the rate-limit investigation resolves. Also unset the
+DEBUG_ENDPOINT_SECRET env var on Railway.
 """
+import os
+import hmac
 from flask import Blueprint, jsonify, request
 
 from backend.extensions import limiter
-from backend.utils.auth_decorators import require_admin
 
 
 debug_bp = Blueprint('debug', __name__)
 
 
+def _check_debug_secret():
+    """Constant-time-compare the incoming X-Debug-Secret header against env."""
+    expected = os.getenv('DEBUG_ENDPOINT_SECRET', '')
+    if not expected:
+        return False
+    provided = request.headers.get('X-Debug-Secret', '')
+    return hmac.compare_digest(expected, provided)
+
+
 @debug_bp.route('/api/_debug/limiter', methods=['GET'])
 @limiter.exempt
-@require_admin
 def limiter_state():
     """Dump flask-limiter runtime state for debugging.
 
-    Admin-gated + exempt from rate limiting itself (ironic). Returns JSON
-    describing the limiter's storage backend, any registered decorated
-    limits, whether headers are enabled, and what the current-request
-    key-function resolution sees.
+    Shared-secret-gated via X-Debug-Secret header. Returns JSON describing
+    the limiter's storage backend, any registered decorated limits, whether
+    headers are enabled, and what the current-request key-function
+    resolution sees.
     """
+    if not _check_debug_secret():
+        # 404 (not 401) so the endpoint doesn't advertise its existence
+        # to scanners. Caller with the right secret gets the diagnostic.
+        return jsonify({"error": "Not found"}), 404
+
     # Attempt to introspect limiter's internal state. Guard every access
     # because flask-limiter's private attrs may rename across minor versions.
     storage = getattr(limiter, '_storage', None)
