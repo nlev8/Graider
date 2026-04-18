@@ -1,7 +1,27 @@
--- Phase 4.2 PR1 — Database RLS Hardening (2026-04-17)
+-- Phase 4.2 PR1 — Database RLS Hardening (2026-04-17, revised 2026-04-18)
 --
 -- Purpose: add Row Level Security policies to tenant-owned tables currently
 -- lacking them, tighten policies on tables with too-broad access.
+--
+-- 2026-04-18 REVISION — LIVE DRIFT RECONCILIATION
+-- A drift audit run against the live Supabase (2026-04-18) found several
+-- tables carry policies under differently-capitalised names ("Teachers
+-- manage own X") that predate the canonical ``<table>_own`` / ``<table>_
+-- <op>_<actor>`` naming convention. Two of those drifted policies have
+-- FUNCTIONAL issues as well:
+--
+--   * ``published_assessments``: USES ``teacher_email = auth.email()``.
+--     Email can change across Supabase OAuth provider switches or admin
+--     renames; ``auth.uid()`` cannot. Swapping to uid-based policy.
+--   * ``submissions``: inherits the email chain via
+--     ``published_assessments.teacher_email = auth.email()``. Same fix.
+--   * ``student_sessions``: ``USING (false)`` blocks teacher reads
+--     entirely. Migration installs a SELECT-only policy scoped by
+--     class ownership so Phase 4.5 teacher dashboards can read sessions.
+--
+-- To make the migration idempotent against the drifted state, every
+-- ``CREATE POLICY`` is preceded by ``DROP POLICY IF EXISTS`` for BOTH
+-- the migration's canonical name AND the live drift name.
 --
 -- Enforcement model: belt-and-suspenders. Graider's backend continues using
 -- the Supabase service role key, which bypasses all RLS. The policies
@@ -39,6 +59,7 @@ CREATE POLICY student_history_own ON student_history
 
 -- classes (UUID teacher_id)
 DROP POLICY IF EXISTS classes_own ON classes;
+DROP POLICY IF EXISTS "Teachers manage own classes" ON classes;  -- live drift (2026-04-18 audit)
 CREATE POLICY classes_own ON classes
     FOR ALL
     USING (auth.uid()::text = teacher_id::text)
@@ -46,6 +67,7 @@ CREATE POLICY classes_own ON classes
 
 -- students (UUID teacher_id)
 DROP POLICY IF EXISTS students_own ON students;
+DROP POLICY IF EXISTS "Teachers manage own students" ON students;  -- live drift
 CREATE POLICY students_own ON students
     FOR ALL
     USING (auth.uid()::text = teacher_id::text)
@@ -53,6 +75,7 @@ CREATE POLICY students_own ON students
 
 -- class_students (multi-hop via class_id -> classes.teacher_id)
 DROP POLICY IF EXISTS class_students_own ON class_students;
+DROP POLICY IF EXISTS "Teachers manage own class_students" ON class_students;  -- live drift
 CREATE POLICY class_students_own ON class_students
     FOR ALL
     USING (
@@ -80,6 +103,10 @@ ALTER TABLE published_assessments ENABLE ROW LEVEL SECURITY;
 
 -- Drop the existing overly-permissive "Anyone can read active assessments" policy
 DROP POLICY IF EXISTS "Anyone can read active assessments" ON published_assessments;
+
+-- Drop the email-based drift policy ("teacher_email = auth.email()" — see header).
+-- Replaced below by four uid-based per-operation policies.
+DROP POLICY IF EXISTS "Teachers manage own published_assessments" ON published_assessments;
 
 -- Teacher CRUD on own rows
 DROP POLICY IF EXISTS published_assessments_select_teacher ON published_assessments;
@@ -116,6 +143,10 @@ ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
 -- Drop the existing overly-permissive "Anyone can insert/read submissions" policies
 DROP POLICY IF EXISTS "Anyone can insert submissions" ON submissions;
 DROP POLICY IF EXISTS "Anyone can read submissions" ON submissions;
+
+-- Drop the live drift policy that inherits the email chain through
+-- published_assessments.teacher_email = auth.email(). Replaced below.
+DROP POLICY IF EXISTS "Teachers view own submissions" ON submissions;
 
 -- Teacher reads submissions to their own assessments
 DROP POLICY IF EXISTS submissions_select_teacher ON submissions;
@@ -166,6 +197,7 @@ CREATE POLICY submissions_delete_teacher ON submissions
 ALTER TABLE published_content ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS published_content_own ON published_content;
+DROP POLICY IF EXISTS "Teachers manage own published_content" ON published_content;  -- live drift
 CREATE POLICY published_content_own ON published_content
     FOR ALL
     USING (auth.uid()::text = teacher_id::text)
@@ -178,6 +210,7 @@ CREATE POLICY published_content_own ON published_content
 ALTER TABLE student_submissions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS student_submissions_own ON student_submissions;
+DROP POLICY IF EXISTS "Teachers manage own student_submissions" ON student_submissions;  -- live drift
 CREATE POLICY student_submissions_own ON student_submissions
     FOR ALL
     USING (
@@ -204,6 +237,9 @@ ALTER TABLE student_sessions ENABLE ROW LEVEL SECURITY;
 -- Only SELECT policy — writes must go through the backend (service role).
 -- A teacher's JWT cannot create/modify/delete student sessions directly.
 DROP POLICY IF EXISTS student_sessions_select_teacher ON student_sessions;
+-- Drop the live drift policy USING(false), which blocks teacher reads entirely.
+-- Replaced below by a SELECT policy scoped by class ownership.
+DROP POLICY IF EXISTS "No direct access to student_sessions" ON student_sessions;
 CREATE POLICY student_sessions_select_teacher ON student_sessions
     FOR SELECT
     USING (
@@ -217,14 +253,28 @@ CREATE POLICY student_sessions_select_teacher ON student_sessions
 -- =========================================================================
 -- SECTION 7 — submission_confirmations (NEW RLS — UUID teacher_id)
 -- =========================================================================
+-- Gated on table existence: the 2026-04-18 drift audit didn't confirm
+-- this table is present on live. If it's not, the section is a no-op.
 
-ALTER TABLE submission_confirmations ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS submission_confirmations_own ON submission_confirmations;
-CREATE POLICY submission_confirmations_own ON submission_confirmations
-    FOR ALL
-    USING (auth.uid()::text = teacher_id::text)
-    WITH CHECK (auth.uid()::text = teacher_id::text);
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = 'submission_confirmations'
+          AND c.relkind = 'r'
+    ) THEN
+        EXECUTE 'ALTER TABLE submission_confirmations ENABLE ROW LEVEL SECURITY';
+        EXECUTE 'DROP POLICY IF EXISTS submission_confirmations_own ON submission_confirmations';
+        EXECUTE $policy$
+            CREATE POLICY submission_confirmations_own ON submission_confirmations
+                FOR ALL
+                USING (auth.uid()::text = teacher_id::text)
+                WITH CHECK (auth.uid()::text = teacher_id::text)
+        $policy$;
+    END IF;
+END $$;
 
 -- =========================================================================
 -- Phase 4.2 PR1 complete.
