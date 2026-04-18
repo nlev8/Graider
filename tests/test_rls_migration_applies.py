@@ -65,13 +65,19 @@ EXPECTED_POLICIES: dict[str, set[str]] = {
 }
 
 # Minimal auth schema stub so CREATE POLICY references to auth.uid() parse.
-# In real Supabase this schema is provisioned automatically.
+# In real Supabase this schema is provisioned automatically — auth.uid()
+# returns UUID (NOT text) because it's backed by auth.users.id which is UUID.
+# Graider's existing policies in supabase_roster_rls.sql rely on the UUID
+# return type (`auth.uid() = teacher_id` with UUID teacher_id, no ::text cast).
+# PR1's migration casts explicitly (`auth.uid()::text = teacher_id`) which
+# works with either return type, but the stub must match Supabase's real
+# signature so the existing policies also apply cleanly in the test container.
 AUTH_SCHEMA_STUB = """
 CREATE SCHEMA IF NOT EXISTS auth;
 
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS text
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
 LANGUAGE sql STABLE
-AS $$ SELECT NULL::text; $$;
+AS $$ SELECT NULL::uuid; $$;
 
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb
 LANGUAGE sql STABLE
