@@ -30,7 +30,11 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest-cov
+        run: |
+          pip install -r requirements.txt pytest-cov
+          if [ -f requirements-dev.txt ]; then
+            pip install -r requirements-dev.txt
+          fi
 
       - name: Run tests with coverage
         run: |
