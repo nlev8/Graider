@@ -66,20 +66,9 @@ DROP POLICY IF EXISTS student_submissions_own ON student_submissions;
 DROP POLICY IF EXISTS student_sessions_select_teacher ON student_sessions;
 
 -- =========================================================================
--- SECTION 5 — submission_confirmations (conditional — table may not exist)
+-- SECTION 5 — submission_confirmations
 -- =========================================================================
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public'
-          AND c.relname = 'submission_confirmations'
-          AND c.relkind = 'r'
-    ) THEN
-        EXECUTE 'DROP POLICY IF EXISTS submission_confirmations_own ON submission_confirmations';
-    END IF;
-END $$;
+DROP POLICY IF EXISTS submission_confirmations_own ON submission_confirmations;
 
 -- =========================================================================
 -- Rollback complete. All 11+ tables keep RLS enabled with no policies

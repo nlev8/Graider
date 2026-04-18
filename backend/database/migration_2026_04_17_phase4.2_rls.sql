@@ -253,28 +253,15 @@ CREATE POLICY student_sessions_select_teacher ON student_sessions
 -- =========================================================================
 -- SECTION 7 — submission_confirmations (NEW RLS — UUID teacher_id)
 -- =========================================================================
--- Gated on table existence: the 2026-04-18 drift audit didn't confirm
--- this table is present on live. If it's not, the section is a no-op.
+-- Confirmed present on live via supabase-py probe 2026-04-18.
 
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public'
-          AND c.relname = 'submission_confirmations'
-          AND c.relkind = 'r'
-    ) THEN
-        EXECUTE 'ALTER TABLE submission_confirmations ENABLE ROW LEVEL SECURITY';
-        EXECUTE 'DROP POLICY IF EXISTS submission_confirmations_own ON submission_confirmations';
-        EXECUTE $policy$
-            CREATE POLICY submission_confirmations_own ON submission_confirmations
-                FOR ALL
-                USING (auth.uid()::text = teacher_id::text)
-                WITH CHECK (auth.uid()::text = teacher_id::text)
-        $policy$;
-    END IF;
-END $$;
+ALTER TABLE submission_confirmations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS submission_confirmations_own ON submission_confirmations;
+CREATE POLICY submission_confirmations_own ON submission_confirmations
+    FOR ALL
+    USING (auth.uid()::text = teacher_id::text)
+    WITH CHECK (auth.uid()::text = teacher_id::text);
 
 -- =========================================================================
 -- Phase 4.2 PR1 complete.
