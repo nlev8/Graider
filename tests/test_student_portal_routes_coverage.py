@@ -74,14 +74,14 @@ def _multi_table_sb(table_map):
 
 class TestPublishAssessment:
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_no_assessment_returns_400(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({})
         resp = client.post('/api/publish-assessment', json={},
                            headers=teacher_headers)
         assert resp.status_code == 400
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_publishes_assessment_returns_join_code(self, mock_get_sb,
                                                     client, teacher_headers):
         # The table call for checking join-code uniqueness returns empty (code unused),
@@ -120,7 +120,7 @@ class TestPublishAssessment:
         assert 'join_code' in body
         assert 'join_link' in body
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_publish_makeup_with_restricted_students(self, mock_get_sb,
                                                       client, teacher_headers):
         mock_sb = MagicMock()
@@ -144,7 +144,7 @@ class TestPublishAssessment:
         assert body['restricted_students'] == ["Jane Doe", "John Smith"]
         assert body['period'] == '3'
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_publish_upsert_returns_no_data_returns_500(self, mock_get_sb,
                                                          client, teacher_headers):
         mock_sb = MagicMock()
@@ -163,14 +163,14 @@ class TestPublishAssessment:
 
 class TestListAssessments:
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_empty_list(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.get('/api/teacher/assessments', headers=teacher_headers)
         assert resp.status_code == 200
         assert resp.get_json() == {"assessments": []}
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_returns_assessments(self, mock_get_sb, client, teacher_headers):
         rows = [{
             "id": "a1", "join_code": "CODE01", "title": "Quiz 1",
@@ -193,14 +193,14 @@ class TestListAssessments:
 
 class TestGetAssessmentResults:
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_not_found(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.get('/api/teacher/assessment/NONE99/results',
                           headers=teacher_headers)
         assert resp.status_code == 404
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_returns_submissions(self, mock_get_sb, client, teacher_headers):
         assessment_row = [{
             "id": "asm-1", "join_code": "ABC123", "title": "Quiz",
@@ -228,14 +228,14 @@ class TestGetAssessmentResults:
 
 class TestToggleAssessment:
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_not_found(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.post('/api/teacher/assessment/BADCODE/toggle',
                            headers=teacher_headers)
         assert resp.status_code == 404
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_toggle_active_to_inactive(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({
             'published_assessments': [{"is_active": True}]
@@ -247,7 +247,7 @@ class TestToggleAssessment:
         assert body['active'] is False
         assert 'deactivated' in body['message']
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_toggle_inactive_to_active(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({
             'published_assessments': [{"is_active": False}]
@@ -264,14 +264,14 @@ class TestToggleAssessment:
 
 class TestDeleteAssessment:
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_not_found(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.delete('/api/teacher/assessment/BADCODE',
                              headers=teacher_headers)
         assert resp.status_code == 404
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_delete_ok(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({
             'published_assessments': [{"id": "a1"}],
@@ -287,13 +287,13 @@ class TestDeleteAssessment:
 
 class TestStudentJoin:
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_not_found(self, mock_get_sb, client):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.get('/api/student/join/BADCODE')
         assert resp.status_code == 404
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_inactive_assessment_returns_403(self, mock_get_sb, client):
         row = [{
             "id": "a1", "is_active": False,
@@ -303,7 +303,7 @@ class TestStudentJoin:
         resp = client.get('/api/student/join/ABC123')
         assert resp.status_code == 403
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_returns_sanitized_assessment(self, mock_get_sb, client):
         row = [{
             "id": "a1", "is_active": True,
@@ -340,7 +340,7 @@ class TestStudentJoin:
         assert 'answer' not in q
         assert q['options'] == ["A) 3", "B) 4"]
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_study_guide_material_response(self, mock_get_sb, client):
         row = [{
             "id": "sg1", "is_active": True, "title": "Chapter 7 Guide",
@@ -361,14 +361,14 @@ class TestStudentJoin:
 
 class TestStudentSubmit:
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_assessment_not_found(self, mock_get_sb, client):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.post('/api/student/submit/BADCODE',
                            json={"student_name": "Jane", "answers": {}})
         assert resp.status_code == 404
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_inactive_assessment(self, mock_get_sb, client):
         mock_get_sb.return_value = _multi_table_sb({
             'published_assessments': [{"is_active": False, "settings": {},
@@ -378,7 +378,7 @@ class TestStudentSubmit:
                            json={"student_name": "Jane", "answers": {}})
         assert resp.status_code == 403
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_duplicate_submission_blocked(self, mock_get_sb, client):
         assessment_row = [{
             "id": "a1", "is_active": True,
@@ -400,7 +400,7 @@ class TestStudentSubmit:
         assert resp.status_code == 400
         assert 'already' in resp.get_json()['error'].lower()
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_happy_path_mc_only_submission(self, mock_get_sb, client):
         assessment_row = [{
             "id": "a1", "teacher_id": "t1", "is_active": True,
@@ -428,7 +428,7 @@ class TestStudentSubmit:
         assert body['success'] is True
         assert body['student_name'] == 'Jane'
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_pending_review_mode(self, mock_get_sb, client):
         """When show_score + show_answers both false => pending_review status."""
         assessment_row = [{
@@ -460,22 +460,22 @@ class TestStudentSubmit:
 class TestHelpers:
 
     def test_parse_ts_empty(self):
-        from routes.student_portal_routes import _parse_ts
+        from backend.routes.student_portal_routes import _parse_ts
         assert _parse_ts('') == datetime.min
         assert _parse_ts(None) == datetime.min
 
     def test_parse_ts_invalid(self):
-        from routes.student_portal_routes import _parse_ts
+        from backend.routes.student_portal_routes import _parse_ts
         assert _parse_ts('not-a-date') == datetime.min
 
     def test_parse_ts_iso_with_z(self):
-        from routes.student_portal_routes import _parse_ts
+        from backend.routes.student_portal_routes import _parse_ts
         result = _parse_ts('2026-04-01T12:00:00Z')
         assert result.year == 2026
         assert result.month == 4
 
     def test_select_submissions_latest(self):
-        from routes.student_portal_routes import _select_submissions_by_mode
+        from backend.routes.student_portal_routes import _select_submissions_by_mode
         subs = {"c1": [
             {"id": "s1", "attempt_number": 1, "submitted_at": "2026-01-01"},
             {"id": "s2", "attempt_number": 2, "submitted_at": "2026-02-01"},
@@ -484,7 +484,7 @@ class TestHelpers:
         assert selected["c1"][0]["id"] == "s2"
 
     def test_select_submissions_best(self):
-        from routes.student_portal_routes import _select_submissions_by_mode
+        from backend.routes.student_portal_routes import _select_submissions_by_mode
         subs = {"c1": [
             {"id": "s1", "percentage": 70, "submitted_at": "2026-01-01"},
             {"id": "s2", "percentage": 90, "submitted_at": "2026-02-01"},
@@ -494,7 +494,7 @@ class TestHelpers:
         assert selected["c1"][0]["id"] == "s2"
 
     def test_select_submissions_average_passes_through(self):
-        from routes.student_portal_routes import _select_submissions_by_mode
+        from backend.routes.student_portal_routes import _select_submissions_by_mode
         subs = {"c1": [
             {"id": "s1", "percentage": 70},
             {"id": "s2", "percentage": 90},
@@ -503,12 +503,12 @@ class TestHelpers:
         assert len(selected["c1"]) == 2
 
     def test_aggregate_mastery_empty(self):
-        from routes.student_portal_routes import _aggregate_mastery_for_student
+        from backend.routes.student_portal_routes import _aggregate_mastery_for_student
         result = _aggregate_mastery_for_student({}, {}, 'latest')
         assert result == {}
 
     def test_aggregate_mastery_latest_mode(self):
-        from routes.student_portal_routes import _aggregate_mastery_for_student
+        from backend.routes.student_portal_routes import _aggregate_mastery_for_student
         selected = {"c1": [{
             "id": "s1", "attempt_number": 1,
             "results": {"standards_mastery": {
@@ -523,7 +523,7 @@ class TestHelpers:
         assert result["CCSS.A1"]["percentage"] == 80.0
 
     def test_aggregate_mastery_average_mode(self):
-        from routes.student_portal_routes import _aggregate_mastery_for_student
+        from backend.routes.student_portal_routes import _aggregate_mastery_for_student
         selected = {"c1": [
             {"id": "s1", "attempt_number": 1,
              "results": {"standards_mastery": {

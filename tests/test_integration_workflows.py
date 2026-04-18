@@ -74,7 +74,7 @@ def _simple_sb(default_data=None):
 class TestPublishAssessment:
     """Test POST /api/publish-assessment — teacher publishes via join code."""
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_publish_returns_join_code(self, mock_get_sb, client, teacher_headers):
         mock_sb = MagicMock()
 
@@ -111,7 +111,7 @@ class TestPublishAssessment:
         assert data.get('success') is True
         assert 'join_code' in data
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_publish_requires_assessment(self, mock_get_sb, client, teacher_headers):
         mock_sb, _ = _simple_sb()
         mock_get_sb.return_value = mock_sb
@@ -128,7 +128,7 @@ class TestPublishAssessment:
 class TestTeacherAssessmentList:
     """Test GET /api/teacher/assessments — list teacher's published assessments."""
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_returns_assessments_for_teacher(self, mock_get_sb, client, teacher_headers):
         mock_sb, chain = _simple_sb([
             {'id': 'a1', 'join_code': 'XYZ789', 'title': 'Quiz 1', 'created_at': '2026-03-20T10:00:00',
@@ -148,7 +148,7 @@ class TestTeacherAssessmentList:
 class TestStudentJoinCode:
     """Test the join-code portal flow: join -> submit -> results."""
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_join_returns_sanitized_assessment(self, mock_get_sb, client):
         """GET /api/student/join/<code> should return assessment WITHOUT answer keys."""
         mock_sb, chain = _simple_sb([{
@@ -190,7 +190,7 @@ class TestStudentJoinCode:
         assert questions[0]['question'] == 'What is 2+2?'
         assert questions[0]['options'] is not None
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_join_inactive_assessment_returns_403(self, mock_get_sb, client):
         mock_sb, _ = _simple_sb([{
             'id': 'pub-002',
@@ -203,7 +203,7 @@ class TestStudentJoinCode:
         response = client.get('/api/student/join/CLOSED1')
         assert response.status_code == 403
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_join_nonexistent_code_returns_404(self, mock_get_sb, client):
         mock_sb, _ = _simple_sb([])
         mock_get_sb.return_value = mock_sb
@@ -212,8 +212,8 @@ class TestStudentJoinCode:
         assert response.status_code == 404
 
     @patch('backend.services.portal_grading.has_written_questions', return_value=False)
-    @patch('routes.student_portal_routes.grade_student_submission')
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.grade_student_submission')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_submit_mc_only_returns_score(self, mock_get_sb, mock_grade, mock_has_written, client):
         """POST /api/student/submit/<code> with MC-only should return instant score."""
         mock_grade.return_value = {
@@ -280,7 +280,7 @@ class TestStudentJoinCode:
 class TestSubmitAvailabilityWindow:
     """Test that submissions are blocked outside availability windows."""
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_submit_before_available_returns_403(self, mock_get_sb, client):
         future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
         mock_sb, _ = _simple_sb([{
@@ -303,7 +303,7 @@ class TestSubmitAvailabilityWindow:
         assert response.status_code == 403
         assert 'not yet available' in data['error']
 
-    @patch('routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes.get_supabase')
     def test_submit_after_window_returns_403(self, mock_get_sb, client):
         past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         mock_sb, _ = _simple_sb([{
