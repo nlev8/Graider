@@ -32,16 +32,16 @@ import os
 import pytest
 
 
-# FLASK_ENV must be set BEFORE backend.app is imported — other test files
-# import it with this same side effect, so this is idempotent.
-os.environ.setdefault("FLASK_ENV", "development")
-os.environ.setdefault("SUPABASE_URL", "https://stub.supabase.co")
-os.environ.setdefault("SUPABASE_SERVICE_KEY", "stub")
-os.environ.setdefault(
-    "SUPABASE_JWT_SECRET",
-    "stub-jwt-secret-stub-jwt-secret-stub-jwt-secret-stub-jwt-secret-stub",
-)
-os.environ.setdefault("FLASK_SECRET_KEY", "x" * 64)
+# NOTE: intentionally no module-level os.environ mutations.
+# backend.extensions raises RuntimeError at import time if
+# FLASK_ENV is not in {development, dev, testing, test} AND
+# REDIS_URL is unset. CI always sets FLASK_ENV=testing; local dev
+# must do the same (`FLASK_ENV=development pytest …`) or the whole
+# backend will fail to import, which those other tests handle via
+# their own fixtures. Doing it at module level here leaks side
+# effects (stub SUPABASE_URL, etc.) into other tests' state and
+# causes real breakage (2026-04-18: broke test_clever_link_roundtrip
+# in CI because the stub URL was set globally).
 
 
 @pytest.fixture
