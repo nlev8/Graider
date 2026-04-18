@@ -120,12 +120,13 @@ def test_submissions_status_check_rejects_typo(postgres_container):
     import psycopg2
 
     # Minimal insert — submissions requires assessment_id + join_code + student_name + answers
-    # Create a parent published_assessments row first (needed for FK)
+    # Create a parent published_assessments row first (needed for FK).
+    # Required NOT NULL columns: join_code, title, assessment.
     cur.execute(
-        "INSERT INTO published_assessments (teacher_id, assessment, join_code) "
-        "VALUES (%s, %s::jsonb, %s) "
+        "INSERT INTO published_assessments (teacher_id, assessment, join_code, title) "
+        "VALUES (%s, %s::jsonb, %s, %s) "
         "RETURNING id;",
-        ("test-teacher", '{}', "TEST01"),
+        ("test-teacher", '{}', "TEST01", "Test Assessment"),
     )
     assessment_id = cur.fetchone()[0]
 
