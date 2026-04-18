@@ -13,6 +13,16 @@ and move on.
 Remove this file + its registration in backend/routes/__init__.py after
 the rate-limit investigation resolves. Also unset the
 DEBUG_ENDPOINT_SECRET env var on Railway.
+
+2026-04-18 revision: fixed key-format bug discovered by Codex review.
+flask-limiter 4.1.1's limit_manager stores decorated limits keyed on
+the 3-part form ``module.name.qualname`` (see
+``flask_limiter.util.get_qualified_name``). The earlier version of this
+endpoint looked up with ``f"{module}.{name}"`` (2-part), which never
+hit. Result: every ``limits_found: []`` was a key miss, not proof of
+missing registration. This revision uses ``get_qualified_name`` for the
+probe and also dumps the raw registry so we can compare the true
+registered keys against what the url_map actually resolves to.
 """
 import os
 import hmac
@@ -39,14 +49,20 @@ def limiter_state():
     """Dump flask-limiter runtime state for debugging.
 
     Shared-secret-gated via X-Debug-Secret header. Returns JSON describing
-    the limiter's storage backend, any registered decorated limits, whether
-    headers are enabled, and what the current-request key-function
-    resolution sees.
+    the limiter's storage backend, the raw decorated-limits registry, and
+    what qualified name the url_map resolves for a known rate-limited route.
     """
     if not _check_debug_secret():
         # 404 (not 401) so the endpoint doesn't advertise its existence
         # to scanners. Caller with the right secret gets the diagnostic.
         return jsonify({"error": "Not found"}), 404
+
+    # Import the canonical key function so our lookup matches what
+    # flask-limiter uses at decoration and request time.
+    try:
+        from flask_limiter.util import get_qualified_name
+    except ImportError:
+        get_qualified_name = None
 
     # Attempt to introspect limiter's internal state. Guard every access
     # because flask-limiter's private attrs may rename across minor versions.
@@ -58,51 +74,88 @@ def limiter_state():
     except Exception as e:
         storage_check = f'check-error: {type(e).__name__}: {e}'
 
-    # flask-limiter 4.1.1: decorated_limits is a METHOD (callable_name: str) → list[RuntimeLimit]
-    # Enumerate every Flask URL rule and query its limits to build the full decorated map.
+    # Dump the RAW decorated-limits registry — this is the source of truth
+    # for what flask-limiter actually knows about, independent of any
+    # url_map / view_fn resolution. Compare these keys against the
+    # url_map_qnames map below to confirm module-path alignment.
+    try:
+        registry = getattr(limiter.limit_manager, '_decorated_limits', None)
+        if registry is None:
+            registry_keys = 'registry-attr-missing'
+            registry_count = None
+        else:
+            registry_keys = sorted(registry.keys())
+            registry_count = len(registry_keys)
+    except Exception as e:
+        registry_keys = f'registry-error: {type(e).__name__}: {e}'
+        registry_count = None
+
+    # For each URL rule, compute the qualified name the way flask-limiter
+    # does and check whether the registry has it. This is the correct
+    # (3-part) equivalent of the old introspection loop.
     try:
         from flask import current_app
-        decorated_by_endpoint: dict[str, list[str]] = {}
+        url_map_qnames: dict[str, dict] = {}
         for rule in current_app.url_map.iter_rules():
             endpoint = rule.endpoint
             view_fn = current_app.view_functions.get(endpoint)
             if view_fn is None:
                 continue
-            callable_name = f"{view_fn.__module__}.{view_fn.__name__}"
+            if get_qualified_name is not None:
+                try:
+                    qname = get_qualified_name(view_fn)
+                except Exception:
+                    qname = None
+            else:
+                qname = None
+
             try:
-                limits_for_endpoint = limiter.limit_manager.decorated_limits(callable_name)
+                limits_for_qname = limiter.limit_manager.decorated_limits(qname) if qname else []
             except Exception:
-                limits_for_endpoint = []
-            if limits_for_endpoint:
-                decorated_by_endpoint[f"{endpoint} ({rule.rule})"] = [str(l) for l in limits_for_endpoint]
-        decorated_count = sum(len(v) for v in decorated_by_endpoint.values())
-        decorated_endpoint_count = len(decorated_by_endpoint)
+                limits_for_qname = []
+
+            if limits_for_qname:
+                url_map_qnames[f"{endpoint} ({rule.rule})"] = {
+                    'qname': qname,
+                    'limits': [str(l) for l in limits_for_qname],
+                }
+        matched_count = len(url_map_qnames)
     except Exception as e:
-        decorated_by_endpoint = f'introspection-error: {type(e).__name__}: {e}'
-        decorated_count = 0
-        decorated_endpoint_count = None
+        url_map_qnames = f'introspection-error: {type(e).__name__}: {e}'
+        matched_count = None
 
     try:
         default_limits = [str(l) for l in limiter.limit_manager.default_limits]
     except Exception as e:
         default_limits = f'introspection-error: {type(e).__name__}: {e}'
 
-    # Resolve the current request's endpoint through Flask's url_map to see
-    # what flask-limiter would use as the callable_name for THIS request path.
-    # This tells us if the decorator-registration callable_name matches what
-    # gets looked up at request time.
+    # Resolve /api/student/join/<code> through Flask's url_map and use the
+    # CORRECT 3-part qname for the lookup. This tells us unambiguously
+    # whether the limit registered via the @limiter.limit decorator is
+    # findable by the same callable Flask would dispatch to.
     try:
         from flask import current_app
-        # Match /api/student/join/TESTCODE (typical rate-limited route)
         with current_app.test_request_context('/api/student/join/TESTCODE', method='GET'):
             endpoint = request.url_rule.endpoint if request.url_rule else None
             view_fn = current_app.view_functions.get(endpoint) if endpoint else None
-            probe_callable_name = f"{view_fn.__module__}.{view_fn.__name__}" if view_fn else None
-            probe_limits = limiter.limit_manager.decorated_limits(probe_callable_name) if probe_callable_name else None
+            if view_fn is not None and get_qualified_name is not None:
+                probe_qname = get_qualified_name(view_fn)
+                probe_legacy_2part = f"{view_fn.__module__}.{view_fn.__name__}"
+            else:
+                probe_qname = None
+                probe_legacy_2part = None
+            try:
+                probe_limits = (
+                    limiter.limit_manager.decorated_limits(probe_qname)
+                    if probe_qname else None
+                )
+            except Exception:
+                probe_limits = None
         probe_result = {
             'route_tested': '/api/student/join/TESTCODE',
             'resolved_endpoint': endpoint,
-            'resolved_callable_name': probe_callable_name,
+            'probe_qname_3part': probe_qname,
+            'probe_qname_2part_legacy': probe_legacy_2part,
             'limits_found': [str(l) for l in (probe_limits or [])],
         }
     except Exception as e:
@@ -124,9 +177,10 @@ def limiter_state():
         },
         'limits': {
             'default': default_limits,
-            'decorated_count_total': decorated_count,
-            'decorated_endpoint_count': decorated_endpoint_count,
-            'decorated_by_endpoint': decorated_by_endpoint,
+            'registry_count': registry_count,
+            'registry_keys': registry_keys,
+            'url_map_matched_count': matched_count,
+            'url_map_qnames_matched': url_map_qnames,
         },
         'probe_student_join': probe_result,
         'config': {
