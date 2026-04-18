@@ -58,18 +58,55 @@ def limiter_state():
     except Exception as e:
         storage_check = f'check-error: {type(e).__name__}: {e}'
 
+    # flask-limiter 4.1.1: decorated_limits is a METHOD (callable_name: str) → list[RuntimeLimit]
+    # Enumerate every Flask URL rule and query its limits to build the full decorated map.
     try:
-        decorated_limits = limiter.limit_manager.decorated_limits
-        decorated_count = sum(len(v) for v in decorated_limits.values())
-        decorated_endpoint_count = len(decorated_limits)
+        from flask import current_app
+        decorated_by_endpoint: dict[str, list[str]] = {}
+        for rule in current_app.url_map.iter_rules():
+            endpoint = rule.endpoint
+            view_fn = current_app.view_functions.get(endpoint)
+            if view_fn is None:
+                continue
+            callable_name = f"{view_fn.__module__}.{view_fn.__name__}"
+            try:
+                limits_for_endpoint = limiter.limit_manager.decorated_limits(callable_name)
+            except Exception:
+                limits_for_endpoint = []
+            if limits_for_endpoint:
+                decorated_by_endpoint[f"{endpoint} ({rule.rule})"] = [str(l) for l in limits_for_endpoint]
+        decorated_count = sum(len(v) for v in decorated_by_endpoint.values())
+        decorated_endpoint_count = len(decorated_by_endpoint)
     except Exception as e:
-        decorated_count = f'introspection-error: {type(e).__name__}: {e}'
+        decorated_by_endpoint = f'introspection-error: {type(e).__name__}: {e}'
+        decorated_count = 0
         decorated_endpoint_count = None
 
     try:
         default_limits = [str(l) for l in limiter.limit_manager.default_limits]
     except Exception as e:
         default_limits = f'introspection-error: {type(e).__name__}: {e}'
+
+    # Resolve the current request's endpoint through Flask's url_map to see
+    # what flask-limiter would use as the callable_name for THIS request path.
+    # This tells us if the decorator-registration callable_name matches what
+    # gets looked up at request time.
+    try:
+        from flask import current_app
+        # Match /api/student/join/TESTCODE (typical rate-limited route)
+        with current_app.test_request_context('/api/student/join/TESTCODE', method='GET'):
+            endpoint = request.url_rule.endpoint if request.url_rule else None
+            view_fn = current_app.view_functions.get(endpoint) if endpoint else None
+            probe_callable_name = f"{view_fn.__module__}.{view_fn.__name__}" if view_fn else None
+            probe_limits = limiter.limit_manager.decorated_limits(probe_callable_name) if probe_callable_name else None
+        probe_result = {
+            'route_tested': '/api/student/join/TESTCODE',
+            'resolved_endpoint': endpoint,
+            'resolved_callable_name': probe_callable_name,
+            'limits_found': [str(l) for l in (probe_limits or [])],
+        }
+    except Exception as e:
+        probe_result = f'probe-error: {type(e).__name__}: {e}'
 
     # Key function resolution — what does flask-limiter see as the rate-limit
     # key for THIS request?
@@ -89,7 +126,9 @@ def limiter_state():
             'default': default_limits,
             'decorated_count_total': decorated_count,
             'decorated_endpoint_count': decorated_endpoint_count,
+            'decorated_by_endpoint': decorated_by_endpoint,
         },
+        'probe_student_join': probe_result,
         'config': {
             'enabled': getattr(limiter, 'enabled', 'unknown'),
             'headers_enabled': getattr(limiter, '_headers_enabled', 'unknown'),
