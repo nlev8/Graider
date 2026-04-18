@@ -23,11 +23,17 @@ import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-# Order matters: parent tables must be created before tables referencing them.
+# Order matters: parent tables must exist before tables or ALTERs that
+# reference them. Key cross-file dependency:
+#   backend/database/supabase_schema.sql ends with an ALTER TABLE
+#   student_submissions ADD COLUMN ... block (Phase 4.1 PR0 migration).
+#   student_submissions is defined in supabase_student_portal_schema.sql,
+#   so portal_schema must apply BEFORE supabase_schema. Safe because
+#   portal_schema has zero dependencies on supabase_schema's tables.
 SCHEMA_APPLY_ORDER = [
+    "supabase_student_portal_schema.sql",
     "backend/database/supabase_schema.sql",
     "backend/database/supabase_teacher_schema.sql",
-    "supabase_student_portal_schema.sql",
     "supabase_submission_confirmations.sql",
     "supabase_roster_rls.sql",
 ]
