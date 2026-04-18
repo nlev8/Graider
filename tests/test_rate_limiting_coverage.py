@@ -175,3 +175,149 @@ def test_extensions_global_default_is_100_per_minute(monkeypatch):
     assert not any("200" in s for s in default_strs), (
         f"Global default still contains '200' — tightening regressed: {default_strs}"
     )
+
+
+class TestProxyFixClientIp:
+    """Phase 4.6 follow-up — ProxyFix must expose the stable real client IP.
+
+    Railway's ingress rotates its edge IP across requests (observed
+    .22 → .37 → .39 → .20 → .24 in back-to-back probes 2026-04-18).
+    With ``ProxyFix(x_for=1)`` werkzeug sets ``request.remote_addr`` to
+    ``XFF[-1]`` — the rotating edge — and every request from the same
+    client got its own rate-limit bucket. flask-limiter could never
+    fire.
+
+    ``x_for=2`` picks ``XFF[-2]`` which, on Railway's canonical 2-hop
+    chain ``[client, edge]``, is the stable client IP.
+
+    Spoofing: Railway always APPENDS the real TCP source as the
+    penultimate XFF entry. Empirically a client sending
+    ``X-Forwarded-For: 6.6.6.6`` produced
+    ``"6.6.6.6, 99.77.78.219, 157.52.98.26"`` at the app, so ``[-2]``
+    was still the real client. These tests pin that behaviour.
+    """
+
+    def _build_app_with_proxyfix(self, x_for: int = 2):
+        """Return a minimal Flask app with ProxyFix wired the way app.py does."""
+        from flask import Flask, request
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app = Flask(__name__)
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=x_for, x_proto=1, x_host=1)
+
+        @app.route("/echo")
+        def _echo():  # pragma: no cover — exercised via test_client below
+            return {"remote_addr": request.remote_addr}
+
+        return app
+
+    def test_x_for_2_picks_second_to_last_xff_entry(self):
+        """The canonical Railway chain [client, edge] resolves to client."""
+        app = self._build_app_with_proxyfix(x_for=2)
+        with app.test_client() as client:
+            resp = client.get(
+                "/echo",
+                headers={"X-Forwarded-For": "99.77.78.219, 157.52.98.22"},
+                environ_overrides={"REMOTE_ADDR": "157.52.98.22"},
+            )
+            assert resp.json["remote_addr"] == "99.77.78.219"
+
+    def test_x_for_2_survives_spoofed_leading_xff_entry(self):
+        """A client-injected leading XFF entry does NOT poison remote_addr.
+
+        Because Railway always appends the real TCP source BEFORE its own
+        edge IP, the [-2] position is insulated from client injection.
+        """
+        app = self._build_app_with_proxyfix(x_for=2)
+        with app.test_client() as client:
+            resp = client.get(
+                "/echo",
+                headers={"X-Forwarded-For": "6.6.6.6, 99.77.78.219, 157.52.98.26"},
+                environ_overrides={"REMOTE_ADDR": "157.52.98.26"},
+            )
+            assert resp.json["remote_addr"] == "99.77.78.219", (
+                "Spoofed leading XFF entry leaked into remote_addr — "
+                "rate-limit poisoning possible."
+            )
+
+    def test_x_for_2_survives_multiple_spoofed_entries(self):
+        """Two client-injected entries still can't reach position [-2]."""
+        app = self._build_app_with_proxyfix(x_for=2)
+        with app.test_client() as client:
+            resp = client.get(
+                "/echo",
+                headers={
+                    "X-Forwarded-For":
+                        "6.6.6.6, 7.7.7.7, 99.77.78.219, 157.52.98.26",
+                },
+                environ_overrides={"REMOTE_ADDR": "157.52.98.26"},
+            )
+            assert resp.json["remote_addr"] == "99.77.78.219"
+
+    def test_x_for_1_would_expose_rotating_edge_ip_regression_guard(self):
+        """Regression guard — pre-fix config gave the rotating edge IP.
+
+        Verifies the bug is real by demonstrating what x_for=1 does with
+        Railway's chain. If this assertion ever changes, werkzeug
+        semantics have shifted and the fix needs re-evaluation.
+        """
+        app = self._build_app_with_proxyfix(x_for=1)
+        with app.test_client() as client:
+            resp = client.get(
+                "/echo",
+                headers={"X-Forwarded-For": "99.77.78.219, 157.52.98.22"},
+                environ_overrides={"REMOTE_ADDR": "157.52.98.22"},
+            )
+            # Pre-fix behavior: remote_addr is the last XFF entry = rotating edge
+            assert resp.json["remote_addr"] == "157.52.98.22"
+
+    def test_x_for_2_falls_back_when_xff_missing(self):
+        """Local / direct requests without XFF still get SOME remote_addr.
+
+        ProxyFix only rewrites REMOTE_ADDR when there are enough trusted
+        hops to consume — if XFF is empty or too short, it leaves the
+        direct TCP source in place. Critical for local dev + unit tests.
+        """
+        app = self._build_app_with_proxyfix(x_for=2)
+        with app.test_client() as client:
+            resp = client.get(
+                "/echo",
+                environ_overrides={"REMOTE_ADDR": "10.0.0.5"},
+            )
+            assert resp.json["remote_addr"] == "10.0.0.5"
+
+
+def test_app_py_proxyfix_uses_x_for_2():
+    """Pin the production ProxyFix config so a future refactor can't
+    silently revert to x_for=1 and re-break rate limiting on Railway.
+    """
+    import ast
+
+    app_py_path = REPO_ROOT / "backend" / "app.py"
+    tree = ast.parse(app_py_path.read_text())
+
+    proxyfix_calls = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        # Match ProxyFix(...) at any attribute depth (ProxyFix, x.ProxyFix, etc.)
+        if isinstance(func, ast.Name) and func.id == "ProxyFix":
+            proxyfix_calls.append(node)
+        elif isinstance(func, ast.Attribute) and func.attr == "ProxyFix":
+            proxyfix_calls.append(node)
+
+    assert proxyfix_calls, "backend/app.py must instantiate ProxyFix"
+
+    for call in proxyfix_calls:
+        x_for = None
+        for kw in call.keywords:
+            if kw.arg == "x_for" and isinstance(kw.value, ast.Constant):
+                x_for = kw.value.value
+        assert x_for == 2, (
+            f"ProxyFix at line {call.lineno} uses x_for={x_for} — must be 2. "
+            "x_for=1 puts Railway's rotating edge IP in request.remote_addr "
+            "which silently disables every flask-limiter @limit on Railway. "
+            "If Railway's proxy topology changes, update the comment and "
+            "the ProxyFixClientIp tests together."
+        )

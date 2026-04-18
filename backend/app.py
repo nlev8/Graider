@@ -135,9 +135,25 @@ def set_security_headers(response):
         )
     return response
 
-# Fix request.host behind reverse proxy (Railway/gunicorn)
+# Fix request.host / request.remote_addr behind reverse proxy (Railway/gunicorn)
+#
+# x_for=2 because Railway's ingress produces a 2-hop X-Forwarded-For chain:
+#   [real_client_ip, railway_edge_ip]
+# and Railway rotates the edge IP per request (empirically verified
+# 2026-04-18: five back-to-back requests from one client saw the last
+# XFF entry vary .22 → .37 → .39 → .20 → .24). With x_for=1, ProxyFix
+# would set request.remote_addr to that rotating edge IP, breaking
+# flask-limiter (every request in its own bucket) and making logs
+# indistinguishable across clients.
+#
+# x_for=2 takes XFF[-2] which is the stable real-client IP. Spoofing is
+# not a concern: Railway always APPENDS the real TCP source as the
+# penultimate entry (verified — a client sending "X-Forwarded-For:
+# 6.6.6.6" produced "6.6.6.6, 99.77.78.219, 157.52.98.26" server-side,
+# so [-2] is still the real client). If Railway ever adds a second
+# proxy layer this becomes brittle and x_for must be bumped to match.
 from werkzeug.middleware.proxy_fix import ProxyFix
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_proto=1, x_host=1)
 
 # Session configuration — Redis in production, filesystem locally
 is_dev = os.getenv('FLASK_ENV', '').lower() in ('development', 'dev')
