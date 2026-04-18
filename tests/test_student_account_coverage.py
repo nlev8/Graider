@@ -102,7 +102,7 @@ def _mock_valid_session(mock_get_sb, student_id='stu-001', class_id='cls-001'):
 class TestCheckStudentSession:
     """GET /api/student/session"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_valid_session_returns_student_info(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -138,7 +138,7 @@ class TestCheckStudentSession:
         resp = client.get('/api/student/session')
         assert resp.status_code == 401
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_expired_session_returns_401(self, mock_get_sb, client):
         expired = (datetime.now(tz=timezone.utc) - timedelta(hours=1)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expired}]
@@ -157,7 +157,7 @@ class TestCheckStudentSession:
 class TestStudentDashboard:
     """GET /api/student/dashboard"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_dashboard_returns_assigned_content(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -207,7 +207,7 @@ class TestSubmitStudentWork:
 
     def _call_submit(self, app, content_id, headers, body):
         """Invoke submit_student_work directly within a request context."""
-        from routes.student_account_routes import submit_student_work
+        from backend.routes.student_account_routes import submit_student_work
         with app.test_request_context(
             f'/api/student/submit/{content_id}',
             method='POST',
@@ -226,7 +226,7 @@ class TestSubmitStudentWork:
 
     @patch('backend.services.portal_grading.has_written_questions', return_value=False)
     @patch('backend.services.grading_service.grade_student_submission')
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_valid_submission_returns_success(self, mock_get_sb, mock_grade, mock_hw, app):
         mock_grade.return_value = {
             'score': 8, 'total_points': 10, 'percentage': 80, 'questions': [],
@@ -283,7 +283,7 @@ class TestSubmitStudentWork:
         status, _ = self._extract(rv)
         assert status == 401
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_submit_nonexistent_content_returns_404(self, mock_get_sb, app):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -317,7 +317,7 @@ class TestSubmitStudentWork:
 
     @patch('backend.services.portal_grading.has_written_questions', return_value=False)
     @patch('backend.services.grading_service.grade_student_submission')
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_duplicate_submission_returns_400(self, mock_get_sb, mock_grade, mock_hw, app):
         """23505 unique violation on upsert returns user-friendly 400."""
         mock_grade.return_value = {
@@ -362,7 +362,7 @@ class TestSubmitStudentWork:
 
     @patch('backend.services.portal_grading.has_written_questions', return_value=False)
     @patch('backend.services.grading_service.grade_student_submission')
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_submission_uses_upsert_not_insert(self, mock_get_sb, mock_grade, mock_hw, app):
         """Verify the code uses upsert (UUID-idempotent) not plain insert."""
         mock_grade.return_value = {
@@ -412,7 +412,7 @@ class TestSubmitStudentWork:
 class TestSaveSubmissionDraft:
     """POST /api/student/submission/<content_id>/draft"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_new_draft_creates_row(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -448,7 +448,7 @@ class TestSaveSubmissionDraft:
         assert resp.status_code == 200
         assert data['success'] is True
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_existing_draft_updates_row(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -486,7 +486,7 @@ class TestSaveSubmissionDraft:
                            json={'answers': {}})
         assert resp.status_code == 401
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_draft_with_timer_returns_remaining(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -528,7 +528,7 @@ class TestSaveSubmissionDraft:
 class TestGetStudentContent:
     """GET /api/student/content/<content_id>"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_content_strips_answer_keys(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -564,7 +564,7 @@ class TestGetStudentContent:
         assert 'answer' not in q
         assert 'correct_answer' not in q
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_content_not_found_returns_404(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -591,7 +591,7 @@ class TestGetStudentContent:
 class TestStudentLogin:
     """POST /api/student/login"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_valid_login_returns_token(self, mock_get_sb, client):
         class_row = [{'id': 'cls-1', 'teacher_id': 't1', 'name': 'P1', 'subject': 'Math'}]
         student_row = [{'id': 'stu-1', 'first_name': 'Jo', 'last_name': 'Mo',
@@ -627,7 +627,7 @@ class TestStudentLogin:
         assert 'token' in data
         assert data['student']['first_name'] == 'Jo'
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_login_missing_fields_returns_400(self, mock_get_sb, client):
         # The route calls _get_supabase() before validating inputs (line 558),
         # so CI needs the mock even though the 400 branch never touches the
@@ -644,7 +644,7 @@ class TestStudentLogin:
 class TestCreateClass:
     """POST /api/classes"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_create_class_success(self, mock_get_sb, client, teacher_headers):
         mock_sb = MagicMock()
         # _generate_class_code checks for existing codes
@@ -668,7 +668,7 @@ class TestCreateClass:
         assert resp.status_code == 200
         assert data['success'] is True
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_create_class_missing_name_returns_400(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = MagicMock()
         resp = client.post('/api/classes', headers=teacher_headers,
@@ -681,7 +681,7 @@ class TestCreateClass:
 class TestListClasses:
     """GET /api/classes"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_list_classes_returns_teacher_classes(self, mock_get_sb, client, teacher_headers):
         classes_row = [
             {'id': 'c1', 'name': 'P1', 'subject': 'Math', 'is_active': True,
@@ -704,7 +704,7 @@ class TestListClasses:
 class TestStudentResources:
     """GET /api/student/resources + /api/student/resource/<id>"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_list_resources_filters_to_resource_types(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -745,7 +745,7 @@ class TestStudentResources:
         resp = client.get('/api/student/resources')
         assert resp.status_code == 401
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_resource_content_not_found_returns_404(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -772,7 +772,7 @@ class TestStudentResources:
 class TestGetSubmissionDraft:
     """GET /api/student/submission/<content_id>/draft"""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_get_draft_returns_saved_answers(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -808,7 +808,7 @@ class TestGetSubmissionDraft:
         # 45 min - 15 min elapsed = ~1800 seconds remaining
         assert 1700 < data['draft']['remaining_seconds'] <= 1800
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_get_draft_no_draft_returns_none(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
@@ -837,7 +837,7 @@ class TestGetSubmissionDraft:
         resp = client.get('/api/student/submission/pc-1/draft')
         assert resp.status_code == 401
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_get_draft_wrong_class_returns_404(self, mock_get_sb, client):
         """Content that doesn't belong to student's class returns 404."""
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
@@ -866,13 +866,13 @@ class TestLoginRateLimit:
     """_check_rate_limit enforces 5 attempts per 10 min per student."""
 
     def test_rate_limit_allows_first_5_attempts(self):
-        from routes.student_account_routes import _check_rate_limit, _login_attempts
+        from backend.routes.student_account_routes import _check_rate_limit, _login_attempts
         _login_attempts.clear()
         for _ in range(5):
             assert _check_rate_limit('S123') is True
 
     def test_rate_limit_blocks_6th_attempt(self):
-        from routes.student_account_routes import _check_rate_limit, _login_attempts
+        from backend.routes.student_account_routes import _check_rate_limit, _login_attempts
         _login_attempts.clear()
         for _ in range(5):
             _check_rate_limit('S456')
@@ -884,7 +884,7 @@ class TestLoginRateLimit:
 class TestErrorHandling:
     """Verify routes return clean JSON errors, not HTML 500."""
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_supabase_failure_returns_json_500(self, mock_get_sb, client, teacher_headers):
         """Supabase connection failure returns JSON error, not HTML."""
         mock_get_sb.side_effect = Exception('Connection refused')
@@ -895,7 +895,7 @@ class TestErrorHandling:
         assert data is not None
         assert 'error' in data
 
-    @patch('routes.student_account_routes._get_supabase')
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_dashboard_db_error_returns_json(self, mock_get_sb, client):
         """Dashboard DB failure returns clean JSON, not traceback."""
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()

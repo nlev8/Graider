@@ -74,7 +74,7 @@ try:
     from backend.storage import load as storage_load, save as storage_save
 except ImportError:
     try:
-        from storage import load as storage_load, save as storage_save
+        from backend.storage import load as storage_load, save as storage_save
     except ImportError:
         storage_load = None
         storage_save = None
@@ -164,14 +164,14 @@ if os.getenv('REDIS_URL'):
 # AUTHENTICATION
 # ══════════════════════════════════════════════════════════════
 try:
-    from utils.logging_utils import configure_logging, log_request_timing
+    from backend.utils.logging_utils import configure_logging, log_request_timing
     configure_logging(app)
     log_request_timing(app)
 except Exception as e:
     print(f"Warning: Logging configuration failed: {e}")
 
 try:
-    from auth import init_auth
+    from backend.auth import init_auth
     init_auth(app)
 except Exception as e:
     print(f"Warning: Auth middleware not loaded: {e}")
@@ -190,7 +190,7 @@ def handle_404(e):
 
 # Recover stale partial submissions from prior deploys (daemon threads killed on restart)
 try:
-    from supabase_client import get_supabase as _recovery_sb
+    from backend.supabase_client import get_supabase as _recovery_sb
     _sb = _recovery_sb()
     if _sb:
         from datetime import timedelta
@@ -398,7 +398,7 @@ from backend.grading.thread import run_grading_thread
 # ══════════════════════════════════════════════════════════════
 
 import signal
-from routes import register_routes
+from backend.routes import register_routes
 
 def _handle_sigterm(signum, frame):
     """Graceful shutdown: stop any running grading thread before exit.
