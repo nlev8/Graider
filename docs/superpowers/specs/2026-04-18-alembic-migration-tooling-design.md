@@ -81,7 +81,7 @@ backend/database/                 frozen after cutoff
   rollback_*.sql                  historical; do not edit
   verify_*.sql                    historical; do not edit
   supabase_schema.sql             historical; do not edit
-railway.json                      +"releaseCommand": "alembic upgrade head" on web service
+railway.json                      +"preDeployCommand": "alembic upgrade head" on web service
 .github/workflows/ci.yml          +"Migrations Smoke" job
 .env.example                      +ALEMBIC_DATABASE_URL=...
 backend/app.py                    no change — does not invoke Alembic at request time
@@ -132,7 +132,7 @@ ALEMBIC_DATABASE_URL=<session-pooler-url> alembic stamp 0001_baseline_existing_l
 
 After that, `alembic current` against live returns this revision, and
 future migrations (`0002_...`, `0003_...`) append from here. The Railway
-`releaseCommand` then becomes a no-op on the first deploy after Alembic
+`preDeployCommand` then becomes a no-op on the first deploy after Alembic
 is introduced and only does work when a new revision is merged.
 
 ---
@@ -141,27 +141,37 @@ is introduced and only does work when a new revision is merged.
 
 ### Railway pre-deploy migration
 
-Add to `railway.json` on the web service:
+Update `railway.json` on the web service:
 
 ```json
 {
   "deploy": {
-    "releaseCommand": "alembic upgrade head",
-    "startCommand": "cd backend && gunicorn app:app --bind 0.0.0.0:$PORT"
+    "preDeployCommand": "alembic upgrade head",
+    "startCommand": "cd backend && gunicorn app:app --bind 0.0.0.0:$PORT",
+    "healthcheckPath": "/healthz",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
   }
 }
 ```
 
-Railway runs the `releaseCommand` after the build completes and before
-the new container receives traffic. If it exits non-zero, Railway aborts
-the deploy, the old container keeps serving, and the deploy surface
-shows the error.
+`preDeployCommand` is Railway's documented hook that runs between
+build and deploy. Per
+[Railway docs](https://docs.railway.com/deployments/pre-deploy-command):
+"if the Pre-Deploy Command fails, the deployment will not proceed."
+Combined with `healthcheckPath: "/healthz"`, Railway's deploy lifecycle
+waits for readiness on the new container before swapping traffic
+([deploys reference](https://docs.railway.com/deployments/healthchecks)),
+so a failed migration or a failed healthcheck both keep the old
+container serving. The healthcheck path is non-optional for the
+traffic-swap guarantee — without it Railway activates the new
+deployment as soon as the container starts.
 
 **The worker service does not run migrations.** Only the web service's
-`releaseCommand` invokes Alembic. The worker's `railway.worker.json`
-remains untouched. Rationale: the web service has a single gunicorn
-master that runs the release command once per deploy; the Celery worker
-is prefork concurrency 8 which would race.
+`preDeployCommand` invokes Alembic. The worker's `railway.worker.json`
+remains untouched. Rationale: the web service has a single container
+per deploy that runs the pre-deploy command once; the Celery worker is
+prefork concurrency 8 which would race.
 
 ### Connection string
 
@@ -169,16 +179,38 @@ A new dedicated env var, `ALEMBIC_DATABASE_URL`, points at the database.
 Not reused from any existing variable — Alembic's connection
 requirements are different from the Supabase client's.
 
-**Pooler choice:** Supabase's **session pooler** (not transaction
-pooler). Alembic uses `pg_advisory_lock` at the session level to
-serialise concurrent migration runs. Transaction pooler (pgbouncer in
-transaction mode) silently releases the advisory lock at every
-transaction boundary, which would let two concurrently-starting
-deploys run migrations in parallel.
+**Pooler choice:** Supabase's **session pooler** (or direct connection),
+NOT the transaction pooler. Three reasons:
+
+1. **Multi-transaction migrations.** Alembic wraps each revision in a
+   single DDL transaction by default, but migrations can legitimately
+   cross transaction boundaries — `autocommit_block()` for
+   autocommit-only DDL (`CREATE INDEX CONCURRENTLY`,
+   `ALTER TYPE ... ADD VALUE`), explicit `op.execute("COMMIT")`, or
+   `transaction_per_migration=True` in `env.py` for per-revision
+   transactions. Transaction pooler (pgbouncer in transaction mode)
+   silently releases the connection at each `COMMIT`, so server-side
+   session state — statement caches, `SET LOCAL`, session variables —
+   evaporates between statements inside a single revision.
+2. **Supabase's own recommendation.** Per Supabase database-connection
+   docs, direct connection or session pooler is recommended for
+   migrations; transaction pooler is recommended only for short
+   stateless request/response traffic.
+3. **Advisory locks (if we later add them).** Some CI/CD wrappers
+   around Alembic add `SELECT pg_advisory_lock(<hash>)` to serialise
+   concurrent deploys. Session-mode pooling preserves that; transaction
+   mode drops it. We don't use this today, but the choice stays safe
+   if we add it later.
+
+(Earlier drafts of this spec attributed the pooler choice primarily to
+Alembic's own use of `pg_advisory_lock` — a 2026-04-18 Codex source
+review found no such usage in upstream Alembic and the rationale has
+been rewritten to the three points above.)
 
 **Direct connection** is acceptable if Railway's IPv6 (or IPv4 add-on)
-reaches Supabase without issue; session pooler is the fallback. We do
-not commit a specific URL — that is operator configuration.
+reaches Supabase without issue; session pooler is the documented
+fallback. We do not commit a specific URL — that is operator
+configuration.
 
 ### CI smoke test
 
@@ -212,17 +244,30 @@ migrations-smoke:
 ```
 
 `supabase_stubs.sql` (new, committed) creates the minimum Supabase-
-flavoured scaffolding so migrations referencing `auth.uid()`,
-`auth.email()`, and the `auth` schema don't immediately fail against
-vanilla Postgres:
+flavoured scaffolding. This reuses the existing in-repo pattern from
+`tests/test_rls_migration_applies.py` and
+`tests/test_schema_tightening_applies.py` (which already do in-process
+Postgres smoke tests) plus `auth.email()` for the drift-reconciled
+policies:
 
 ```sql
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
-    LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+    LANGUAGE sql STABLE AS $$ SELECT NULL::uuid; $$;
+CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb
+    LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb; $$;
+CREATE OR REPLACE FUNCTION auth.role() RETURNS text
+    LANGUAGE sql STABLE AS $$ SELECT NULL::text; $$;
 CREATE OR REPLACE FUNCTION auth.email() RETURNS text
-    LANGUAGE sql STABLE AS $$ SELECT NULL::text $$;
+    LANGUAGE sql STABLE AS $$ SELECT NULL::text; $$;
 ```
+
+Choice of `uid/jwt/role/email` over `uid/email` alone: existing Graider
+schema (e.g. `backend/database/supabase_schema.sql`) uses
+`auth.role() = 'service_role'` in service-role policies. Stubbing only
+`uid/email` would cause a smoke-test failure the first time someone
+reuses that pattern in a new migration. Matching the existing richer
+stub keeps future-proofing minimal.
 
 The stubs return NULL, which is correct for a fresh ephemeral DB with
 no request context — policies that test `auth.uid() = teacher_id`
@@ -248,7 +293,7 @@ smoke test.
 
 We accept these limitations as the cost of option C (§ Baseline). The
 smoke test is defence-in-depth, not the primary gate — Railway's
-`releaseCommand` against real Supabase is the authoritative
+`preDeployCommand` against real Supabase is the authoritative
 verification.
 
 Branch protection is extended (operator action) to require this job
@@ -278,7 +323,7 @@ behaviour.
 RLS policy): safe to ship in the same PR as the code that depends on it.
 Deploy order:
 
-1. Migration runs during Railway `releaseCommand`
+1. Migration runs during Railway `preDeployCommand`
 2. Old container still serving — its code does not reference the new
    thing, so no harm
 3. New container starts — its code uses the new thing
@@ -309,6 +354,64 @@ Every PR that touches schema must include:
   old code run against new schema (or vice versa) in a way that breaks
   requests
 
+### Mechanical enforcement — destructive-op CI scan
+
+A new pytest (`tests/test_alembic_destructive_ops.py`) scans every
+revision file under `backend/migrations/versions/` for patterns that
+indicate destructive operations and fails CI unless the revision
+carries an explicit acknowledgment comment:
+
+```python
+DESTRUCTIVE_PATTERNS = [
+    r"op\.drop_column\b",
+    r"op\.drop_table\b",
+    r"op\.rename_table\b",
+    r"op\.drop_constraint\b",
+    r"op\.drop_index\b",
+    # alter_column with type_=... or nullable=False (tightening)
+    r"op\.alter_column\([^)]*\btype_=",
+    r"op\.alter_column\([^)]*\bnullable=False\b",
+    # Raw SQL escape hatches that bypass op helpers
+    r"DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX|POLICY)\b",
+    r"ALTER\s+TABLE\s+.+\s+DROP\b",
+]
+ACK_MARKER = "# destructive:"  # comment line in the revision
+```
+
+If a file matches any pattern AND does not contain a line starting with
+`# destructive: <one-line justification>`, the test fails. The
+justification forces the author to think through the expand-contract
+implications at PR time rather than in review comments.
+
+This is a narrow heuristic — it doesn't catch every possible
+destructive operation, and it can flag false positives when raw SQL is
+used defensively (e.g., `DROP POLICY IF EXISTS` followed by
+`CREATE POLICY` in the same migration to make the migration
+idempotent, which is non-destructive net-net). Authors can mark such
+cases with the ack comment and a one-line reason. Net effect: no
+silent destructive op, every destructive op is acknowledged in code.
+
+### Autocommit-only DDL policy
+
+Certain Postgres DDL cannot run inside a transaction:
+`CREATE INDEX CONCURRENTLY`, `ALTER TYPE ... ADD VALUE`, and a few
+extension operations. These require `op.execute` inside
+`op.get_context().autocommit_block()` (Alembic 1.13+) or setting
+`transaction_per_migration=True` in `env.py` so a FAILED
+autocommit-only migration does not leave a previously-applied
+autocommit op stranded in a half-done state.
+
+Policy:
+
+- An Alembic revision that contains ANY autocommit-only DDL must
+  contain ONLY that DDL — no other statements in the same revision
+- The revision header includes `# autocommit: <op name>` as an
+  acknowledgment comment (the destructive-op CI scan pattern above is
+  extended to detect autocommit-only ops and enforce this rule)
+- `env.py` is configured with `transaction_per_migration=True` from
+  day one so that autocommit migrations run in their own transaction
+  context and failures don't leak across revisions.
+
 ---
 
 ## Cutoff rule
@@ -330,10 +433,25 @@ Every PR that touches schema must include:
   verification either lives inside the migration as `op.execute(...)`
   assertions or in a companion test.
 
-A lint rule (a simple test that greps for new files matching
-`backend/database/migration_*.sql` added on the current branch when
-not also adding to `backend/migrations/versions/`) enforces this at PR
-time.
+A pytest lint rule (`tests/test_cutoff_policy.py`) enforces this at PR
+time. It:
+
+1. Fails if any new file matching
+   `backend/database/migration_*.sql`,
+   `backend/database/rollback_*.sql`, or
+   `backend/database/verify_*.sql` is added on the current branch
+   relative to `origin/main`.
+2. Fails if any existing pre-cutoff file (the set captured by
+   `git ls-tree origin/main -- backend/database/`) has been modified
+   on the current branch — they are frozen, not just capped.
+3. The `supabase_schema.sql` and sibling top-level schema files
+   (`supabase_behavior_schema.sql`, `supabase_roster_rls.sql`,
+   `supabase_student_portal_schema.sql`, `supabase_submission_
+   confirmations.sql`) are included in the freeze set.
+
+A short `CUTOFF.md` at the top of `backend/database/` documents why
+these files are frozen and points at `backend/migrations/versions/`
+for forward work.
 
 ---
 
@@ -382,7 +500,7 @@ just makes that existing practice explicit.
    baseline_existing_live_schema.py`), updates `requirements.txt`,
    `railway.json`, `.env.example`, adds the CI smoke job, adds
    `backend/database/CUTOFF.md`. No deploy behaviour change yet because
-   the `releaseCommand` runs Alembic which no-ops on `0001` baseline.
+   the `preDeployCommand` runs Alembic which no-ops on `0001` baseline.
 2. **Operator sets `ALEMBIC_DATABASE_URL`** on the Railway web service
    pointing at Supabase's session pooler. Sets same env var on operator
    workstation for first-time stamp. CI gets its own stub URL via the
@@ -390,7 +508,7 @@ just makes that existing practice explicit.
 3. **Operator stamps live**: `alembic stamp
    0001_baseline_existing_live_schema`. Verify with `alembic current`.
 4. **Merge the implementation PR.** Railway deploys. `alembic upgrade
-   head` runs as `releaseCommand` and no-ops (already at head).
+   head` runs as `preDeployCommand` and no-ops (already at head).
 5. **First real migration** is the next schema PR. Naming pattern:
    `0002_<slug>.py`. Ships through the usual review + CI + deploy flow,
    now with Alembic as gate instead of the Supabase SQL Editor.
