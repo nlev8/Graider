@@ -87,7 +87,11 @@ jobs:
           --health-retries 10
 
     env:
+      # Alembic wants the SQLAlchemy dialect prefix (+psycopg) to pick
+      # the driver. psql rejects that prefix and falls back to a local
+      # socket, so it gets the plain libpq form. Two env vars, same DB.
       ALEMBIC_DATABASE_URL: postgresql+psycopg://postgres:smoke@localhost:5432/smoke
+      PSQL_URL: postgresql://postgres:smoke@localhost:5432/smoke
 
     steps:
       - uses: actions/checkout@v4
@@ -105,7 +109,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Seed Supabase auth stubs
-        run: psql "$ALEMBIC_DATABASE_URL" -v ON_ERROR_STOP=1 -f .github/ci/supabase_stubs.sql
+        run: psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f .github/ci/supabase_stubs.sql
 
       - name: Apply migrations
         run: alembic upgrade head
