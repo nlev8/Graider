@@ -17,6 +17,25 @@
 
 CREATE SCHEMA IF NOT EXISTS auth;
 
+-- Supabase auto-creates these roles on every project. Vanilla Postgres
+-- doesn't, so TO authenticated / TO anon / TO service_role clauses in
+-- RLS policies would fail with "role does not exist". Seed them here.
+DO $$
+BEGIN
+    CREATE ROLE authenticated NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+    CREATE ROLE anon NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+    CREATE ROLE service_role NOLOGIN;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
     LANGUAGE sql STABLE AS $$ SELECT NULL::uuid; $$;
 
