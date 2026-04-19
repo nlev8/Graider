@@ -19,6 +19,7 @@ jobs:
     env:
       FLASK_ENV: testing
       FLASK_SECRET_KEY: ci-test-secret-key
+      SUPABASE_ANON_KEY: ci-stub-anon-key-does-not-need-to-validate
 
     steps:
       - uses: actions/checkout@v4
