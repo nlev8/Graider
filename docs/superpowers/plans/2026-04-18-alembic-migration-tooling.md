@@ -370,7 +370,7 @@ Create `backend/migrations/versions/0001_baseline_existing_live_schema.py`:
 ```python
 """Baseline — existing live schema at Alembic introduction.
 
-Revision ID: 0001_baseline_existing_live_schema
+Revision ID: 0001_baseline
 Revises:
 Create Date: 2026-04-18
 
@@ -385,6 +385,10 @@ changes only, not for historical reconstruction. If a fresh-environment
 bootstrap requirement arises later, we rebaseline then (see the spec
 at docs/superpowers/specs/2026-04-18-alembic-migration-tooling-design.md).
 
+Note on revision ID length: Alembic's default alembic_version.version_num
+column is VARCHAR(32). The short "0001_baseline" ID (13 chars) fits with
+margin; the filename keeps the descriptive long form for discoverability.
+
 Operator step (run once against live before the PR that introduces
 Alembic is merged; also safe to run again because `alembic stamp` is
 idempotent):
@@ -398,7 +402,7 @@ from typing import Sequence, Union
 
 
 # revision identifiers, used by Alembic.
-revision: str = "0001_baseline_existing_live_schema"
+revision: str = "0001_baseline"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -421,7 +425,7 @@ export ALEMBIC_DATABASE_URL=postgresql+psycopg://fake:fake@localhost:9999/fake
 alembic heads
 ```
 
-Expected output: `0001_baseline_existing_live_schema (head)`.
+Expected output: `0001_baseline (head)`.
 
 - [ ] **Step 3: Verify `alembic history` shows one entry**
 
@@ -429,7 +433,7 @@ Expected output: `0001_baseline_existing_live_schema (head)`.
 alembic history --verbose
 ```
 
-Expected output includes `Rev: 0001_baseline_existing_live_schema` with empty Path and `down_revision = None`.
+Expected output includes `Rev: 0001_baseline` with empty Path and `down_revision = None`.
 
 - [ ] **Step 4: Unset the fake URL**
 
@@ -1185,7 +1189,7 @@ source venv/bin/activate
 alembic upgrade head
 ```
 
-Expected output: `Running upgrade  -> 0001_baseline_existing_live_schema, Baseline — existing live schema at Alembic introduction.`
+Expected output: `Running upgrade  -> 0001_baseline, Baseline — existing live schema at Alembic introduction.`
 
 - [ ] **Step 4: Verify current revision**
 
@@ -1193,7 +1197,7 @@ Expected output: `Running upgrade  -> 0001_baseline_existing_live_schema, Baseli
 alembic current --verbose
 ```
 
-Expected: prints `0001_baseline_existing_live_schema` with `(head)` notation.
+Expected: prints `0001_baseline` with `(head)` notation.
 
 - [ ] **Step 5: Verify alembic_version table exists in Postgres**
 
@@ -1201,7 +1205,7 @@ Expected: prints `0001_baseline_existing_live_schema` with `(head)` notation.
 docker exec graider-alembic-smoke psql -U postgres -d smoke -c "SELECT version_num FROM alembic_version;"
 ```
 
-Expected: returns `0001_baseline_existing_live_schema`.
+Expected: returns `0001_baseline`.
 
 - [ ] **Step 6: Clean up**
 
@@ -1295,7 +1299,7 @@ See `docs/superpowers/specs/2026-04-18-alembic-migration-tooling-design.md` for 
 3. Verify:
    ```bash
    ALEMBIC_DATABASE_URL='<session-pooler-url>' alembic current
-   # → 0001_baseline_existing_live_schema (head)
+   # → 0001_baseline (head)
    ```
 4. Merge this PR. Railway deploys. `alembic upgrade head` runs as `preDeployCommand` and no-ops (already at head).
 
