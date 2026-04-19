@@ -166,14 +166,19 @@ def test_rls_isolates_teachers_via_per_user_role(prepared_db):
     assert cur.fetchone()[0] == 2, "superuser baseline should see both rows"
 
     def _query_as_teacher(teacher_uuid: str) -> int:
-        # Rewire auth.uid() to return this teacher, then switch to
-        # the authenticated role (which is what PostgREST uses for
-        # JWT-bearing requests). Policies evaluate auth.uid() = teacher_id.
+        # Rewire auth.uid() to return this teacher, then switch to the
+        # authenticated role (which is what PostgREST uses for JWT-bearing
+        # requests). Policies evaluate auth.uid() = teacher_id.
+        #
+        # Use SET (not SET LOCAL) because conn.autocommit=True means each
+        # statement is its own implicit transaction — SET LOCAL would be
+        # reverted immediately, leaving the SELECT to run as the default
+        # superuser role (which bypasses RLS).
         cur.execute(
             f"CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid "
             f"LANGUAGE sql STABLE AS $$ SELECT '{teacher_uuid}'::uuid; $$;"
         )
-        cur.execute("SET LOCAL ROLE authenticated;")
+        cur.execute("SET ROLE authenticated;")
         cur.execute("SELECT count(*) FROM behavior_sessions;")
         count = cur.fetchone()[0]
         cur.execute("RESET ROLE;")
