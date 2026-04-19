@@ -375,8 +375,8 @@ DESTRUCTIVE_PATTERNS = [
     # op.execute("...") escape hatches — raw SQL destruction
     r"\bDROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX|POLICY|SCHEMA)\b",
     r"\bALTER\s+TABLE\s+\S+\s+DROP\b",
-    r"\bALTER\s+TABLE\s+\S+\s+SET\s+NOT\s+NULL\b",
-    r"\bALTER\s+TABLE\s+\S+\s+DROP\s+DEFAULT\b",
+    r"\bALTER\s+TABLE\s+\S+.*\bSET\s+NOT\s+NULL\b",
+    r"\bALTER\s+TABLE\s+\S+.*\bDROP\s+DEFAULT\b",
     r"\bTRUNCATE\b",
     # Data migrations — UPDATE/DELETE mutate existing rows and are
     # always destructive even if the net effect is desired.
