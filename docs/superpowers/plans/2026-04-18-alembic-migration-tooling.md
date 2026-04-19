@@ -390,7 +390,7 @@ Alembic is merged; also safe to run again because `alembic stamp` is
 idempotent):
 
     export ALEMBIC_DATABASE_URL='<session-pooler-url>'
-    alembic stamp 0001_baseline_existing_live_schema
+    alembic stamp 0001_baseline
 """
 from __future__ import annotations
 
@@ -1290,7 +1290,7 @@ See `docs/superpowers/specs/2026-04-18-alembic-migration-tooling-design.md` for 
 1. Set `ALEMBIC_DATABASE_URL` on the Railway web service — Supabase session pooler URL.
 2. Set the same env var on your workstation, one-off:
    ```bash
-   ALEMBIC_DATABASE_URL='<session-pooler-url>' alembic stamp 0001_baseline_existing_live_schema
+   ALEMBIC_DATABASE_URL='<session-pooler-url>' alembic stamp 0001_baseline
    ```
 3. Verify:
    ```bash

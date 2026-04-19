@@ -127,7 +127,7 @@ def downgrade():
 **Day-one operator step (once, against live):**
 
 ```bash
-ALEMBIC_DATABASE_URL=<session-pooler-url> alembic stamp 0001_baseline_existing_live_schema
+ALEMBIC_DATABASE_URL=<session-pooler-url> alembic stamp 0001_baseline
 ```
 
 After that, `alembic current` against live returns this revision, and

@@ -1,6 +1,6 @@
 """Baseline — existing live schema at Alembic introduction.
 
-Revision ID: 0001_baseline_existing_live_schema
+Revision ID: 0001_baseline
 Revises:
 Create Date: 2026-04-18
 
@@ -15,12 +15,18 @@ changes only, not for historical reconstruction. If a fresh-environment
 bootstrap requirement arises later, we rebaseline then (see the spec
 at docs/superpowers/specs/2026-04-18-alembic-migration-tooling-design.md).
 
+Note on revision ID length: Alembic's default alembic_version.version_num
+column is VARCHAR(32). The short "0001_baseline" ID (13 chars) fits with
+margin. The filename slug keeps the descriptive long form for
+discoverability. Do NOT change the ``revision`` literal below without
+verifying the target DB's alembic_version column is wide enough.
+
 Operator step (run once against live before the PR that introduces
 Alembic is merged; also safe to run again because `alembic stamp` is
 idempotent):
 
     export ALEMBIC_DATABASE_URL='<session-pooler-url>'
-    alembic stamp 0001_baseline_existing_live_schema
+    alembic stamp 0001_baseline
 """
 from __future__ import annotations
 
@@ -28,7 +34,7 @@ from typing import Sequence, Union
 
 
 # revision identifiers, used by Alembic.
-revision: str = "0001_baseline_existing_live_schema"
+revision: str = "0001_baseline"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
