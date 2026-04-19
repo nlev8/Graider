@@ -28,3 +28,32 @@ CREATE OR REPLACE FUNCTION auth.role() RETURNS text
 
 CREATE OR REPLACE FUNCTION auth.email() RETURNS text
     LANGUAGE sql STABLE AS $$ SELECT NULL::text; $$;
+
+-- ---------------------------------------------------------------------
+-- CI-only stub tables for Phase 4.2 PR2 migration policies.
+-- Real schema lives in live Supabase (pre-Alembic-cutoff raw SQL). For
+-- CI purposes we only need tables that the RLS policies can attach to —
+-- minimum columns: a PK `id` and the `teacher_id` the policy checks.
+-- Keep these STUB-ONLY: do not add columns to match live unless a new
+-- migration's policies require them. Loading this file against live
+-- would be a no-op (CREATE TABLE IF NOT EXISTS) but strongly discouraged.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS behavior_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID NOT NULL
+);
+ALTER TABLE behavior_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS behavior_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID NOT NULL
+);
+ALTER TABLE behavior_events ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id TEXT NOT NULL,
+    timestamp TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
