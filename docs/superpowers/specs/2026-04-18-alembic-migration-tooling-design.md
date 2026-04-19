@@ -363,17 +363,27 @@ carries an explicit acknowledgment comment:
 
 ```python
 DESTRUCTIVE_PATTERNS = [
+    # Alembic op helpers — schema destruction
     r"op\.drop_column\b",
     r"op\.drop_table\b",
     r"op\.rename_table\b",
     r"op\.drop_constraint\b",
     r"op\.drop_index\b",
-    # alter_column with type_=... or nullable=False (tightening)
+    # alter_column tightening: type change or nullable=False
     r"op\.alter_column\([^)]*\btype_=",
     r"op\.alter_column\([^)]*\bnullable=False\b",
-    # Raw SQL escape hatches that bypass op helpers
-    r"DROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX|POLICY)\b",
-    r"ALTER\s+TABLE\s+.+\s+DROP\b",
+    # op.execute("...") escape hatches — raw SQL destruction
+    r"\bDROP\s+(TABLE|COLUMN|CONSTRAINT|INDEX|POLICY|SCHEMA)\b",
+    r"\bALTER\s+TABLE\s+\S+\s+DROP\b",
+    r"\bALTER\s+TABLE\s+\S+\s+SET\s+NOT\s+NULL\b",
+    r"\bALTER\s+TABLE\s+\S+\s+DROP\s+DEFAULT\b",
+    r"\bTRUNCATE\b",
+    # Data migrations — UPDATE/DELETE mutate existing rows and are
+    # always destructive even if the net effect is desired.
+    r"op\.execute\([^)]*\bUPDATE\s+\w+\s+SET\b",
+    r"op\.execute\([^)]*\bDELETE\s+FROM\b",
+    r"\bUPDATE\s+\w+\s+SET\b",
+    r"\bDELETE\s+FROM\b",
 ]
 ACK_MARKER = "# destructive:"  # comment line in the revision
 ```
@@ -383,13 +393,20 @@ If a file matches any pattern AND does not contain a line starting with
 justification forces the author to think through the expand-contract
 implications at PR time rather than in review comments.
 
-This is a narrow heuristic — it doesn't catch every possible
-destructive operation, and it can flag false positives when raw SQL is
-used defensively (e.g., `DROP POLICY IF EXISTS` followed by
-`CREATE POLICY` in the same migration to make the migration
-idempotent, which is non-destructive net-net). Authors can mark such
-cases with the ack comment and a one-line reason. Net effect: no
-silent destructive op, every destructive op is acknowledged in code.
+**Excluded from the scan:**
+- `0001_baseline_existing_live_schema.py` (empty by design)
+- Any file matching a configured allowlist in `pyproject.toml`
+  (expected to stay empty; present only so emergency exemptions don't
+  require test changes)
+
+**Known false-positive pattern** (and how to handle):
+`DROP POLICY IF EXISTS foo` followed by `CREATE POLICY foo` in the
+same revision is the idempotent policy-swap pattern we used in PR #101
+and is net-zero destructive. The author adds
+`# destructive: idempotent policy swap — net-zero change` to
+acknowledge. Marker fatigue is deliberate — the cost of false positives
+is low (one comment line), the cost of missed true positives is a
+production schema surprise.
 
 ### Autocommit-only DDL policy
 
@@ -411,6 +428,20 @@ Policy:
 - `env.py` is configured with `transaction_per_migration=True` from
   day one so that autocommit migrations run in their own transaction
   context and failures don't leak across revisions.
+
+**Why strict isolation (one autocommit op per revision) rather than
+mixing.** When `autocommit_block()` opens, Alembic commits any
+previously-accumulated work in the same revision before entering
+autocommit mode. If the autocommit op then fails, the prior-committed
+work is stranded on live with no rollback path — exactly the state
+this spec is trying to prevent. Splitting keeps each piece independently
+replayable and prevents split-brain failure states. Alembic's own
+documentation implicitly recommends this when it notes that
+`transaction_per_migration` is the right setting when autocommit
+migrations exist (otherwise all prior revisions in the same upgrade
+run could be affected by one autocommit failure). The strict rule
+costs one extra PR per concurrent-index addition; the relaxed rule
+costs a production recovery of arbitrary complexity.
 
 ---
 
