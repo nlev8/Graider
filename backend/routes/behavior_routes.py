@@ -26,13 +26,15 @@ behavior_bp = Blueprint('behavior', __name__)
 PERIODS_DIR = os.path.expanduser("~/.graider_data/periods")
 
 def _get_supabase():
-    """Return the canonical resilient Supabase client.
+    """Return the request-scoped Supabase client.
 
-    Delegates to backend.supabase_client so all behavior calls route
-    through ResilientClient and get automatic retry on transient failures.
+    Phase 4.5: when USE_PER_USER_JWT=1 + a teacher JWT is on the request,
+    returns a per-user client that enforces RLS. Otherwise falls back to
+    the service-role singleton (current behavior). All behavior routes
+    are teacher-authenticated so this module migrates wholly.
     """
-    from backend.supabase_client import get_supabase_or_raise
-    return get_supabase_or_raise()
+    from backend.supabase_client_scoped import get_request_supabase
+    return get_request_supabase()
 
 
 def _get_teacher_id():
