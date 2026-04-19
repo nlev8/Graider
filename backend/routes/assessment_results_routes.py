@@ -6,7 +6,7 @@ class-based (published_content + student_submissions) paths.
 """
 import logging
 from flask import Blueprint, request, jsonify, g
-from backend.supabase_client import get_supabase_or_raise as get_supabase
+from backend.supabase_client_scoped import get_request_supabase as get_supabase
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 import sentry_sdk
