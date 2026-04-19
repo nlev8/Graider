@@ -193,6 +193,16 @@ except Exception as e:
     print(f"Warning: Auth middleware not loaded: {e}")
     sentry_sdk.capture_exception(e)
 
+# Phase 4.5: structured logging for DB mode + auth source per request.
+# Used to measure direct-JWT traffic share before flipping
+# USE_PER_USER_JWT to "1". See backend/observability/db_mode.py.
+try:
+    from backend.observability.db_mode import register as _register_db_mode
+    _register_db_mode(app)
+except Exception as e:
+    print(f"Warning: db_mode observability hook not loaded: {e}")
+    sentry_sdk.capture_exception(e)
+
 @app.errorhandler(500)
 def handle_500(e):
     return jsonify({"error": "Internal server error"}), 500
