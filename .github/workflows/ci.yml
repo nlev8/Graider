@@ -67,3 +67,52 @@ jobs:
 
       - name: Build
         run: cd frontend && npm run build
+
+  migrations-smoke:
+    name: Migrations Smoke
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: smoke
+          POSTGRES_DB: smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Alembic wants the SQLAlchemy dialect prefix (+psycopg) to pick
+      # the driver. psql rejects that prefix and falls back to a local
+      # socket, so it gets the plain libpq form. Two env vars, same DB.
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://postgres:smoke@localhost:5432/smoke
+      PSQL_URL: postgresql://postgres:smoke@localhost:5432/smoke
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Seed Supabase auth stubs
+        run: psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f .github/ci/supabase_stubs.sql
+
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      - name: Show current revision
+        run: alembic current --verbose
