@@ -12,6 +12,13 @@ import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as get_supabase
+# Phase 4.5: this module has MIXED auth paths. Teacher-authenticated
+# handlers use _get_teacher_supabase() so their requests land under RLS
+# when USE_PER_USER_JWT=1. Anonymous join-code paths
+# (/api/student/join/<code>, /api/student/submit/<code>) and the
+# generate_join_code() uniqueness-check helper stay on service-role
+# via get_supabase() — they have no teacher JWT.
+from backend.supabase_client_scoped import get_request_supabase as _get_teacher_supabase
 
 student_portal_bp = Blueprint('student_portal', __name__)
 _logger = logging.getLogger(__name__)
@@ -51,7 +58,10 @@ def generate_join_code():
     chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
     while True:
         code = ''.join(random.choices(chars, k=6))
-        # Check if code already exists
+        # Uniqueness check must see ALL existing codes across all teachers,
+        # so we stay on service-role here even when USE_PER_USER_JWT=1.
+        # Per-user RLS would limit visibility to current teacher's codes
+        # and increase collision probability.
         db = get_supabase()
         result = db.table('published_assessments').select('id').eq('join_code', code).execute()
         if len(result.data) == 0:
@@ -237,7 +247,7 @@ def publish_assessment():
     - accommodations: Applied accommodations per student
     """
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         data = request.json
         assessment = data.get('assessment')
         settings = data.get('settings', {})
@@ -470,7 +480,7 @@ def delete_saved_assessment():
 def list_published_assessments():
     """List all published assessments for the teacher."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
 
         result = db.table('published_assessments').select(
             'id, join_code, title, created_at, submission_count, is_active, teacher_name, settings'
@@ -504,7 +514,7 @@ def list_published_assessments():
 def get_assessment_results(code):
     """Get all submissions for a published assessment."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         code = code.upper()
 
         # Get assessment — scoped to this teacher
@@ -553,7 +563,7 @@ def get_assessment_results(code):
 def toggle_assessment(code):
     """Activate or deactivate a published assessment."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         code = code.upper()
 
         # Get current status — scoped to this teacher
@@ -590,7 +600,7 @@ def toggle_assessment(code):
 def delete_published_assessment(code):
     """Delete a published assessment and all its submissions."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         code = code.upper()
 
         # Verify ownership before deleting
@@ -629,6 +639,7 @@ def get_assessment_for_student(code):
     enumeration attacks. Typical student traffic is <5/min per IP.
     """
     try:
+        # Anonymous join-code path — no teacher JWT, so service-role.
         db = get_supabase()
         code = code.upper()
 
@@ -732,6 +743,7 @@ def submit_assessment(code):
     Returns immediate feedback and score.
     """
     try:
+        # Anonymous join-code path — no teacher JWT, so service-role.
         db = get_supabase()
         code = code.upper()
 
@@ -938,7 +950,7 @@ RESOURCE_CONTENT_TYPES = ('study_guide', 'flashcards', 'slide_deck')
 def list_shared_resources():
     """List all shared resources (flashcards, study guides, slide decks) for the teacher."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
 
         result = db.table('published_content').select(
             'id, title, content_type, class_id, created_at, is_active, settings'
@@ -978,7 +990,7 @@ def list_shared_resources():
 def delete_shared_resource(resource_id):
     """Delete a single shared resource."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
 
         # Verify ownership
         check = db.table('published_content').select('id').eq(
@@ -1001,7 +1013,7 @@ def delete_shared_resource(resource_id):
 def delete_shared_resources_bulk():
     """Delete all shared resources matching a title for this teacher."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         data = request.json
         title = data.get('title', '').strip()
 
@@ -1030,7 +1042,7 @@ def update_shared_resource_unit(resource_id):
     Works for both published_assessments and published_content tables.
     """
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         data = request.json
         unit_name = data.get('unit_name', '').strip()
 
@@ -1058,7 +1070,7 @@ def update_shared_resource_unit(resource_id):
 def end_student_attempt(submission_id):
     """Force-end a student's in-progress draft, converting it to a submitted row."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
 
         # Fetch the draft
         sub = db.table('student_submissions').select('*').eq('id', submission_id).execute()
@@ -1095,7 +1107,7 @@ def end_student_attempt(submission_id):
 def list_in_progress_drafts(content_id):
     """List students currently drafting a specific piece of class-based content."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
 
         # Verify teacher owns this content
         content = db.table('published_content').select('teacher_id, settings').eq('id', content_id).execute()
@@ -1142,7 +1154,7 @@ def list_in_progress_drafts(content_id):
 def list_content_submissions(content_id):
     """List all submissions (all attempts per student) for a class-based assessment."""
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
 
         # Verify teacher owns this content
         content = db.table('published_content').select('teacher_id, title, content, settings').eq('id', content_id).execute()
@@ -1202,7 +1214,7 @@ def get_class_progress_rank(class_id):
       attempt_mode: 'latest' (default) | 'best' | 'average'
     """
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
 
         attempt_mode = request.args.get('attempt_mode', 'latest')
         if attempt_mode not in ('latest', 'best', 'average'):
@@ -1315,7 +1327,7 @@ def list_teacher_tags():
     including unit_name values and tags array values.
     """
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         teacher_id = g.teacher_id
 
         tag_set = set()
@@ -1360,7 +1372,7 @@ def set_content_tags(content_id):
     Preserves all other settings fields.
     """
     try:
-        db = get_supabase()
+        db = _get_teacher_supabase()
         data = request.json or {}
         raw_tags = data.get('tags')
         if not isinstance(raw_tags, list):
