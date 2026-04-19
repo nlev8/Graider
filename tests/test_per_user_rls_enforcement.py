@@ -59,6 +59,13 @@ AS $$ SELECT NULL::text; $$;
 DO $$ BEGIN
   CREATE ROLE authenticated NOLOGIN;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Supabase's realtime publication exists in prod; plain Postgres doesn't
+-- have it. supabase_behavior_schema.sql does ALTER PUBLICATION on this
+-- name at the end. Create an empty placeholder so the ALTER succeeds.
+DO $$ BEGIN
+  CREATE PUBLICATION supabase_realtime;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 """
 
 
