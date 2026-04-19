@@ -644,8 +644,11 @@ class TestStudentLogin:
 class TestCreateClass:
     """POST /api/classes"""
 
+    # Phase 4.5: create_class uses _get_teacher_supabase; _generate_class_code
+    # helper (called inside) still uses _get_supabase. Patch both to share one mock.
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
     @patch('backend.routes.student_account_routes._get_supabase')
-    def test_create_class_success(self, mock_get_sb, client, teacher_headers):
+    def test_create_class_success(self, mock_get_sb, mock_get_teacher_sb, client, teacher_headers):
         mock_sb = MagicMock()
         # _generate_class_code checks for existing codes
         code_chain = _make_chain([])  # no collision
@@ -661,6 +664,7 @@ class TestCreateClass:
 
         mock_sb.table.side_effect = table_side
         mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         resp = client.post('/api/classes', headers=teacher_headers,
                            json={'name': 'Period 3', 'subject': 'History'})
@@ -668,9 +672,9 @@ class TestCreateClass:
         assert resp.status_code == 200
         assert data['success'] is True
 
-    @patch('backend.routes.student_account_routes._get_supabase')
-    def test_create_class_missing_name_returns_400(self, mock_get_sb, client, teacher_headers):
-        mock_get_sb.return_value = MagicMock()
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_create_class_missing_name_returns_400(self, mock_get_teacher_sb, client, teacher_headers):
+        mock_get_teacher_sb.return_value = MagicMock()
         resp = client.post('/api/classes', headers=teacher_headers,
                            json={'name': '', 'subject': 'Math'})
         assert resp.status_code == 400
@@ -681,8 +685,8 @@ class TestCreateClass:
 class TestListClasses:
     """GET /api/classes"""
 
-    @patch('backend.routes.student_account_routes._get_supabase')
-    def test_list_classes_returns_teacher_classes(self, mock_get_sb, client, teacher_headers):
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_list_classes_returns_teacher_classes(self, mock_get_teacher_sb, client, teacher_headers):
         classes_row = [
             {'id': 'c1', 'name': 'P1', 'subject': 'Math', 'is_active': True,
              'class_students': [{'count': 15}]},
@@ -691,7 +695,7 @@ class TestListClasses:
         ]
         mock_sb = MagicMock()
         mock_sb.table.return_value = _make_chain(classes_row)
-        mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         resp = client.get('/api/classes', headers=teacher_headers)
         assert resp.status_code == 200
