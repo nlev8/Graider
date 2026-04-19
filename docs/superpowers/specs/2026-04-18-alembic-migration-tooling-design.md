@@ -94,10 +94,20 @@ Alembic itself pulls in; no application code imports from
 
 ---
 
-## Baseline — `0001_baseline_existing_live_schema`
+## Baseline — `0001_baseline_existing_live_schema.py`
 
 A deliberate no-op revision that records the migration-system anchor
-without attempting to replay history:
+without attempting to replay history.
+
+**Naming convention in effect.** The FILENAME is descriptive
+(`0001_baseline_existing_live_schema.py`) so a reader browsing the
+versions directory understands what the anchor represents. The
+**revision ID** inside the file is the terse form `"0001_baseline"` —
+required because Alembic's `alembic_version.version_num` column is
+`VARCHAR(32)` by default; the long descriptive form would overflow.
+All operator commands (`alembic stamp`, `alembic upgrade`, `alembic
+current`, `--head=` / `--rev-id=` for subsequent revisions) use the
+short revision ID.
 
 ```python
 """Baseline — existing live schema at Alembic introduction.
@@ -110,7 +120,9 @@ Tradeoff accepted: Alembic becomes authoritative for forward schema
 changes only, not for historical reconstruction. If a fresh-environment
 bootstrap requirement arises later, we rebaseline then.
 """
-revision = "0001_baseline_existing_live_schema"
+# revision ID stays short to fit Alembic's default VARCHAR(32)
+# alembic_version.version_num column. Filename is descriptive.
+revision = "0001_baseline"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -536,8 +548,8 @@ just makes that existing practice explicit.
    pointing at Supabase's session pooler. Sets same env var on operator
    workstation for first-time stamp. CI gets its own stub URL via the
    smoke job's service container.
-3. **Operator stamps live**: `alembic stamp
-   0001_baseline_existing_live_schema`. Verify with `alembic current`.
+3. **Operator stamps live**: `alembic stamp 0001_baseline`.
+   Verify with `alembic current` — expected output: `0001_baseline (head)`.
 4. **Merge the implementation PR.** Railway deploys. `alembic upgrade
    head` runs as `preDeployCommand` and no-ops (already at head).
 5. **First real migration** is the next schema PR. Naming pattern:
