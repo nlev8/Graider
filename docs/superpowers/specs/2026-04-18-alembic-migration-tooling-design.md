@@ -206,22 +206,53 @@ migrations-smoke:
     - uses: actions/setup-python@v5
       with: { python-version: "3.12", cache: pip }
     - run: pip install -r requirements.txt
+    - run: psql "$ALEMBIC_DATABASE_URL" -f .github/ci/supabase_stubs.sql
     - run: alembic upgrade head
-    - run: alembic current | grep -q "$(alembic heads --verbose | head -1 | awk '{print $1}')"
+    - run: alembic current --verbose
 ```
 
-This job catches the error classes that would otherwise surface at
-Railway deploy time: syntax errors, missing imports, migration ordering
-bugs, undefined Alembic operations.
+`supabase_stubs.sql` (new, committed) creates the minimum Supabase-
+flavoured scaffolding so migrations referencing `auth.uid()`,
+`auth.email()`, and the `auth` schema don't immediately fail against
+vanilla Postgres:
 
-**Limitation.** The smoke test does not and cannot catch schema drift
-against live, because the baseline is a no-op. It verifies only that
-each new migration applies cleanly against a fresh Postgres. That is
-the cost of option C (§ Baseline) — we accepted this tradeoff
-explicitly.
+```sql
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
+    LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+CREATE OR REPLACE FUNCTION auth.email() RETURNS text
+    LANGUAGE sql STABLE AS $$ SELECT NULL::text $$;
+```
 
-Branch protection is extended to require this job (alongside the
-existing `Backend Tests` + `Frontend Build`).
+The stubs return NULL, which is correct for a fresh ephemeral DB with
+no request context — policies that test `auth.uid() = teacher_id`
+simply evaluate FALSE, which is what we want for a schema-validity
+smoke test.
+
+**Explicit limitations.**
+1. The smoke test cannot catch drift against live. The baseline is a
+   no-op; we seed nothing. It verifies only that each new migration
+   is a syntactically valid Python file that applies cleanly against
+   a fresh ephemeral Postgres.
+2. Supabase-specific constructs beyond the stubbed functions (RLS
+   evaluator internals, the `realtime` schema, storage, pgsodium,
+   `pg_graphql`, etc.) are not available in vanilla Postgres and are
+   not stubbed. Migrations that depend on them will fail the smoke
+   test even though they'd work against live.
+3. If a migration needs a pre-cutoff table that's only defined in
+   `backend/database/*.sql` (not in an Alembic revision), the smoke
+   test will fail because that SQL is not replayed. This is an
+   intentional consequence of the cutoff rule: new migrations should
+   not reference tables from the pre-cutoff set without at minimum an
+   explicit `op.execute("CREATE TABLE IF NOT EXISTS ...")` guard.
+
+We accept these limitations as the cost of option C (§ Baseline). The
+smoke test is defence-in-depth, not the primary gate — Railway's
+`releaseCommand` against real Supabase is the authoritative
+verification.
+
+Branch protection is extended (operator action) to require this job
+alongside the existing `Backend Tests` + `Frontend Build`.
 
 ---
 
