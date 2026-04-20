@@ -33,14 +33,15 @@ from backend.observability import critical_path
 def _spawn_thread_grading(submission_id, assessment, answers, student_info,
                          teacher_config, teacher_id, supabase_table,
                          student_accommodations):
-    """Legacy thread-based portal grading spawn.
+    """Thread-based portal grading spawn.
 
-    Kept as a callable for (a) the Celery enqueue-failure fallback path and
-    (b) the default path when CELERY_PORTAL_GRADING is off. Preserves
-    run_portal_grading_thread's full 8-arg contract including accommodations.
+    Used for (a) the Celery enqueue-failure fallback on the join-code path
+    (Redis outage → thread so the student doesn't lose their submission)
+    and (b) the class-based submission path in student_account_routes.py,
+    which remains thread-backed until Phase 4.1b migrates it to Celery.
 
-    Phase 4.1 PR3 will delete the call site in this route (class-based
-    student_account_routes.py still uses threads, so the helper stays).
+    Preserves run_portal_grading_thread's full 8-arg contract including
+    accommodations.
     """
     import threading
     from backend.services.portal_grading import run_portal_grading_thread
@@ -849,48 +850,44 @@ def submit_assessment(code):
             student_info = {"student_name": student_name, "student_id": "", "email": ""}
             student_accommodations = assessment_data.get("settings", {}).get("student_accommodations", {})
 
-            # Phase 4.1: feature-flag gated Celery enqueue + thread fallback.
-            # Flag is read at request time (no caching) so a Railway env-var
-            # update + rolling restart flips behavior cleanly.
-            use_celery = os.getenv('CELERY_PORTAL_GRADING', '0') == '1'
-
-            if use_celery:
-                from backend.tasks.grading_tasks import grade_portal_submission
-                # Enqueue-failure fallback — broker outage degrades to the
-                # legacy thread path so the student doesn't lose their
-                # submission. Catch ONLY known broker-communication failures:
-                #   - kombu.exceptions.OperationalError: Kombu's wrapped
-                #     connection failure (redis down, auth, network)
-                #   - kombu.exceptions.ConnectionError: transport-layer
-                #     errors (NOT Python's builtin ConnectionError)
-                # Do NOT catch bare Exception — programming bugs
-                # (serialization, missing decorator) must surface loudly.
-                import kombu.exceptions
-                try:
-                    district_id = getattr(g, 'district_id', None)
-                    user_id = getattr(g, 'user_id', None)
-                except RuntimeError:
-                    district_id = None
-                    user_id = None
-                try:
-                    grade_portal_submission.delay(
-                        submission_id,
-                        teacher_id,
-                        'submissions',
-                        district_id=district_id,
-                        user_id=user_id,
-                    )
-                except (kombu.exceptions.OperationalError,
-                        kombu.exceptions.ConnectionError) as e:
-                    import sentry_sdk
-                    with sentry_sdk.push_scope() as scope:
-                        scope.set_tag('celery_enqueue_failure', True)
-                        scope.level = 'warning'
-                        sentry_sdk.capture_exception(e)
-                    _spawn_thread_grading(submission_id, assessment, answers,
-                                          student_info, teacher_config, teacher_id,
-                                          'submissions', student_accommodations)
-            else:
+            # Phase 4.1 PR3: Celery is the always-on primary path for join-code
+            # grading. The CELERY_PORTAL_GRADING flag gate + else-branch thread
+            # spawn were removed after the 48h post-flip monitor window closed
+            # green. Thread-based grading still runs for the class-based
+            # submission path (backend/routes/student_account_routes.py); that
+            # migration is Phase 4.1b scope.
+            from backend.tasks.grading_tasks import grade_portal_submission
+            # Enqueue-failure fallback — broker outage degrades to the
+            # legacy thread path so the student doesn't lose their
+            # submission. Catch ONLY known broker-communication failures:
+            #   - kombu.exceptions.OperationalError: Kombu's wrapped
+            #     connection failure (redis down, auth, network)
+            #   - kombu.exceptions.ConnectionError: transport-layer
+            #     errors (NOT Python's builtin ConnectionError)
+            # Do NOT catch bare Exception — programming bugs
+            # (serialization, missing decorator) must surface loudly.
+            import kombu.exceptions
+            try:
+                district_id = getattr(g, 'district_id', None)
+                user_id = getattr(g, 'user_id', None)
+            except RuntimeError:
+                district_id = None
+                user_id = None
+            try:
+                grade_portal_submission.delay(
+                    submission_id,
+                    teacher_id,
+                    'submissions',
+                    district_id=district_id,
+                    user_id=user_id,
+                )
+            except (kombu.exceptions.OperationalError,
+                    kombu.exceptions.ConnectionError) as e:
+                import sentry_sdk
+                with sentry_sdk.push_scope() as scope:
+                    scope.set_tag('celery_enqueue_failure', True)
+                    scope.level = 'warning'
+                    sentry_sdk.capture_exception(e)
                 _spawn_thread_grading(submission_id, assessment, answers,
                                       student_info, teacher_config, teacher_id,
                                       'submissions', student_accommodations)
