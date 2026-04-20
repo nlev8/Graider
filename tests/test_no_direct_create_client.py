@@ -1,7 +1,8 @@
-"""Regression guard: no module outside backend/supabase_client.py may call
-supabase.create_client directly. All Supabase access must route through the
-canonical get_supabase()/get_supabase_or_raise() helpers so the ResilientClient
-wrapper is applied.
+"""Regression guard: no module outside the approved Supabase client factories
+may call supabase.create_client directly. All Supabase access must route
+through the canonical get_supabase()/get_supabase_or_raise() helpers (or, for
+per-user JWT requests, get_request_supabase()) so the ResilientClient wrapper
+is applied.
 """
 
 from pathlib import Path
@@ -9,7 +10,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND = REPO_ROOT / "backend"
-ALLOWED = {BACKEND / "supabase_client.py"}
+ALLOWED = {
+    BACKEND / "supabase_client.py",
+    BACKEND / "supabase_client_scoped.py",
+}
 
 
 def _python_files():

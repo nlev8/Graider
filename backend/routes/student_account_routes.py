@@ -25,6 +25,12 @@ from datetime import datetime, timezone, timedelta
 import sentry_sdk
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
+# Phase 4.5: this module has MIXED auth paths. Teacher endpoints use
+# get_request_supabase() so their requests land under RLS when the
+# USE_PER_USER_JWT flag is on. Student-session endpoints (authenticated
+# via X-Student-Token, not a Supabase JWT) and shared helpers continue
+# to use _get_supabase() / service-role.
+from backend.supabase_client_scoped import get_request_supabase as _get_teacher_supabase
 from backend.extensions import limiter
 from backend.observability import critical_path
 
@@ -129,7 +135,7 @@ def create_class():
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
         data = request.json
         name = data.get('name', '').strip()
         subject = data.get('subject', '')
@@ -170,7 +176,7 @@ def list_classes():
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
         classes = db.table('classes').select(
             '*, class_students(count)'
         ).eq('teacher_id', teacher_id).eq('is_active', True).execute()
@@ -192,7 +198,7 @@ def sync_roster_to_class(class_id):
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
 
         # Verify class belongs to teacher
         cls = db.table('classes').select('*').eq('id', class_id).eq(
@@ -311,7 +317,7 @@ def list_class_students(class_id):
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
 
         cls = db.table('classes').select('id').eq('id', class_id).eq(
             'teacher_id', teacher_id
@@ -338,7 +344,7 @@ def publish_to_class():
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
         data = request.json
         class_id = data.get('class_id')
         content = data.get('content')
@@ -402,7 +408,7 @@ def get_portal_submissions():
         return jsonify({"submissions": [], "pending_confirmations": 0})
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
 
         content = db.table('published_content').select('id, title, content_type').eq(
             'teacher_id', teacher_id
@@ -466,7 +472,7 @@ def grade_portal_submission():
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
         data = request.json
         submission_id = data.get('submission_id')
 
@@ -1007,7 +1013,7 @@ def send_submission_confirmations():
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
 
         # Recover stale 'processing' rows (stuck > 10 min) back to pending
         stale_cutoff = (datetime.now(tz=timezone.utc) - timedelta(minutes=10)).isoformat()
@@ -1111,7 +1117,7 @@ def mark_confirmations_sent():
     teacher_id = g.teacher_id
 
     try:
-        db = _get_supabase()
+        db = _get_teacher_supabase()
         data = request.json or {}
         conf_ids = data.get('confirmation_ids', [])
         status = data.get('status', 'sent')

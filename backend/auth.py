@@ -229,6 +229,11 @@ def init_auth(app):
         # Attach user info to Flask's g object for use in route handlers
         g.user_id = payload.get('sub')
         g.user_email = payload.get('email', '')
+        # Phase 4.5: raw JWT stashed here so get_request_supabase()
+        # (in backend/supabase_client_scoped.py) can mint a per-user
+        # Supabase client. This attr is ONLY set on the validated
+        # Bearer-JWT path — never on Clever/ClassLink/student/dev.
+        g.supabase_jwt = token
 
         # Approval gate — skip for the approval-status endpoint itself
         if request.path != '/api/auth/approval-status':

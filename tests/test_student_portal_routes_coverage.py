@@ -73,16 +73,22 @@ def _multi_table_sb(table_map):
 # ============ PUBLISH ASSESSMENT ============
 
 class TestPublishAssessment:
+    # Phase 4.5: publish_assessment uses _get_teacher_supabase; the
+    # generate_join_code helper (called inside) still uses get_supabase.
+    # Tests that go past the early-return patch both; early-return only needs
+    # the teacher patch.
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
-    def test_no_assessment_returns_400(self, mock_get_sb, client, teacher_headers):
-        mock_get_sb.return_value = _multi_table_sb({})
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_no_assessment_returns_400(self, mock_get_teacher_sb, client, teacher_headers):
+        mock_get_teacher_sb.return_value = _multi_table_sb({})
         resp = client.post('/api/publish-assessment', json={},
                            headers=teacher_headers)
         assert resp.status_code == 400
 
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     @patch('backend.routes.student_portal_routes.get_supabase')
     def test_publishes_assessment_returns_join_code(self, mock_get_sb,
+                                                    mock_get_teacher_sb,
                                                     client, teacher_headers):
         # The table call for checking join-code uniqueness returns empty (code unused),
         # then upsert returns inserted row.
@@ -102,6 +108,7 @@ class TestPublishAssessment:
 
         mock_sb.table.side_effect = table_side
         mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         payload = {
             "assessment": {"title": "Algebra Quiz", "total_points": 20},
@@ -120,14 +127,16 @@ class TestPublishAssessment:
         assert 'join_code' in body
         assert 'join_link' in body
 
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     @patch('backend.routes.student_portal_routes.get_supabase')
-    def test_publish_makeup_with_restricted_students(self, mock_get_sb,
+    def test_publish_makeup_with_restricted_students(self, mock_get_sb, mock_get_teacher_sb,
                                                       client, teacher_headers):
         mock_sb = MagicMock()
         insert_chain = _make_chain([{"id": "asm-2"}])
         uniq = _make_chain([])
         mock_sb.table.side_effect = [uniq, insert_chain]
         mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         payload = {
             "assessment": {"title": "Makeup"},
@@ -144,14 +153,16 @@ class TestPublishAssessment:
         assert body['restricted_students'] == ["Jane Doe", "John Smith"]
         assert body['period'] == '3'
 
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     @patch('backend.routes.student_portal_routes.get_supabase')
-    def test_publish_upsert_returns_no_data_returns_500(self, mock_get_sb,
+    def test_publish_upsert_returns_no_data_returns_500(self, mock_get_sb, mock_get_teacher_sb,
                                                          client, teacher_headers):
         mock_sb = MagicMock()
         uniq = _make_chain([])
         empty_upsert = _make_chain([])  # upsert returns empty data
         mock_sb.table.side_effect = [uniq, empty_upsert]
         mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         resp = client.post('/api/publish-assessment',
                            json={"assessment": {"title": "X"}},
@@ -163,14 +174,14 @@ class TestPublishAssessment:
 
 class TestListAssessments:
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_empty_list(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.get('/api/teacher/assessments', headers=teacher_headers)
         assert resp.status_code == 200
         assert resp.get_json() == {"assessments": []}
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_returns_assessments(self, mock_get_sb, client, teacher_headers):
         rows = [{
             "id": "a1", "join_code": "CODE01", "title": "Quiz 1",
@@ -193,14 +204,14 @@ class TestListAssessments:
 
 class TestGetAssessmentResults:
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_not_found(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.get('/api/teacher/assessment/NONE99/results',
                           headers=teacher_headers)
         assert resp.status_code == 404
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_returns_submissions(self, mock_get_sb, client, teacher_headers):
         assessment_row = [{
             "id": "asm-1", "join_code": "ABC123", "title": "Quiz",
@@ -228,14 +239,14 @@ class TestGetAssessmentResults:
 
 class TestToggleAssessment:
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_not_found(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.post('/api/teacher/assessment/BADCODE/toggle',
                            headers=teacher_headers)
         assert resp.status_code == 404
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_toggle_active_to_inactive(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({
             'published_assessments': [{"is_active": True}]
@@ -247,7 +258,7 @@ class TestToggleAssessment:
         assert body['active'] is False
         assert 'deactivated' in body['message']
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_toggle_inactive_to_active(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({
             'published_assessments': [{"is_active": False}]
@@ -264,14 +275,14 @@ class TestToggleAssessment:
 
 class TestDeleteAssessment:
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_not_found(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({'published_assessments': []})
         resp = client.delete('/api/teacher/assessment/BADCODE',
                              headers=teacher_headers)
         assert resp.status_code == 404
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_delete_ok(self, mock_get_sb, client, teacher_headers):
         mock_get_sb.return_value = _multi_table_sb({
             'published_assessments': [{"id": "a1"}],

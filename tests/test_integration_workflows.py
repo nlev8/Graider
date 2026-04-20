@@ -74,8 +74,11 @@ def _simple_sb(default_data=None):
 class TestPublishAssessment:
     """Test POST /api/publish-assessment — teacher publishes via join code."""
 
+    # Phase 4.5: publish_assessment uses _get_teacher_supabase; the
+    # generate_join_code helper still uses get_supabase. Patch both.
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     @patch('backend.routes.student_portal_routes.get_supabase')
-    def test_publish_returns_join_code(self, mock_get_sb, client, teacher_headers):
+    def test_publish_returns_join_code(self, mock_get_sb, mock_get_teacher_sb, client, teacher_headers):
         mock_sb = MagicMock()
 
         def table_side_effect(name):
@@ -92,6 +95,7 @@ class TestPublishAssessment:
 
         mock_sb.table.side_effect = table_side_effect
         mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         response = client.post('/api/publish-assessment', headers=teacher_headers, json={
             'assessment': {
@@ -111,10 +115,10 @@ class TestPublishAssessment:
         assert data.get('success') is True
         assert 'join_code' in data
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
-    def test_publish_requires_assessment(self, mock_get_sb, client, teacher_headers):
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_publish_requires_assessment(self, mock_get_teacher_sb, client, teacher_headers):
         mock_sb, _ = _simple_sb()
-        mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         response = client.post('/api/publish-assessment', headers=teacher_headers, json={
             'settings': {}
@@ -128,13 +132,13 @@ class TestPublishAssessment:
 class TestTeacherAssessmentList:
     """Test GET /api/teacher/assessments — list teacher's published assessments."""
 
-    @patch('backend.routes.student_portal_routes.get_supabase')
-    def test_returns_assessments_for_teacher(self, mock_get_sb, client, teacher_headers):
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_returns_assessments_for_teacher(self, mock_get_teacher_sb, client, teacher_headers):
         mock_sb, chain = _simple_sb([
             {'id': 'a1', 'join_code': 'XYZ789', 'title': 'Quiz 1', 'created_at': '2026-03-20T10:00:00',
              'submission_count': 5, 'is_active': True, 'settings': {'period': 'P1'}},
         ])
-        mock_get_sb.return_value = mock_sb
+        mock_get_teacher_sb.return_value = mock_sb
 
         response = client.get('/api/teacher/assessments', headers=teacher_headers)
         data = json.loads(response.data)

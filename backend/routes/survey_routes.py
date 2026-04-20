@@ -6,7 +6,7 @@ Responses stored in published_assessments with content_type="survey".
 import random
 from datetime import datetime
 from flask import Blueprint, request, jsonify, make_response
-from backend.supabase_client import get_supabase_or_raise as get_supabase
+from backend.supabase_client_scoped import get_request_supabase as get_supabase
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 

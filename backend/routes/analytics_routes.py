@@ -56,10 +56,7 @@ def _fetch_assessment_analytics(source):
         return assessment_stats, assessment_category_summary
     try:
         from flask import g as _ga
-        try:
-            from backend.supabase_client import get_supabase_or_raise as _get_sb
-        except ImportError:
-            from supabase_client import get_supabase_or_raise as _get_sb
+        from backend.supabase_client_scoped import get_request_supabase as _get_sb
         _db = _get_sb()
         _tid = getattr(_ga, 'teacher_id', getattr(_ga, 'user_id', 'local-dev'))
 
