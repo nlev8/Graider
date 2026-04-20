@@ -28,8 +28,8 @@ Close a measurable subset of the Phase 5 excellence-tier quality gap by shipping
 | B2 | pip-tools lockfile workflow + drift-check CI job + `docs/dependencies.md` | Security, Data integrity |
 | C1 | Logging payload contract (formatter strategy decision + tests) | Observability |
 | C2 | `print()` migration in runtime paths + Ruff T20 lint rule + explicit allow-list for CLI/protocol/test-harness prints | Observability |
-| D1 | LLM provider adapter for **non-streaming** call sites (~22 sites) | Error handling, Operational safety |
-| D2 | LLM adapter extension for **streaming/tool-use** in `assistant_routes` (~8 sites) | Error handling, Operational safety |
+| D1 | LLM provider adapter for **non-streaming** call sites (26 sites) | Error handling, Operational safety |
+| D2 | LLM adapter extension for **streaming/tool-use** in `backend/routes/assistant_routes.py` (3 sites) | Error handling, Operational safety |
 
 **Explicitly deferred to Phase 5b:**
 - Circuit breakers (`pybreaker`) layered onto the D1/D2 adapter seam
@@ -75,17 +75,20 @@ Print classes (for C2 allow-list):
 - `backend/routes/planner_routes.py` — 14 sites (464, 556, 775, 1209, 1252, 1539, 1916, 4196, 5072, 5210, 5318, 5414, 5527, 5789)
 - `backend/routes/assistant_routes.py` — 3 sites (1461, 1508, 1620) — streaming/tool-use, all D2
 - `backend/app.py` — 2 sites (1560, 1626)
-- Single-call files (13 sites total, all D1):
-  - `backend/routes/assignment_routes.py:148`
-  - `backend/routes/assignment_player_routes.py:344`
-  - `backend/routes/grading_routes.py:768`
-  - `backend/routes/lesson_routes.py:463`
-  - `backend/services/grading_service.py:235`
-  - `backend/services/assistant_tools_behavior.py:599`
-  - `backend/services/assistant_tools_ai.py:123`
-  - `backend/services/seo_service.py:38`
-  - `backend/services/assignment_post_processing.py:1929`
-  - `backend/services/slide_generator.py:155, 258` — **excluded from Phase 5a** (image gen, not chat)
+- Single-call files:
+  - `backend/routes/assignment_routes.py:148` — D1
+  - `backend/routes/assignment_player_routes.py:344` — D1
+  - `backend/routes/grading_routes.py:768` — D1
+  - `backend/routes/lesson_routes.py:463` — D1
+  - `backend/services/grading_service.py:235` — D1
+  - `backend/services/assistant_tools_behavior.py:599` — D1
+  - `backend/services/assistant_tools_ai.py:123` — D1
+  - `backend/services/seo_service.py:38` — D1
+  - `backend/services/assignment_post_processing.py:1929` — D1
+  - `backend/services/slide_generator.py:155` — D1 (text generation via `google.generativeai.GenerativeModel.generate_content`, chat-shaped)
+  - `backend/services/slide_generator.py:258` — **excluded from Phase 5a** (image generation via `google.genai`, NOT chat-shaped — deferred to Phase 5b sibling adapter)
+
+**Total: 30 sites → D1 covers 26, D2 covers 3 (assistant_routes streaming), 1 deferred to Phase 5b.**
 
 ---
 
@@ -185,14 +188,30 @@ Print classes (for C2 allow-list):
 Option 1 would be justified if we had many independent event types each needing different keys. Today we have ~2 (db_mode, future llm.call.*).
 
 **Changes in C1:**
-- Add a helper `backend/observability/events.py` exposing `emit(event_name: str, level: str = "info", **fields)` that wraps `logger.log(level, json.dumps({...}))` with `event_name` as a top-level key.
-- Update `backend/observability/db_mode.py` to use the helper (refactor, no behavior change).
+- Add a helper `backend/observability/events.py` exposing `emit(event: str, level: str = "info", **fields)`. Implementation: `logger.log(level_int, json.dumps({"event": event, **fields}))`. The helper serializes the structured payload **inside the formatter's `message` field** — it does NOT add top-level keys to the outer log line (the formatter is intentionally not extended in C1).
+- Update `backend/observability/db_mode.py` to use the helper (refactor, no behavior change — `db_mode.py` already uses the JSON-in-message pattern manually).
 - Add tests verifying the helper's output shape.
-- Document the convention in `docs/observability.md`.
+- Document the convention in `docs/observability.md` with an explicit example of the wrapper shape below.
+
+**Output shape (verified against current `JsonFormatter`):**
+
+```
+emit("llm.call.start", model="gpt-4", tokens=0)
+```
+
+produces this log line:
+
+```json
+{"timestamp": "2026-04-20T...", "level": "INFO", "logger": "backend.observability.events", "request_id": "abc-123", "message": "{\"event\": \"llm.call.start\", \"model\": \"gpt-4\", \"tokens\": 0}"}
+```
+
+Note: `event`, `model`, `tokens` are NESTED inside the JSON-encoded `message` field — consistent with the existing `db_mode.py:63-75` pattern. BetterStack / log parsers extract structured fields by parsing `message` as JSON.
+
+**Naming convention:** the first argument of `emit()` is called `event` (not `event_name`). The serialized JSON key is also `event`. Used consistently across helper signature, examples, and tests.
 
 **Test plan:**
-- Unit test: `emit('llm.call.start', model='gpt-4', tokens=0)` produces a JSON line with `event='llm.call.start'`, `model='gpt-4'`, `tokens=0`, plus standard `timestamp`, `level`, `logger`, `request_id` from the existing formatter.
-- Unit test: `db_mode` refactor produces byte-identical output to pre-refactor (snapshot test).
+- Unit test: `emit('llm.call.start', model='gpt-4', tokens=0)` produces a log record whose `message` attribute is the JSON string `'{"event": "llm.call.start", "model": "gpt-4", "tokens": 0}'`. The formatter then wraps this as the `message` field of the outer JSON line.
+- Unit test: `db_mode` refactor produces byte-identical outer JSON to pre-refactor (snapshot test of full log line).
 
 **Out of scope:** migrating any `print()` call (that's C2). Extending `JsonFormatter` (option 1 was not chosen).
 
@@ -244,7 +263,7 @@ Option 1 would be justified if we had many independent event types each needing 
 
 **Goal:** normalize non-streaming LLM calls behind a single testable seam. Creates the architectural ground floor that Phase 5b's circuit breakers and future observability will stand on.
 
-**Inventory (~22 non-streaming sites):**
+**Inventory (26 non-streaming sites):**
 - `backend/routes/planner_routes.py` — 14 sites
 - `backend/app.py` — 2 sites
 - `backend/routes/assignment_routes.py:148`
@@ -256,20 +275,32 @@ Option 1 would be justified if we had many independent event types each needing 
 - `backend/services/assistant_tools_ai.py:123`
 - `backend/services/seo_service.py:38`
 - `backend/services/assignment_post_processing.py:1929`
+- `backend/services/slide_generator.py:155` — text generation (chat-shaped) via `google.generativeai.GenerativeModel.generate_content`
 
 **Explicitly excluded:**
-- `backend/routes/assistant_routes.py` (3 sites) — all streaming+tool-use, migrated in D2
-- `backend/services/slide_generator.py:155, 258` — image generation via `google.genai`, not chat-shaped, deferred to Phase 5b
+- `backend/routes/assistant_routes.py` (3 sites at lines 1461, 1508, 1620) — all streaming + tool-use, migrated in D2
+- `backend/services/slide_generator.py:258` — image generation via `google.genai` SDK, not chat-shaped, deferred to Phase 5b's sibling image-generation adapter
 
 **New module:** `backend/services/llm_adapter.py`
 
+**Message type (role-bearing wrapper around content parts):**
+```python
+@dataclass(frozen=True)
+class Message:
+    role: Literal["user", "assistant", "tool"]
+    content: list[ContentPart]
+    tool_call_id: str | None = None   # set when role == "tool" (tool result)
+```
+
+`ContentPart` is a discriminated union: `TextPart(text: str)`, `ImagePart(url: str | None, base64: str | None, mime_type: str)`, `ToolUsePart(tool_call_id: str, name: str, args: dict)` (assistant-side), `ToolResultPart(tool_call_id: str, content: str | dict)` (user-side). Covers every current call site: multimodal image input in `backend/routes/assignment_player_routes.py:344-357` and `backend/app.py:1626-1647`, assistant content blocks in `backend/routes/assistant_routes.py:107-169, 1337-1349, 1585-1614`.
+
 **Request model (`LLMRequest`) — first-class fields:**
 ```python
-@dataclass
+@dataclass(frozen=True)
 class LLMRequest:
     model: str
-    messages: list[ContentPart]          # structured, not plain strings
-    system_prompt: str | None = None     # dedicated field, not messages[0]
+    messages: list[Message]              # role-tagged, multi-turn
+    system_prompt: str | None = None     # dedicated field (Anthropic top-level system=; OpenAI system message; Gemini system_instruction=)
     tools: list[ToolDef] | None = None   # tool-use is first-class
     response_format: ResponseFormat | None = None   # JSON-mode, etc.
     max_tokens: int | None = None
@@ -278,13 +309,11 @@ class LLMRequest:
     metadata: dict = field(default_factory=dict)   # only non-semantic tags (request_id, teacher_id, feature_label)
 ```
 
-`ContentPart` is a union: `TextPart`, `ImagePart` (URL-based or base64), future `ToolResultPart` for tool round-trips.
-
 **Response model (`LLMResponse`):**
 ```python
-@dataclass
+@dataclass(frozen=True)
 class LLMResponse:
-    content_parts: list[ContentPart]     # rich content, not just text
+    content_parts: list[ContentPart]     # rich content, not just text — mirrors request Message.content structure for assistant-side
     tool_calls: list[ToolCall]           # if any
     usage: Usage                         # prompt_tokens, completion_tokens, cost_usd
     finish_reason: str                   # stop, length, tool_use, content_filter
@@ -480,7 +509,7 @@ Average movement: 6.8 → ~7.3 on Phase 5a alone. Phase 5b closes the gap to ~8.
 
 ---
 
-## Self-review (2026-04-20, post-Codex round-2)
+## Self-review (2026-04-20, post-Codex round-3)
 
 **Placeholder scan:** none. All sections have concrete content; code examples are compilable Python; file paths verified against repo state today.
 
@@ -490,5 +519,12 @@ Average movement: 6.8 → ~7.3 on Phase 5a alone. Phase 5b closes the gap to ~8.
 
 **Ambiguity check:**
 - C1's "recommendation: option 2" is explicit enough for the plan — plan writer picks option 2 unless the user objects.
-- D1's `ContentPart` union is a type, not an implementation — plan will specify `@dataclass(frozen=True)` per member.
+- C1 output shape is explicitly documented: structured fields nest inside the formatter's `message` key as JSON-encoded text (matches existing `db_mode.py:63-75` pattern). NOT top-level keys on the outer log line.
+- D1's `ContentPart` union members and `Message` wrapper specified with `@dataclass(frozen=True)`. Plan enumerates each concrete type.
 - D2's `StreamEvent` discriminated union is similar — plan specifies tagged dataclasses.
+
+**Round-3 fixes applied (from Codex final review):**
+- C1: clarified output shape as JSON-in-message (not top-level keys), added worked example of full log line, picked `event` as the canonical field name.
+- D1/D2: added `Message` role-bearing wrapper around `ContentPart` (required for multi-turn chat and assistant_routes conversation state).
+- D1: added `slide_generator.py:155` as a D1 site (text generation, chat-shaped). Only `slide_generator.py:258` is deferred (image generation).
+- Counts normalized: D1 = 26 sites, D2 = 3 sites, deferred = 1 site. Totals to 30 ✓.
