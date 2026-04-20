@@ -1,0 +1,2 @@
+[tool.alembic-destructive-ops]
+allowlist = []
