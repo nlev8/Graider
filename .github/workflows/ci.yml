@@ -32,8 +32,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
 
       - name: Run tests with coverage
         run: |
@@ -102,7 +102,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install --require-hashes -r requirements.txt
 
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -115,3 +115,27 @@ jobs:
 
       - name: Show current revision
         run: alembic current --verbose
+
+  lockfile-drift-check:
+    name: Lockfile Drift Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install pip-tools
+        run: pip install pip-tools
+
+      - name: Recompile lockfiles in a tmp dir and diff against committed
+        run: |
+          cp requirements.txt /tmp/committed-prod.txt
+          cp requirements-dev.txt /tmp/committed-dev.txt
+          pip-compile --generate-hashes --allow-unsafe --output-file=requirements.txt requirements.in --quiet
+          pip-compile --generate-hashes --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in -c requirements.txt --quiet
+          diff /tmp/committed-prod.txt requirements.txt || (echo "::error::requirements.txt is stale vs requirements.in — run pip-compile locally and commit"; exit 1)
+          diff /tmp/committed-dev.txt requirements-dev.txt || (echo "::error::requirements-dev.txt is stale vs requirements-dev.in — run pip-compile locally and commit"; exit 1)

@@ -1,0 +1,21 @@
+# Dev-only dependencies for CI tests.
+# Installed via: pip install -r requirements-dev.txt
+
+# Testing & Coverage
+pytest-cov>=4.0
+selenium>=4.15.0
+# Note: playwright is a RUNTIME dep (subprocess in outlook_sender.py) —
+# see requirements.txt. Do NOT add it here.
+
+# Packaging
+py2app>=0.28.0
+
+# Phase 4.2 RLS hardening
+# pglast 7.x provides Python 3.12 + 3.14 wheels (6.12 in the plan was not
+# published to PyPI; 6.16 is the latest 6.x but lacks a 3.14 wheel).
+pglast>=7.13,<8  # libpg_query Python wrapper — parses Postgres SQL via the real grammar
+# testcontainers 4.11.0 (originally pinned) is YANKED from PyPI as broken —
+# it connects to Docker at import time, breaking test collection without Docker.
+# 4.14.2+ imports cleanly and defers Docker connection until container spin-up.
+testcontainers[postgres]>=4.14.2,<5  # Postgres 15 container for RLS migration smoke test
+psycopg2-binary>=2.9.9,<3  # Postgres driver used by the smoke test (testcontainers' postgres extra does not ship one)
