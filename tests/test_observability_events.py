@@ -24,7 +24,7 @@ def test_emit_info_level_serializes_event_and_fields(caplog):
 
     records = _capture_records(caplog)
     assert len(records) == 1
-    payload = json.loads(records[0].message)
+    payload = json.loads(records[0].getMessage())
     assert payload == {"event": "llm.call.start", "model": "gpt-4", "tokens": 0}
 
 
@@ -35,7 +35,7 @@ def test_emit_warning_level(caplog):
     records = _capture_records(caplog)
     assert len(records) == 1
     assert records[0].levelno == logging.WARNING
-    payload = json.loads(records[0].message)
+    payload = json.loads(records[0].getMessage())
     assert payload["event"] == "llm.call.error"
     assert payload["error_kind"] == "rate_limit"
     assert "level" not in payload  # level controls the logger level, not the payload
