@@ -82,3 +82,14 @@ sentry-sdk[flask]>=2.0
 celery==5.4.0
 alembic>=1.13,<2
 psycopg[binary]>=3.2,<4
+
+# ── Linux-only transitive deps of keyring, pinned explicitly so pip-compile
+# ── captures them regardless of the compile host platform. Without this,
+# ── --require-hashes install on Linux CI/Railway rejects them as unpinned
+# ── transitives (keyring gates them on Linux only, so a macOS-generated
+# ── lockfile omits them entirely). No platform markers here because
+# ── pip-compile itself ignores markers that don't match the compile host.
+# ── The cost on macOS/Windows is installing two small pure-Python wheels
+# ── that keyring never calls into on those platforms — harmless.
+SecretStorage>=3.2
+jeepney>=0.4.2
