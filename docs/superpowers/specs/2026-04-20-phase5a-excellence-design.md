@@ -98,14 +98,15 @@ Print classes (for C2 allow-list):
 
 **Changes:**
 - New file `.github/workflows/security-scan.yml`.
-- New file `.bandit.yaml` baseline at repo root.
+- New file `.bandit-baseline.json` at repo root (Bandit's `--baseline` input requires JSON — the tool's baseline loader calls `json.loads()` directly and will NOT parse YAML).
+- New file `docs/superpowers/baselines/.bandit-governance.md` holding the review-cadence + refresh-command documentation (since JSON can't carry inline comments, governance lives in a sibling Markdown file).
 - Update `README.md` coverage-floor reference from 40% to 32% (same PR — trivial doc fix).
 
 **Bandit config:**
 - Scan root: `backend/` (NOT `backend/scripts/`, NOT `backend/migrations/`).
 - Severity floor: `-ll` (MEDIUM and above — Bandit's `-l` flag is cumulative "show LOW+", `-ll` means "show MEDIUM+") plus `-iii` (HIGH confidence only). Effective: MEDIUM+ severity AND HIGH confidence only.
-- Baseline file `.bandit.yaml` allow-lists pre-existing findings to produce a clean green signal on day 1.
-- **Baseline governance:** two-line comment at top of `.bandit.yaml` states the allow-list review cadence ("review quarterly" or "every phase-N plan") and the refresh command (`bandit -r backend/ --exclude ... -o .bandit.yaml -f yaml --baseline`). Without governance, the baseline becomes permanent debt concealment.
+- Baseline file `.bandit-baseline.json` allow-lists pre-existing findings to produce a clean green signal on day 1.
+- **Baseline governance:** lives in `docs/superpowers/baselines/.bandit-governance.md`. Documents review cadence (refresh at the start of each new phase plan, or when a flagged pattern is fixed or introduced) and the exact refresh command (`bandit -r backend/ --exclude backend/scripts,backend/migrations -ll -iii -f json -o .bandit-baseline.json`). Without this governance doc, the baseline becomes permanent debt concealment.
 
 **trufflehog config:**
 - Uses `trufflesecurity/trufflehog@main` action.

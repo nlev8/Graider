@@ -31,7 +31,7 @@ jobs:
           bandit -r backend/ \
             --exclude backend/scripts,backend/migrations \
             -ll -iii \
-            --baseline .bandit.yaml
+            --baseline .bandit-baseline.json
 
   trufflehog:
     name: Secret Scan (trufflehog, verified only, PR diff)
