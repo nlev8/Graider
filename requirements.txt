@@ -787,12 +787,6 @@ jaraco-functools==4.4.0 \
     --hash=sha256:9eec1e36f45c818d9bf307c8948eb03b2b56cd44087b3cdc989abca1f20b9176 \
     --hash=sha256:da21933b0417b89515562656547a77b4931f98176eb173644c0d35032a33d6bb
     # via keyring
-jeepney==0.9.0 ; sys_platform == "linux" \
-    --hash=sha256:l-VxRSDBb8CkVpXlNlouEbgep5u6eW4m-fHReMsYJoM \
-    --hash=sha256:zw6ehFYiuB5KKN-UxANFQAJW7GCNDlW7ij_qqRY_VzI
-    # via
-    #   -r requirements.in
-    #   secretstorage
 jinja2==3.1.6 \
     --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
@@ -2445,12 +2439,6 @@ sentry-sdk[flask]==2.58.0 \
     --hash=sha256:688d1c704ddecf382ea3326f21a67453d4caa95592d722b7c780a36a9d23109e \
     --hash=sha256:c1144d947352d54e5b7daa63596d9f848adf684989c06c4f5a659f0c85a18f6f
     # via -r requirements.in
-secretstorage==3.5.0 ; sys_platform == "linux" \
-    --hash=sha256:DOZYiMByX8ssW8D9uOVDjuzgLFI1V-pAzgcDwmYkgTc \
-    --hash=sha256:8EuORonLzjUXRNVTe_axMpxvxo-R-mZvYKOA7d3NEb4
-    # via
-    #   -r requirements.in
-    #   keyring
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
     --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81

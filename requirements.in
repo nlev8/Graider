@@ -82,11 +82,3 @@ sentry-sdk[flask]>=2.0
 celery==5.4.0
 alembic>=1.13,<2
 psycopg[binary]>=3.2,<4
-
-# ── Linux-only transitives of keyring, pinned explicitly so pip-compile
-# ── captures them regardless of the compile host platform. Adding them
-# ── here doesn't affect non-Linux installs (their environment markers
-# ── still gate actual install). Without explicit pins, --require-hashes
-# ── rejects them on Linux CI (they're un-pinned transitives).
-SecretStorage>=3.2 ; sys_platform == "linux"
-jeepney>=0.4.2 ; sys_platform == "linux"
