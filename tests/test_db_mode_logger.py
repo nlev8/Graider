@@ -35,11 +35,11 @@ def app(monkeypatch):
 
 def _capture_logs(caplog):
     """Return only log records from the db_mode logger."""
-    return [r for r in caplog.records if r.name == "backend.db_mode"]
+    return [r for r in caplog.records if r.name == "backend.observability.events"]
 
 
 def test_emits_one_log_per_api_request(app, caplog):
-    caplog.set_level(logging.INFO, logger="backend.db_mode")
+    caplog.set_level(logging.INFO, logger="backend.observability.events")
     with app.test_client() as client:
         resp = client.get("/api/ping")
     assert resp.status_code == 200
@@ -55,14 +55,14 @@ def test_emits_one_log_per_api_request(app, caplog):
 
 
 def test_non_api_requests_not_logged(app, caplog):
-    caplog.set_level(logging.INFO, logger="backend.db_mode")
+    caplog.set_level(logging.INFO, logger="backend.observability.events")
     with app.test_client() as client:
         client.get("/not-api")
     assert _capture_logs(caplog) == []
 
 
 def test_auth_source_jwt_when_supabase_jwt_attr_present(app, caplog, monkeypatch):
-    caplog.set_level(logging.INFO, logger="backend.db_mode")
+    caplog.set_level(logging.INFO, logger="backend.observability.events")
 
     @app.before_request
     def set_jwt():
@@ -78,7 +78,7 @@ def test_auth_source_jwt_when_supabase_jwt_attr_present(app, caplog, monkeypatch
 
 def test_db_mode_per_user_when_flag_on_and_jwt_present(app, caplog, monkeypatch):
     monkeypatch.setenv("USE_PER_USER_JWT", "1")
-    caplog.set_level(logging.INFO, logger="backend.db_mode")
+    caplog.set_level(logging.INFO, logger="backend.observability.events")
 
     @app.before_request
     def set_jwt():

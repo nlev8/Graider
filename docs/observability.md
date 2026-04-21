@@ -198,6 +198,29 @@ Expected behavior that future operators should not waste time diagnosing:
 
 ---
 
+## Structured events (`emit()` helper)
+
+For machine-parsed log events (e.g. traffic split, LLM call metrics),
+use `backend.observability.events.emit()`:
+
+```python
+from backend.observability.events import emit
+
+emit("llm.call.complete", model="gpt-4", duration_ms=423, tokens=150)
+```
+
+The event name and fields are serialized as JSON inside the outer log
+line's `message` field — consumers parse `message` as JSON to extract
+`event` and its fields. This is intentional: the existing `JsonFormatter`
+at `backend/utils/logging_utils.py` serializes only a fixed set of outer
+fields and drops `extra={...}` kwargs. The `emit()` helper routes around
+that limitation without modifying the formatter.
+
+For human-readable operational messages, continue using standard
+`logger.info/warning/exception` calls.
+
+---
+
 ## Follow-ups / known gaps
 
 - **Frontend error tracking not yet implemented** — see memory: `project_frontend_error_tracking.md`. Observability v1 only captures Python backend errors. React rendering crashes, stuck spinners, and event handler exceptions are currently invisible. Estimated 4-6 hours of follow-up work.
