@@ -15,6 +15,12 @@ Graider uses **pip-tools** for reproducible, hash-verified installs.
 pip install --require-hashes -r requirements.txt -r requirements-dev.txt
 ```
 
+## Python version requirement
+
+**Regenerate lockfiles with Python 3.12** (the version CI and Railway use). pip-compile records the Python version in the file header and resolves slightly different dep graphs between minor versions — a 3.14-generated lockfile will fail the `lockfile-drift-check` CI job because CI recompiles on 3.12.
+
+On macOS: `brew install python@3.12` → `python3.12 -m venv /tmp/v && /tmp/v/bin/pip install pip-tools && /tmp/v/bin/pip-compile ...`.
+
 ## Add a new runtime package
 
 1. Add to `requirements.in` (loose, e.g. `somelib>=1.2`).
