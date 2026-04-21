@@ -30,7 +30,7 @@ jobs:
         run: |
           bandit -r backend/ \
             --exclude backend/scripts,backend/migrations \
-            -l -iii \
+            -ll -iii \
             --baseline .bandit.yaml
 
   trufflehog:

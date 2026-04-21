@@ -103,7 +103,7 @@ Print classes (for C2 allow-list):
 
 **Bandit config:**
 - Scan root: `backend/` (NOT `backend/scripts/`, NOT `backend/migrations/`).
-- Severity floor: `-l` plus `-iii` (skip low severity, skip anything below HIGH confidence). Effective: medium+ severity AND high confidence only.
+- Severity floor: `-ll` (MEDIUM and above — Bandit's `-l` flag is cumulative "show LOW+", `-ll` means "show MEDIUM+") plus `-iii` (HIGH confidence only). Effective: MEDIUM+ severity AND HIGH confidence only.
 - Baseline file `.bandit.yaml` allow-lists pre-existing findings to produce a clean green signal on day 1.
 - **Baseline governance:** two-line comment at top of `.bandit.yaml` states the allow-list review cadence ("review quarterly" or "every phase-N plan") and the refresh command (`bandit -r backend/ --exclude ... -o .bandit.yaml -f yaml --baseline`). Without governance, the baseline becomes permanent debt concealment.
 
