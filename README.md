@@ -436,8 +436,9 @@ Contributions welcome! Please read CLAUDE.md for development guidelines.
 This project uses GitHub Actions for continuous integration. Branch protection on `main` requires all checks to pass before merging.
 
 **Required checks:**
-- **Backend Tests** — runs `pytest` with 40% coverage floor (excludes load/stress/e2e tests)
+- **Backend Tests** — runs `pytest` with 32% coverage floor (enforced via `--cov-fail-under=32`)
 - **Frontend Build** — runs `npm run build` via Vite
+- **Security Scan** — Bandit SAST on backend/ and trufflehog secrets on PR diff
 
 **Workflow:**
 1. Create a feature branch: `git checkout -b feature/my-change`
