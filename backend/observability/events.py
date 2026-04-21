@@ -39,7 +39,11 @@ def emit(event: str, level: str = "info", **fields) -> None:
             Becomes the "event" key in the serialized payload.
         level: logging level — one of debug/info/warning/error/critical.
             Controls the log level, NOT included in the payload.
-        **fields: arbitrary serializable key/value pairs.
+        **fields: arbitrary key/value pairs. Non-JSON-native values
+            (datetime, UUID, Decimal, Enum, etc.) are coerced to str()
+            via json.dumps(default=str) — matches the pre-refactor
+            db_mode.py semantics and prevents a silent TypeError in
+            after_request hooks.
 
     Raises:
         ValueError: if level is not a recognized level name.
@@ -49,4 +53,4 @@ def emit(event: str, level: str = "info", **fields) -> None:
         raise ValueError(f"unknown log level: {level!r}")
 
     payload = {"event": event, **fields}
-    _logger.log(level_int, json.dumps(payload))
+    _logger.log(level_int, json.dumps(payload, default=str))

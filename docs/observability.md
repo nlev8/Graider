@@ -219,6 +219,13 @@ that limitation without modifying the formatter.
 For human-readable operational messages, continue using standard
 `logger.info/warning/exception` calls.
 
+**Note on logger names (Phase 5a PR C1):** `request.db_mode` events now
+emit from logger `backend.observability.events` (previously
+`backend.db_mode`). If you have BetterStack filters or searches keyed on
+the old logger name, update them to `backend.observability.events` — or
+better, key on `message.event == "request.db_mode"` since the event name
+is the stable contract regardless of where it's emitted from.
+
 ---
 
 ## Follow-ups / known gaps
