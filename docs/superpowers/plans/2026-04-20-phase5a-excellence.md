@@ -286,11 +286,11 @@ When all green, operator merges. Proceed to Task 2.
 **Moves (non-runtime deps that currently live in main requirements.txt):**
 - `pytest-cov` → dev
 - `py2app` → dev (Mac packaging, never hit at runtime)
-- `playwright` → dev (E2E)
-- `selenium` → dev (E2E)
+- `selenium` → dev (no Python importers in repo — effectively dead; deletion deferred to a hygiene PR or B2)
 
 **Keep in main** (production dependencies):
 - Both Gemini SDKs (`google-generativeai`, `google.genai`) — used by live routes + slide_generator. Document with a one-line comment.
+- **`playwright`** — RUNTIME dep despite appearances. `backend/services/outlook_sender.py:253` imports it inside a subprocess spawned by three Flask routes in `backend/routes/email_routes.py` (`/api/send-outlook-emails`, `/api/outlook-send/status`, `/api/outlook-login`). The subprocess inherits the backend's site-packages via `sys.executable`. DO NOT move to requirements-dev.txt.
 
 ---
 
@@ -304,40 +304,64 @@ git checkout -b feat/phase5a-pr-b1-dep-audit
 - [ ] **Step 2: Audit current requirements.txt to confirm the moves**
 
 ```bash
-grep -n "pytest-cov\|py2app\|playwright\|selenium" requirements.txt
-grep -n "google-generativeai\|google.genai\|google-genai" requirements.txt
+grep -n "pytest-cov\|py2app\|selenium" requirements.txt
+grep -n "google-generativeai\|google.genai\|google-genai\|playwright" requirements.txt
+grep -n "import playwright\|from playwright" backend/
 ```
 
-Expected: each of the 4 dev deps appears in `requirements.txt` (confirms the move is needed). Both Gemini SDKs should appear.
+Expected:
+- The 3 dev deps (pytest-cov, py2app, selenium) appear in `requirements.txt`.
+- Both Gemini SDKs and `playwright` appear (all three stay in runtime).
+- The `grep backend/` confirms `playwright` is imported in `backend/services/outlook_sender.py` — that's WHY playwright stays in runtime.
 
-- [ ] **Step 3: Move the 4 non-runtime deps from `requirements.txt` to `requirements-dev.txt`**
+- [ ] **Step 3: Move the 3 non-runtime deps from `requirements.txt` to `requirements-dev.txt`**
 
-Delete the 4 lines from `requirements.txt`. Add them to `requirements-dev.txt` with preserved version constraints.
+Delete the 3 lines (pytest-cov, py2app, selenium) from `requirements.txt`. Add them to `requirements-dev.txt` with preserved version constraints.
+
+**DO NOT** move `playwright`. It is a runtime dependency (see backend/services/outlook_sender.py:253) despite the name suggesting an E2E-test library.
 
 Example — before, `requirements.txt` might have:
 ```
 pytest-cov>=4.1
 py2app>=0.28
-playwright>=1.40
 selenium>=4.15
 ```
 
 After Step 3:
-- `requirements.txt` no longer contains these lines.
+- `requirements.txt` no longer contains these 3 lines.
 - `requirements-dev.txt` now contains them (append to the file).
+- `playwright>=1.40.0` remains in `requirements.txt` (unchanged).
 
-- [ ] **Step 4: Add a comment to `requirements.txt` about dual Gemini SDKs**
+- [ ] **Step 4: Add a comment to `requirements.txt` about dual Gemini SDKs and the playwright exception**
 
 At the top of `requirements.txt`, add:
 
 ```
 # Graider runtime dependencies. Non-runtime dev tooling (pytest-cov,
-# py2app, playwright, selenium) lives in requirements-dev.txt.
+# py2app, selenium) lives in requirements-dev.txt.
 #
 # Dual Gemini SDK note: `google-generativeai` is used for chat-style text
 # generation (planner_routes, assistant_routes, slide_generator:155);
 # `google.genai` is used for image generation (slide_generator:258).
 # Phase 5b's adapter unification will collapse these if possible.
+#
+# Runtime Playwright note: `playwright` is a RUNTIME dependency because
+# backend/services/outlook_sender.py imports it inside a subprocess
+# spawned by three Flask routes in backend/routes/email_routes.py
+# (/api/send-outlook-emails, /api/outlook-send/status, /api/outlook-login).
+# The subprocess inherits the backend's site-packages via sys.executable,
+# so playwright MUST be in this file, not in requirements-dev.txt.
+```
+
+Also add a section comment in `requirements.txt` above the `playwright>=1.40.0` line (preserving its existing position near the Auth section):
+
+```
+# Browser Automation — RUNTIME. Used by backend/services/outlook_sender.py
+# (a subprocess spawned by /api/send-outlook-emails, /api/outlook-send/status,
+# and /api/outlook-login routes in backend/routes/email_routes.py). The
+# subprocess inherits the backend's site-packages, so this MUST stay in
+# runtime requirements. Do NOT move to requirements-dev.txt.
+playwright>=1.40.0
 ```
 
 - [ ] **Step 5: Remove ad-hoc pytest-cov install from `.github/workflows/ci.yml`**
@@ -367,21 +391,21 @@ Change to:
 - [ ] **Step 6: Verify locally**
 
 ```bash
-# Fresh venv to prove requirements.txt alone is sufficient for app boot
+# Fresh prod-only venv to prove requirements.txt alone covers runtime — INCLUDING playwright
 python -m venv /tmp/v-b1-prod
 /tmp/v-b1-prod/bin/pip install -r requirements.txt
-/tmp/v-b1-prod/bin/python -c "from backend.app import app; print('ok')"
+/tmp/v-b1-prod/bin/python -c "from backend.app import app; import playwright; print('prod ok')"
 
-# Different fresh venv to prove dev deps still install
+# Different fresh venv to prove dev deps still install (note: playwright comes from requirements.txt, not dev)
 python -m venv /tmp/v-b1-dev
 /tmp/v-b1-dev/bin/pip install -r requirements.txt -r requirements-dev.txt
-/tmp/v-b1-dev/bin/python -c "import pytest_cov, py2app, playwright, selenium; print('ok')"
+/tmp/v-b1-dev/bin/python -c "import pytest_cov, py2app, selenium; print('dev ok')"
 
 # Clean up
 rm -rf /tmp/v-b1-prod /tmp/v-b1-dev
 ```
 
-Expected: both `print('ok')` succeed.
+Expected: both `print('...')` succeed. The `import playwright` in the prod-only venv is the critical check — it MUST succeed or the Outlook email feature breaks in production.
 
 - [ ] **Step 7: Run full test suite to verify pytest-cov still works**
 
@@ -400,10 +424,13 @@ git add requirements.txt requirements-dev.txt .github/workflows/ci.yml
 git commit -m "$(cat <<'EOF'
 refactor: Phase 5a PR B1 — dependency ownership audit (runtime vs dev)
 
-Move 4 non-runtime deps from requirements.txt → requirements-dev.txt:
+Move 3 non-runtime deps from requirements.txt → requirements-dev.txt:
   - pytest-cov (test-only)
   - py2app (Mac packaging, not loaded at runtime)
-  - playwright, selenium (E2E testing)
+  - selenium (no Python importers; effectively dead)
+
+Keep playwright in requirements.txt — runtime dep via
+backend/services/outlook_sender.py subprocess (see in-file comments).
 
 CI: remove ad-hoc `pip install pytest-cov` before requirements-dev install
 (now unnecessary since pytest-cov lives in dev requirements).
@@ -426,7 +453,7 @@ gh pr create --base main --title "refactor: Phase 5a PR B1 — dependency owners
 ## Summary
 
 Separates runtime from non-runtime tooling in requirements files before PR B2's pip-compile lockfile work:
-- Moves pytest-cov, py2app, playwright, selenium to dev requirements.
+- Moves pytest-cov, py2app, selenium to dev requirements. playwright stays in runtime (outlook_sender.py subprocess dependency).
 - Removes the redundant ad-hoc pytest-cov install from CI.
 
 ## Spec
@@ -587,7 +614,7 @@ Graider uses **pip-tools** for reproducible, hash-verified installs.
 
 - `requirements.in` — **edited by humans.** Loose version declarations.
 - `requirements.txt` — **generated.** Output of `pip-compile` with full pinning + hashes.
-- `requirements-dev.in` — **edited by humans.** Dev-only deps (pytest, playwright, etc.).
+- `requirements-dev.in` — **edited by humans.** Dev-only deps (pytest, selenium, etc. — NOT playwright; that's runtime).
 - `requirements-dev.txt` — **generated.** Constrained against `requirements.txt`.
 
 ## Install
