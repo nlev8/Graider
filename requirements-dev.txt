@@ -1,6 +1,14 @@
 # Dev-only dependencies for CI tests.
 # Installed via: pip install -r requirements-dev.txt
 
+# Testing & Coverage
+pytest-cov>=4.0
+playwright>=1.40.0
+selenium>=4.15.0
+
+# Packaging
+py2app>=0.28.0
+
 # Phase 4.2 RLS hardening
 # pglast 7.x provides Python 3.12 + 3.14 wheels (6.12 in the plan was not
 # published to PyPI; 6.16 is the latest 6.x but lacks a 3.14 wheel).
