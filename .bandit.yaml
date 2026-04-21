@@ -1,0 +1,21 @@
+# Bandit baseline for Phase 5a (PR A).
+#
+# REVIEW CADENCE: this allow-list should be reviewed at the start of every
+# new phase plan and refreshed anytime a flagged pattern is either fixed
+# (remove from allow-list) or newly introduced during a phase.
+#
+# REFRESH COMMAND:
+#   bandit -r backend/ --exclude backend/scripts,backend/migrations -l -iii -f yaml -o .bandit.yaml --baseline
+#
+# The -l flag skips LOW severity; -iii flag requires HIGH confidence.
+# Effective: medium+ severity AND high confidence only.
+
+# Severity and confidence filters (must match security-scan.yml invocation)
+skips: []
+
+# Per-file allow-lists below. Each entry is a {path, issue} pair.
+# Entries auto-generated from the initial scan. Regenerate with the refresh
+# command above; review the diff before committing.
+
+# Baseline scan (2026-04-21): 0 issues at HIGH confidence + MEDIUM+ severity.
+# No entries required.

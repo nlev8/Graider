@@ -1,0 +1,53 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bandit:
+    name: Bandit SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Run Bandit against backend/ (exclude scripts + migrations)
+        run: |
+          bandit -r backend/ \
+            --exclude backend/scripts,backend/migrations \
+            -l -iii \
+            --baseline .bandit.yaml
+
+  trufflehog:
+    name: Secret Scan (trufflehog, verified only, PR diff)
+    runs-on: ubuntu-latest
+    # Skip the push-to-main variant for this job: a verified secret in a
+    # merged commit is historical; the PR-diff variant already blocked
+    # merging it, and scanning main afterward just adds noise.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required for --since-commit diff mode
+
+      - name: Scan PR diff for verified secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --only-verified
