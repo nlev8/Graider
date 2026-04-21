@@ -128,22 +128,23 @@ Print classes (for C2 allow-list):
 
 ## PR B1 — Dependency ownership audit
 
-**Goal:** separate runtime from non-runtime tooling before pip-compile freezes the current mess into a lockfile. Codex's review flagged: `py2app` (Mac packaging), `pytest-cov`, `playwright`, `selenium`, dual Gemini SDKs all currently co-mingled in `requirements.txt`.
+**Goal:** separate runtime from non-runtime tooling before pip-compile freezes the current mess into a lockfile. Codex's review flagged: `py2app` (Mac packaging), `pytest-cov`, `selenium`, dual Gemini SDKs all currently co-mingled in `requirements.txt`.
 
 **Changes:**
 - Move out of `requirements.txt` into `requirements-dev.txt`:
   - `pytest-cov` (currently in main, also installed ad-hoc in `.github/workflows/ci.yml:33-38`)
   - `py2app` (Mac packaging, never loaded at runtime)
-  - `playwright`, `selenium` (E2E testing, never hit by gunicorn)
+  - `selenium` (never imported from backend code — only referenced in a few JS files that don't use the Python package)
+- **Keep `playwright` in `requirements.txt`** — despite the appearance of being an E2E-test package, it is a **runtime** dependency because `backend/services/outlook_sender.py:253` imports it inside a subprocess spawned by three Flask routes in `backend/routes/email_routes.py` (`/api/send-outlook-emails`, `/api/outlook-send/status`, `/api/outlook-login`). The subprocess inherits the backend's site-packages via `sys.executable`, so playwright must remain in runtime requirements.
 - Remove the ad-hoc `pip install pytest-cov` from `ci.yml:33-38` once it's in dev requirements.
 - Dual Gemini SDK decision: keep both (`google-generativeai` for chat and `google.genai` for slide image gen) but document in a comment at the top of `requirements.txt` WHY both are needed. Phase 5b can unify after slide-generator migration.
 
 **Test plan:**
-- `pip install -r requirements.txt` followed by running the app in isolation should succeed.
-- `pip install -r requirements-dev.txt` must pull pytest-cov, playwright, selenium, py2app.
+- `pip install -r requirements.txt` followed by running the app in isolation should succeed, AND `python -c "import playwright"` must succeed in the prod-only venv (since Outlook sending needs it).
+- `pip install -r requirements-dev.txt` must pull pytest-cov, selenium, py2app.
 - CI `backend-tests` job still passes with the `pytest-cov` install step removed (because dev requirements now include it).
 
-**Out of scope:** actual lockfile generation (that's B2).
+**Out of scope:** actual lockfile generation (that's B2). Deleting dead deps like `selenium` + `webdriver-manager` (ship as a separate hygiene PR or fold into B2).
 
 ---
 
