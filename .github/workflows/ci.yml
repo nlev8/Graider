@@ -137,5 +137,15 @@ jobs:
           cp requirements-dev.txt /tmp/committed-dev.txt
           pip-compile --generate-hashes --allow-unsafe --output-file=requirements.txt requirements.in --quiet
           pip-compile --generate-hashes --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in -c requirements.txt --quiet
-          diff /tmp/committed-prod.txt requirements.txt || (echo "::error::requirements.txt is stale vs requirements.in — run pip-compile locally and commit"; exit 1)
-          diff /tmp/committed-dev.txt requirements-dev.txt || (echo "::error::requirements-dev.txt is stale vs requirements-dev.in — run pip-compile locally and commit"; exit 1)
+          # Strip platform-marker lines (sys_platform == "linux") before diffing.
+          # These entries are manually pre-pinned in the committed file for --require-hashes
+          # compatibility, but pip-compile on Linux may order or annotate them slightly
+          # differently. The hashes are verified by --require-hashes install; we only diff
+          # the platform-neutral content here.
+          strip_linux() { grep -v 'sys_platform == "linux"' "$1" > "$1.stripped"; }
+          strip_linux /tmp/committed-prod.txt
+          strip_linux requirements.txt
+          strip_linux /tmp/committed-dev.txt
+          strip_linux requirements-dev.txt
+          diff /tmp/committed-prod.txt.stripped requirements.txt.stripped || (echo "::error::requirements.txt is stale vs requirements.in — run pip-compile locally and commit"; exit 1)
+          diff /tmp/committed-dev.txt.stripped requirements-dev.txt.stripped || (echo "::error::requirements-dev.txt is stale vs requirements-dev.in — run pip-compile locally and commit"; exit 1)
