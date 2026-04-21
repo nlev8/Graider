@@ -129,7 +129,11 @@ jobs:
           cache: 'pip'
 
       - name: Install pip-tools
-        run: pip install pip-tools
+        # Pin pip-tools version: its output format is stable within a
+        # minor release but not across them. An unpinned install risks
+        # false-positive drift-check failures when pip-tools updates
+        # upstream (e.g., reordered `# via` annotations or header tweaks).
+        run: pip install pip-tools==7.5.3
 
       - name: Recompile lockfiles in a tmp dir and diff against committed
         run: |
