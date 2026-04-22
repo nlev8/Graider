@@ -286,9 +286,26 @@ class AnthropicAdapter:
         )
         t0 = time.monotonic()
 
+        # NOTE on retry semantics: `self._client.messages.stream(**kwargs)`
+        # returns a MessageStreamManager WITHOUT performing any HTTP — the
+        # actual request is dispatched inside `__enter__()`. So wrapping
+        # `.stream(...)` alone in with_retry is a no-op for transient
+        # network failures. To retry stream-open for real, we enter the
+        # context manager INSIDE the retry lambda. If an HTTP-level error
+        # fires during __enter__, with_retry catches + retries. Once
+        # iteration begins (yield loop below), we don't retry — that would
+        # replay tool-call state inconsistently.
+        ctx_holder: list[Any] = [None]
+
+        def _open_stream():
+            ctx = self._client.messages.stream(**kwargs)
+            stream = ctx.__enter__()
+            ctx_holder[0] = ctx
+            return stream
+
         try:
-            stream_ctx = with_retry(
-                lambda: self._client.messages.stream(**kwargs),
+            stream = with_retry(
+                _open_stream,
                 label=f"anthropic.messages.stream({request.model})",
             )
         except Exception as e:
@@ -317,72 +334,81 @@ class AnthropicAdapter:
         finish_reason_raw: str | None = None
 
         try:
-            with stream_ctx as stream:
-                for event in stream:
-                    etype = event.type
+            for event in stream:
+                etype = event.type
 
-                    if etype == "message_start":
-                        try:
-                            input_tokens = event.message.usage.input_tokens or 0
-                        except Exception:
-                            pass
+                if etype == "message_start":
+                    try:
+                        input_tokens = event.message.usage.input_tokens or 0
+                    except Exception:
+                        pass
 
-                    elif etype == "content_block_start":
-                        cb = event.content_block
-                        block_meta[event.index] = {
-                            "type": cb.type,
-                            "id": getattr(cb, "id", ""),
-                            "name": getattr(cb, "name", ""),
-                            "accumulated_json": "",
-                        }
+                elif etype == "content_block_start":
+                    cb = event.content_block
+                    block_meta[event.index] = {
+                        "type": cb.type,
+                        "id": getattr(cb, "id", ""),
+                        "name": getattr(cb, "name", ""),
+                        "accumulated_json": "",
+                    }
 
-                    elif etype == "content_block_delta":
-                        delta = event.delta
-                        delta_type = getattr(delta, "type", "")
+                elif etype == "content_block_delta":
+                    delta = event.delta
+                    delta_type = getattr(delta, "type", "")
 
-                        if delta_type == "text_delta":
-                            text = getattr(delta, "text", "")
-                            if text:
-                                yield TextDelta(text=text)
+                    if delta_type == "text_delta":
+                        text = getattr(delta, "text", "")
+                        if text:
+                            yield TextDelta(text=text)
 
-                        elif delta_type == "input_json_delta":
-                            fragment = getattr(delta, "partial_json", "")
-                            meta = block_meta.get(event.index, {})
-                            is_first = not meta.get("accumulated_json")
-                            meta["accumulated_json"] = meta.get("accumulated_json", "") + fragment
-                            yield ToolCallDelta(
-                                tool_call_id=meta.get("id", ""),
-                                name=meta.get("name") if is_first else None,
-                                args_delta=fragment,
-                            )
-
-                    elif etype == "content_block_stop":
+                    elif delta_type == "input_json_delta":
+                        fragment = getattr(delta, "partial_json", "")
                         meta = block_meta.get(event.index, {})
-                        if meta.get("type") == "tool_use":
-                            raw_json = meta.get("accumulated_json", "")
-                            try:
-                                args = _json.loads(raw_json) if raw_json else {}
-                            except _json.JSONDecodeError:
-                                args = {}
-                            yield ToolCallComplete(
-                                tool_call=ToolCall(
-                                    tool_call_id=meta.get("id", ""),
-                                    name=meta.get("name", ""),
-                                    args=args,
-                                )
+                        is_first = not meta.get("accumulated_json")
+                        meta["accumulated_json"] = meta.get("accumulated_json", "") + fragment
+                        yield ToolCallDelta(
+                            tool_call_id=meta.get("id", ""),
+                            name=meta.get("name") if is_first else None,
+                            args_delta=fragment,
+                        )
+
+                elif etype == "content_block_stop":
+                    meta = block_meta.get(event.index, {})
+                    if meta.get("type") == "tool_use":
+                        raw_json = meta.get("accumulated_json", "")
+                        try:
+                            args = _json.loads(raw_json) if raw_json else {}
+                        except _json.JSONDecodeError:
+                            _logger.warning(
+                                "Dropping malformed Anthropic tool args for %s (block=%s): %r",
+                                meta.get("name"), event.index, raw_json,
                             )
+                            sentry_sdk.add_breadcrumb(
+                                category="llm.tool_call",
+                                level="warning",
+                                message=f"anthropic tool args JSONDecodeError for {meta.get('name')}",
+                                data={"provider": "anthropic", "tool_name": meta.get("name"), "args_len": len(raw_json or "")},
+                            )
+                            args = {}
+                        yield ToolCallComplete(
+                            tool_call=ToolCall(
+                                tool_call_id=meta.get("id", ""),
+                                name=meta.get("name", ""),
+                                args=args,
+                            )
+                        )
 
-                    elif etype == "message_delta":
-                        try:
-                            output_tokens = event.usage.output_tokens or 0
-                        except Exception:
-                            pass
-                        try:
-                            finish_reason_raw = event.delta.stop_reason
-                        except Exception:
-                            pass
+                elif etype == "message_delta":
+                    try:
+                        output_tokens = event.usage.output_tokens or 0
+                    except Exception:
+                        pass
+                    try:
+                        finish_reason_raw = event.delta.stop_reason
+                    except Exception:
+                        pass
 
-                    # message_stop — FinishEvent emitted after loop
+                # message_stop — FinishEvent emitted after loop
 
         except Exception as e:
             duration_ms = int((time.monotonic() - t0) * 1000)
@@ -401,7 +427,19 @@ class AnthropicAdapter:
                 message=f"anthropic stream iteration failed for {request.model}",
                 data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
             )
+            if ctx_holder[0] is not None:
+                try:
+                    ctx_holder[0].__exit__(type(e), e, e.__traceback__)
+                except Exception:
+                    pass
             raise
+        else:
+            # Clean finish — release the context manager.
+            if ctx_holder[0] is not None:
+                try:
+                    ctx_holder[0].__exit__(None, None, None)
+                except Exception:
+                    pass
 
         usage = Usage(
             prompt_tokens=input_tokens,

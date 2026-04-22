@@ -367,6 +367,20 @@ class OpenAIAdapter:
                 try:
                     args = _json.loads(tc["arguments"]) if tc["arguments"] else {}
                 except _json.JSONDecodeError:
+                    # Malformed tool args (usually from truncated output hitting
+                    # max_tokens). Log + breadcrumb so operators can detect — the
+                    # tool will execute with empty args rather than crash, but
+                    # that's a quality regression worth surfacing.
+                    _logger.warning(
+                        "Dropping malformed OpenAI tool args for %s (idx=%s): %r",
+                        tc["name"], idx, tc["arguments"],
+                    )
+                    sentry_sdk.add_breadcrumb(
+                        category="llm.tool_call",
+                        level="warning",
+                        message=f"openai tool args JSONDecodeError for {tc['name']}",
+                        data={"provider": "openai", "tool_name": tc["name"], "args_len": len(tc["arguments"] or "")},
+                    )
                     args = {}
                 yield ToolCallComplete(
                     tool_call=ToolCall(
