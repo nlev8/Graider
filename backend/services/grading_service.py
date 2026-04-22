@@ -205,8 +205,10 @@ def grade_student_submission(assessment, answers):
     # AI grading for open-ended questions
     if ai_grading_needed:
         try:
-            from openai import OpenAI
-            client = OpenAI()
+            from backend.services.llm_adapter import (
+                LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart,
+            )
+            adapter = OpenAIAdapter()
 
             for item in ai_grading_needed:
                 q = item["question"]
@@ -232,17 +234,16 @@ Evaluate the student's response and provide:
 Respond in JSON format:
 {{"points_earned": <number>, "feedback": "<string>", "is_correct": <boolean>}}"""
 
-                response = client.chat.completions.create(
+                resp = adapter.chat(LLMRequest(
                     model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "You are a fair and encouraging teacher grading student work. Be supportive but accurate. Provide constructive feedback that helps students learn."},
-                        {"role": "user", "content": grading_prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    max_tokens=300
-                )
+                    system_prompt="You are a fair and encouraging teacher grading student work. Be supportive but accurate. Provide constructive feedback that helps students learn.",
+                    messages=[Message(role="user", content=[TextPart(text=grading_prompt)])],
+                    response_format=ResponseFormat(type="json_object"),
+                    max_tokens=300,
+                    metadata={"feature_label": "portal_ai_grading"},
+                ))
 
-                ai_result = json.loads(response.choices[0].message.content)
+                ai_result = json.loads(resp.content_parts[0].text if resp.content_parts else "{}")
                 q_result["points_earned"] = min(ai_result.get("points_earned", 0), points)
                 q_result["feedback"] = ai_result.get("feedback", "")
                 q_result["is_correct"] = ai_result.get("is_correct", False)

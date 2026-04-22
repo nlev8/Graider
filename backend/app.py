@@ -1555,18 +1555,17 @@ def retranslate_feedback():
 
     try:
         from backend.api_keys import get_api_key
-        client = openai.OpenAI(api_key=get_api_key('openai', getattr(g, 'user_id', 'local-dev')))
-
-        response = client.chat.completions.create(
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, TextPart
+        adapter = OpenAIAdapter(api_key=get_api_key('openai', getattr(g, 'user_id', 'local-dev')))
+        response = adapter.chat(LLMRequest(
             model="gpt-4o-mini",
-            messages=[{
-                "role": "user",
-                "content": f"Translate the following teacher feedback to {target_language}. Keep the same warm, encouraging tone. Only output the translation, nothing else.\n\nFeedback:\n{english_feedback}"
-            }],
-            temperature=0.3
-        )
-
-        translation = response.choices[0].message.content.strip()
+            messages=[Message(role="user", content=[TextPart(
+                text=f"Translate the following teacher feedback to {target_language}. Keep the same warm, encouraging tone. Only output the translation, nothing else.\n\nFeedback:\n{english_feedback}"
+            )])],
+            temperature=0.3,
+            metadata={"feature_label": "retranslate_feedback"},
+        ))
+        translation = (response.content_parts[0].text if response.content_parts else "").strip()
         return jsonify({"translation": translation})
 
     except Exception as e:
@@ -1590,18 +1589,13 @@ def extract_student_from_image():
         if not image_data:
             return jsonify({"error": "No image provided"})
 
-        # Use Anthropic Claude Opus 4.5 for extraction
-        try:
-            import anthropic
-        except ImportError:
-            return jsonify({"error": "Anthropic library not installed. Run: pip install anthropic"})
-
         from backend.api_keys import get_api_key
+        from backend.services.llm_adapter import (
+            AnthropicAdapter, ImagePart, LLMRequest, Message, TextPart,
+        )
         api_key = get_api_key('anthropic', getattr(g, 'user_id', 'local-dev'))
         if not api_key:
             return jsonify({"error": "ANTHROPIC_API_KEY not configured"})
-
-        client = anthropic.Anthropic(api_key=api_key)
 
         # Remove data URL prefix if present
         if ',' in image_data:
@@ -1623,31 +1617,21 @@ Important:
 - For names with multiple parts, include all parts (e.g., middle names)
 - Return ONLY the JSON, no other text"""
 
-        response = client.messages.create(
+        adapter = AnthropicAdapter(api_key=api_key)
+        response = adapter.chat(LLMRequest(
             model="claude-sonnet-4-20250514",
             max_tokens=500,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": image_data
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
-                }
-            ]
-        )
+            messages=[Message(
+                role="user",
+                content=[
+                    ImagePart(url=None, base64=image_data, mime_type="image/png"),
+                    TextPart(text=prompt),
+                ],
+            )],
+            metadata={"feature_label": "extract_student_from_image"},
+        ))
 
-        response_text = response.content[0].text.strip()
+        response_text = (response.content_parts[0].text if response.content_parts else "").strip()
 
         # Parse JSON from response
         if response_text.startswith('```'):

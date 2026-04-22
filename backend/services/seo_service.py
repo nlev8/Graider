@@ -16,31 +16,22 @@ import os
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _get_anthropic_client():
-    """Lazy-import anthropic and return a client, or None + error message."""
+def _call_haiku(prompt, max_tokens=1500):
+    """Make a single Haiku call via AnthropicAdapter. Returns parsed JSON dict or error dict."""
     from backend.api_keys import get_api_key
+    from backend.services.llm_adapter import AnthropicAdapter, LLMRequest, Message, TextPart
     api_key = get_api_key('anthropic')
     if not api_key:
-        return None, "ANTHROPIC_API_KEY not configured"
+        return {"error": "ANTHROPIC_API_KEY not configured"}
     try:
-        import anthropic
-        return anthropic.Anthropic(api_key=api_key), None
-    except ImportError:
-        return None, "anthropic package not installed"
-
-
-def _call_haiku(prompt, max_tokens=1500):
-    """Make a single Haiku call. Returns parsed JSON dict or error dict."""
-    client, err = _get_anthropic_client()
-    if err:
-        return {"error": err}
-    try:
-        response = client.messages.create(
+        adapter = AnthropicAdapter(api_key=api_key)
+        response = adapter.chat(LLMRequest(
             model=HAIKU_MODEL,
             max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            metadata={"feature_label": "seo_service"},
+        ))
+        text = (response.content_parts[0].text if response.content_parts else "").strip()
         # Strip markdown fences if present
         if text.startswith("```"):
             first_nl = text.index("\n")

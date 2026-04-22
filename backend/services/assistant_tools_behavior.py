@@ -595,14 +595,16 @@ INSTRUCTIONS:
 
         audit_tool_action(teacher_id, 'generate_behavior_email', 'SEND_AI')
 
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
+        from backend.services.llm_adapter import AnthropicAdapter, LLMRequest, Message, TextPart
+        adapter = AnthropicAdapter(api_key=api_key)
+        response = adapter.chat(LLMRequest(
             model="claude-sonnet-4-20250514",
             max_tokens=600,
-            messages=[{"role": "user", "content": anon_prompt}],
-        )
+            messages=[Message(role="user", content=[TextPart(text=anon_prompt)])],
+            metadata={"feature_label": "behavior_email_ai", "teacher_id": teacher_id},
+        ))
 
-        body = response.content[0].text.strip()
+        body = (response.content_parts[0].text if response.content_parts else "").strip()
 
         # Deanonymize the response to restore student names
         if name_mapping:

@@ -148,15 +148,15 @@ def generate_slide_content(content, subject, grade, title, api_key,
 
     prompt = "\n".join(prompt_parts)
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    from backend.services.llm_adapter import GeminiAdapter, LLMRequest, Message, TextPart
+    adapter = GeminiAdapter(api_key=api_key)
+    llm_resp = adapter.chat(LLMRequest(
+        model="gemini-2.0-flash",
+        messages=[Message(role="user", content=[TextPart(text=prompt)])],
+        metadata={"feature_label": "generate_slide_content"},
+    ))
 
-    response = with_retry(
-        lambda: model.generate_content(prompt),
-        label="generate_slide_content",
-    )
-
-    response_text = response.text.strip()
+    response_text = (llm_resp.content_parts[0].text if llm_resp.content_parts else "").strip()
     if response_text.startswith("```"):
         response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
     if response_text.endswith("```"):

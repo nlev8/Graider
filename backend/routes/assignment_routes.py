@@ -142,17 +142,20 @@ Return ONLY valid JSON:
 }}"""
 
     try:
-        import openai
         from backend.api_keys import get_api_key
-        client = openai.OpenAI(api_key=get_api_key('openai', getattr(g, 'user_id', 'local-dev')))
-        response = with_retry(lambda: client.chat.completions.create(
+        from backend.services.llm_adapter import (
+            LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart,
+        )
+        adapter = OpenAIAdapter(api_key=get_api_key('openai', getattr(g, 'user_id', 'local-dev')))
+        resp = adapter.chat(LLMRequest(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
             max_tokens=3000,
             temperature=0.3,
-            response_format={"type": "json_object"}
-        ), label="assignment_answer_key_openai")
-        result = json.loads(response.choices[0].message.content.strip())
+            response_format=ResponseFormat(type="json_object"),
+            metadata={"feature_label": "assignment_answer_key"},
+        ))
+        result = json.loads(resp.content_parts[0].text.strip() if resp.content_parts else "{}")
         return jsonify(result)
     except json.JSONDecodeError:
         return jsonify({"error": "Failed to parse AI response. Try again."}), 500
