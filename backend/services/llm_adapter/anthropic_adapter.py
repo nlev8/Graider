@@ -11,16 +11,25 @@ Key differences from OpenAI:
 """
 from __future__ import annotations
 
+import json as _json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Iterator
 
 import anthropic
 import sentry_sdk
 
 from backend.observability.events import emit
 from backend.retry import with_retry
+from backend.services.llm_adapter.streaming import (
+    FinishEvent,
+    StreamEvent,
+    TextDelta,
+    ToolCallComplete,
+    ToolCallDelta,
+    UsageEvent,
+)
 from backend.services.llm_adapter.types import (
     ImagePart,
     LLMRequest,
@@ -229,4 +238,190 @@ class AnthropicAdapter:
             finish_reason=finish_reason,
             provider=self._provider,
             model=raw.model,
+        )
+
+    def stream_chat(self, request: LLMRequest) -> Iterator[StreamEvent]:
+        """Yield StreamEvent instances from an Anthropic streaming response.
+
+        Uses client.messages.stream() context manager. The initial open
+        call is protected by with_retry(); iteration is not.
+
+        Event mapping:
+        - content_block_start (tool_use) → records block metadata
+        - content_block_delta (text_delta) → TextDelta
+        - content_block_delta (input_json_delta) → ToolCallDelta
+        - content_block_stop (tool_use block) → ToolCallComplete
+        - message_start → captures input_tokens
+        - message_delta → UsageEvent (output_tokens), FinishEvent
+        - message_stop → no additional event (FinishEvent already emitted)
+        """
+        messages = [_message_to_anthropic(msg) for msg in request.messages]
+
+        kwargs: dict[str, Any] = {
+            "model": request.model,
+            "messages": messages,
+            "max_tokens": request.max_tokens or 1024,
+            "timeout": request.timeout,
+        }
+        if request.system_prompt:
+            kwargs["system"] = request.system_prompt
+        if request.temperature is not None:
+            kwargs["temperature"] = request.temperature
+        if request.tools:
+            kwargs["tools"] = [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                }
+                for t in request.tools
+            ]
+
+        emit(
+            "llm.call.start",
+            provider=self._provider,
+            model=request.model,
+            streaming=True,
+            **{k: v for k, v in request.metadata.items() if isinstance(v, (str, int, float, bool))},
+        )
+        t0 = time.monotonic()
+
+        try:
+            stream_ctx = with_retry(
+                lambda: self._client.messages.stream(**kwargs),
+                label=f"anthropic.messages.stream({request.model})",
+            )
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            emit(
+                "llm.call.error",
+                level="warning",
+                provider=self._provider,
+                model=request.model,
+                duration_ms=duration_ms,
+                streaming=True,
+                error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"anthropic.messages.stream failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+            )
+            raise
+
+        # block_meta: index -> {type, id, name, accumulated_json}
+        block_meta: dict[int, dict[str, str]] = {}
+        input_tokens = 0
+        output_tokens = 0
+        finish_reason_raw: str | None = None
+
+        try:
+            with stream_ctx as stream:
+                for event in stream:
+                    etype = event.type
+
+                    if etype == "message_start":
+                        try:
+                            input_tokens = event.message.usage.input_tokens or 0
+                        except Exception:
+                            pass
+
+                    elif etype == "content_block_start":
+                        cb = event.content_block
+                        block_meta[event.index] = {
+                            "type": cb.type,
+                            "id": getattr(cb, "id", ""),
+                            "name": getattr(cb, "name", ""),
+                            "accumulated_json": "",
+                        }
+
+                    elif etype == "content_block_delta":
+                        delta = event.delta
+                        delta_type = getattr(delta, "type", "")
+
+                        if delta_type == "text_delta":
+                            text = getattr(delta, "text", "")
+                            if text:
+                                yield TextDelta(text=text)
+
+                        elif delta_type == "input_json_delta":
+                            fragment = getattr(delta, "partial_json", "")
+                            meta = block_meta.get(event.index, {})
+                            is_first = not meta.get("accumulated_json")
+                            meta["accumulated_json"] = meta.get("accumulated_json", "") + fragment
+                            yield ToolCallDelta(
+                                tool_call_id=meta.get("id", ""),
+                                name=meta.get("name") if is_first else None,
+                                args_delta=fragment,
+                            )
+
+                    elif etype == "content_block_stop":
+                        meta = block_meta.get(event.index, {})
+                        if meta.get("type") == "tool_use":
+                            raw_json = meta.get("accumulated_json", "")
+                            try:
+                                args = _json.loads(raw_json) if raw_json else {}
+                            except _json.JSONDecodeError:
+                                args = {}
+                            yield ToolCallComplete(
+                                tool_call=ToolCall(
+                                    tool_call_id=meta.get("id", ""),
+                                    name=meta.get("name", ""),
+                                    args=args,
+                                )
+                            )
+
+                    elif etype == "message_delta":
+                        try:
+                            output_tokens = event.usage.output_tokens or 0
+                        except Exception:
+                            pass
+                        try:
+                            finish_reason_raw = event.delta.stop_reason
+                        except Exception:
+                            pass
+
+                    # message_stop — FinishEvent emitted after loop
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            emit(
+                "llm.call.error",
+                level="warning",
+                provider=self._provider,
+                model=request.model,
+                duration_ms=duration_ms,
+                streaming=True,
+                error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"anthropic stream iteration failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+            )
+            raise
+
+        usage = Usage(
+            prompt_tokens=input_tokens,
+            completion_tokens=output_tokens,
+            cost_usd=_estimate_cost_usd(request.model, input_tokens, output_tokens),
+        )
+        yield UsageEvent(usage=usage)
+
+        finish_reason = normalize_finish_reason(finish_reason_raw)
+        yield FinishEvent(finish_reason=finish_reason)
+
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        emit(
+            "llm.call.complete",
+            provider=self._provider,
+            model=request.model,
+            duration_ms=duration_ms,
+            streaming=True,
+            prompt_tokens=input_tokens,
+            completion_tokens=output_tokens,
+            cost_usd=usage.cost_usd,
+            finish_reason=finish_reason,
         )
