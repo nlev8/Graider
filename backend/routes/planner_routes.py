@@ -791,7 +791,7 @@ Make each idea distinct - vary the approaches (hands-on activities, discussions,
 
     except Exception as e:
         error_msg = str(e)
-        _logger.error("Brainstorm Error: %s", error_msg)
+        _logger.exception("Brainstorm Error")
         # Fallback mock ideas
         mock_ideas = {
             "ideas": [
@@ -1286,7 +1286,8 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
     except Exception as e:
         error_msg = str(e)
-        _logger.warning("OpenAI API Error: %s. Falling back to Mock Mode.", error_msg)
+        # Keep as warning (recoverable — falls back to mock) but add exc_info for traceback.
+        _logger.warning("OpenAI API Error — falling back to Mock Mode", exc_info=True)
 
         # Fallback Mock Plan
         content_type = config.get('type', 'Unit Plan')
@@ -1942,7 +1943,7 @@ Make the questions specific to the lesson content. Include a variety of question
 
     except Exception as e:
         error_msg = str(e)
-        _logger.error("Assignment Generation Error: %s", error_msg)
+        _logger.exception("Assignment Generation Error")
 
         # Detect network-blocked AI provider
         error_lower = error_msg.lower()
@@ -4241,7 +4242,7 @@ Generate a complete assessment in this JSON format:
 
     except Exception as e:
         error_msg = str(e)
-        _logger.error("Assessment Generation Error: %s", error_msg)
+        _logger.exception("Assessment Generation Error")
         return jsonify({"error": f"Failed to generate assessment: {error_msg}"}), 500
 
 
@@ -5095,7 +5096,7 @@ Respond in JSON format:
                     results["questions"][item["index"]] = q_result
 
             except Exception as e:
-                _logger.error("AI grading error: %s", e)
+                _logger.exception("AI grading error")
                 # Fall back to basic comparison for failed AI grading
                 for item in ai_grading_needed:
                     q_result = item["result"]
