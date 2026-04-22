@@ -184,13 +184,13 @@ try:
     configure_logging(app)
     log_request_timing(app)
 except Exception as e:
-    print(f"Warning: Logging configuration failed: {e}")
+    _logger.warning("Logging configuration failed: %s", e)
 
 try:
     from backend.auth import init_auth
     init_auth(app)
 except Exception as e:
-    print(f"Warning: Auth middleware not loaded: {e}")
+    _logger.warning("Auth middleware not loaded: %s", e)
     sentry_sdk.capture_exception(e)
 
 # Phase 4.5: structured logging for DB mode + auth source per request.
@@ -200,7 +200,7 @@ try:
     from backend.observability.db_mode import register as _register_db_mode
     _register_db_mode(app)
 except Exception as e:
-    print(f"Warning: db_mode observability hook not loaded: {e}")
+    _logger.warning("db_mode observability hook not loaded: %s", e)
     sentry_sdk.capture_exception(e)
 
 @app.errorhandler(500)
@@ -228,7 +228,7 @@ try:
                     ids = [r['id'] for r in stale.data]
                     for sid in ids:
                         _sb.table(table).update({'status': 'grading_failed'}).eq('id', sid).execute()
-                    print(f"Recovered {len(ids)} stale partial submissions in {table}")
+                    _logger.info("Recovered %d stale partial submissions in %s", len(ids), table)
             except Exception:
                 pass
 except Exception:
@@ -272,7 +272,7 @@ def get_audit_logs(limit: int = 100):
                     })
             return logs[::-1]  # Newest first
     except Exception as e:
-        print(f"Error reading audit logs: {e}")
+        _logger.error("Error reading audit logs: %s", e)
         sentry_sdk.capture_exception(e)
         return []
 
@@ -345,7 +345,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                     total_chars += len(content[:2000])
 
             except Exception as e:
-                print(f"Error loading document: {e}")
+                _logger.error("Error loading document: %s", e)
                 continue
 
     if not docs_content:
@@ -627,7 +627,7 @@ def grade_individual():
             try:
                 add_assignment_to_history(result['student_id'], result)
             except Exception as e:
-                print(f"  Note: Could not update student history: {e}")
+                _logger.warning("Could not update student history: %s", e)
                 sentry_sdk.capture_exception(e)
 
         # FERPA audit log
@@ -687,7 +687,7 @@ def _remove_from_master_csv(result):
                 writer.writeheader()
                 writer.writerows(filtered)
     except Exception as e:
-        print(f"Could not remove from master_grades.csv: {e}")
+        _logger.error("Could not remove from master_grades.csv: %s", e)
         sentry_sdk.capture_exception(e)
 
 
@@ -742,7 +742,7 @@ def _sync_approval_to_master_csv(result, approval_status):
                 writer.writeheader()
                 writer.writerows(rows)
     except Exception as e:
-        print(f"Could not sync approval to master_grades.csv: {e}")
+        _logger.error("Could not sync approval to master_grades.csv: %s", e)
         sentry_sdk.capture_exception(e)
 
 
@@ -1268,7 +1268,7 @@ def export_individual_student_data():
     except Exception as e:
         pdf_path = None
         sentry_sdk.capture_exception(e)
-        print(f"PDF generation error: {e}")
+        _logger.error("PDF generation error: %s", e)
 
     # Open folder (macOS local dev only)
     if sys.platform == 'darwin':
@@ -1492,7 +1492,7 @@ def import_individual_student_data():
                         writer.writeheader()
                         writer.writerows(rows)
         except Exception as e:
-            print(f"Warning: Could not add student to roster: {e}")
+            _logger.warning("Could not add student to roster: %s", e)
             sentry_sdk.capture_exception(e)
 
     audit_log("IMPORT_STUDENT_DATA", f"Imported data for student (name redacted), sections: {imported}")
@@ -1905,16 +1905,16 @@ if __name__ == '__main__':
         time.sleep(1.5)
         webbrowser.open('http://localhost:3000')
 
-    print()
-    print("+" + "=" * 50 + "+")
-    print("|  Graider - AI-Powered Assignment Grading         |")
-    print("+" + "=" * 50 + "+")
-    print("|                                                  |")
-    print("|  Open in browser: http://localhost:3000          |")
-    print("|                                                  |")
-    print("|  Press Ctrl+C to stop                            |")
-    print("+" + "=" * 50 + "+")
-    print()
+    _logger.info("")
+    _logger.info("+" + "=" * 50 + "+")
+    _logger.info("|  Graider - AI-Powered Assignment Grading         |")
+    _logger.info("+" + "=" * 50 + "+")
+    _logger.info("|                                                  |")
+    _logger.info("|  Open in browser: http://localhost:3000          |")
+    _logger.info("|                                                  |")
+    _logger.info("|  Press Ctrl+C to stop                            |")
+    _logger.info("+" + "=" * 50 + "+")
+    _logger.info("")
 
     # Auto-open browser
     threading.Thread(target=open_browser, daemon=True).start()
