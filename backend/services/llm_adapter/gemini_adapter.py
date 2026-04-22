@@ -15,16 +15,26 @@ Key differences from OpenAI/Anthropic:
 """
 from __future__ import annotations
 
+import json as _json
 import logging
 import os
 import time
-from typing import Any
+import uuid
+from typing import Any, Iterator
 
 import google.generativeai as genai
 import sentry_sdk
 
 from backend.observability.events import emit
 from backend.retry import with_retry
+from backend.services.llm_adapter.streaming import (
+    FinishEvent,
+    StreamEvent,
+    TextDelta,
+    ToolCallComplete,
+    ToolCallDelta,
+    UsageEvent,
+)
 from backend.services.llm_adapter.types import (
     ImagePart,
     LLMRequest,
@@ -53,7 +63,20 @@ def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -
 
 
 def _part_to_gemini(p: Any) -> dict[str, Any]:
-    """Map a single ContentPart to a Gemini part dict."""
+    """Map a single ContentPart to a Gemini part dict.
+
+    Tool-use blocks map to Gemini's function_call/function_response shape:
+      - ToolUsePart (assistant-side request) -> {"function_call": {name, args}}
+      - ToolResultPart (user-side result)    -> {"function_response": {name, response}}
+
+    Note: Gemini's function_response requires the tool NAME alongside the
+    result. ToolResultPart only carries tool_call_id, so the route must
+    either pair each tool_result with its tool_call_id<->name mapping
+    before constructing the Message (preferred), or we fall back to
+    passing the tool_call_id as the name (lossy but functional).
+    """
+    from backend.services.llm_adapter.types import ToolResultPart, ToolUsePart  # noqa: PLC0415
+
     if isinstance(p, TextPart):
         return {"text": p.text}
     elif isinstance(p, ImagePart):
@@ -63,15 +86,59 @@ def _part_to_gemini(p: Any) -> dict[str, Any]:
             # Gemini natively supports gs:// URIs; plain HTTPS URLs are passed
             # through — Gemini Flash will attempt to fetch them at inference time.
             return {"file_data": {"mime_type": p.mime_type, "file_uri": p.url}}
-    # ToolUsePart / ToolResultPart not handled here — tool-use is D2 scope
+    elif isinstance(p, ToolUsePart):
+        # Gemini function_call takes a name + args (dict).
+        return {
+            "function_call": {
+                "name": p.name,
+                "args": p.args,
+            }
+        }
+    elif isinstance(p, ToolResultPart):
+        # Gemini function_response needs a name; if ToolResultPart lacks one
+        # explicitly, fall back to tool_call_id as a stable identifier.
+        # Content must be a dict; wrap string results as {"result": <text>}.
+        name = getattr(p, "name", None) or p.tool_call_id
+        if isinstance(p.content, dict):
+            response = p.content
+        else:
+            response = {"result": str(p.content)}
+        return {
+            "function_response": {
+                "name": name,
+                "response": response,
+            }
+        }
     return {"text": str(p)}
 
 
 def _message_to_gemini(msg: Message) -> dict[str, Any]:
-    # Gemini uses "user" and "model" (not "assistant")
+    # Gemini uses "user" and "model" (not "assistant"). Tool results
+    # (role == "tool") route to "user" per Gemini's contract.
     role = "model" if msg.role == "assistant" else "user"
     parts = [_part_to_gemini(p) for p in msg.content]
     return {"role": role, "parts": parts}
+
+
+def _unwrap_protobuf(value: Any) -> Any:
+    """Recursively convert protobuf Struct/ListValue/Value into plain
+    Python dict/list/scalar so json.dumps can serialize nested tool args.
+
+    `FunctionCall.args` is a Struct whose __getitem__ returns nested
+    Struct/ListValue for nested JSON — a plain dict() cast only gives
+    one level. Without this unwrap, any tool call whose args contain
+    nested objects or arrays hits JSONDecodeError silently (the adapter
+    previously swallowed these in a blanket except).
+    """
+    # proto.marshal.collections.maps.MapComposite and ListValue expose
+    # dict-like / list-like semantics but contain Struct values that
+    # need recursion. Duck-type on attributes rather than import types
+    # to avoid a hard dep on google.protobuf internals.
+    if hasattr(value, "items") and callable(getattr(value, "items")):
+        return {str(k): _unwrap_protobuf(v) for k, v in value.items()}
+    if hasattr(value, "__iter__") and not isinstance(value, (str, bytes)):
+        return [_unwrap_protobuf(v) for v in value]
+    return value
 
 
 class GeminiAdapter:
@@ -219,4 +286,213 @@ class GeminiAdapter:
             finish_reason=finish_reason,
             provider=self._provider,
             model=response_model,
+        )
+
+    def stream_chat(self, request: LLMRequest) -> Iterator[StreamEvent]:
+        """Yield StreamEvent instances from a Gemini streaming response.
+
+        Uses generate_content(stream=True). The initial call is protected
+        by with_retry(); iteration is not (can't retry mid-stream).
+
+        Gemini yields full GenerateContentResponse chunks per step.
+        Each chunk may have .text (TextDelta) or function_call parts in
+        candidates[0].content.parts (ToolCallDelta / ToolCallComplete).
+        Usage is only present on the final chunk.
+        """
+        genai.configure(api_key=self._api_key)
+
+        model_kwargs: dict[str, Any] = {}
+        if request.system_prompt:
+            model_kwargs["system_instruction"] = request.system_prompt
+        if request.tools:
+            declarations = []
+            for t in request.tools:
+                schema = t.input_schema
+                props = schema.get("properties", {})
+                cleaned_props = {
+                    k: {kk: vv for kk, vv in v.items() if kk != "additionalProperties"}
+                    for k, v in props.items()
+                }
+                declarations.append(genai.types.FunctionDeclaration(
+                    name=t.name,
+                    description=t.description,
+                    parameters={
+                        "type": "object",
+                        "properties": cleaned_props,
+                        "required": schema.get("required", []),
+                    },
+                ))
+            model_kwargs["tools"] = [genai.types.Tool(function_declarations=declarations)]
+
+        model = genai.GenerativeModel(request.model, **model_kwargs)
+        contents = [_message_to_gemini(msg) for msg in request.messages]
+
+        generation_config: dict[str, Any] = {}
+        if request.max_tokens is not None:
+            generation_config["max_output_tokens"] = request.max_tokens
+        if request.temperature is not None:
+            generation_config["temperature"] = request.temperature
+
+        request_options = {"timeout": request.timeout}
+
+        emit(
+            "llm.call.start",
+            provider=self._provider,
+            model=request.model,
+            streaming=True,
+            **{k: v for k, v in request.metadata.items() if isinstance(v, (str, int, float, bool))},
+        )
+        t0 = time.monotonic()
+
+        try:
+            stream = with_retry(
+                lambda: model.generate_content(
+                    contents,
+                    generation_config=generation_config if generation_config else None,
+                    request_options=request_options,
+                    stream=True,
+                ),
+                label=f"gemini.generate_content(stream, {request.model})",
+            )
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            emit(
+                "llm.call.error",
+                level="warning",
+                provider=self._provider,
+                model=request.model,
+                duration_ms=duration_ms,
+                streaming=True,
+                error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"gemini.generate_content(stream) failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+            )
+            raise
+
+        prompt_tokens = 0
+        completion_tokens = 0
+        finish_reason_raw: str | None = None
+
+        try:
+            for chunk in stream:
+                # Text delta — chunk.text raises if the response has function calls
+                try:
+                    text = chunk.text
+                    if text:
+                        yield TextDelta(text=text)
+                except (ValueError, AttributeError):
+                    pass
+
+                # Function call parts — treated as atomic ToolCallDelta + ToolCallComplete
+                # (Gemini doesn't stream incremental JSON fragments, it delivers the
+                # whole function_call at once in a part)
+                try:
+                    for candidate in chunk.candidates:
+                        for part in candidate.content.parts:
+                            if hasattr(part, "function_call") and part.function_call:
+                                fc = part.function_call
+                                tool_id = f"gemini_{fc.name}_{uuid.uuid4().hex[:8]}"
+                                # Use _unwrap_protobuf so nested dicts/lists survive
+                                # JSON serialization. `dict(fc.args)` alone only
+                                # unwraps one level — nested Struct/ListValue values
+                                # would crash json.dumps.
+                                try:
+                                    args = _unwrap_protobuf(fc.args) if fc.args else {}
+                                    if not isinstance(args, dict):
+                                        args = {}
+                                except Exception as unwrap_err:
+                                    _logger.warning(
+                                        "Failed to unwrap Gemini tool args for %s: %s — treating as empty",
+                                        fc.name, unwrap_err,
+                                    )
+                                    sentry_sdk.add_breadcrumb(
+                                        category="llm.tool_call",
+                                        level="warning",
+                                        message=f"gemini tool args unwrap failed for {fc.name}",
+                                        data={"provider": "gemini", "tool_name": fc.name, "error_kind": type(unwrap_err).__name__},
+                                    )
+                                    args = {}
+                                # Single delta that is also complete (no incremental JSON)
+                                yield ToolCallDelta(
+                                    tool_call_id=tool_id,
+                                    name=fc.name,
+                                    args_delta=_json.dumps(args),
+                                )
+                                yield ToolCallComplete(
+                                    tool_call=ToolCall(
+                                        tool_call_id=tool_id,
+                                        name=fc.name,
+                                        args=args,
+                                    )
+                                )
+                except Exception as loop_err:
+                    _logger.warning("Gemini tool-call scan failed mid-stream: %s", loop_err)
+
+                # Usage metadata — only on final chunk
+                try:
+                    if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+                        prompt_tokens = getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0
+                        completion_tokens = getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0
+                except Exception:
+                    pass
+
+                # Finish reason — from candidate (may only be set on last chunk)
+                try:
+                    candidate = chunk.candidates[0]
+                    fr = candidate.finish_reason
+                    raw = fr.name if hasattr(fr, "name") else str(fr)
+                    if raw and raw not in ("", "FINISH_REASON_UNSPECIFIED", "0"):
+                        finish_reason_raw = raw
+                except Exception:
+                    pass
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            emit(
+                "llm.call.error",
+                level="warning",
+                provider=self._provider,
+                model=request.model,
+                duration_ms=duration_ms,
+                streaming=True,
+                error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"gemini stream iteration failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+            )
+            raise
+
+        usage = Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=_estimate_cost_usd(request.model, prompt_tokens, completion_tokens),
+        )
+        yield UsageEvent(usage=usage)
+
+        # Normalize Gemini integer enum values before the shared map
+        if finish_reason_raw == "1":
+            finish_reason_raw = "stop"
+        elif finish_reason_raw == "2":
+            finish_reason_raw = "max_tokens_reached"
+        finish_reason = normalize_finish_reason(finish_reason_raw)
+        yield FinishEvent(finish_reason=finish_reason)
+
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        emit(
+            "llm.call.complete",
+            provider=self._provider,
+            model=request.model,
+            duration_ms=duration_ms,
+            streaming=True,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=usage.cost_usd,
+            finish_reason=finish_reason,
         )

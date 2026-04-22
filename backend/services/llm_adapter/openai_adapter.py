@@ -8,13 +8,21 @@ import json as _json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, Iterator
 
 import sentry_sdk
 from openai import OpenAI
 
 from backend.observability.events import emit
 from backend.retry import with_retry
+from backend.services.llm_adapter.streaming import (
+    FinishEvent,
+    StreamEvent,
+    TextDelta,
+    ToolCallComplete,
+    ToolCallDelta,
+    UsageEvent,
+)
 from backend.services.llm_adapter.types import (
     ImagePart,
     LLMRequest,
@@ -47,7 +55,9 @@ def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -
 
 
 def _content_to_openai(content: list) -> str | list[dict[str, Any]]:
-    """Map our ContentPart list to OpenAI's message content shape.
+    """Map our ContentPart list to OpenAI's message content shape (for user
+    messages — assistant and tool roles have their own handling in
+    _message_to_openai because OpenAI splits tool calls out of `content`).
 
     If content is a single TextPart, return a string (OpenAI accepts this
     as a shorthand). Otherwise return the array-of-parts form for
@@ -67,17 +77,80 @@ def _content_to_openai(content: list) -> str | list[dict[str, Any]]:
                 # base64 data URL
                 data_url = f"data:{p.mime_type};base64,{p.base64}"
                 parts.append({"type": "image_url", "image_url": {"url": data_url}})
-        # ToolUsePart / ToolResultPart are not valid inside message.content
-        # for OpenAI — they belong at the tool_calls / tool role level.
+        # ToolUsePart / ToolResultPart handled at message level by _message_to_openai
     return parts
 
 
 def _message_to_openai(msg: Message) -> dict[str, Any]:
-    result: dict[str, Any] = {"role": msg.role}
-    if msg.role == "tool" and msg.tool_call_id:
-        result["tool_call_id"] = msg.tool_call_id
+    # Tool-role messages (tool results) — OpenAI wire format:
+    # {"role": "tool", "tool_call_id": "...", "content": "<result as string>"}
+    # Each ToolResultPart becomes its own tool-role message; if a single
+    # Message.content has multiple ToolResultPart entries, caller should
+    # expand via _expand_messages_for_openai (below).
+    if msg.role == "tool":
+        # Pick the first ToolResultPart — callers should build one tool-role
+        # Message per result; _expand_messages_for_openai enforces this.
+        for p in msg.content:
+            if isinstance(p, ToolResultPart):
+                content = p.content if isinstance(p.content, str) else _json.dumps(p.content)
+                return {
+                    "role": "tool",
+                    "tool_call_id": p.tool_call_id,
+                    "content": content,
+                }
+        # Fallback: tool message with no ToolResultPart — stringify whatever's there.
+        return {"role": "tool", "tool_call_id": msg.tool_call_id or "", "content": ""}
+
+    # Assistant messages may carry text + tool_use blocks — split them.
+    if msg.role == "assistant":
+        text_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+        for p in msg.content:
+            if isinstance(p, TextPart):
+                text_parts.append(p.text)
+            elif isinstance(p, ToolUsePart):
+                tool_calls.append({
+                    "id": p.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": p.name,
+                        "arguments": _json.dumps(p.args),
+                    },
+                })
+            # ImagePart on assistant isn't valid OpenAI shape — skip.
+        result: dict[str, Any] = {"role": "assistant"}
+        # OpenAI requires content OR tool_calls; content can be null when tool_calls present.
+        result["content"] = " ".join(text_parts) if text_parts else None
+        if tool_calls:
+            result["tool_calls"] = tool_calls
+        return result
+
+    # User role — standard content conversion.
+    result = {"role": msg.role}
     result["content"] = _content_to_openai(msg.content)
     return result
+
+
+def _expand_messages_for_openai(messages: list[Message]) -> list[dict[str, Any]]:
+    """Expand typed Messages into OpenAI wire format, splitting any
+    tool-role Message with multiple ToolResultPart entries into separate
+    tool-role messages (OpenAI requires one tool message per tool_call_id).
+    """
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        if msg.role == "tool":
+            result_parts = [p for p in msg.content if isinstance(p, ToolResultPart)]
+            if len(result_parts) > 1:
+                for p in result_parts:
+                    content = p.content if isinstance(p.content, str) else _json.dumps(p.content)
+                    out.append({
+                        "role": "tool",
+                        "tool_call_id": p.tool_call_id,
+                        "content": content,
+                    })
+                continue
+        out.append(_message_to_openai(msg))
+    return out
 
 
 class OpenAIAdapter:
@@ -91,8 +164,7 @@ class OpenAIAdapter:
         messages = []
         if request.system_prompt:
             messages.append({"role": "system", "content": request.system_prompt})
-        for msg in request.messages:
-            messages.append(_message_to_openai(msg))
+        messages.extend(_expand_messages_for_openai(request.messages))
 
         kwargs: dict[str, Any] = {
             "model": request.model,
@@ -202,4 +274,202 @@ class OpenAIAdapter:
             finish_reason=finish_reason,
             provider=self._provider,
             model=raw.model,
+        )
+
+    def stream_chat(self, request: LLMRequest) -> Iterator[StreamEvent]:
+        """Yield StreamEvent instances from a streaming OpenAI completion.
+
+        The initial stream-open call is protected by with_retry(); the
+        iteration loop is not (can't retry mid-stream).
+        """
+        messages = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.extend(_expand_messages_for_openai(request.messages))
+
+        kwargs: dict[str, Any] = {
+            "model": request.model,
+            "messages": messages,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "timeout": request.timeout,
+        }
+        if request.max_tokens is not None:
+            kwargs["max_tokens"] = request.max_tokens
+        if request.temperature is not None:
+            kwargs["temperature"] = request.temperature
+        if request.tools:
+            kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    },
+                }
+                for t in request.tools
+            ]
+
+        emit(
+            "llm.call.start",
+            provider=self._provider,
+            model=request.model,
+            streaming=True,
+            **{k: v for k, v in request.metadata.items() if isinstance(v, (str, int, float, bool))},
+        )
+        t0 = time.monotonic()
+
+        try:
+            stream = with_retry(
+                lambda: self._client.chat.completions.create(**kwargs),
+                label=f"openai.chat.completions.create(stream, {request.model})",
+            )
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            emit(
+                "llm.call.error",
+                level="warning",
+                provider=self._provider,
+                model=request.model,
+                duration_ms=duration_ms,
+                streaming=True,
+                error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"openai.chat.completions.create(stream) failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+            )
+            raise
+
+        # pending_tool_calls: index -> {id, name, arguments_accumulated}
+        pending_tool_calls: dict[int, dict[str, str]] = {}
+        usage_event: UsageEvent | None = None
+        finish_reason_raw: str | None = None
+
+        try:
+            for chunk in stream:
+                choice = chunk.choices[0] if chunk.choices else None
+
+                # Usage-only chunk (arrives when stream_options include_usage=True)
+                if chunk.usage and (not choice or not choice.delta.content):
+                    usage_event = UsageEvent(
+                        usage=Usage(
+                            prompt_tokens=chunk.usage.prompt_tokens or 0,
+                            completion_tokens=chunk.usage.completion_tokens or 0,
+                            cost_usd=_estimate_cost_usd(
+                                request.model,
+                                chunk.usage.prompt_tokens or 0,
+                                chunk.usage.completion_tokens or 0,
+                            ),
+                        )
+                    )
+
+                if not choice:
+                    continue
+
+                delta = choice.delta
+
+                # Text content
+                if delta and delta.content:
+                    yield TextDelta(text=delta.content)
+
+                # Tool call deltas
+                if delta and delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in pending_tool_calls:
+                            pending_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+
+                        is_first = False
+                        if tc_delta.id:
+                            pending_tool_calls[idx]["id"] = tc_delta.id
+                            is_first = True
+                        if tc_delta.function and tc_delta.function.name:
+                            pending_tool_calls[idx]["name"] = tc_delta.function.name
+                            is_first = True
+                        args_fragment = ""
+                        if tc_delta.function and tc_delta.function.arguments:
+                            args_fragment = tc_delta.function.arguments
+                            pending_tool_calls[idx]["arguments"] += args_fragment
+
+                        yield ToolCallDelta(
+                            tool_call_id=pending_tool_calls[idx]["id"],
+                            name=pending_tool_calls[idx]["name"] if is_first else None,
+                            args_delta=args_fragment,
+                        )
+
+                if choice.finish_reason:
+                    finish_reason_raw = choice.finish_reason
+
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            emit(
+                "llm.call.error",
+                level="warning",
+                provider=self._provider,
+                model=request.model,
+                duration_ms=duration_ms,
+                streaming=True,
+                error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"openai stream iteration failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+            )
+            raise
+
+        # Emit ToolCallComplete for every accumulated tool call
+        for idx in sorted(pending_tool_calls.keys()):
+            tc = pending_tool_calls[idx]
+            if tc["name"]:
+                try:
+                    args = _json.loads(tc["arguments"]) if tc["arguments"] else {}
+                except _json.JSONDecodeError:
+                    # Malformed tool args (usually from truncated output hitting
+                    # max_tokens). Log + breadcrumb so operators can detect — the
+                    # tool will execute with empty args rather than crash, but
+                    # that's a quality regression worth surfacing.
+                    _logger.warning(
+                        "Dropping malformed OpenAI tool args for %s (idx=%s): %r",
+                        tc["name"], idx, tc["arguments"],
+                    )
+                    sentry_sdk.add_breadcrumb(
+                        category="llm.tool_call",
+                        level="warning",
+                        message=f"openai tool args JSONDecodeError for {tc['name']}",
+                        data={"provider": "openai", "tool_name": tc["name"], "args_len": len(tc["arguments"] or "")},
+                    )
+                    args = {}
+                yield ToolCallComplete(
+                    tool_call=ToolCall(
+                        tool_call_id=tc["id"] or f"call_{idx}",
+                        name=tc["name"],
+                        args=args,
+                    )
+                )
+
+        if usage_event:
+            yield usage_event
+
+        finish_reason = normalize_finish_reason(finish_reason_raw)
+        yield FinishEvent(finish_reason=finish_reason)
+
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        prompt_tokens = usage_event.usage.prompt_tokens if usage_event else 0
+        completion_tokens = usage_event.usage.completion_tokens if usage_event else 0
+        emit(
+            "llm.call.complete",
+            provider=self._provider,
+            model=request.model,
+            duration_ms=duration_ms,
+            streaming=True,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=usage_event.usage.cost_usd if usage_event else 0.0,
+            finish_reason=finish_reason,
         )
