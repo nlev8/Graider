@@ -10,11 +10,6 @@ import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
-try:
-    import anthropic
-except ImportError:
-    anthropic = None
-
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors

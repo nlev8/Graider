@@ -575,7 +575,6 @@ def export_focus_csv():
     Format: Student_ID,Score
     """
     import json
-    import anthropic
 
     data = request.json
     results = data.get('results', [])

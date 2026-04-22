@@ -21,7 +21,6 @@ import logging
 import os
 from io import BytesIO
 
-import google.generativeai as genai
 import sentry_sdk
 
 logger = logging.getLogger(__name__)

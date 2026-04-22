@@ -1544,8 +1544,6 @@ def get_student_baseline_api(student_id):
 @handle_route_errors
 def retranslate_feedback():
     """Re-translate English feedback to the target language."""
-    import openai
-
     data = request.json
     english_feedback = data.get('english_feedback', '')
     target_language = data.get('target_language', 'spanish')

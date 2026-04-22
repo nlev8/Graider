@@ -527,7 +527,6 @@ def _generate_email_ai(ctx, tone, custom_note, teacher_id):
     """Generate email using Claude AI. Returns (subject, body) or None on failure."""
     try:
         from backend.api_keys import get_api_key
-        import anthropic
 
         api_key = get_api_key('anthropic', teacher_id)
         if not api_key:

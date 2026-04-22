@@ -31,13 +31,12 @@ def _make_app():
     return app
 
 
-def _mock_gemini_response(text):
-    """Create a mock Gemini response."""
+def _mock_genai_response(text):
+    """Create a mock response compatible with GeminiAdapter's genai.GenerativeModel."""
     mock_resp = MagicMock()
     mock_resp.text = text
-    mock_resp.usage_metadata = MagicMock()
-    mock_resp.usage_metadata.prompt_token_count = 100
-    mock_resp.usage_metadata.candidates_token_count = 300
+    mock_resp.candidates = [MagicMock(finish_reason=MagicMock(name="STOP"))]
+    mock_resp.usage_metadata = MagicMock(prompt_token_count=100, candidates_token_count=300)
     return mock_resp
 
 
@@ -60,9 +59,9 @@ class TestGenerateFlashcards:
         app = _make_app()
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
-                 patch('backend.routes.planner_routes.genai') as mock_genai:
+                 patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
                 mock_model = MagicMock()
-                mock_model.generate_content.return_value = _mock_gemini_response(SAMPLE_FLASHCARDS)
+                mock_model.generate_content.return_value = _mock_genai_response(SAMPLE_FLASHCARDS)
                 mock_genai.GenerativeModel.return_value = mock_model
 
                 resp = client.post('/api/generate-flashcards', json={
@@ -92,7 +91,7 @@ class TestGenerateFlashcards:
         app = _make_app()
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
-                 patch('backend.routes.planner_routes.genai') as mock_genai:
+                 patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
                 mock_model = MagicMock()
                 mock_model.generate_content.side_effect = Exception("API error")
                 mock_genai.GenerativeModel.return_value = mock_model
@@ -109,11 +108,18 @@ class TestGenerateFlashcards:
     def test_includes_lesson_plan_vocab(self):
         """Should incorporate lesson plan vocabulary into the prompt."""
         app = _make_app()
+        captured_prompt = []
+
+        def capture(contents, generation_config=None):
+            prompt_text = contents[0]["parts"][0]["text"] if contents else ""
+            captured_prompt.append(prompt_text)
+            return _mock_genai_response(SAMPLE_FLASHCARDS)
+
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
-                 patch('backend.routes.planner_routes.genai') as mock_genai:
+                 patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
                 mock_model = MagicMock()
-                mock_model.generate_content.return_value = _mock_gemini_response(SAMPLE_FLASHCARDS)
+                mock_model.generate_content.side_effect = capture
                 mock_genai.GenerativeModel.return_value = mock_model
 
                 resp = client.post('/api/generate-flashcards', json={
@@ -128,17 +134,24 @@ class TestGenerateFlashcards:
                 }, headers={"X-Test-Teacher-Id": "teacher-1"})
 
             assert resp.status_code == 200
-            call_args = mock_model.generate_content.call_args[0][0]
-            assert "federalism" in call_args
+            assert captured_prompt, "generate_content was not called"
+            assert "federalism" in captured_prompt[0]
 
     def test_respects_global_ai_notes(self):
         """Should include globalAINotes in the prompt."""
         app = _make_app()
+        captured_prompt = []
+
+        def capture(contents, generation_config=None):
+            prompt_text = contents[0]["parts"][0]["text"] if contents else ""
+            captured_prompt.append(prompt_text)
+            return _mock_genai_response(SAMPLE_FLASHCARDS)
+
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
-                 patch('backend.routes.planner_routes.genai') as mock_genai:
+                 patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
                 mock_model = MagicMock()
-                mock_model.generate_content.return_value = _mock_gemini_response(SAMPLE_FLASHCARDS)
+                mock_model.generate_content.side_effect = capture
                 mock_genai.GenerativeModel.return_value = mock_model
 
                 resp = client.post('/api/generate-flashcards', json={
@@ -150,17 +163,24 @@ class TestGenerateFlashcards:
                 }, headers={"X-Test-Teacher-Id": "teacher-1"})
 
             assert resp.status_code == 200
-            call_args = mock_model.generate_content.call_args[0][0]
-            assert "simplified vocabulary" in call_args
+            assert captured_prompt, "generate_content was not called"
+            assert "simplified vocabulary" in captured_prompt[0]
 
     def test_custom_card_count(self):
         """Should pass card count to the prompt."""
         app = _make_app()
+        captured_prompt = []
+
+        def capture(contents, generation_config=None):
+            prompt_text = contents[0]["parts"][0]["text"] if contents else ""
+            captured_prompt.append(prompt_text)
+            return _mock_genai_response(SAMPLE_FLASHCARDS)
+
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
-                 patch('backend.routes.planner_routes.genai') as mock_genai:
+                 patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
                 mock_model = MagicMock()
-                mock_model.generate_content.return_value = _mock_gemini_response(SAMPLE_FLASHCARDS)
+                mock_model.generate_content.side_effect = capture
                 mock_genai.GenerativeModel.return_value = mock_model
 
                 resp = client.post('/api/generate-flashcards', json={
@@ -172,8 +192,8 @@ class TestGenerateFlashcards:
                 }, headers={"X-Test-Teacher-Id": "teacher-1"})
 
             assert resp.status_code == 200
-            call_args = mock_model.generate_content.call_args[0][0]
-            assert "20" in call_args
+            assert captured_prompt, "generate_content was not called"
+            assert "20" in captured_prompt[0]
 
 
 class TestExportFlashcards:
