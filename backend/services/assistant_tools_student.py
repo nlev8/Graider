@@ -8,11 +8,14 @@ import base64
 import csv
 import io
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
 from datetime import datetime
+
+_logger = logging.getLogger(__name__)
 
 from backend.services.assistant_tools import (
     _load_master_csv, _load_accommodations, _load_roster,
@@ -1045,7 +1048,7 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
                         writer.writeheader()
                         writer.writerows(rows)
         except Exception as e:
-            print(f"Warning: Could not add student to roster: {e}")
+            _logger.warning("Could not add student to roster: %s", e)
             sentry_sdk.capture_exception(e)
 
     total = imported["results"] + sum(1 for v in [imported["history"], imported["accommodations"], imported["ell"], imported["contacts"]] if v)

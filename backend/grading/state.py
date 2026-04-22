@@ -5,11 +5,14 @@ and the thread-safe accessors exactly as they were at app.py head.
 """
 
 import json
+import logging
 import os
 import re
 import threading
 
 import sentry_sdk
+
+_logger = logging.getLogger(__name__)
 
 # Import storage abstraction (mirrors the fallback pattern in backend/app.py)
 try:
@@ -100,7 +103,7 @@ def save_results(results, teacher_id='local-dev'):
             with open(RESULTS_FILE, 'w') as f:
                 json.dump(results, f, indent=2)
         except Exception as e:
-            print(f"Error saving results: {e}")
+            _logger.error("Error saving results: %s", e)
             sentry_sdk.capture_exception(e)
 
 # ── Per-teacher grading state (dict-of-dicts) ────────────────

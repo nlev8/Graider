@@ -296,7 +296,7 @@ def _process_image_answer(answer, question, subject, q_type, ai_model='gpt-4o'):
             question_type=q_type,
         )
         if ocr_result.get('error'):
-            print(f"Mathpix OCR failed, falling back to GPT-4o Vision: {ocr_result['error']}")
+            _logger.warning("Mathpix OCR failed, falling back to GPT-4o Vision: %s", ocr_result['error'])
             ocr_result = _vision_ocr_fallback(image_data, question_text, subject)
     else:
         # Non-STEM: GPT-4o Vision (handwritten text → text)
@@ -370,7 +370,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
         }
 
     except Exception as e:
-        print(f"GPT-4o Vision OCR failed: {e}")
+        _logger.error("GPT-4o Vision OCR failed: %s", e)
         return {
             'extracted_text': '',
             'latex': '',
@@ -574,7 +574,7 @@ def _grade_with_ai(question, student_answer, q_type, q_points,
 
     except Exception as e:
         # Fallback to basic grading if AI fails
-        print(f"AI grading failed, falling back to basic: {e}")
+        _logger.error("AI grading failed, falling back to basic: %s", e)
         return grade_short_answer(question, answer_text)
 
 

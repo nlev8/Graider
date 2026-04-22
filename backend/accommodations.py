@@ -14,11 +14,14 @@ Accommodation types are generic categories that tell the AI how to adjust
 feedback without revealing any student identity.
 """
 
+import logging
 import os
 import json
 from datetime import datetime
 from typing import Optional
 import sentry_sdk
+
+_logger = logging.getLogger(__name__)
 
 # Import storage abstraction
 try:
@@ -53,7 +56,7 @@ def audit_log_accommodation(action: str, details: str = ""):
         with open(AUDIT_LOG_FILE, 'a') as f:
             f.write(log_entry)
     except Exception as e:
-        print(f"Audit log error: {e}")
+        _logger.error("Audit log error: %s", e)
         sentry_sdk.capture_exception(e)
 
 
@@ -268,7 +271,7 @@ def load_presets(teacher_id: str = 'local-dev') -> dict:
                 # Merge custom presets (can override defaults)
                 presets.update(custom)
         except Exception as e:
-            print(f"Error loading custom presets: {e}")
+            _logger.error("Error loading custom presets: %s", e)
             sentry_sdk.capture_exception(e)
 
     audit_log_accommodation("LOAD_PRESETS", f"Loaded {len(presets)} presets")
@@ -304,7 +307,7 @@ def save_preset(preset: dict, teacher_id: str = 'local-dev') -> bool:
         audit_log_accommodation("SAVE_PRESET", f"Saved preset: {preset_id}")
         return True
     except Exception as e:
-        print(f"Error saving preset: {e}")
+        _logger.error("Error saving preset: %s", e)
         sentry_sdk.capture_exception(e)
         return False
 
@@ -335,7 +338,7 @@ def delete_preset(preset_id: str, teacher_id: str = 'local-dev') -> bool:
             return True
         return False
     except Exception as e:
-        print(f"Error deleting preset: {e}")
+        _logger.error("Error deleting preset: %s", e)
         sentry_sdk.capture_exception(e)
         return False
 
@@ -366,7 +369,7 @@ def load_student_accommodations(teacher_id: str = 'local-dev') -> dict:
             audit_log_accommodation("LOAD_STUDENT_MAPPINGS", f"Loaded {len(data)} student mappings")
             return data
         except Exception as e:
-            print(f"Error loading student accommodations: {e}")
+            _logger.error("Error loading student accommodations: %s", e)
             sentry_sdk.capture_exception(e)
 
     return {}
@@ -386,7 +389,7 @@ def save_student_accommodations(mappings: dict, teacher_id: str = 'local-dev') -
         audit_log_accommodation("SAVE_STUDENT_MAPPINGS", f"Saved {len(mappings)} student mappings")
         return True
     except Exception as e:
-        print(f"Error saving student accommodations: {e}")
+        _logger.error("Error saving student accommodations: %s", e)
         sentry_sdk.capture_exception(e)
         return False
 
@@ -699,7 +702,7 @@ def clear_all_accommodations(teacher_id: str = 'local-dev') -> bool:
         audit_log_accommodation("CLEAR_ALL_DATA", "Deleted all student accommodation data")
         return True
     except Exception as e:
-        print(f"Error clearing accommodations: {e}")
+        _logger.error("Error clearing accommodations: %s", e)
         sentry_sdk.capture_exception(e)
         return False
 

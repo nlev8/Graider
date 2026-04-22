@@ -129,7 +129,7 @@ def get_students_from_period_file(filepath):
                                 first, last = parse_student_name(name)
                                 students.append({"first": first, "last": last, "full": name})
             except ImportError:
-                print(f"Warning: pandas not installed, cannot read Excel file {filepath}")
+                _logger.warning("pandas not installed, cannot read Excel file %s", filepath)
         else:
             # Use built-in csv module for CSV files
             with open(filepath, 'r', encoding='utf-8') as f:
@@ -152,7 +152,7 @@ def get_students_from_period_file(filepath):
                             first, last = parse_student_name(name)
                             students.append({"first": first, "last": last, "full": name, "id": student_id})
     except Exception as e:
-        print(f"Error reading period file {filepath}: {e}")
+        _logger.error("Error reading period file %s: %s", filepath, e)
         sentry_sdk.capture_exception(e)
 
     return students
@@ -490,7 +490,7 @@ def list_periods():
                         metadata['students'] = []
                     periods.append(metadata)
             except Exception as e:
-                print(f"Error loading cloud period metadata {key}: {e}")
+                _logger.error("Error loading cloud period metadata %s: %s", key, e)
                 sentry_sdk.capture_exception(e)
         if periods:
             return jsonify({"periods": periods})
@@ -510,7 +510,7 @@ def list_periods():
                             metadata['students'] = []
                         periods.append(metadata)
                 except Exception as e:
-                    print(f"Error loading period metadata {f}: {e}")
+                    _logger.error("Error loading period metadata %s: %s", f, e)
                     sentry_sdk.capture_exception(e)
     return jsonify({"periods": periods})
 
