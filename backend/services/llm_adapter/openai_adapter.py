@@ -24,6 +24,7 @@ from backend.services.llm_adapter.types import (
     ToolResultPart,
     ToolUsePart,
     Usage,
+    normalize_finish_reason,
 )
 
 _logger = logging.getLogger(__name__)
@@ -173,6 +174,8 @@ class OpenAIAdapter:
             ),
         )
 
+        finish_reason = normalize_finish_reason(choice.finish_reason)
+
         emit(
             "llm.call.complete",
             provider=self._provider,
@@ -181,14 +184,14 @@ class OpenAIAdapter:
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,
             cost_usd=usage.cost_usd,
-            finish_reason=choice.finish_reason,
+            finish_reason=finish_reason,
         )
 
         return LLMResponse(
             content_parts=content_parts,
             tool_calls=tool_calls,
             usage=usage,
-            finish_reason=choice.finish_reason,
+            finish_reason=finish_reason,
             provider=self._provider,
             model=raw.model,
         )

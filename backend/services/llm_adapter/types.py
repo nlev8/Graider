@@ -93,6 +93,48 @@ class Usage:
     cost_usd: float
 
 
+# ---- Finish reason normalization --------------------------------------
+
+# Canonical finish_reason values returned by LLMResponse — downstream code
+# should switch on exactly these 4 strings. Provider SDKs emit different
+# native names; each adapter calls normalize_finish_reason() to map to
+# these canonicals. Unmapped values are passed through (lowercased) so
+# operators still see what the provider actually said, but downstream
+# logic should treat anything unexpected as "stop" (the safe default).
+_FINISH_REASON_MAP = {
+    # OpenAI native → canonical
+    "stop": "stop",
+    "length": "length",
+    "tool_calls": "tool_use",
+    "tool_use": "tool_use",
+    "function_call": "tool_use",
+    "content_filter": "content_filter",
+    # Anthropic native → canonical
+    "end_turn": "stop",
+    "max_tokens": "length",
+    "stop_sequence": "stop",
+    # Gemini native → canonical (finish_reason enum as uppercased string)
+    "max_tokens_reached": "length",
+    "safety": "content_filter",
+    "recitation": "content_filter",
+    "blocklist": "content_filter",
+    "prohibited_content": "content_filter",
+    "spii": "content_filter",
+    "other": "stop",
+    "malformed_function_call": "tool_use",
+    "finish_reason_unspecified": "stop",
+    "unexpected_tool_call": "tool_use",
+    "image_safety": "content_filter",
+}
+
+
+def normalize_finish_reason(raw: str | None) -> str:
+    """Map a provider-native finish_reason to one of the 4 canonical values."""
+    if not raw:
+        return "stop"
+    return _FINISH_REASON_MAP.get(str(raw).lower(), str(raw).lower())
+
+
 # ---- Request / Response ------------------------------------------------
 
 DEFAULT_TIMEOUT = 60.0

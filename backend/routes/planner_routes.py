@@ -5354,7 +5354,7 @@ def extract_text_from_file():
                 model="gpt-4o",
                 system_prompt="Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary.",
                 messages=[Message(role="user", content=[
-                    ImagePart(url=f"data:{mime};base64,{b64}", mime_type=mime),
+                    ImagePart(url=None, base64=b64, mime_type=mime),
                     TextPart(text="Extract all text from this image."),
                 ])],
                 max_tokens=4000,

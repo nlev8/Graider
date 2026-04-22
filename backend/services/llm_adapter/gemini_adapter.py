@@ -32,6 +32,7 @@ from backend.services.llm_adapter.types import (
     TextPart,
     ToolCall,
     Usage,
+    normalize_finish_reason,
 )
 
 _logger = logging.getLogger(__name__)
@@ -158,17 +159,22 @@ class GeminiAdapter:
             cost_usd=_estimate_cost_usd(request.model, prompt_tokens, completion_tokens),
         )
 
-        # Finish reason
-        finish_reason = "stop"
+        # Finish reason — Gemini returns an enum; extract string then normalize
+        # through the shared map so consumers see the canonical 4 values
+        # (stop/length/tool_use/content_filter).
+        raw_finish_reason = None
         try:
             candidate = raw.candidates[0]
             fr = candidate.finish_reason
-            # Gemini finish_reason is an enum; map to string
-            finish_reason = str(fr.name).lower() if hasattr(fr, "name") else str(fr).lower()
-            if finish_reason in ("stop", "max_tokens", "1", "2"):
-                finish_reason = "stop" if finish_reason in ("stop", "1") else "length"
+            raw_finish_reason = fr.name if hasattr(fr, "name") else str(fr)
         except Exception:
             pass
+        # Map Gemini's integer enum values (1=STOP, 2=MAX_TOKENS) before normalize
+        if raw_finish_reason == "1":
+            raw_finish_reason = "stop"
+        elif raw_finish_reason == "2":
+            raw_finish_reason = "max_tokens_reached"
+        finish_reason = normalize_finish_reason(raw_finish_reason)
 
         emit(
             "llm.call.complete",

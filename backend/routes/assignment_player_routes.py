@@ -20,7 +20,6 @@ import time
 from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
-from backend.retry import with_retry
 
 _logger = logging.getLogger(__name__)
 from pathlib import Path
@@ -342,9 +341,10 @@ def _vision_ocr_fallback(image_data, question_text, subject):
             image_data = f"data:image/png;base64,{image_data}"
 
         adapter = OpenAIAdapter(api_key=api_key)
-        # ImagePart.url accepts a data: URI; OpenAIAdapter maps it to image_url.
-        # The "detail: high" hint is dropped — the adapter uses default detail.
-        resp = with_retry(lambda: adapter.chat(LLMRequest(
+        # OpenAIAdapter.chat() already wraps the network call in with_retry;
+        # calling with_retry here too would stack retries and amplify rate-limit
+        # failures. Call adapter.chat directly.
+        resp = adapter.chat(LLMRequest(
             model="gpt-4o",
             system_prompt="You are an OCR assistant. Read the handwritten student work in the image and transcribe it exactly as written. For math expressions, use LaTeX notation. For regular text, transcribe plainly. Only output the transcribed content, nothing else.",
             messages=[Message(
@@ -357,7 +357,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
             max_tokens=1000,
             temperature=0,
             metadata={"feature_label": "player_ocr_gpt4o_vision"},
-        )), label="player_ocr_gpt4o_vision")
+        ))
 
         text = resp.content_parts[0].text.strip() if resp.content_parts else ""
         return {

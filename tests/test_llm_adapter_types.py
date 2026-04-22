@@ -18,6 +18,7 @@ from backend.services.llm_adapter.types import (
     ToolResultPart,
     ToolUsePart,
     Usage,
+    normalize_finish_reason,
 )
 
 
@@ -86,3 +87,38 @@ def test_tooluse_and_toolresult_parts():
     result = ToolResultPart(tool_call_id="tc1", content="found it")
     assert use.name == "search"
     assert result.content == "found it"
+
+
+# ---- Finish reason normalization tests -------------------------------
+
+
+def test_normalize_finish_reason_openai_native():
+    # OpenAI emits "stop", "length", "tool_calls", "content_filter".
+    assert normalize_finish_reason("stop") == "stop"
+    assert normalize_finish_reason("length") == "length"
+    assert normalize_finish_reason("tool_calls") == "tool_use"
+    assert normalize_finish_reason("content_filter") == "content_filter"
+
+
+def test_normalize_finish_reason_anthropic_native():
+    # Anthropic emits "end_turn", "max_tokens", "stop_sequence", "tool_use".
+    assert normalize_finish_reason("end_turn") == "stop"
+    assert normalize_finish_reason("max_tokens") == "length"
+    assert normalize_finish_reason("stop_sequence") == "stop"
+    assert normalize_finish_reason("tool_use") == "tool_use"
+
+
+def test_normalize_finish_reason_gemini_native():
+    # Gemini enum names (uppercased in .name) — lowercased then mapped.
+    assert normalize_finish_reason("STOP") == "stop"
+    assert normalize_finish_reason("MAX_TOKENS") == "length"
+    assert normalize_finish_reason("max_tokens_reached") == "length"
+    assert normalize_finish_reason("SAFETY") == "content_filter"
+    assert normalize_finish_reason("RECITATION") == "content_filter"
+
+
+def test_normalize_finish_reason_none_and_unknown():
+    assert normalize_finish_reason(None) == "stop"
+    assert normalize_finish_reason("") == "stop"
+    # Unknown values pass through lowercased — operators still see provider's native word.
+    assert normalize_finish_reason("weird_new_reason") == "weird_new_reason"

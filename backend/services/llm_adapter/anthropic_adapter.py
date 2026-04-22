@@ -27,8 +27,10 @@ from backend.services.llm_adapter.types import (
     Message,
     TextPart,
     ToolCall,
+    ToolResultPart,
     ToolUsePart,
     Usage,
+    normalize_finish_reason,
 )
 
 _logger = logging.getLogger(__name__)
@@ -87,7 +89,6 @@ def _message_to_anthropic(msg: Message) -> dict[str, Any]:
         # Convert ToolResultPart content into a tool_result block
         blocks: list[dict[str, Any]] = []
         for p in msg.content:
-            from backend.services.llm_adapter.types import ToolResultPart
             if isinstance(p, ToolResultPart):
                 result_content = p.content if isinstance(p.content, str) else str(p.content)
                 blocks.append({
@@ -185,7 +186,7 @@ class AnthropicAdapter:
             cost_usd=_estimate_cost_usd(request.model, prompt_tokens, completion_tokens),
         )
 
-        finish_reason = raw.stop_reason or "stop"
+        finish_reason = normalize_finish_reason(raw.stop_reason)
 
         emit(
             "llm.call.complete",

@@ -35,7 +35,11 @@ def _mock_genai_response(text):
     """Create a mock response compatible with GeminiAdapter's genai.GenerativeModel."""
     mock_resp = MagicMock()
     mock_resp.text = text
-    mock_resp.candidates = [MagicMock(finish_reason=MagicMock(name="STOP"))]
+    # NOTE: MagicMock(name=...) sets the mock's repr name, NOT a `.name` attribute.
+    # Gemini's finish_reason is accessed as `fr.name`, so set it explicitly via attribute assignment.
+    fr = MagicMock()
+    fr.name = "STOP"
+    mock_resp.candidates = [MagicMock(finish_reason=fr)]
     mock_resp.usage_metadata = MagicMock(prompt_token_count=100, candidates_token_count=300)
     return mock_resp
 
