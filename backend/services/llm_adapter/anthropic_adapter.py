@@ -17,6 +17,7 @@ import time
 from typing import Any
 
 import anthropic
+import sentry_sdk
 
 from backend.observability.events import emit
 from backend.retry import with_retry
@@ -37,11 +38,13 @@ _logger = logging.getLogger(__name__)
 
 
 def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """Rough per-1K-token pricing for Anthropic models."""
+    """Rough per-1K-token pricing for Anthropic models (verify against
+    https://www.anthropic.com/pricing when adding a new model)."""
     rates = {
         "claude-opus-4-20250514": (0.015, 0.075),
         "claude-sonnet-4-20250514": (0.003, 0.015),
-        "claude-haiku-4-5-20251001": (0.00025, 0.00125),
+        # Haiku 4.5 is $1 / $5 per million tokens (not $0.25 / $1.25).
+        "claude-haiku-4-5-20251001": (0.001, 0.005),
     }
     in_rate, out_rate = rates.get(model, (0.003, 0.015))
     return round(prompt_tokens * in_rate / 1000 + completion_tokens * out_rate / 1000, 6)
@@ -116,6 +119,7 @@ class AnthropicAdapter:
             "model": request.model,
             "messages": messages,
             "max_tokens": request.max_tokens or 1024,
+            "timeout": request.timeout,
         }
         if request.system_prompt:
             kwargs["system"] = request.system_prompt
@@ -130,6 +134,19 @@ class AnthropicAdapter:
                 }
                 for t in request.tools
             ]
+        if request.response_format is not None:
+            # Anthropic doesn't have a native response_format param, but a JSON
+            # tool schema can enforce structured output. When response_format is
+            # json_schema and no tools are already defined, prepend a JSON-extract
+            # tool and instruct the model to call it. For plain "json_object" we
+            # leave it to the caller's system prompt (Anthropic recommends this).
+            if request.response_format.type == "json_schema" and request.response_format.schema and not request.tools:
+                kwargs["tools"] = [{
+                    "name": "emit_json",
+                    "description": "Return the requested JSON object.",
+                    "input_schema": request.response_format.schema,
+                }]
+                kwargs["tool_choice"] = {"type": "tool", "name": "emit_json"}
 
         emit(
             "llm.call.start",
@@ -153,6 +170,12 @@ class AnthropicAdapter:
                 model=request.model,
                 duration_ms=duration_ms,
                 error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"anthropic.messages.create failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
             )
             raise
 

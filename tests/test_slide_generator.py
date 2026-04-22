@@ -273,7 +273,7 @@ class TestDeckFormat:
 
         captured_prompt = []
 
-        def capture_generate_content(contents, generation_config=None):
+        def capture_generate_content(contents, generation_config=None, request_options=None):
             # contents is a list of {"role": ..., "parts": [{"text": ...}]}
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
@@ -302,7 +302,7 @@ class TestDeckFormat:
 
         captured_prompt = []
 
-        def capture_generate_content(contents, generation_config=None):
+        def capture_generate_content(contents, generation_config=None, request_options=None):
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
             return MagicMock(

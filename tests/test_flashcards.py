@@ -114,7 +114,7 @@ class TestGenerateFlashcards:
         app = _make_app()
         captured_prompt = []
 
-        def capture(contents, generation_config=None):
+        def capture(contents, generation_config=None, request_options=None):
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
             return _mock_genai_response(SAMPLE_FLASHCARDS)
@@ -146,7 +146,7 @@ class TestGenerateFlashcards:
         app = _make_app()
         captured_prompt = []
 
-        def capture(contents, generation_config=None):
+        def capture(contents, generation_config=None, request_options=None):
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
             return _mock_genai_response(SAMPLE_FLASHCARDS)
@@ -175,7 +175,7 @@ class TestGenerateFlashcards:
         app = _make_app()
         captured_prompt = []
 
-        def capture(contents, generation_config=None):
+        def capture(contents, generation_config=None, request_options=None):
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
             return _mock_genai_response(SAMPLE_FLASHCARDS)

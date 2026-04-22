@@ -10,6 +10,7 @@ import os
 import time
 from typing import Any
 
+import sentry_sdk
 from openai import OpenAI
 
 from backend.observability.events import emit
@@ -31,13 +32,14 @@ _logger = logging.getLogger(__name__)
 
 
 def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """Rough per-1K-token pricing. Update as models evolve."""
-    # Values accurate as of 2026-04. Conservative estimate — real billing
-    # is authoritative, this is for observability only.
+    """Rough per-1K-token pricing (verify against https://openai.com/pricing
+    when adding a new model). Real billing is authoritative — this is for
+    observability only."""
     rates = {
         "gpt-4": (0.03, 0.06),
         "gpt-4-turbo": (0.01, 0.03),
-        "gpt-4o": (0.005, 0.015),
+        # gpt-4o is $2.50 / $10 per million tokens (not $5 / $15).
+        "gpt-4o": (0.0025, 0.010),
         "gpt-4o-mini": (0.00015, 0.0006),
     }
     in_rate, out_rate = rates.get(model, (0.01, 0.03))
@@ -144,6 +146,12 @@ class OpenAIAdapter:
                 model=request.model,
                 duration_ms=duration_ms,
                 error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"openai.chat.completions.create failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
             )
             raise
 

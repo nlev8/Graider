@@ -21,6 +21,7 @@ import time
 from typing import Any
 
 import google.generativeai as genai
+import sentry_sdk
 
 from backend.observability.events import emit
 from backend.retry import with_retry
@@ -39,13 +40,15 @@ _logger = logging.getLogger(__name__)
 
 
 def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """Rough per-1K-token pricing for Gemini models."""
+    """Rough per-1K-token pricing for Gemini models (verify against
+    https://ai.google.dev/gemini-api/docs/pricing when adding a new model)."""
     rates = {
-        "gemini-2.0-flash": (0.000075, 0.0003),
+        # gemini-2.0-flash is $0.10 / $0.40 per million tokens (not $0.075 / $0.30).
+        "gemini-2.0-flash": (0.0001, 0.0004),
         "gemini-1.5-pro": (0.00125, 0.005),
         "gemini-1.5-flash": (0.000075, 0.0003),
     }
-    in_rate, out_rate = rates.get(model, (0.000075, 0.0003))
+    in_rate, out_rate = rates.get(model, (0.0001, 0.0004))
     return round(prompt_tokens * in_rate / 1000 + completion_tokens * out_rate / 1000, 6)
 
 
@@ -96,6 +99,16 @@ class GeminiAdapter:
             generation_config["max_output_tokens"] = request.max_tokens
         if request.temperature is not None:
             generation_config["temperature"] = request.temperature
+        if request.response_format is not None:
+            # Gemini's generation_config.response_mime_type enforces JSON output
+            # when set to "application/json". json_schema adds response_schema.
+            if request.response_format.type in ("json_object", "json_schema"):
+                generation_config["response_mime_type"] = "application/json"
+            if request.response_format.type == "json_schema" and request.response_format.schema:
+                generation_config["response_schema"] = request.response_format.schema
+
+        # Plumb timeout through the SDK's request_options.
+        request_options = {"timeout": request.timeout}
 
         emit(
             "llm.call.start",
@@ -110,6 +123,7 @@ class GeminiAdapter:
                 lambda: model.generate_content(
                     contents,
                     generation_config=generation_config if generation_config else None,
+                    request_options=request_options,
                 ),
                 label=f"gemini.generate_content({request.model})",
             )
@@ -122,6 +136,12 @@ class GeminiAdapter:
                 model=request.model,
                 duration_ms=duration_ms,
                 error_kind=type(e).__name__,
+            )
+            sentry_sdk.add_breadcrumb(
+                category="llm.call",
+                level="warning",
+                message=f"gemini.generate_content failed for {request.model}",
+                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
             )
             raise
 
@@ -187,11 +207,16 @@ class GeminiAdapter:
             finish_reason=finish_reason,
         )
 
+        # Prefer the provider-reported model ID (consistent with OpenAI/Anthropic
+        # adapters). Gemini's raw response doesn't always expose `.model`, so
+        # fall back to the request alias when unavailable.
+        response_model = getattr(raw, "model_version", None) or getattr(raw, "model", None) or request.model
+
         return LLMResponse(
             content_parts=content_parts,
             tool_calls=[],  # tool-use is D2 scope
             usage=usage,
             finish_reason=finish_reason,
             provider=self._provider,
-            model=request.model,
+            model=response_model,
         )
