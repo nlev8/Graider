@@ -15,9 +15,13 @@ from backend.services.llm_adapter.types import (
     Usage,
 )
 
+from backend.services.llm_adapter.anthropic_adapter import AnthropicAdapter
+from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
 from backend.services.llm_adapter.openai_adapter import OpenAIAdapter
 
 __all__ = [
+    "AnthropicAdapter",
+    "GeminiAdapter",
     "OpenAIAdapter",
     "ContentPart",
     "DEFAULT_TIMEOUT",
