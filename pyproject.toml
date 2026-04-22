@@ -1,2 +1,19 @@
 [tool.alembic-destructive-ops]
 allowlist = []
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["T20"]  # flake8-print
+
+[tool.ruff.lint.per-file-ignores]
+# Intentional print surfaces — do NOT expand this list without review. See Phase 5a PR C2.
+"backend/services/outlook_sender.py" = ["T20"]  # stdout JSON IPC protocol
+"backend/services/visualization.py" = ["T20"]   # local test harness
+"backend/migrations/env.py" = ["T20"]           # hard-fail CLI errors to stderr
+"backend/scripts/**" = ["T20"]                  # CLI scripts
+# Note: backend/services/email_service.py is NOT in this list — runtime code
+# paths (GraiderEmailer class methods) use _logger; the __main__ CLI block
+# keeps prints with inline `# noqa: T201` for user-facing output.

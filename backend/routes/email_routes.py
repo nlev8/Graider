@@ -1174,7 +1174,7 @@ def _save_confirmed_filenames(filenames_set):
         with open(CONFIRMATIONS_FILE, 'w') as f:
             json.dump(sorted(filenames_set), f, indent=2)
     except Exception as e:
-        print(f"Error saving confirmations file: {e}")
+        _logger.error("Error saving confirmations file: %s", e)
         sentry_sdk.capture_exception(e)
 
 
@@ -1219,7 +1219,7 @@ def mark_confirmations_sent_file():
                 with open(RESULTS_FILE, 'w') as f:
                     json.dump(results, f, indent=2)
             except Exception as e:
-                print(f"Error saving results after marking confirmations: {e}")
+                _logger.error("Error saving results after marking confirmations: %s", e)
                 sentry_sdk.capture_exception(e)
 
         # Also persist to dedicated confirmations file (covers ungraded files)

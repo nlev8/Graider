@@ -19,3 +19,6 @@ pglast>=7.13,<8  # libpg_query Python wrapper — parses Postgres SQL via the re
 # 4.14.2+ imports cleanly and defers Docker connection until container spin-up.
 testcontainers[postgres]>=4.14.2,<5  # Postgres 15 container for RLS migration smoke test
 psycopg2-binary>=2.9.9,<3  # Postgres driver used by the smoke test (testcontainers' postgres extra does not ship one)
+
+# Linting
+ruff>=0.3  # T20 print-check + future lint rules

@@ -179,9 +179,9 @@ def clear_results():
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                     writer.writerows(rows_to_keep)
-                print(f"Removed {cleared_count} entries from master_grades.csv")
+                _logger.info("Removed %d entries from master_grades.csv", cleared_count)
             except Exception as e:
-                print(f"Could not update master_grades.csv: {e}")
+                _logger.error("Could not update master_grades.csv: %s", e)
                 sentry_sdk.capture_exception(e)
 
         return jsonify({"status": "cleared", "cleared_count": cleared_count})
@@ -210,9 +210,9 @@ def clear_results():
         if os.path.exists(master_file):
             try:
                 os.remove(master_file)
-                print(f"🗑️ Removed master_grades.csv")
+                _logger.info("Removed master_grades.csv")
             except Exception as e:
-                print(f"⚠️ Could not remove master_grades.csv: {e}")
+                _logger.warning("Could not remove master_grades.csv: %s", e)
                 sentry_sdk.capture_exception(e)
 
         return jsonify({"status": "cleared", "cleared_count": cleared_count})
@@ -288,7 +288,7 @@ def _sync_result_to_master_csv(result):
                 writer.writeheader()
                 writer.writerows(rows)
     except Exception as e:
-        print(f"Could not sync to master_grades.csv: {e}")
+        _logger.error("Could not sync to master_grades.csv: %s", e)
         sentry_sdk.capture_exception(e)
 
 
@@ -781,7 +781,7 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
                         if matched_id != 'UNMATCHED':
                             s['id'] = matched_id
         except Exception as e:
-            print(f"Claude matching error: {e}")
+            _logger.error("Claude matching error: %s", e)
             # Continue without matching
 
     # Generate CSV
@@ -1512,7 +1512,7 @@ def migrate_student_names():
                     if student_id and first and last:
                         id_to_name[str(student_id).strip()] = f"{first} {last}"
         except Exception as e:
-            print(f"Could not read roster: {e}")
+            _logger.error("Could not read roster: %s", e)
             sentry_sdk.capture_exception(e)
 
     # Also try period CSVs

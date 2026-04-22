@@ -5,12 +5,15 @@ Tracks student performance over time for personalized feedback.
 FERPA Compliant: Data stored locally, no PII sent to AI.
 """
 
+import logging
 import os
 import json
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict
 import sentry_sdk
+
+_logger = logging.getLogger(__name__)
 
 # Import storage abstraction
 try:
@@ -103,7 +106,7 @@ def save_student_history(student_id: str, history: dict, teacher_id: str = 'loca
         with open(path, 'w') as f:
             json.dump(history, f, indent=2)
     except Exception as e:
-        print(f"Error saving student history: {e}")
+        _logger.error("Error saving student history: %s", e)
         sentry_sdk.capture_exception(e)
 
     # Also write to storage

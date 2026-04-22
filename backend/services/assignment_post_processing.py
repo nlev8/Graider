@@ -7,12 +7,15 @@ PR3: quality validators + project filter.
 PR4: explicit-context _auto_fix_flagged_questions (Flask-decoupled).
 Spec: docs/superpowers/specs/2026-04-15-phase3b1-planner-helpers-design.md
 """
+import logging
 import os
 import sys
 import json
 import time
 import math
 import re
+
+_logger = logging.getLogger(__name__)
 
 # Import MODEL_PRICING for token cost tracking
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -1966,7 +1969,7 @@ Rules:
         _record_planner_cost(usage)
 
     except Exception as e:
-        print(f"Auto-fix quality check failed (non-fatal): {e}")
+        _logger.warning("Auto-fix quality check failed (non-fatal): %s", e)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

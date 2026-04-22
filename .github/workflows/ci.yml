@@ -157,3 +157,21 @@ jobs:
 
           diff /tmp/committed-prod.normalized /tmp/recompiled-prod.normalized || (echo "::error::requirements.txt has stale pins or hashes vs requirements.in — run pip-compile locally (Python 3.12) and commit"; exit 1)
           diff /tmp/committed-dev.normalized /tmp/recompiled-dev.normalized || (echo "::error::requirements-dev.txt has stale pins or hashes vs requirements-dev.in — run pip-compile locally (Python 3.12) and commit"; exit 1)
+
+  ruff-lint:
+    name: Ruff Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff against backend/
+        run: ruff check backend/
