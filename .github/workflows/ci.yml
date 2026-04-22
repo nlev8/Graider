@@ -32,8 +32,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
 
       - name: Run tests with coverage
         run: |
@@ -102,7 +102,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install --require-hashes -r requirements.txt
 
       - name: Install psql client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -115,3 +115,45 @@ jobs:
 
       - name: Show current revision
         run: alembic current --verbose
+
+  lockfile-drift-check:
+    name: Lockfile Drift Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install pip-tools
+        # Pin pip-tools version: its output format is stable within a
+        # minor release but not across them. An unpinned install risks
+        # false-positive drift-check failures when pip-tools updates
+        # upstream (e.g., reordered `# via` annotations or header tweaks).
+        run: pip install pip-tools==7.5.3
+
+      - name: Recompile lockfiles in a tmp dir and diff against committed
+        run: |
+          # Snapshot committed lockfiles, then recompile in place.
+          cp requirements.txt /tmp/committed-prod.txt
+          cp requirements-dev.txt /tmp/committed-dev.txt
+          pip-compile --generate-hashes --allow-unsafe --output-file=requirements.txt requirements.in --quiet
+          pip-compile --generate-hashes --allow-unsafe --output-file=requirements-dev.txt requirements-dev.in -c requirements.txt --quiet
+
+          # Strip comment-only lines before comparing. The actual pins
+          # (package==version + --hash=sha256:...) are platform-invariant,
+          # but pip-compile's "# via X" annotations differ across platforms
+          # because keyring's install_requires includes SecretStorage on
+          # Linux only. Stripping comment lines gives a stable diff that
+          # still catches real drift (version or hash changes).
+          normalize() { grep -v '^\s*#' "$1" | grep -v '^$'; }
+          normalize /tmp/committed-prod.txt > /tmp/committed-prod.normalized
+          normalize requirements.txt > /tmp/recompiled-prod.normalized
+          normalize /tmp/committed-dev.txt > /tmp/committed-dev.normalized
+          normalize requirements-dev.txt > /tmp/recompiled-dev.normalized
+
+          diff /tmp/committed-prod.normalized /tmp/recompiled-prod.normalized || (echo "::error::requirements.txt has stale pins or hashes vs requirements.in — run pip-compile locally (Python 3.12) and commit"; exit 1)
+          diff /tmp/committed-dev.normalized /tmp/recompiled-dev.normalized || (echo "::error::requirements-dev.txt has stale pins or hashes vs requirements-dev.in — run pip-compile locally (Python 3.12) and commit"; exit 1)

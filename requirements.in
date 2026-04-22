@@ -1,0 +1,95 @@
+# Graider runtime dependencies. Non-runtime dev tooling (pytest-cov,
+# py2app, selenium) lives in requirements-dev.txt.
+#
+# Dual Gemini SDK note: `google-generativeai` is used for chat-style text
+# generation (planner_routes, assistant_routes, slide_generator:155);
+# `google.genai` is used for image generation (slide_generator:258).
+# Phase 5b's adapter unification will collapse these if possible.
+#
+# Runtime Playwright note: `playwright` is a RUNTIME dependency because
+# backend/services/outlook_sender.py imports it inside a subprocess
+# spawned by three Flask routes in backend/routes/email_routes.py
+# (/api/send-outlook-emails, /api/outlook-send/status, /api/outlook-login).
+# The subprocess inherits the backend's site-packages via sys.executable,
+# so playwright MUST be in this file, not in requirements-dev.txt.
+
+flask>=2.0.0
+flask-cors>=3.0.0
+Flask-Limiter>=3.5.0
+openai>=1.0.0
+anthropic>=0.18.0
+python-docx>=0.8.11
+openpyxl>=3.0.0
+python-dotenv>=0.19.0
+Pillow>=9.0.0
+webdriver-manager>=4.0.0
+reportlab>=4.0.0
+pymupdf>=1.23.0
+mammoth>=1.6.0
+
+# STEM Subject Support
+sympy>=1.12
+antlr4-python3-runtime==4.11.*
+
+# Graphing & Visualization (for math/science assignments)
+matplotlib>=3.7.0
+numpy>=1.24.0
+
+# HTTP requests (admin notifications)
+requests>=2.28.0
+
+# Email Service
+resend>=0.7.0
+
+# Database (Student Portal)
+supabase>=2.0.0
+
+# Auth (JWT validation — cryptography needed for ES256/JWKS verification)
+PyJWT>=2.8.0
+cryptography>=42.0.0
+
+# Browser Automation — RUNTIME. Used by backend/services/outlook_sender.py
+# (a subprocess spawned by /api/send-outlook-emails, /api/outlook-send/status,
+# and /api/outlook-login routes in backend/routes/email_routes.py). The
+# subprocess inherits the backend's site-packages, so this MUST stay in
+# runtime requirements. Do NOT move to requirements-dev.txt.
+playwright>=1.40.0
+
+# Secure credential storage (SharePoint password)
+keyring>=25.0.0
+
+# Stripe (Billing)
+stripe>=7.0.0
+
+# Voice TTS (ElevenLabs WebSocket streaming)
+websocket-client>=1.6.0
+
+# Clever Integration (async HTTP + sessions)
+httpx>=0.24.0
+Flask-Session>=0.5.0
+redis>=5.0.0
+
+# Google Gemini (old SDK — used by grading, study guides, flashcards)
+google-generativeai>=0.8.0
+# Slide Deck Generator (new SDK for image gen + PowerPoint assembly)
+google-genai>=1.0.0
+python-pptx>=1.0.0
+
+# Production Server
+gunicorn>=21.0.0
+flask-wtf>=1.2.0
+sentry-sdk[flask]>=2.0
+celery==5.4.0
+alembic>=1.13,<2
+psycopg[binary]>=3.2,<4
+
+# ── Linux-only transitive deps of keyring, pinned explicitly so pip-compile
+# ── captures them regardless of the compile host platform. Without this,
+# ── --require-hashes install on Linux CI/Railway rejects them as unpinned
+# ── transitives (keyring gates them on Linux only, so a macOS-generated
+# ── lockfile omits them entirely). No platform markers here because
+# ── pip-compile itself ignores markers that don't match the compile host.
+# ── The cost on macOS/Windows is installing two small pure-Python wheels
+# ── that keyring never calls into on those platforms — harmless.
+SecretStorage>=3.2
+jeepney>=0.4.2
