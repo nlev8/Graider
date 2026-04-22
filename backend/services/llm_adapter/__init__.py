@@ -15,7 +15,10 @@ from backend.services.llm_adapter.types import (
     Usage,
 )
 
+from backend.services.llm_adapter.openai_adapter import OpenAIAdapter
+
 __all__ = [
+    "OpenAIAdapter",
     "ContentPart",
     "DEFAULT_TIMEOUT",
     "ImagePart",
