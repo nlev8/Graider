@@ -10,9 +10,12 @@ Setup:
 3. Emails will be sent from noreply@graider.live
 """
 
+import logging
 import os
 import json
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 # Try to import resend
 try:
@@ -20,7 +23,7 @@ try:
     RESEND_AVAILABLE = True
 except ImportError:
     RESEND_AVAILABLE = False
-    print("Warning: resend package not installed. Run: pip install resend")
+    _logger.warning("resend package not installed — run: pip install resend")
 
 
 class GraiderEmailer:
@@ -82,7 +85,7 @@ class GraiderEmailer:
 
         if os.name != 'nt':
             os.chmod(self.config_path, 0o600)
-        print("Email configuration saved!")
+        _logger.info("Email configuration saved to %s", self.config_path)
 
     def send_email(self, to_email: str, student_name: str, subject: str, body: str,
                    reply_to: str = None) -> bool:
@@ -100,11 +103,11 @@ class GraiderEmailer:
             True if successful
         """
         if not RESEND_AVAILABLE:
-            print("Resend package not installed. Run: pip install resend")
+            _logger.error("resend package not installed — cannot send email")
             return False
 
         if not self.resend_available:
-            print("Resend API key not configured. Add RESEND_API_KEY to .env")
+            _logger.error("RESEND_API_KEY not configured — cannot send email")
             return False
 
         try:
@@ -124,14 +127,14 @@ class GraiderEmailer:
             response = resend.Emails.send(params)
 
             if response and response.get('id'):
-                print(f"  Sent to {student_name} ({to_email})")
+                _logger.info("email sent to %s (%s)", student_name, to_email)
                 return True
             else:
-                print(f"  Failed to send to {to_email}: No response ID")
+                _logger.warning("email send failed for %s: no response ID from Resend", to_email)
                 return False
 
         except Exception as e:
-            print(f"  Failed to send to {to_email}: {e}")
+            _logger.exception("email send raised for %s: %s", to_email, e)
             return False
 
     def send_grade_email(self, student_info: dict, grade_result: dict,
@@ -147,7 +150,7 @@ class GraiderEmailer:
         """
         email = student_info.get('email', '')
         if not email:
-            print(f"  No email for {student_info.get('student_name', 'Unknown')}")
+            _logger.warning("no email on record for %s", student_info.get('student_name', 'Unknown'))
             return False
 
         first_name = student_info.get('first_name', 'Student').split()[0]
@@ -189,7 +192,7 @@ This email was sent by Graider (https://graider.live)
         Returns:
             Dict with sent/failed/skipped counts
         """
-        print(f"\nSending {len(grades)} grade emails...")
+        _logger.info("sending %d grade emails", len(grades))
 
         sent = 0
         failed = 0
@@ -225,27 +228,24 @@ This email was sent by Graider (https://graider.live)
             else:
                 failed += 1
 
-        print(f"\nEmail Summary:")
-        print(f"   Sent: {sent}")
-        print(f"   Failed: {failed}")
-        print(f"   Skipped (no email): {skipped}")
+        _logger.info("bulk email summary — sent: %d, failed: %d, skipped: %d", sent, failed, skipped)
 
         return {'sent': sent, 'failed': failed, 'skipped': skipped}
 
     def test_connection(self, test_email: str = None) -> bool:
         """Test the email configuration by sending a test email."""
         if not RESEND_AVAILABLE:
-            print("Resend package not installed.")
+            _logger.error("resend package not installed — cannot test connection")
             return False
 
         if not self.resend_available:
-            print("Resend API key not configured.")
+            _logger.error("RESEND_API_KEY not configured — cannot test connection")
             return False
 
         # Send to provided email or a test address
         to_email = test_email or "delivered@resend.dev"
 
-        print(f"Sending test email to {to_email}...")
+        _logger.info("sending test email to %s", to_email)
 
         return self.send_email(
             to_email,
@@ -276,9 +276,9 @@ if __name__ == "__main__":
     emailer = GraiderEmailer()
 
     if args.setup:
-        print("\nGraider Email Setup\n")
-        print("Emails will be sent from: noreply@graider.live")
-        print("Students can reply to your email address.\n")
+        print("\nGraider Email Setup\n")  # noqa: T201  # CLI-facing output
+        print("Emails will be sent from: noreply@graider.live")  # noqa: T201
+        print("Students can reply to your email address.\n")  # noqa: T201
 
         teacher = input("Your name (for email signature) [Your Teacher]: ").strip()
         if not teacher:
@@ -287,13 +287,13 @@ if __name__ == "__main__":
         teacher_email = input("Your email (for student replies): ").strip()
 
         emailer.save_config(teacher, teacher_email)
-        print("\nConfiguration saved!")
+        print("\nConfiguration saved!")  # noqa: T201
 
     elif args.test:
         if emailer.test_connection(args.test):
-            print("\nTest email sent successfully!")
+            print("\nTest email sent successfully!")  # noqa: T201
         else:
-            print("\nTest failed. Check your RESEND_API_KEY in .env")
+            print("\nTest failed. Check your RESEND_API_KEY in .env")  # noqa: T201
 
     else:
         parser.print_help()
