@@ -51,6 +51,7 @@ except ImportError:
 from backend.grading.state import _get_state, _get_lock, save_results
 from backend.services.rubric_formatting import format_rubric_for_prompt
 
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants copied byte-identical from backend/app.py (can't import because
@@ -180,7 +181,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                     total_chars += len(content[:2000])
 
             except Exception as e:
-                print(f"Error loading document: {e}")
+                _logger.error("Error loading document: %s", e)
                 continue
 
     if not docs_content:
@@ -212,17 +213,17 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
     # Log global AI notes status
     if global_ai_notes:
         preview = global_ai_notes[:100].replace('\n', ' ')
-        print(f"[GRADING] Global AI Instructions received: {len(global_ai_notes)} chars - \"{preview}...\"")
+        _logger.info("[GRADING] Global AI Instructions received: %d chars - \"%s...\"", len(global_ai_notes), preview)
     else:
-        print("[GRADING] No Global AI Instructions provided")
+        _logger.info("[GRADING] No Global AI Instructions provided")
 
     # Format rubric and log status
     rubric_prompt = format_rubric_for_prompt(rubric)
     if rubric_prompt:
-        print(f"[GRADING] Custom rubric loaded: {len(rubric.get('categories', []))} categories")
+        _logger.info("[GRADING] Custom rubric loaded: %d categories", len(rubric.get('categories', [])))
         grading_state["log"].append(f"📋 Using custom rubric ({len(rubric.get('categories', []))} categories)")
     else:
-        print("[GRADING] No custom rubric - using default")
+        _logger.info("[GRADING] No custom rubric - using default")
 
     # Build rubric_weights list for score aggregation
     # The breakdown always has 4 categories in order: content_accuracy, completeness, writing_quality, effort_engagement
@@ -236,7 +237,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         if len(weights) == 4 and weights != default_weights:
             rubric_weights = weights
             cat_names = [cat.get('name', '') for cat in cats]
-            print(f"[GRADING] Custom rubric weights: {list(zip(cat_names, weights))}")
+            _logger.info("[GRADING] Custom rubric weights: %s", list(zip(cat_names, weights)))
 
     # Load ALL saved assignment configs for auto-matching
     all_configs = {}
@@ -774,10 +775,10 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                                        "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
 
                 # Match assignment config
-                print(f"  🔍 Matching config for: {filepath.name}")
-                print(f"  🔍 Available configs: {list(all_configs.keys())}")
+                _logger.debug("  Matching config for: %s", filepath.name)
+                _logger.debug("  Available configs: %s", list(all_configs.keys()))
                 matched_config = find_matching_config(filepath.name)
-                print(f"  🔍 Match result: {'FOUND - ' + matched_config.get('title', '?') if matched_config else 'NONE'}")
+                _logger.debug("  Match result: %s", ('FOUND - ' + matched_config.get('title', '?')) if matched_config else 'NONE')
                 if not matched_config:
                     try:
                         temp_file_data = read_assignment_file(filepath)
@@ -797,8 +798,8 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                     file_exclude_markers = matched_config.get('excludeMarkers', [])
                     file_notes = matched_config.get('gradingNotes', '')
                     file_sections = matched_config.get('responseSections', [])
-                    print(f"  ✅ Config matched: {matched_config.get('title', '?')}")
-                    print(f"  ✅ Grading notes: {len(file_notes)} chars, LENIENT={'YES' if 'LENIENT' in file_notes.upper() else 'NO'}")
+                    _logger.info("  Config matched: %s", matched_config.get('title', '?'))
+                    _logger.info("  Grading notes: %d chars, LENIENT=%s", len(file_notes), 'YES' if 'LENIENT' in file_notes.upper() else 'NO')
                     matched_title = matched_config.get('title', 'Unknown')
                     is_completion_only = matched_config.get('completionOnly', False)
                     imported_doc = matched_config.get('importedDoc') or {}
@@ -858,10 +859,10 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                 if rubric_type == 'standard':
                     if 'fill in the blank' in filename_lower or 'fill in blank' in filename_lower or 'fillintheblank' in filename_lower.replace(' ', ''):
                         rubric_type = 'fill-in-blank'
-                        print(f"  ✓ Auto-detected Fill-in-the-Blank from filename")
+                        _logger.info("  Auto-detected Fill-in-the-Blank from filename")
                     elif 'cornell notes' in filename_lower or 'cornellnotes' in filename_lower.replace(' ', ''):
                         rubric_type = 'cornell-notes'
-                        print(f"  ✓ Auto-detected Cornell Notes from filename")
+                        _logger.info("  Auto-detected Cornell Notes from filename")
 
                 # Get student's period - try exact match first, then fuzzy match
                 student_name_lower = student_info['student_name'].lower()
@@ -920,10 +921,10 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                 # Build AI notes
                 file_ai_notes = global_ai_notes
                 if global_ai_notes:
-                    print(f"  ✓ Applying Global AI Instructions ({len(global_ai_notes)} chars)")
+                    _logger.info("  Applying Global AI Instructions (%d chars)", len(global_ai_notes))
                 if file_notes:
                     file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
-                    print(f"  ✓ Applying Assignment-Specific Notes ({len(file_notes)} chars)")
+                    _logger.info("  Applying Assignment-Specific Notes (%d chars)", len(file_notes))
 
                 # Inject correction patterns (learn from teacher edits)
                 try:
@@ -939,9 +940,9 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                     )
                     if _correction_ctx:
                         file_ai_notes += "\n\n" + _correction_ctx
-                        print(f"  ✓ Applying Correction Patterns ({len(_correction_ctx)} chars)")
+                        _logger.info("  Applying Correction Patterns (%d chars)", len(_correction_ctx))
                 except Exception as e:
-                    print(f"  ! Correction patterns skipped: {e}")
+                    _logger.warning("  Correction patterns skipped: %s", e)
 
                 # Inject model answers from config (if generated)
                 model_answers = matched_config.get('modelAnswers', {}) if matched_config else {}
@@ -950,7 +951,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                     for section_name, answer_text in model_answers.items():
                         ma_lines.append(f"- {section_name}: {answer_text}")
                     file_ai_notes += "\n".join(ma_lines)
-                    print(f"  ✓ Applying Model Answers ({len(model_answers)} sections)")
+                    _logger.info("  Applying Model Answers (%d sections)", len(model_answers))
 
                     # Detect fill-in-the-blank assignments and add special rubric override
                     # Use specific phrases to avoid false positives (e.g., "fill in the Cornell Notes")
@@ -973,7 +974,7 @@ CRITICAL GRADING RULES FOR FILL-IN-THE-BLANK:
 - A student who fills in all blanks with mostly correct answers should get 90+
 - Minor typos like "rebelion" for "rebellion" = FULL CREDIT
 """
-                        print(f"  ✓ Fill-in-the-blank detected - applying lenient grading override")
+                        _logger.info("  Fill-in-the-blank detected - applying lenient grading override")
 
                 # Apply assignment-specific rubric type (overrides global rubric)
                 if rubric_type and rubric_type != 'standard':
@@ -991,7 +992,7 @@ CRITICAL RULES:
 - Accept synonyms and reasonable variations
 - A student who fills in all blanks with mostly correct answers = 90+
 """
-                        print(f"  ✓ Rubric Type: Fill-in-the-Blank")
+                        _logger.info("  Rubric Type: Fill-in-the-Blank")
                     elif rubric_type == 'essay':
                         file_ai_notes += """
 
@@ -1004,7 +1005,7 @@ Use these categories:
 
 Grade writing quality more strictly than fill-in-blank, but still be encouraging.
 """
-                        print(f"  ✓ Rubric Type: Essay/Written Response")
+                        _logger.info("  Rubric Type: Essay/Written Response")
                     elif rubric_type == 'cornell-notes':
                         file_ai_notes += """
 
@@ -1017,7 +1018,7 @@ Use these categories:
 
 Look for: main ideas captured, good questions, clear summary at bottom.
 """
-                        print(f"  ✓ Rubric Type: Cornell Notes")
+                        _logger.info("  Rubric Type: Cornell Notes")
                     elif rubric_type == 'custom' and custom_rubric:
                         rubric_text = "ASSIGNMENT RUBRIC TYPE: CUSTOM\nUse these categories ONLY:\n"
                         for cat in custom_rubric:
@@ -1025,7 +1026,7 @@ Look for: main ideas captured, good questions, clear summary at bottom.
                             weight = cat.get('weight', 0)
                             rubric_text += f"- {name} ({weight}%)\n"
                         file_ai_notes += f"\n{rubric_text}"
-                        print(f"  ✓ Rubric Type: Custom ({len(custom_rubric)} categories)")
+                        _logger.info("  Rubric Type: Custom (%d categories)", len(custom_rubric))
 
                 # Add accommodation prompt if student has IEP/504
                 if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
@@ -1158,7 +1159,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                             "5. End with encouragement about their growth mindset and willingness to revise\n"
                         )
                         file_ai_notes += resub_context
-                        print(f"  🔄 Injected resubmission context (prev score: {prev_score})")
+                        _logger.info("  Injected resubmission context (prev score: %s)", prev_score)
 
                 # Read file
                 file_data = read_assignment_file(filepath)
@@ -1194,15 +1195,15 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 # Check if student is trusted (skip AI/plagiarism detection)
                 student_id = student_info.get('student_id', '')
                 # Debug: Show what we're checking
-                print(f"  🔍 Checking trust: student_id='{student_id}', trusted_list={trusted_students}")
+                _logger.debug("  Checking trust: student_id='%s', trusted_list=%s", student_id, trusted_students)
                 is_trusted = trusted_students and student_id in trusted_students
                 if is_trusted:
-                    print(f"  🛡️ Trusted student - skipping AI/copy detection")
+                    _logger.info("  Trusted student - skipping AI/copy detection")
 
                 # FITB: Skip AI/plagiarism detection - answers are factual, not creative writing
                 is_fitb = rubric_type == 'fill-in-blank'
                 if is_fitb:
-                    print(f"  📝 FITB assignment - skipping AI/copy detection")
+                    _logger.info("  FITB assignment - skipping AI/copy detection")
 
                 # Skip detection for trusted students or FITB assignments
                 skip_detection = is_trusted or is_fitb
@@ -1212,7 +1213,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 if rubric_type == 'custom' and custom_rubric and len(custom_rubric) == 4:
                     file_rubric_weights = [cat.get('weight', 0) for cat in custom_rubric]
                     if file_rubric_weights != [40, 25, 20, 15]:
-                        print(f"  📊 Using per-assignment custom rubric weights: {file_rubric_weights}")
+                        _logger.info("  Using per-assignment custom rubric weights: %s", file_rubric_weights)
                     else:
                         file_rubric_weights = None  # Default weights, no override needed
 
