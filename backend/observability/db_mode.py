@@ -2,32 +2,16 @@
 database access mode and authenticated identity source. Used to
 measure traffic splits before and after the USE_PER_USER_JWT flag flip.
 
-IMPORTANT — logging formatter compatibility: Graider's production
-JsonFormatter (backend/utils/logging_utils.py) emits only
-timestamp/level/logger/request_id/message/exception and drops any
-``extra={...}`` keys passed to logging calls. Sentry uses
-FlaskIntegration + CeleryIntegration only; no LoggingIntegration, so
-extras don't flow to Sentry either.
-
-Rather than changing the formatter (broad blast radius for a narrow
-need), this module emits its fields as a JSON object embedded in the
-log MESSAGE body. BetterStack and other aggregators parse
-JSON-in-message and index the fields; the existing JsonFormatter
-preserves the message as-is.
-
-Trade-off: the message contains JSON-shaped text rather than a
-human-readable sentence. Acceptable for a programmatic observability
-event like db_mode; not a pattern to spread to every log line.
+Uses backend.observability.events.emit() to serialize structured fields
+as JSON inside the log message (for machine parsing by BetterStack, etc.).
 """
 from __future__ import annotations
 
-import json
-import logging
 import os
 
 from flask import Flask, g, request, session
 
-_logger = logging.getLogger("backend.db_mode")
+from backend.observability.events import emit
 
 
 def _classify_auth_source() -> str:
@@ -62,15 +46,13 @@ def register(app: Flask) -> None:
     @app.after_request
     def _log_db_mode(response):
         if request.path.startswith("/api/"):
-            event = {
-                "event": "request.db_mode",
-                "path": request.path,
-                "method": request.method,
-                "status": response.status_code,
-                "auth_source": _classify_auth_source(),
-                "db_mode": _classify_db_mode(),
-                "user_id": getattr(g, "user_id", None),
-            }
-            # JSON-in-message because JsonFormatter drops extras.
-            _logger.info(json.dumps(event, default=str))
+            emit(
+                "request.db_mode",
+                path=request.path,
+                method=request.method,
+                status=response.status_code,
+                auth_source=_classify_auth_source(),
+                db_mode=_classify_db_mode(),
+                user_id=getattr(g, "user_id", None),
+            )
         return response
