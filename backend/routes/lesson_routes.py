@@ -10,11 +10,6 @@ import logging
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 
-try:
-    import anthropic
-except ImportError:
-    anthropic = None
-
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
@@ -459,13 +454,15 @@ def parse_document_for_calendar():
     )
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        message = with_retry(lambda: client.messages.create(
+        from backend.services.llm_adapter import AnthropicAdapter, LLMRequest, Message, TextPart
+        adapter = AnthropicAdapter(api_key=api_key)
+        message = adapter.chat(LLMRequest(
             model="claude-sonnet-4-20250514",
             max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        ), label="lesson_calendar_extract_anthropic")
-        response_text = message.content[0].text.strip()
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            metadata={"feature_label": "lesson_calendar_extract"},
+        ))
+        response_text = (message.content_parts[0].text if message.content_parts else "").strip()
 
         # Strip markdown code fences if present
         if response_text.startswith('```'):

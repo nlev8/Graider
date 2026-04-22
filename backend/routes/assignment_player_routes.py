@@ -20,7 +20,6 @@ import time
 from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
-from backend.retry import with_retry
 
 _logger = logging.getLogger(__name__)
 from pathlib import Path
@@ -329,38 +328,38 @@ def _vision_ocr_fallback(image_data, question_text, subject):
     Fallback for non-STEM subjects or when Mathpix fails.
     """
     try:
-        from openai import OpenAI
         from backend.api_keys import get_api_key
+        from backend.services.llm_adapter import (
+            ImagePart, LLMRequest, Message, OpenAIAdapter, TextPart,
+        )
         api_key = get_api_key('openai', getattr(g, 'user_id', 'local-dev'))
         if not api_key:
             return {'extracted_text': '', 'confidence': 0, 'error': 'No OpenAI API key'}
-
-        client = OpenAI(api_key=api_key)
 
         # Ensure proper data URI format
         if not image_data.startswith('data:'):
             image_data = f"data:image/png;base64,{image_data}"
 
-        response = with_retry(lambda: client.chat.completions.create(
+        adapter = OpenAIAdapter(api_key=api_key)
+        # OpenAIAdapter.chat() already wraps the network call in with_retry;
+        # calling with_retry here too would stack retries and amplify rate-limit
+        # failures. Call adapter.chat directly.
+        resp = adapter.chat(LLMRequest(
             model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an OCR assistant. Read the handwritten student work in the image and transcribe it exactly as written. For math expressions, use LaTeX notation. For regular text, transcribe plainly. Only output the transcribed content, nothing else."
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": f"Read and transcribe the student's handwritten answer to this question: {question_text}"},
-                        {"type": "image_url", "image_url": {"url": image_data, "detail": "high"}},
-                    ]
-                }
-            ],
+            system_prompt="You are an OCR assistant. Read the handwritten student work in the image and transcribe it exactly as written. For math expressions, use LaTeX notation. For regular text, transcribe plainly. Only output the transcribed content, nothing else.",
+            messages=[Message(
+                role="user",
+                content=[
+                    TextPart(text=f"Read and transcribe the student's handwritten answer to this question: {question_text}"),
+                    ImagePart(url=image_data, base64=None, mime_type="image/png"),
+                ],
+            )],
             max_tokens=1000,
             temperature=0,
-        ), label="player_ocr_gpt4o_vision")
+            metadata={"feature_label": "player_ocr_gpt4o_vision"},
+        ))
 
-        text = response.choices[0].message.content.strip()
+        text = resp.content_parts[0].text.strip() if resp.content_parts else ""
         return {
             'extracted_text': text,
             'latex': '',

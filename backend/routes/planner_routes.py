@@ -18,11 +18,6 @@ from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.retry import with_retry
 
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
-
 ALLOWED_DOC_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf', '.png', '.jpg', '.jpeg'}
 
 # Import MODEL_PRICING for token cost tracking
@@ -84,20 +79,15 @@ _PYTHAGOREAN_RE = _re.compile(
 
 
 def _get_openai_context():
-    """Extract user_id + OpenAI client for the post-processing pipeline.
+    """Extract user_id for the post-processing pipeline.
 
-    Pulls user_id from Flask g and instantiates the OpenAI client from the
-    caller's configured API key. Returns (None, None) on any failure so
-    the pipeline runs deterministically and silently skips AI auto-fix.
+    Returns (user_id, None) — the client slot is kept for call-site
+    compatibility but is no longer used now that _auto_fix_flagged_questions
+    builds its own LLM adapter internally.
     """
     try:
-        from openai import OpenAI
-        from backend.api_keys import get_api_key
         user_id = getattr(g, 'user_id', 'local-dev')
-        api_key = get_api_key('openai', user_id)
-        if not api_key or api_key.startswith('your-'):
-            return None, None
-        return user_id, OpenAI(api_key=api_key)
+        return user_id, None
     except Exception as e:
         _logger.warning("OpenAI context unavailable (non-fatal): %s", e)
         return None, None
@@ -426,15 +416,15 @@ def align_document_to_standards():
         })
 
     try:
-        from openai import OpenAI
         from backend.api_keys import get_api_key as _gak
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         teacher_id = getattr(g, 'user_id', 'local-dev')
         api_key = _gak('openai', teacher_id)
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             return jsonify({"error": "Missing or placeholder OpenAI API Key"})
 
-        client = OpenAI(api_key=api_key)
+        adapter = OpenAIAdapter(api_key=api_key)
 
         # Truncate document to fit in context with standards
         truncated_doc = doc_text[:8000]
@@ -460,20 +450,16 @@ def align_document_to_standards():
             }
         })
 
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.3,
-            ),
-            label="align_document_to_standards",
-        )
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt=system_prompt,
+            messages=[Message(role="user", content=[TextPart(text=user_prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            temperature=0.3,
+            metadata={"feature_label": "align_document_to_standards"},
+        ))
 
-        raw_content = completion.choices[0].message.content
+        raw_content = completion.content_parts[0].text if completion.content_parts else "{}"
         try:
             result = json.loads(raw_content)
         except json.JSONDecodeError:
@@ -525,15 +511,15 @@ def rewrite_for_alignment():
         })
 
     try:
-        from openai import OpenAI
         from backend.api_keys import get_api_key as _gak
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         teacher_id = getattr(g, 'user_id', 'local-dev')
         api_key = _gak('openai', teacher_id)
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             return jsonify({"error": "Missing or placeholder OpenAI API Key"})
 
-        client = OpenAI(api_key=api_key)
+        adapter = OpenAIAdapter(api_key=api_key)
 
         system_prompt = (
             f"You are an expert curriculum specialist for grade {grade} {subject}. "
@@ -552,20 +538,16 @@ def rewrite_for_alignment():
             }
         })
 
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.3,
-            ),
-            label="rewrite_for_alignment",
-        )
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o-mini",
+            system_prompt=system_prompt,
+            messages=[Message(role="user", content=[TextPart(text=user_prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            temperature=0.3,
+            metadata={"feature_label": "rewrite_for_alignment"},
+        ))
 
-        raw_content = completion.choices[0].message.content
+        raw_content = completion.content_parts[0].text if completion.content_parts else "{}"
         try:
             result = json.loads(raw_content)
         except json.JSONDecodeError:
@@ -647,15 +629,15 @@ def brainstorm_lesson_ideas():
             f"Brainstorm requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
 
     try:
-        from openai import OpenAI
         from backend.api_keys import get_api_key
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
 
         api_key = get_api_key('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
 
-        client = OpenAI(api_key=api_key)
+        adapter = OpenAIAdapter(api_key=api_key)
 
         # Load support documents for context
         support_docs = load_support_documents_for_planning()
@@ -771,19 +753,15 @@ Return JSON with this structure:
 
 Make each idea distinct - vary the approaches (hands-on activities, discussions, projects, simulations, research, collaborative work, technology integration, primary source analysis, games/competitions). Be creative and specific to the content."""
 
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
-            ),
-            label="brainstorm_lesson_ideas",
-        )
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert curriculum developer. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            metadata={"feature_label": "brainstorm_lesson_ideas"},
+        ))
 
-        content = completion.choices[0].message.content
+        content = completion.content_parts[0].text if completion.content_parts else "{}"
         ideas = json.loads(content)
         usage = _extract_usage(completion, "gpt-4o")
         _record_planner_cost(usage)
@@ -827,16 +805,14 @@ def generate_lesson_plan():
             f"Lesson plan requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
 
     try:
-        from openai import OpenAI
-        from dotenv import load_dotenv
-
         from backend.api_keys import get_api_key as _gak
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         api_key = _gak('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
 
-        client = OpenAI(api_key=api_key)
+        adapter = OpenAIAdapter(api_key=api_key)
 
         period_length = config.get('periodLength', 50)
         content_type = config.get('type', 'Lesson Plan')
@@ -1205,24 +1181,20 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
             for approach_name, approach_desc in approaches:
                 variation_prompt = prompt + f"\n\nIMPORTANT: Use a {approach_name} approach. {approach_desc}"
 
-                completion = with_retry(
-                    lambda: client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
-                            {"role": "user", "content": variation_prompt}
-                        ],
-                        response_format={"type": "json_object"}
-                    ),
-                    label="generate_lesson_plan_variation",
-                )
+                completion = adapter.chat(LLMRequest(
+                    model="gpt-4o",
+                    system_prompt="You are an expert curriculum developer. Return valid JSON only.",
+                    messages=[Message(role="user", content=[TextPart(text=variation_prompt)])],
+                    response_format=ResponseFormat(type="json_object"),
+                    metadata={"feature_label": "generate_lesson_plan_variation"},
+                ))
 
                 u = _extract_usage(completion, "gpt-4o")
                 if u:
                     for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
                         total_usage[k] += u[k]
 
-                content = completion.choices[0].message.content
+                content = completion.content_parts[0].text if completion.content_parts else "{}"
                 plan = json.loads(content)
                 if content_type == 'Assignment':
                     target_q = config.get('totalQuestions', 10)
@@ -1248,19 +1220,15 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
             return jsonify({"variations": variations, "method": "AI", "usage": total_usage})
 
         # Single plan generation
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert curriculum developer. Return valid JSON only."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
-            ),
-            label="generate_lesson_plan",
-        )
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert curriculum developer. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            metadata={"feature_label": "generate_lesson_plan"},
+        ))
 
-        content = completion.choices[0].message.content
+        content = completion.content_parts[0].text if completion.content_parts else "{}"
         plan = json.loads(content)
 
         if content_type == 'Assignment':
@@ -1496,16 +1464,14 @@ def generate_assignment_from_lesson():
         return jsonify({"error": "No lesson plan provided"})
 
     try:
-        from openai import OpenAI
-        from dotenv import load_dotenv
-
         from backend.api_keys import get_api_key as _gak
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         api_key = _gak('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
 
-        client = OpenAI(api_key=api_key)
+        adapter = OpenAIAdapter(api_key=api_key)
 
         # Extract lesson details for context
         lesson_title = lesson_plan.get('title', 'Untitled Lesson')
@@ -1536,20 +1502,16 @@ def generate_assignment_from_lesson():
         # Check for essay/project — use dedicated prompts (no section categories)
         dedicated_prompt = _build_assignment_prompt(lesson_plan, config, assignment_type)
         if dedicated_prompt is not None:
-            completion = with_retry(
-                lambda: client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are an expert teacher. Return valid JSON only."},
-                        {"role": "user", "content": dedicated_prompt},
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.7,
-                ),
-                label="generate_essay_or_project",
-            )
+            completion = adapter.chat(LLMRequest(
+                model="gpt-4o",
+                system_prompt="You are an expert teacher. Return valid JSON only.",
+                messages=[Message(role="user", content=[TextPart(text=dedicated_prompt)])],
+                response_format=ResponseFormat(type="json_object"),
+                temperature=0.7,
+                metadata={"feature_label": "generate_essay_or_project"},
+            ))
 
-            content = completion.choices[0].message.content
+            content = completion.content_parts[0].text if completion.content_parts else "{}"
             result = json.loads(content)
 
             # Wrap essay/project in sections format for frontend compatibility
@@ -1913,19 +1875,15 @@ Make the questions specific to the lesson content. Include a variety of question
 
 """
 
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert teacher. Return valid JSON only."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
-            ),
-            label="generate_assignment_from_lesson",
-        )
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert teacher. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            metadata={"feature_label": "generate_assignment_from_lesson"},
+        ))
 
-        content = completion.choices[0].message.content
+        content = completion.content_parts[0].text if completion.content_parts else "{}"
         assignment = json.loads(content)
         target_q = config.get('totalQuestions', 10)
         _ctx_uid, _ctx_client = _get_openai_context()
@@ -3793,17 +3751,14 @@ def generate_assessment():
             f"Assessment requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
 
     try:
-        from openai import OpenAI
-        from dotenv import load_dotenv
-
-        app_dir = Path(__file__).parent.parent.parent
         from backend.api_keys import get_api_key as _gak
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         api_key = _gak('openai', getattr(g, 'user_id', 'local-dev'))
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             raise Exception("Missing or placeholder API Key")
 
-        client = OpenAI(api_key=api_key)
+        adapter = OpenAIAdapter(api_key=api_key)
 
         # Extract assessment configuration
         assessment_type = assessment_config.get('type', 'quiz')
@@ -4193,20 +4148,16 @@ Generate a complete assessment in this JSON format:
     }}
 }}"""
 
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert assessment developer. Create rigorous, standards-aligned assessments. Return valid JSON only."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.7
-            ),
-            label="generate_assessment",
-        )
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert assessment developer. Create rigorous, standards-aligned assessments. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            temperature=0.7,
+            metadata={"feature_label": "generate_assessment"},
+        ))
 
-        content = completion.choices[0].message.content
+        content = completion.content_parts[0].text if completion.content_parts else "{}"
         assessment = json.loads(content)
         _ctx_uid, _ctx_client = _get_openai_context()
         assessment, _ = _post_process_assignment(
@@ -5040,8 +4991,8 @@ def grade_assessment_answers():
         grading_usage = {"model": "gpt-4o-mini", "input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost": 0}
         if ai_grading_needed:
             try:
-                from openai import OpenAI
-                client = OpenAI()
+                from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+                _grade_adapter = OpenAIAdapter()
 
                 for item in ai_grading_needed:
                     q = item["question"]
@@ -5069,25 +5020,21 @@ Evaluate the student's response and provide:
 Respond in JSON format:
 {{"points_earned": <number>, "feedback": "<string>", "is_correct": <boolean>}}"""
 
-                    response = with_retry(
-                        lambda: client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=[
-                                {"role": "system", "content": "You are a fair and helpful teacher grading student work. Be encouraging but accurate. Provide constructive feedback."},
-                                {"role": "user", "content": grading_prompt}
-                            ],
-                            response_format={"type": "json_object"},
-                            max_tokens=300
-                        ),
-                        label="grade_assessment_answers",
-                    )
+                    response = _grade_adapter.chat(LLMRequest(
+                        model="gpt-4o-mini",
+                        system_prompt="You are a fair and helpful teacher grading student work. Be encouraging but accurate. Provide constructive feedback.",
+                        messages=[Message(role="user", content=[TextPart(text=grading_prompt)])],
+                        response_format=ResponseFormat(type="json_object"),
+                        max_tokens=300,
+                        metadata={"feature_label": "submit_assessment_ai_grading"},
+                    ))
 
                     u = _extract_usage(response, "gpt-4o-mini")
                     if u:
                         for k in ["input_tokens", "output_tokens", "total_tokens", "cost"]:
                             grading_usage[k] += u[k]
 
-                    ai_result = json.loads(response.choices[0].message.content)
+                    ai_result = json.loads(response.content_parts[0].text if response.content_parts else "{}")
                     q_result["points_earned"] = min(ai_result.get("points_earned", 0), points)
                     q_result["feedback"] = ai_result.get("feedback", "")
                     q_result["is_correct"] = ai_result.get("is_correct", False)
@@ -5153,9 +5100,9 @@ def regenerate_questions():
             f"Regenerate requested without subject/grade: subject={_subject!r}, grade={_grade!r}")
 
     try:
-        from openai import OpenAI
         from backend.api_keys import get_api_key as _gak
-        client = OpenAI(api_key=_gak('openai', getattr(g, 'user_id', 'local-dev')))
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+        adapter = OpenAIAdapter(api_key=_gak('openai', getattr(g, 'user_id', 'local-dev')))
 
         grade = config.get('grade', '')
         subject = config.get('subject', '')
@@ -5207,20 +5154,16 @@ For math questions, include step-by-step solution in the answer.
 
 Make questions grade-appropriate, clear, and assessable by AI grading systems."""
 
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert assessment developer. Generate high-quality assessment questions that are clear, unambiguous, and appropriate for AI-based grading. Always return valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.8,
-            ),
-            label="regenerate_questions",
-        )
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert assessment developer. Generate high-quality assessment questions that are clear, unambiguous, and appropriate for AI-based grading. Always return valid JSON.",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            temperature=0.8,
+            metadata={"feature_label": "regenerate_questions"},
+        ))
 
-        content = completion.choices[0].message.content
+        content = completion.content_parts[0].text if completion.content_parts else "{}"
         result = json.loads(content)
         new_questions = result.get('questions', [])
 
@@ -5313,25 +5256,21 @@ TEXT TO REWRITE:
 {text}"""
 
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a reading level adjustment specialist. Rewrite text at the requested grade level while preserving meaning and key terms. Always respond with valid JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.3,
-            ),
-            label="adjust_reading_level",
-        )
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+        adapter = OpenAIAdapter(api_key=api_key)
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are a reading level adjustment specialist. Rewrite text at the requested grade level while preserving meaning and key terms. Always respond with valid JSON.",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            temperature=0.3,
+            metadata={"feature_label": "adjust_reading_level"},
+        ))
 
         usage = _extract_usage(completion, "gpt-4o")
         _record_planner_cost(usage)
 
-        raw = completion.choices[0].message.content
+        raw = completion.content_parts[0].text if completion.content_parts else "{}"
         result = json.loads(raw)
 
         return jsonify({
@@ -5409,28 +5348,23 @@ def extract_text_from_file():
                     "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp"}.get(ext, "image/png")
             b64 = base64.b64encode(file_data).decode('utf-8')
 
-            from openai import OpenAI
-            client = OpenAI(api_key=api_key)
-            completion = with_retry(
-                lambda: client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary."},
-                        {"role": "user", "content": [
-                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-                            {"type": "text", "text": "Extract all text from this image."},
-                        ]},
-                    ],
-                    max_tokens=4000,
-                    temperature=0,
-                ),
-                label="extract_text_image",
-            )
+            from backend.services.llm_adapter import ImagePart, LLMRequest, Message, OpenAIAdapter, TextPart
+            adapter = OpenAIAdapter(api_key=api_key)
+            completion = adapter.chat(LLMRequest(
+                model="gpt-4o",
+                system_prompt="Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary.",
+                messages=[Message(role="user", content=[
+                    ImagePart(url=None, base64=b64, mime_type=mime),
+                    TextPart(text="Extract all text from this image."),
+                ])],
+                max_tokens=4000,
+                temperature=0,
+                metadata={"feature_label": "extract_text_image"},
+            ))
 
-            usage = _extract_usage(completion, "gpt-4o")
-            _record_planner_cost(usage)
+            _record_planner_cost(_extract_usage(completion, "gpt-4o"))
 
-            return jsonify({"text": completion.choices[0].message.content.strip()})
+            return jsonify({"text": (completion.content_parts[0].text if completion.content_parts else "").strip()})
 
         else:
             return jsonify({"error": "Unsupported file type. Use .docx, .pdf, .txt, .png, .jpg, or .jpeg"}), 400
@@ -5521,15 +5455,15 @@ def generate_study_guide():
 
     try:
         from backend.api_keys import get_api_key as _gak
-        genai.configure(api_key=_gak('gemini', user_id))
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        from backend.services.llm_adapter import GeminiAdapter, LLMRequest, Message, TextPart
+        adapter = GeminiAdapter(api_key=_gak('gemini', user_id))
+        response = adapter.chat(LLMRequest(
+            model="gemini-2.0-flash",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            metadata={"feature_label": "generate_study_guide"},
+        ))
 
-        response = with_retry(
-            lambda: model.generate_content(prompt),
-            label="generate_study_guide",
-        )
-
-        response_text = response.text.strip()
+        response_text = (response.content_parts[0].text if response.content_parts else "").strip()
         # Strip markdown code fences if present
         if response_text.startswith("```"):
             response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
@@ -5783,15 +5717,15 @@ def generate_flashcards():
 
     try:
         from backend.api_keys import get_api_key as _gak
-        genai.configure(api_key=_gak('gemini', user_id))
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        from backend.services.llm_adapter import GeminiAdapter, LLMRequest, Message, TextPart
+        adapter = GeminiAdapter(api_key=_gak('gemini', user_id))
+        response = adapter.chat(LLMRequest(
+            model="gemini-2.0-flash",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            metadata={"feature_label": "generate_flashcards"},
+        ))
 
-        response = with_retry(
-            lambda: model.generate_content(prompt),
-            label="generate_flashcards",
-        )
-
-        response_text = response.text.strip()
+        response_text = (response.content_parts[0].text if response.content_parts else "").strip()
         if response_text.startswith("```"):
             response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
         if response_text.endswith("```"):

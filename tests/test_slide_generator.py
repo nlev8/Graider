@@ -68,28 +68,33 @@ class TestGenerateSlideContent:
     def test_returns_structured_json(self):
         """Should return slide content with title, theme, and slides array."""
         from backend.services.slide_generator import generate_slide_content
+        from backend.services.llm_adapter.types import LLMResponse, TextPart, Usage
 
-        mock_resp = MagicMock()
-        mock_resp.text = json.dumps(SAMPLE_SLIDE_CONTENT)
+        mock_llm_resp = LLMResponse(
+            content_parts=[TextPart(text=json.dumps(SAMPLE_SLIDE_CONTENT))],
+            tool_calls=[],
+            usage=Usage(prompt_tokens=10, completion_tokens=5, cost_usd=0.0),
+            finish_reason="stop",
+            provider="gemini",
+            model="gemini-2.0-flash",
+        )
 
-        with patch('backend.services.slide_generator._get_genai_client') as mock_client:
+        with patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
             mock_model = MagicMock()
-            mock_model.generate_content.return_value = mock_resp
-            mock_client.return_value.models = mock_model
+            mock_model.generate_content.return_value = MagicMock(
+                text=json.dumps(SAMPLE_SLIDE_CONTENT),
+                candidates=[MagicMock(finish_reason=MagicMock(name="STOP"))],
+                usage_metadata=MagicMock(prompt_token_count=10, candidates_token_count=5),
+            )
+            mock_genai.GenerativeModel.return_value = mock_model
 
-            # Use the old SDK mock pattern since content gen uses text model
-            with patch('backend.services.slide_generator.genai') as mock_genai:
-                mock_genai_model = MagicMock()
-                mock_genai_model.generate_content.return_value = mock_resp
-                mock_genai.GenerativeModel.return_value = mock_genai_model
-
-                result = generate_slide_content(
-                    content="The Constitution establishes three branches...",
-                    subject="US History",
-                    grade="8",
-                    title="The Constitution",
-                    api_key="fake-key",
-                )
+            result = generate_slide_content(
+                content="The Constitution establishes three branches...",
+                subject="US History",
+                grade="8",
+                title="The Constitution",
+                api_key="fake-key",
+            )
 
         assert "slides" in result
         assert "theme" in result
@@ -266,12 +271,21 @@ class TestDeckFormat:
         """Detailed format prompt should mention full text and standalone."""
         from backend.services.slide_generator import generate_slide_content
 
-        mock_resp = MagicMock()
-        mock_resp.text = json.dumps(SAMPLE_SLIDE_CONTENT)
+        captured_prompt = []
 
-        with patch('backend.services.slide_generator.genai') as mock_genai:
+        def capture_generate_content(contents, generation_config=None, request_options=None):
+            # contents is a list of {"role": ..., "parts": [{"text": ...}]}
+            prompt_text = contents[0]["parts"][0]["text"] if contents else ""
+            captured_prompt.append(prompt_text)
+            return MagicMock(
+                text=json.dumps(SAMPLE_SLIDE_CONTENT),
+                candidates=[MagicMock(finish_reason=MagicMock(name="STOP"))],
+                usage_metadata=MagicMock(prompt_token_count=10, candidates_token_count=5),
+            )
+
+        with patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
             mock_model = MagicMock()
-            mock_model.generate_content.return_value = mock_resp
+            mock_model.generate_content.side_effect = capture_generate_content
             mock_genai.GenerativeModel.return_value = mock_model
 
             generate_slide_content(
@@ -279,19 +293,27 @@ class TestDeckFormat:
                 title="Test", api_key="fake", deck_format="detailed",
             )
 
-            call_args = mock_model.generate_content.call_args[0][0]
-            assert "DETAILED DECK" in call_args
+        assert captured_prompt, "generate_content was not called"
+        assert "DETAILED DECK" in captured_prompt[0]
 
     def test_presenter_format_includes_talking_points(self):
         """Presenter format prompt should mention key talking points."""
         from backend.services.slide_generator import generate_slide_content
 
-        mock_resp = MagicMock()
-        mock_resp.text = json.dumps(SAMPLE_SLIDE_CONTENT)
+        captured_prompt = []
 
-        with patch('backend.services.slide_generator.genai') as mock_genai:
+        def capture_generate_content(contents, generation_config=None, request_options=None):
+            prompt_text = contents[0]["parts"][0]["text"] if contents else ""
+            captured_prompt.append(prompt_text)
+            return MagicMock(
+                text=json.dumps(SAMPLE_SLIDE_CONTENT),
+                candidates=[MagicMock(finish_reason=MagicMock(name="STOP"))],
+                usage_metadata=MagicMock(prompt_token_count=10, candidates_token_count=5),
+            )
+
+        with patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
             mock_model = MagicMock()
-            mock_model.generate_content.return_value = mock_resp
+            mock_model.generate_content.side_effect = capture_generate_content
             mock_genai.GenerativeModel.return_value = mock_model
 
             generate_slide_content(
@@ -299,5 +321,5 @@ class TestDeckFormat:
                 title="Test", api_key="fake", deck_format="presenter",
             )
 
-            call_args = mock_model.generate_content.call_args[0][0]
-            assert "PRESENTER SLIDES" in call_args
+        assert captured_prompt, "generate_content was not called"
+        assert "PRESENTER SLIDES" in captured_prompt[0]

@@ -575,7 +575,6 @@ def export_focus_csv():
     Format: Student_ID,Score
     """
     import json
-    import anthropic
 
     data = request.json
     results = data.get('results', [])
@@ -751,7 +750,9 @@ def export_focus_csv():
     # --- Fall back to Claude AI for remaining unmatched ---
     if still_unmatched and roster_students and api_key:
         try:
-            client = anthropic.Anthropic(api_key=api_key)
+            from backend.services.llm_adapter import (
+                AnthropicAdapter, LLMRequest, Message, TextPart,
+            )
 
             prompt = f"""Match these student names from grading results to their Student IDs from the roster.
 Names may be misspelled, truncated, or in different order.
@@ -765,13 +766,14 @@ STUDENTS TO MATCH:
 Return ONLY a JSON object mapping each student name to their ID. If no match found, use "UNMATCHED".
 Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMATCHED"}}"""
 
-            message = with_retry(lambda: client.messages.create(
+            adapter = AnthropicAdapter(api_key=api_key)
+            message = adapter.chat(LLMRequest(
                 model="claude-sonnet-4-20250514",
                 max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}]
-            ), label="grading_fuzzy_match_anthropic")
-
-            response_text = message.content[0].text
+                messages=[Message(role="user", content=[TextPart(text=prompt)])],
+                metadata={"feature_label": "grading_fuzzy_match"},
+            ))
+            response_text = message.content_parts[0].text if message.content_parts else ""
             json_match = re_mod.search(r'\{[^{}]+\}', response_text, re_mod.DOTALL)
             if json_match:
                 matches = json.loads(json_match.group())

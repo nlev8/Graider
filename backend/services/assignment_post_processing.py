@@ -1869,9 +1869,10 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
     Uses gpt-4o-mini to review and fix problematic questions in a single batch.
     Only called when deterministic checks flag issues.
 
-    Pure service function — zero Flask coupling. Callers MUST pass `user_id`
-    and an OpenAI `client` instance. If either is missing, the function
-    silently returns (no auto-fix possible without AI context).
+    Pure service function — zero Flask coupling. Callers MUST pass `user_id`.
+    The `client` param is accepted for backward compatibility but no longer used;
+    the function builds an OpenAIAdapter internally from the user's API key.
+    If user_id is missing, the function silently returns.
     """
     # Collect questions with errors (not just warnings)
     error_items = [w for w in warnings if w['severity'] == 'error']
@@ -1879,7 +1880,18 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
         return  # Only auto-fix errors; warnings are shown to teacher
 
     # Without explicit context we cannot call the AI — silent return.
-    if user_id is None or client is None:
+    if user_id is None:
+        return
+
+    # Build adapter from user's API key (replaces the injected raw client).
+    try:
+        from backend.api_keys import get_api_key
+        from backend.services.llm_adapter import OpenAIAdapter
+        api_key = get_api_key('openai', user_id)
+        if not api_key or api_key.startswith('your-'):
+            return
+        _adapter = OpenAIAdapter(api_key=api_key)
+    except Exception:
         return
 
     # Build batch for AI review
@@ -1928,20 +1940,17 @@ Rules:
 - If flagged as off-subject, replace with an on-subject question for the correct standard
 - Return ONLY the JSON array, no other text"""
 
-        completion = with_retry(
-            lambda: client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You fix assessment questions. Return valid JSON only."},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.3,
-            ),
-            label="auto_fix_flagged_questions",
-        )
+        from backend.services.llm_adapter import LLMRequest, Message, ResponseFormat, TextPart
+        completion = _adapter.chat(LLMRequest(
+            model="gpt-4o-mini",
+            system_prompt="You fix assessment questions. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            temperature=0.3,
+            metadata={"feature_label": "auto_fix_flagged_questions", "user_id": user_id},
+        ))
 
-        content = completion.choices[0].message.content
+        content = completion.content_parts[0].text if completion.content_parts else "{}"
         result = json.loads(content)
         fixes = result if isinstance(result, list) else result.get('fixes', result.get('questions', []))
 
@@ -1965,7 +1974,18 @@ Rules:
             q['warning'] = f"Auto-fixed: {item['issue']}"
             q['warning_severity'] = 'info'
 
-        usage = _extract_usage(completion, "gpt-4o-mini")
+        # Build usage dict from LLMResponse.usage for cost tracking
+        u = completion.usage
+        pricing = MODEL_PRICING.get("gpt-4o-mini", {"input": 0, "output": 0})
+        cost = (u.prompt_tokens * pricing["input"] + u.completion_tokens * pricing["output"]) / 1_000_000
+        usage = {
+            "model": "gpt-4o-mini",
+            "input_tokens": u.prompt_tokens,
+            "output_tokens": u.completion_tokens,
+            "total_tokens": u.prompt_tokens + u.completion_tokens,
+            "cost": round(cost, 6),
+            "cost_display": f"${cost:.4f}",
+        }
         _record_planner_cost(usage)
 
     except Exception as e:
