@@ -99,7 +99,7 @@ def _get_openai_context():
             return None, None
         return user_id, OpenAI(api_key=api_key)
     except Exception as e:
-        print(f"OpenAI context unavailable (non-fatal): {e}")
+        _logger.warning("OpenAI context unavailable (non-fatal): %s", e)
         return None, None
 
 
@@ -477,7 +477,7 @@ def align_document_to_standards():
         try:
             result = json.loads(raw_content)
         except json.JSONDecodeError:
-            print(f"[align-standards] Non-JSON response: {raw_content[:500]}")
+            _logger.warning("[align-standards] Non-JSON response: %s", raw_content[:500])
             return jsonify({"error": "AI returned non-JSON response. Possibly rate limited."})
 
         usage = _extract_usage(completion, "gpt-4o")
@@ -569,7 +569,7 @@ def rewrite_for_alignment():
         try:
             result = json.loads(raw_content)
         except json.JSONDecodeError:
-            print(f"[rewrite-alignment] Non-JSON response: {raw_content[:500]}")
+            _logger.warning("[rewrite-alignment] Non-JSON response: %s", raw_content[:500])
             return jsonify({"error": "AI returned non-JSON response. Possibly rate limited."})
 
         usage = _extract_usage(completion, "gpt-4o-mini")
@@ -791,7 +791,7 @@ Make each idea distinct - vary the approaches (hands-on activities, discussions,
 
     except Exception as e:
         error_msg = str(e)
-        print(f"Brainstorm Error: {error_msg}")
+        _logger.error("Brainstorm Error: %s", error_msg)
         # Fallback mock ideas
         mock_ideas = {
             "ideas": [
@@ -1286,7 +1286,7 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
 
     except Exception as e:
         error_msg = str(e)
-        print(f"OpenAI API Error: {error_msg}. Falling back to Mock Mode.")
+        _logger.warning("OpenAI API Error: %s. Falling back to Mock Mode.", error_msg)
 
         # Fallback Mock Plan
         content_type = config.get('type', 'Unit Plan')
@@ -1942,7 +1942,7 @@ Make the questions specific to the lesson content. Include a variety of question
 
     except Exception as e:
         error_msg = str(e)
-        print(f"Assignment Generation Error: {error_msg}")
+        _logger.error("Assignment Generation Error: %s", error_msg)
 
         # Detect network-blocked AI provider
         error_lower = error_msg.lower()
@@ -2315,9 +2315,9 @@ def _save_grading_config_for_export(assignment):
             except Exception:
                 pass  # Local save succeeded, Supabase is best-effort
 
-        print(f"Saved grading config: {config_path}")
+        _logger.info("Saved grading config: %s", config_path)
     except Exception as e:
-        print(f"Warning: Could not save grading config: {e}")
+        _logger.warning("Could not save grading config: %s", e)
 
 
 def _question_to_visual_dict(q):
@@ -2496,7 +2496,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
 
                     _embed_visual(doc, visual_dict)
                 except Exception as e:
-                    print(f"Warning: Could not embed visual for Q{q_number}: {e}")
+                    _logger.warning("Could not embed visual for Q%s: %s", q_number, e)
 
             # Inject True/False options if missing for TF questions
             if not q_options and q_type in ('true_false', 'tf'):
@@ -3722,7 +3722,7 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
         return Image(buf, width=target_width, height=target_height)
 
     except Exception as e:
-        print(f"Error creating visual: {e}")
+        _logger.error("Error creating visual: %s", e)
         return None
 
 
@@ -4241,7 +4241,7 @@ Generate a complete assessment in this JSON format:
 
     except Exception as e:
         error_msg = str(e)
-        print(f"Assessment Generation Error: {error_msg}")
+        _logger.error("Assessment Generation Error: %s", error_msg)
         return jsonify({"error": f"Failed to generate assessment: {error_msg}"}), 500
 
 
@@ -5095,7 +5095,7 @@ Respond in JSON format:
                     results["questions"][item["index"]] = q_result
 
             except Exception as e:
-                print(f"AI grading error: {e}")
+                _logger.error("AI grading error: %s", e)
                 # Fall back to basic comparison for failed AI grading
                 for item in ai_grading_needed:
                     q_result = item["result"]
