@@ -45,6 +45,24 @@ from backend.services.assistant_tools import (
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 import sentry_sdk
 
+from backend.services.llm_adapter import (
+    AnthropicAdapter,
+    GeminiAdapter,
+    OpenAIAdapter,
+    LLMRequest,
+    Message,
+    TextPart,
+    ImagePart,
+    ToolUsePart,
+    ToolResultPart,
+    ToolDef,
+    TextDelta,
+    ToolCallDelta,
+    ToolCallComplete,
+    UsageEvent,
+    FinishEvent,
+)
+
 # Import storage abstraction for per-teacher credential isolation
 try:
     from backend.storage import load as storage_load, save as storage_save
@@ -190,6 +208,112 @@ def _convert_tools_for_gemini(anthropic_tools):
             }
         ))
     return declarations
+
+def _wire_messages_to_llm_messages(wire_messages: list) -> list[Message]:
+    """Convert the route's Anthropic-wire-format message dicts to typed Message objects.
+
+    The conversation store uses Anthropic wire format throughout (tool_use /
+    tool_result blocks in content lists). This function maps those to the
+    adapter layer's LLMRequest.Message typed objects so all three adapters
+    can use the same LLMRequest.
+    """
+    result: list[Message] = []
+    for msg in wire_messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        if isinstance(content, str):
+            result.append(Message(role=role, content=[TextPart(text=content)]))
+            continue
+
+        # content is a list of blocks
+        parts = []
+        tool_result_parts = []
+
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type", "")
+
+            if btype == "text":
+                parts.append(TextPart(text=block.get("text", "")))
+
+            elif btype == "image":
+                src = block.get("source", {})
+                if src.get("type") == "base64":
+                    parts.append(ImagePart(
+                        url=None,
+                        base64=src.get("data", ""),
+                        mime_type=src.get("media_type", "image/png"),
+                    ))
+                else:
+                    parts.append(ImagePart(
+                        url=src.get("url", ""),
+                        base64=None,
+                        mime_type=src.get("media_type", "image/png"),
+                    ))
+
+            elif btype == "tool_use":
+                # Assistant message with a tool call
+                parts.append(ToolUsePart(
+                    tool_call_id=block.get("id", ""),
+                    name=block.get("name", ""),
+                    args=block.get("input", {}),
+                ))
+
+            elif btype == "tool_result":
+                # User message carrying tool results — collected separately
+                result_content = block.get("content", "")
+                if isinstance(result_content, list):
+                    # Sometimes content is a list of text blocks
+                    result_content = " ".join(
+                        b.get("text", "") for b in result_content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    )
+                tool_result_parts.append(ToolResultPart(
+                    tool_call_id=block.get("tool_use_id", ""),
+                    content=result_content,
+                ))
+
+        if tool_result_parts:
+            # Tool result messages: one Message per result, role="tool"
+            for trp in tool_result_parts:
+                result.append(Message(
+                    role="tool",
+                    content=[trp],
+                    tool_call_id=trp.tool_call_id,
+                ))
+        elif parts:
+            result.append(Message(role=role, content=parts))
+
+    return result
+
+
+def _build_llm_request(
+    model: str,
+    messages: list,
+    system_prompt: str,
+    tools: list,
+    max_tokens: int,
+) -> LLMRequest:
+    """Build a typed LLMRequest from Anthropic-wire-format route data."""
+    typed_messages = _wire_messages_to_llm_messages(messages)
+    typed_tools = [
+        ToolDef(
+            name=t["name"],
+            description=t.get("description", ""),
+            input_schema=t.get("input_schema", {"type": "object", "properties": {}}),
+        )
+        for t in tools
+    ]
+    return LLMRequest(
+        model=model,
+        messages=typed_messages,
+        system_prompt=system_prompt,
+        tools=typed_tools,
+        max_tokens=max_tokens,
+    )
+
 
 # In-memory conversation store {session_id: {"messages": [...], "last_active": timestamp}}
 conversations = {}
@@ -1455,206 +1579,69 @@ def assistant_chat():
                 # Ensure all submodule tools are registered before passing to API
                 _merge_submodules()
 
-                # ── ANTHROPIC STREAMING ──
+                # ── ADAPTER STREAMING (all providers) ──
+                llm_req = _build_llm_request(
+                    model=active_model,
+                    messages=messages,
+                    system_prompt=system_prompt,
+                    tools=TOOL_DEFINITIONS,
+                    max_tokens=MAX_TOKENS,
+                )
+
                 if active_provider == "anthropic":
-                    client = anthropic.Anthropic(api_key=api_key)
-                    with client.messages.stream(
-                        model=active_model,
-                        max_tokens=MAX_TOKENS,
-                        system=system_prompt,
-                        messages=messages,
-                        tools=TOOL_DEFINITIONS
-                    ) as stream:
-                        for event in stream:
-                            if session_id in cancelled_sessions:
-                                break
-                            if event.type == "content_block_start":
-                                if hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
-                                    tool_use_blocks.append({
-                                        "id": event.content_block.id,
-                                        "name": event.content_block.name,
-                                        "input_json": ""
-                                    })
-                                    # Defer tool_start until after TTS flush so voice finishes its sentence
-                                    deferred_tool_starts.append({'type': 'tool_start', 'tool': event.content_block.name, 'id': event.content_block.id})
-                            elif event.type == "content_block_delta":
-                                if hasattr(event.delta, 'text'):
-                                    full_response_text += event.delta.text
-                                    yield f"data: {json.dumps({'type': 'text_delta', 'content': event.delta.text})}\n\n"
-                                    if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
-                                        for sent in sentence_buffer.add(event.delta.text):
-                                            text_to_speak = sent + " "
-                                            tts_stream.send_text(text_to_speak)
-                                            total_tts_chars += len(text_to_speak)
-                                elif hasattr(event.delta, 'partial_json'):
-                                    if tool_use_blocks:
-                                        tool_use_blocks[-1]["input_json"] += event.delta.partial_json
-                            yield from _flush_audio_queue()
-
-                    try:
-                        final_msg = stream.get_final_message()
-                        if final_msg and hasattr(final_msg, 'usage') and final_msg.usage:
-                            total_input_tokens += final_msg.usage.input_tokens or 0
-                            total_output_tokens += final_msg.usage.output_tokens or 0
-                    except Exception:
-                        pass
-
-                # ── OPENAI STREAMING ──
+                    _stream_adapter = AnthropicAdapter(api_key=api_key)
                 elif active_provider == "openai":
-                    oai_client = openai_pkg.OpenAI(api_key=api_key)
-                    oai_messages = _convert_messages_for_openai(messages, system_prompt)
-                    oai_tools = _convert_tools_for_openai(TOOL_DEFINITIONS)
-
-                    stream = oai_client.chat.completions.create(
-                        model=active_model,
-                        messages=oai_messages,
-                        tools=oai_tools,
-                        max_tokens=MAX_TOKENS,
-                        stream=True
-                    )
-
-                    # Accumulate tool call deltas by index
-                    pending_tool_calls = {}  # index -> {id, name, arguments}
-                    for chunk in stream:
-                        if session_id in cancelled_sessions:
-                            break
-                        choice = chunk.choices[0] if chunk.choices else None
-                        if not choice:
-                            continue
-                        delta = choice.delta
-
-                        # Text content
-                        if delta and delta.content:
-                            full_response_text += delta.content
-                            yield f"data: {json.dumps({'type': 'text_delta', 'content': delta.content})}\n\n"
-                            if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
-                                for sent in sentence_buffer.add(delta.content):
-                                    text_to_speak = sent + " "
-                                    tts_stream.send_text(text_to_speak)
-                                    total_tts_chars += len(text_to_speak)
-
-                        # Tool call deltas
-                        if delta and delta.tool_calls:
-                            for tc_delta in delta.tool_calls:
-                                idx = tc_delta.index
-                                if idx not in pending_tool_calls:
-                                    pending_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
-                                if tc_delta.id:
-                                    pending_tool_calls[idx]["id"] = tc_delta.id
-                                if tc_delta.function and tc_delta.function.name:
-                                    pending_tool_calls[idx]["name"] = tc_delta.function.name
-                                    # Defer tool_start until after TTS flush
-                                    deferred_tool_starts.append({'type': 'tool_start', 'tool': tc_delta.function.name, 'id': tc_delta.id or pending_tool_calls[idx]['id']})
-                                if tc_delta.function and tc_delta.function.arguments:
-                                    pending_tool_calls[idx]["arguments"] += tc_delta.function.arguments
-
-                        yield from _flush_audio_queue()
-
-                        # Capture usage from final chunk
-                        if chunk.usage:
-                            total_input_tokens += chunk.usage.prompt_tokens or 0
-                            total_output_tokens += chunk.usage.completion_tokens or 0
-
-                    # Convert accumulated tool calls to tool_use_blocks
-                    for idx in sorted(pending_tool_calls.keys()):
-                        tc = pending_tool_calls[idx]
-                        if tc["name"]:
-                            tool_use_blocks.append({
-                                "id": tc["id"] or f"call_{idx}",
-                                "name": tc["name"],
-                                "input_json": tc["arguments"]
-                            })
-
-                # ── GEMINI STREAMING ──
+                    _stream_adapter = OpenAIAdapter(api_key=api_key)
                 elif active_provider == "gemini":
-                    genai_pkg.configure(api_key=api_key)
-                    gemini_tools = _convert_tools_for_gemini(TOOL_DEFINITIONS)
-                    gemini_model = genai_pkg.GenerativeModel(
-                        active_model,
-                        system_instruction=system_prompt,
-                        tools=[genai_pkg.types.Tool(function_declarations=gemini_tools)]
-                    )
+                    _stream_adapter = GeminiAdapter(api_key=api_key)
+                else:
+                    raise ValueError(f"Unknown provider: {active_provider}")
 
-                    # Build Gemini chat history from messages
-                    gemini_history = []
-                    for msg in messages:
-                        role = msg.get("role", "user")
-                        content = msg.get("content", "")
-                        gemini_role = "model" if role == "assistant" else "user"
+                # in-progress tool call: tool_call_id -> {id, name, args_fragments}
+                _pending_tool: dict[str, dict] = {}
 
-                        if isinstance(content, list):
-                            # Handle tool results
-                            parts = []
-                            for block in content:
-                                if isinstance(block, dict):
-                                    if block.get("type") == "tool_result":
-                                        parts.append(genai_pkg.types.Part.from_function_response(
-                                            name="tool_response",
-                                            response={"result": block.get("content", "")}
-                                        ))
-                                    elif block.get("type") == "text":
-                                        parts.append(block["text"])
-                                    elif block.get("type") == "image":
-                                        # Convert Anthropic image to Gemini inline_data
-                                        src = block.get("source", {})
-                                        parts.append({
-                                            "inline_data": {
-                                                "mime_type": src.get("media_type", "image/png"),
-                                                "data": src.get("data", "")
-                                            }
-                                        })
-                                    elif block.get("type") == "tool_use":
-                                        parts.append(genai_pkg.types.Part.from_function_response(
-                                            name=block.get("name", ""),
-                                            response=block.get("input", {})
-                                        ))
-                            if parts:
-                                gemini_history.append({"role": gemini_role, "parts": parts})
-                        else:
-                            gemini_history.append({"role": gemini_role, "parts": [content]})
+                for stream_event in _stream_adapter.stream_chat(llm_req):
+                    if session_id in cancelled_sessions:
+                        break
 
-                    # Start chat and send last user message
-                    chat = gemini_model.start_chat(history=gemini_history[:-1] if gemini_history else [])
-                    last_parts = gemini_history[-1]["parts"] if gemini_history else ["Hello"]
+                    if isinstance(stream_event, TextDelta):
+                        full_response_text += stream_event.text
+                        yield f"data: {json.dumps({'type': 'text_delta', 'content': stream_event.text})}\n\n"
+                        if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                            for sent in sentence_buffer.add(stream_event.text):
+                                text_to_speak = sent + " "
+                                tts_stream.send_text(text_to_speak)
+                                total_tts_chars += len(text_to_speak)
 
-                    response = chat.send_message(last_parts, stream=True)
-                    for chunk in response:
-                        if session_id in cancelled_sessions:
-                            break
-                        if chunk.text:
-                            full_response_text += chunk.text
-                            yield f"data: {json.dumps({'type': 'text_delta', 'content': chunk.text})}\n\n"
-                            if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
-                                for sent in sentence_buffer.add(chunk.text):
-                                    text_to_speak = sent + " "
-                                    tts_stream.send_text(text_to_speak)
-                                    total_tts_chars += len(text_to_speak)
-                        yield from _flush_audio_queue()
+                    elif isinstance(stream_event, ToolCallDelta):
+                        tcid = stream_event.tool_call_id
+                        if tcid not in _pending_tool:
+                            _pending_tool[tcid] = {"id": tcid, "name": "", "args_json": ""}
+                        if stream_event.name:
+                            _pending_tool[tcid]["name"] = stream_event.name
+                            # Defer tool_start SSE until after TTS flush
+                            deferred_tool_starts.append({
+                                'type': 'tool_start',
+                                'tool': stream_event.name,
+                                'id': tcid,
+                            })
+                        _pending_tool[tcid]["args_json"] += stream_event.args_delta
 
-                    # Check for function calls in the final response
-                    try:
-                        for candidate in response.candidates:
-                            for part in candidate.content.parts:
-                                if hasattr(part, 'function_call') and part.function_call:
-                                    fc = part.function_call
-                                    tool_id = f"gemini_{fc.name}_{uuid.uuid4().hex[:8]}"
-                                    tool_use_blocks.append({
-                                        "id": tool_id,
-                                        "name": fc.name,
-                                        "input_json": json.dumps(dict(fc.args)) if fc.args else "{}"
-                                    })
-                                    # Defer tool_start until after TTS flush
-                                    deferred_tool_starts.append({'type': 'tool_start', 'tool': fc.name, 'id': tool_id})
-                    except Exception:
-                        pass
+                    elif isinstance(stream_event, ToolCallComplete):
+                        tc = stream_event.tool_call
+                        tool_use_blocks.append({
+                            "id": tc.tool_call_id,
+                            "name": tc.name,
+                            "input_json": json.dumps(tc.args),
+                        })
 
-                    # Capture token usage
-                    try:
-                        if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                            total_input_tokens += getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
-                            total_output_tokens += getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
-                    except Exception:
-                        pass
+                    elif isinstance(stream_event, UsageEvent):
+                        total_input_tokens += stream_event.usage.prompt_tokens
+                        total_output_tokens += stream_event.usage.completion_tokens
+
+                    # FinishEvent — nothing to do; finish_reason recorded if needed
+
+                    yield from _flush_audio_queue()
 
                 # ── POST-STREAM (shared across all providers) ──
 
