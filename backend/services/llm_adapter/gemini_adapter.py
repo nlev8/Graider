@@ -63,7 +63,20 @@ def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -
 
 
 def _part_to_gemini(p: Any) -> dict[str, Any]:
-    """Map a single ContentPart to a Gemini part dict."""
+    """Map a single ContentPart to a Gemini part dict.
+
+    Tool-use blocks map to Gemini's function_call/function_response shape:
+      - ToolUsePart (assistant-side request) -> {"function_call": {name, args}}
+      - ToolResultPart (user-side result)    -> {"function_response": {name, response}}
+
+    Note: Gemini's function_response requires the tool NAME alongside the
+    result. ToolResultPart only carries tool_call_id, so the route must
+    either pair each tool_result with its tool_call_id<->name mapping
+    before constructing the Message (preferred), or we fall back to
+    passing the tool_call_id as the name (lossy but functional).
+    """
+    from backend.services.llm_adapter.types import ToolResultPart, ToolUsePart  # noqa: PLC0415
+
     if isinstance(p, TextPart):
         return {"text": p.text}
     elif isinstance(p, ImagePart):
@@ -73,15 +86,59 @@ def _part_to_gemini(p: Any) -> dict[str, Any]:
             # Gemini natively supports gs:// URIs; plain HTTPS URLs are passed
             # through — Gemini Flash will attempt to fetch them at inference time.
             return {"file_data": {"mime_type": p.mime_type, "file_uri": p.url}}
-    # ToolUsePart / ToolResultPart not handled here — tool-use is D2 scope
+    elif isinstance(p, ToolUsePart):
+        # Gemini function_call takes a name + args (dict).
+        return {
+            "function_call": {
+                "name": p.name,
+                "args": p.args,
+            }
+        }
+    elif isinstance(p, ToolResultPart):
+        # Gemini function_response needs a name; if ToolResultPart lacks one
+        # explicitly, fall back to tool_call_id as a stable identifier.
+        # Content must be a dict; wrap string results as {"result": <text>}.
+        name = getattr(p, "name", None) or p.tool_call_id
+        if isinstance(p.content, dict):
+            response = p.content
+        else:
+            response = {"result": str(p.content)}
+        return {
+            "function_response": {
+                "name": name,
+                "response": response,
+            }
+        }
     return {"text": str(p)}
 
 
 def _message_to_gemini(msg: Message) -> dict[str, Any]:
-    # Gemini uses "user" and "model" (not "assistant")
+    # Gemini uses "user" and "model" (not "assistant"). Tool results
+    # (role == "tool") route to "user" per Gemini's contract.
     role = "model" if msg.role == "assistant" else "user"
     parts = [_part_to_gemini(p) for p in msg.content]
     return {"role": role, "parts": parts}
+
+
+def _unwrap_protobuf(value: Any) -> Any:
+    """Recursively convert protobuf Struct/ListValue/Value into plain
+    Python dict/list/scalar so json.dumps can serialize nested tool args.
+
+    `FunctionCall.args` is a Struct whose __getitem__ returns nested
+    Struct/ListValue for nested JSON — a plain dict() cast only gives
+    one level. Without this unwrap, any tool call whose args contain
+    nested objects or arrays hits JSONDecodeError silently (the adapter
+    previously swallowed these in a blanket except).
+    """
+    # proto.marshal.collections.maps.MapComposite and ListValue expose
+    # dict-like / list-like semantics but contain Struct values that
+    # need recursion. Duck-type on attributes rather than import types
+    # to avoid a hard dep on google.protobuf internals.
+    if hasattr(value, "items") and callable(getattr(value, "items")):
+        return {str(k): _unwrap_protobuf(v) for k, v in value.items()}
+    if hasattr(value, "__iter__") and not isinstance(value, (str, bytes)):
+        return [_unwrap_protobuf(v) for v in value]
+    return value
 
 
 class GeminiAdapter:
@@ -339,7 +396,26 @@ class GeminiAdapter:
                             if hasattr(part, "function_call") and part.function_call:
                                 fc = part.function_call
                                 tool_id = f"gemini_{fc.name}_{uuid.uuid4().hex[:8]}"
-                                args = dict(fc.args) if fc.args else {}
+                                # Use _unwrap_protobuf so nested dicts/lists survive
+                                # JSON serialization. `dict(fc.args)` alone only
+                                # unwraps one level — nested Struct/ListValue values
+                                # would crash json.dumps.
+                                try:
+                                    args = _unwrap_protobuf(fc.args) if fc.args else {}
+                                    if not isinstance(args, dict):
+                                        args = {}
+                                except Exception as unwrap_err:
+                                    _logger.warning(
+                                        "Failed to unwrap Gemini tool args for %s: %s — treating as empty",
+                                        fc.name, unwrap_err,
+                                    )
+                                    sentry_sdk.add_breadcrumb(
+                                        category="llm.tool_call",
+                                        level="warning",
+                                        message=f"gemini tool args unwrap failed for {fc.name}",
+                                        data={"provider": "gemini", "tool_name": fc.name, "error_kind": type(unwrap_err).__name__},
+                                    )
+                                    args = {}
                                 # Single delta that is also complete (no incremental JSON)
                                 yield ToolCallDelta(
                                     tool_call_id=tool_id,
@@ -353,8 +429,8 @@ class GeminiAdapter:
                                         args=args,
                                     )
                                 )
-                except Exception:
-                    pass
+                except Exception as loop_err:
+                    _logger.warning("Gemini tool-call scan failed mid-stream: %s", loop_err)
 
                 # Usage metadata — only on final chunk
                 try:
