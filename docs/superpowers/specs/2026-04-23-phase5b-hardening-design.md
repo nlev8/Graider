@@ -399,7 +399,7 @@ def _finalize_assistant_stream(
     """
 ```
 
-**Why a generator, not a plain function:** steps 5 (audio-chunk yields) need to happen FROM INSIDE the Flask generator's yield context. Returning audio chunks as a list would buffer potentially-large PCM data in memory. A generator lets us stream them directly.
+**Why a generator, not a plain function:** step 6 (audio-chunk yields) needs to happen FROM INSIDE the Flask generator's yield context. Returning audio chunks as a list would buffer potentially-large PCM data in memory. A generator lets us stream them directly.
 
 **Call sites in the route:**
 
@@ -441,7 +441,8 @@ def generate():
         error_msg = str(e)
         if "APIError" in type(e).__name__ or "AuthenticationError" in type(e).__name__:
             error_msg = f"API error ({active_provider}): {error_msg}"
-        yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+        error_payload = {"type": "error", "content": error_msg}
+        yield f"data: {json.dumps(error_payload)}\n\n"
         # Still finalize — error path also needs state cleanup.
         yield from _finalize_assistant_stream(
             session_id=session_id, conv=conv, messages=messages,
@@ -608,7 +609,7 @@ Compressible to ~4-5 days with parallel worktrees for PR 3, PR 6 (non-conflictin
 
 | Codex finding | Resolution |
 |---|---|
-| Per-provider breaker too coarse — suggests per-(provider, credential) | Changed to per-(provider, model). Single credential per provider env var; multi-tenant routing isn't a Phase 5b concern. Model granularity handles the real failure-isolation issue. |
+| Per-provider breaker too coarse — suggests per-(provider, credential) | Changed to per-(provider, model). Provider-side health is credential-independent (rate limits / 5xx / outages hit all teachers at once on the same provider endpoints), so keying by BYOK credential would multiply breaker count by teacher count without improving failure isolation. Model granularity handles the real failure-isolation issue (e.g., gpt-4o down while gpt-4o-mini is fine). See corrected Round-2 rationale below. |
 | Remove 429 from breaker trip | **Accepted.** `RateLimitError` + `status_code == 429` now in `_is_user_error`. Retry handles 429 with Retry-After; breaker stays out of rate-limit state. |
 | Document breaker+retry math explicitly | **Accepted.** Noted in `_is_user_error` docstring AND in this spec's PR 1 section. |
 | "Open succeeded but no first chunk" streaming gap | **Accepted as known limitation.** Documented; fix deferred. |
