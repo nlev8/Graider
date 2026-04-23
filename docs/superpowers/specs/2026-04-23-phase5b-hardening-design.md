@@ -339,33 +339,9 @@ def _iterate_stream(self, stream, request):
 
 **Decision flagged for implementation:** if neither `.cancel()` nor `.close()` exists on the `google.genai` sync stream, document the limitation and rely on generator garbage collection. Do NOT block the PR on this — it's a best-effort cleanup, not a correctness requirement.
 
-**(c) `assistant_routes.py` route-level hook** — the SSE route wraps the adapter stream in `stream_with_context(generate())` and owns non-trivial post-stream cleanup (`tts_stream.close()`, conversation persistence, `cancelled_sessions` teardown — currently at `backend/routes/assistant_routes.py:1403-1424, 1710-1739`). A `GeneratorExit` (client disconnect or Flask teardown) must route through the SAME cleanup path as the normal-completion path, not skip it.
+**(c) `assistant_routes.py` route-level hook** — the SSE route wraps the adapter stream in `stream_with_context(generate())` and owns non-trivial post-stream cleanup (conversation persistence, TTS sentence-buffer flush, TTS stream close, final audio-queue drain, `tts_muted_sessions` and `cancelled_sessions` teardown, cost recording — currently at `backend/routes/assistant_routes.py:1710-1749`). A `GeneratorExit` (client disconnect or Flask teardown) must route through the SAME cleanup path as the normal-completion path, not skip it.
 
-Implementation: factor the route's post-stream cleanup into a `_finalize_assistant_stream()` helper and call it from BOTH normal completion AND the `GeneratorExit` branch. Then re-raise `GeneratorExit` so Flask's generator machinery behaves correctly.
-
-```python
-def generate():
-    try:
-        for event in adapter.stream_chat(request):
-            # existing SSE-event mapping
-            yield ...
-        # Normal completion — run cleanup
-        _finalize_assistant_stream(session_id, tts_stream, conversation, cancelled=False)
-    except GeneratorExit:
-        # Client disconnected or Flask is tearing down the response.
-        # Run the same cleanup path as normal completion; the adapter's
-        # inner finally releases the provider stream, this helper handles
-        # route-owned resources.
-        _logger.info("assistant stream generator closed by client disconnect")
-        _finalize_assistant_stream(session_id, tts_stream, conversation, cancelled=True)
-        raise
-    except Exception as e:
-        # Existing error-to-SSE-frame handler stays in place.
-        _finalize_assistant_stream(session_id, tts_stream, conversation, cancelled=True)
-        yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-```
-
-`_finalize_assistant_stream()` is idempotent — safe to call twice. Its body consolidates the existing cleanup code at `assistant_routes.py:1710-1739`. This is extraction-without-behavior-change; the normal-path cleanup doesn't move, just gets deduplicated with the disconnect path.
+Implementation: factor the route's post-stream cleanup into a `_finalize_assistant_stream()` helper that's called from BOTH normal completion AND the `GeneratorExit` branch. The full design is specified below — including helper shape, responsibilities, and call-site sketches.
 
 **Shape:** it's a generator, not a plain function — the normal-path cleanup yields `audio_chunk` SSE frames as it drains the final audio queue. Disconnect mode skips the yields but still releases resources.
 
@@ -385,34 +361,41 @@ def _finalize_assistant_stream(
     cancelled: bool,
 ):
     """Idempotent cleanup for the assistant SSE stream. Yields SSE audio_chunk
-    and cost frames in normal-completion mode; silent in disconnect mode.
+    frames in normal-completion mode; silent in disconnect mode.
 
-    Preserves ALL the behavior that currently lives at assistant_routes.py:
-    1710-1739 — do NOT drop any of these responsibilities:
+    Preserves ALL the behavior that currently lives at
+    assistant_routes.py:1710-1749 — do NOT drop any of these responsibilities:
 
-      1. Conversation persistence: conv["messages"] = messages; _persist_conversation(session_id)
-      2. TTS sentence-buffer flush: if not muted, sentence_buffer.flush() and
-         send the remaining text to tts_stream; increment total_tts_chars.
-      3. TTS stream flush + drain: tts_stream.flush() + wait_for_flush(timeout=15.0)
-      4. TTS stream close: tts_stream.close()
-      5. Final audio-queue drain: yield `{'type': 'audio_chunk', 'audio': chunk}`
-         SSE frames until queue is empty OR 3s timeout (normal mode only; skip
-         yields in disconnect mode — client is gone).
-      6. tts_muted_sessions.discard(session_id)
-      7. cancelled_sessions.discard(session_id)
-      8. Cost recording: _record_assistant_cost(...) — runs in both modes.
+      1. conv["messages"] = messages  (:1711)
+      2. _persist_conversation(session_id)  (:1712)
+      3. If tts_stream set + session not muted + sentence_buffer nonempty:
+         sentence_buffer.flush(), tts_stream.send_text(remaining + " "),
+         total_tts_chars += len(...)  (:1715-1721)
+      4. tts_stream.flush() + tts_stream.wait_for_flush(timeout=15.0)  (:1722-1723)
+      5. tts_stream.close()  (:1724)
+      6. Final audio-queue drain: yield `{'type': 'audio_chunk', 'audio': chunk}`
+         SSE frames until queue empty OR 3s timeout (normal mode only; skip
+         yields in disconnect mode — client is gone)  (:1725-1734)
+      7. tts_muted_sessions.discard(session_id)  (:1735-1736)
+      8. cancelled_sessions.discard(session_id)  (:1738-1739)
+      9. _record_assistant_cost(total_input_tokens, total_output_tokens,
+         active_model, total_tts_chars) and yield its cost-summary SSE frame
+         if returned  (:1741-1749)
 
     In disconnect mode (`cancelled=True` or called from GeneratorExit path):
-    - Steps 1 (persistence), 3-4 (TTS flush/close), 6-8 (flag + cost cleanup)
-      STILL RUN. These are pure state cleanup that must happen regardless
-      of client connectivity.
-    - Step 2 (sentence-buffer flush + send) is skipped — sending more text
+    - Steps 1-2 (persistence), 4-5 (TTS flush/close), 7-9 (flag + cost
+      cleanup) STILL RUN. These are pure state cleanup that must happen
+      regardless of client connectivity.
+    - Step 3 (sentence-buffer flush + send) is skipped — sending more text
       to TTS when the client is gone wastes Eleven Labs credits.
-    - Step 5 (yield audio chunks) is skipped — no client to receive them.
+    - Step 6 (yield audio chunks) is skipped — no client to receive them.
+    - Step 9's cost SSE frame is also suppressed in disconnect mode, but
+      the underlying _record_assistant_cost call still runs so cost
+      tracking in the backend DB is accurate.
 
-    This preserves current behavior at :1710-1739 for normal completion
+    This preserves current behavior at :1710-1749 for normal completion
     AND ensures a disconnect doesn't orphan cancelled_sessions, leak tts_stream
-    connections, or lose conversation state.
+    connections, lose conversation state, or miss cost records.
     """
 ```
 
@@ -637,10 +620,10 @@ Compressible to ~4-5 days with parallel worktrees for PR 3, PR 6 (non-conflictin
 
 | Round-2 finding | Resolution |
 |---|---|
-| BYOK-model rationale for breaker keying was wrong ("single credential per provider env var" is false in a BYOK repo) | **Accepted.** Rationale updated: per-(provider, model) is the right altitude because provider-side health is credential-independent; adding credential dimension would grow breakers with teacher count. Decision unchanged; rationale corrected. |
-| Retry math wrong (~25 attempts vs actual ~30) | **Accepted.** Fixed: 1 initial + 5 retries × fail_max=5 = ~30 provider attempts before trip. |
+| BYOK-model rationale for breaker keying — Codex correctly noted Graider uses per-teacher BYOK keys, not a single env-var credential | **Accepted.** Rationale updated: per-(provider, model) is the right altitude because provider-side health is credential-independent; adding credential dimension would grow breakers with teacher count. Decision unchanged; rationale corrected. |
+| Retry math — Codex correctly noted `with_retry` attempts 1 initial + 5 retries, so fail_max=5 × 6 = ~30 attempts before trip (not ~25) | **Accepted.** Fixed throughout: 1 initial + 5 retries × fail_max=5 = ~30 provider attempts before trip. |
 | PR 2 test-migration scope incomplete (`test_flashcards.py`, `test_study_guide.py`, `test_slide_generator.py` patch the old Gemini SDK) | **Accepted.** PR 2 test section now enumerates all three test files + specifies mock-target updates. |
-| PR 4 `GeneratorExit` sketch bypasses route-owned cleanup (`tts_stream`, conversation persistence, `cancelled_sessions`) | **Accepted.** PR 4 now specifies a `_finalize_assistant_stream()` helper that runs from BOTH normal completion and `GeneratorExit` paths. Idempotent; consolidates existing cleanup from `assistant_routes.py:1403-1424, 1710-1739`. |
+| PR 4 `GeneratorExit` sketch bypasses route-owned cleanup (`tts_stream`, conversation persistence, `cancelled_sessions`) | **Accepted.** PR 4 now specifies a `_finalize_assistant_stream()` helper that runs from BOTH normal completion and `GeneratorExit` paths. Idempotent; consolidates existing cleanup from `assistant_routes.py:1710-1749`. |
 | SSE breaker-open contract wrong — Flask returns `Response(...)` before iteration, so a breaker raise inside `stream_chat()` becomes an SSE `error` frame, not a 503 | **Accepted.** Spec now explicitly documents: non-streaming routes get 503 + Retry-After; SSE route gets an `error` frame (existing handler at `assistant_routes.py:1703-1708`). Preflight check rejected due to TOCTOU race + UI-distinction cost. |
 | Stale `:344` citation (now `:353-355`) | **Fixed.** |
 | Ungrounded "10× observed prod" claim for 256 KB cap | **Fixed.** Cap reframed as deliberate guardrail with observable overflow event, not tuned-to-data value. |
