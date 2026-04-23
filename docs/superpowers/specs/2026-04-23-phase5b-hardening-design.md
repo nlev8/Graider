@@ -128,12 +128,15 @@ class _BreakerListener(pybreaker.CircuitBreakerListener):
         self._model = model
 
     def state_change(self, cb, old_state, new_state):
+        # pybreaker types old_state as optional (first transition has no prior
+        # state). Guard against None via getattr-with-default rather than
+        # unconditional .name dereference.
         emit(
             "llm.breaker.state_change",
             provider=self._provider,
             model=self._model,
-            from_state=str(old_state.name),
-            to_state=str(new_state.name),
+            from_state=getattr(old_state, "name", None) or "initial",
+            to_state=getattr(new_state, "name", None) or "unknown",
         )
 
 
@@ -190,12 +193,12 @@ This makes breaker-open a clean `503 + Retry-After: 60` contract for **non-strea
 
 **Design decision:** accept the SSE `error` frame as the breaker-open contract for this one route. Clients already handle SSE `error` frames (they surface as chat failures in the UI). The alternative — a preflight `get_breaker(...).current_state != pybreaker.STATE_OPEN` check before constructing the `Response(...)` — adds a TOCTOU race (breaker could open between check and call) and surfaces a distinct error path that UI code would need to handle. Not worth the complexity for a rare condition.
 
-**What the error frame looks like** (existing route handler, no change):
+**What the error frame looks like** (existing route handler at `assistant_routes.py:1708`, no change):
 ```json
-{"type": "error", "message": "CircuitBreakerError: Circuit 'openai:gpt-4o' is open"}
+{"type": "error", "content": "CircuitBreakerError: Circuit 'openai:gpt-4o' is open"}
 ```
 
-The frontend's existing error-frame handler already renders this as a transient chat-failure banner. Operators see the event in logs; users see the banner and retry. Consistent with the non-streaming 503 behavior from the user's perspective.
+Note: the payload field is `content`, not `message`. The frontend consumes `event.content` at `frontend/src/components/AssistantChat.jsx:507` (`last.content + '\n\n' + event.content`). The existing error-frame handler renders this inline in the assistant's last message with `isError: true`, styling it as a transient chat-failure banner. Operators see the event in logs; users see the banner and retry. Consistent with the non-streaming 503 behavior from the user's perspective.
 
 **Dependency addition:** `pybreaker>=1.0` in `requirements.in`. Regenerate lockfiles per `docs/dependencies.md`.
 
@@ -362,13 +365,123 @@ def generate():
         yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 ```
 
-`_finalize_assistant_stream()` is idempotent — safe to call twice. Its body consolidates the existing cleanup code at `assistant_routes.py:1403-1424` and `:1710-1739`. This is extraction-without-behavior-change; the normal-path cleanup doesn't move, just gets deduplicated with the disconnect path.
+`_finalize_assistant_stream()` is idempotent — safe to call twice. Its body consolidates the existing cleanup code at `assistant_routes.py:1710-1739`. This is extraction-without-behavior-change; the normal-path cleanup doesn't move, just gets deduplicated with the disconnect path.
 
-**Cleanup responsibilities the helper owns:**
-- Close any active `tts_stream` via `tts_stream.close()`.
-- Clear the session from `cancelled_sessions` (whether or not the client actually cancelled — it's cleanup either way).
-- Persist the partial conversation state if the adapter got far enough to emit text/tool events (match current route behavior).
-- Emit `assistant.stream.finalized` via `emit()` with `cancelled` + duration for observability.
+**Shape:** it's a generator, not a plain function — the normal-path cleanup yields `audio_chunk` SSE frames as it drains the final audio queue. Disconnect mode skips the yields but still releases resources.
+
+```python
+def _finalize_assistant_stream(
+    *,
+    session_id: str,
+    conv: dict,
+    messages: list,
+    tts_stream,
+    sentence_buffer,
+    audio_out_queue,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    total_tts_chars: int,
+    active_model: str,
+    cancelled: bool,
+):
+    """Idempotent cleanup for the assistant SSE stream. Yields SSE audio_chunk
+    and cost frames in normal-completion mode; silent in disconnect mode.
+
+    Preserves ALL the behavior that currently lives at assistant_routes.py:
+    1710-1739 — do NOT drop any of these responsibilities:
+
+      1. Conversation persistence: conv["messages"] = messages; _persist_conversation(session_id)
+      2. TTS sentence-buffer flush: if not muted, sentence_buffer.flush() and
+         send the remaining text to tts_stream; increment total_tts_chars.
+      3. TTS stream flush + drain: tts_stream.flush() + wait_for_flush(timeout=15.0)
+      4. TTS stream close: tts_stream.close()
+      5. Final audio-queue drain: yield `{'type': 'audio_chunk', 'audio': chunk}`
+         SSE frames until queue is empty OR 3s timeout (normal mode only; skip
+         yields in disconnect mode — client is gone).
+      6. tts_muted_sessions.discard(session_id)
+      7. cancelled_sessions.discard(session_id)
+      8. Cost recording: _record_assistant_cost(...) — runs in both modes.
+
+    In disconnect mode (`cancelled=True` or called from GeneratorExit path):
+    - Steps 1 (persistence), 3-4 (TTS flush/close), 6-8 (flag + cost cleanup)
+      STILL RUN. These are pure state cleanup that must happen regardless
+      of client connectivity.
+    - Step 2 (sentence-buffer flush + send) is skipped — sending more text
+      to TTS when the client is gone wastes Eleven Labs credits.
+    - Step 5 (yield audio chunks) is skipped — no client to receive them.
+
+    This preserves current behavior at :1710-1739 for normal completion
+    AND ensures a disconnect doesn't orphan cancelled_sessions, leak tts_stream
+    connections, or lose conversation state.
+    """
+```
+
+**Why a generator, not a plain function:** steps 5 (audio-chunk yields) need to happen FROM INSIDE the Flask generator's yield context. Returning audio chunks as a list would buffer potentially-large PCM data in memory. A generator lets us stream them directly.
+
+**Call sites in the route:**
+
+```python
+def generate():
+    try:
+        for event in adapter.stream_chat(request):
+            # existing SSE mapping
+            yield ...
+        # Normal completion
+        yield from _finalize_assistant_stream(
+            session_id=session_id, conv=conv, messages=messages,
+            tts_stream=tts_stream, sentence_buffer=sentence_buffer,
+            audio_out_queue=audio_out_queue,
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
+            total_tts_chars=total_tts_chars,
+            active_model=active_model,
+            cancelled=False,
+        )
+    except GeneratorExit:
+        # Client disconnected. Run state cleanup but skip audio yields.
+        # `yield from` would still attempt to yield, which is illegal here —
+        # call the helper in non-yielding mode via a separate drain path.
+        _finalize_assistant_stream_silent(  # thin wrapper that discards yields
+            session_id=session_id, conv=conv, messages=messages,
+            tts_stream=tts_stream, sentence_buffer=sentence_buffer,
+            audio_out_queue=audio_out_queue,
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
+            total_tts_chars=total_tts_chars,
+            active_model=active_model,
+            cancelled=True,
+        )
+        _logger.info("assistant stream generator closed by client disconnect (session=%s)", session_id)
+        raise
+    except Exception as e:
+        # Existing error-to-SSE-frame handler stays in place.
+        error_msg = str(e)
+        if "APIError" in type(e).__name__ or "AuthenticationError" in type(e).__name__:
+            error_msg = f"API error ({active_provider}): {error_msg}"
+        yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+        # Still finalize — error path also needs state cleanup.
+        yield from _finalize_assistant_stream(
+            session_id=session_id, conv=conv, messages=messages,
+            tts_stream=tts_stream, sentence_buffer=sentence_buffer,
+            audio_out_queue=audio_out_queue,
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
+            total_tts_chars=total_tts_chars,
+            active_model=active_model,
+            cancelled=True,  # treat as cancelled for cleanup purposes
+        )
+```
+
+**`_finalize_assistant_stream_silent()` thin wrapper:**
+```python
+def _finalize_assistant_stream_silent(**kwargs):
+    """Run finalize's state cleanup but discard any SSE yields.
+    For disconnect path where client is gone."""
+    for _ in _finalize_assistant_stream(**kwargs):
+        pass  # discard audio_chunk frames — no client to receive
+```
+
+**Observability:** `_finalize_assistant_stream` emits `assistant.stream.finalized` with `cancelled`, `duration_ms`, `total_input_tokens`, `total_output_tokens`, `total_tts_chars` so operators can see disconnect patterns.
 
 **No change needed for Anthropic adapter** — Phase 5a D2's context manager pattern already cleans up correctly.
 
@@ -477,7 +590,7 @@ pending_tool_calls[idx]["arguments"] += fragment
 
 | PR | Risk | Mitigation |
 |---|---|---|
-| 1 | pybreaker misconfiguration causes legitimate traffic to hit 503s | Trip threshold 5 failures × 5 retries ≈ 25 attempts — very hard to trip from normal usage |
+| 1 | pybreaker misconfiguration causes legitimate traffic to hit 503s | Trip threshold fail_max=5 × (1 initial + 5 retries) = ~30 provider attempts before open — very hard to trip from normal usage |
 | 1 | Per-model breaker count grows unbounded if users request obscure model names | Lazy dict has no GC; accept minor memory overhead (< 1 KB per breaker × O(10) models) |
 | 2 | `google.genai` SDK field-name difference not caught by tests | Add contract-pinning tests; exercise real call paths in dev before merge |
 | 2 | Missed install-check string update at `assistant_routes.py:1331` breaks diagnostic error | Grep for "google-generativeai" before merge |
