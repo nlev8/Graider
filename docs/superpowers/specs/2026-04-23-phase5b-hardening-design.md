@@ -59,7 +59,7 @@ Tighten the LLM adapter seam Phase 5a built. Six small-to-medium sequential PRs 
 - `pybreaker` is NOT yet in `requirements.in`. Added in PR 1.
 - `google.generativeai` (deprecated) is used by `gemini_adapter.py`. `google.genai` (maintained) is ALREADY in `requirements.in` and used by `slide_generator.py` for image gen.
 - `backend/routes/assistant_routes.py:36, 1331` imports `google.generativeai as genai_pkg` for install-check strings only.
-- `backend/routes/assignment_player_routes.py:344` (OCR call site) was the Phase 5a D1 regression for missing `detail: high` — it's still missing; PR 3 addresses it.
+- `backend/routes/assignment_player_routes.py:353-355` (OCR call site) was the Phase 5a D1 regression for missing `detail: high` — it's still missing; PR 3 addresses it.
 
 **CI state:** 7 jobs (`Backend Tests`, `Frontend Build`, `Migrations Smoke`, `Lockfile Drift Check`, `Ruff Lint`, `Bandit SAST`, `Secret Scan`). 1620 tests passing on main.
 
@@ -72,6 +72,8 @@ Tighten the LLM adapter seam Phase 5a built. Six small-to-medium sequential PRs 
 **New module:** `backend/services/llm_adapter/breakers.py`
 
 **Granularity:** one breaker per `(provider, model)` tuple — lazy-populated dict. Prevents a flaky `gpt-4o` from blackouting `gpt-4o-mini`. Codex flagged the original per-provider design as too coarse.
+
+**Why not per-credential?** Graider is BYOK — teachers/districts can supply their own API keys (`backend/api_keys.py:48-103`). Adding credential to the breaker key would grow the breaker count unboundedly with teacher count, and the failure mode we care about (provider-side health for a given model) is credential-independent: if OpenAI's `gpt-4o` endpoint is degraded, every key sees that degradation. Per-(provider, model) is the right altitude — granular enough to isolate a failing model, coarse enough to share health signal across keys.
 
 ```python
 # backend/services/llm_adapter/breakers.py
@@ -91,10 +93,11 @@ RESET_TIMEOUT = 60  # seconds
 def _is_user_error(exc: Exception) -> bool:
     """Return True for 4xx-class errors that shouldn't count toward breaker trip.
 
-    Retry+breaker math: with_retry attempts up to MAX_RETRIES=5 times per call.
-    A FAILED adapter call (retries exhausted) counts as 1 failure toward
-    fail_max=5. So ~25 provider attempts precede breaker open. Transient 5xx
-    handled inside retry; only retry-exhausted 5xx reaches the breaker.
+    Retry+breaker math: with_retry attempts 1 initial + MAX_RETRIES=5 retries
+    = 6 provider attempts per call. A FAILED adapter call (retries exhausted)
+    counts as 1 failure toward fail_max=5. So ~30 provider attempts precede
+    breaker open. Transient 5xx handled inside retry; only retry-exhausted
+    5xx reaches the breaker.
 
     429 (rate limit) is EXCLUDED here — retry+backoff with Retry-After is
     the right response to throttling, not a circuit break.
@@ -181,7 +184,18 @@ except pybreaker.CircuitBreakerError:
     }), 503, {"Retry-After": "60"}
 ```
 
-This makes breaker-open a clean `503 + Retry-After: 60` contract for HTTP callers. For the SSE streaming route in `assistant_routes.py`, the breaker's raise happens BEFORE SSE iteration begins, so the standard JSON-error path handles it.
+This makes breaker-open a clean `503 + Retry-After: 60` contract for **non-streaming** HTTP callers.
+
+**SSE route contract is different.** `assistant_routes.py` constructs `Response(stream_with_context(generate()))` and returns BEFORE `generate()` starts iterating (`assistant_routes.py:1504, 1753-1761`). By the time the breaker's `CircuitBreakerError` fires inside `stream_chat()`, the HTTP response header is already flushed — we can't turn that into a 503. The generator's `except Exception` handler at `assistant_routes.py:1703-1708` catches it and emits an SSE `error` frame instead.
+
+**Design decision:** accept the SSE `error` frame as the breaker-open contract for this one route. Clients already handle SSE `error` frames (they surface as chat failures in the UI). The alternative — a preflight `get_breaker(...).current_state != pybreaker.STATE_OPEN` check before constructing the `Response(...)` — adds a TOCTOU race (breaker could open between check and call) and surfaces a distinct error path that UI code would need to handle. Not worth the complexity for a rare condition.
+
+**What the error frame looks like** (existing route handler, no change):
+```json
+{"type": "error", "message": "CircuitBreakerError: Circuit 'openai:gpt-4o' is open"}
+```
+
+The frontend's existing error-frame handler already renders this as a transient chat-failure banner. Operators see the event in logs; users see the banner and retry. Consistent with the non-streaming 503 behavior from the user's perspective.
 
 **Dependency addition:** `pybreaker>=1.0` in `requirements.in`. Regenerate lockfiles per `docs/dependencies.md`.
 
@@ -221,12 +235,20 @@ This makes breaker-open a clean `503 + Retry-After: 60` contract for HTTP caller
 - `backend/routes/assistant_routes.py:36` — change install-check to `from google import genai as genai_pkg`.
 - `backend/routes/assistant_routes.py:1331` — update error message string: "google-generativeai package not installed" → "google-genai package not installed. Run: pip install google-genai".
 
-**Tests:**
-- All existing Gemini tests (`test_llm_adapter_gemini.py`, `test_llm_adapter_gemini_stream.py`) must pass against the new SDK. Test-mock targets change from `google.generativeai` to `google.genai`.
-- Tests in `test_flashcards.py`, `test_study_guide.py`, `test_slide_generator.py` already patch `google.genai` / their adapter-level mocks — verify they still pass.
-- Add one test per SDK that pins the field-name contract (`finish_reason.name`, `usage_metadata.prompt_token_count`) so a future SDK break is caught.
+**Tests — three groups that all need attention:**
+
+1. **Adapter-level tests** (`test_llm_adapter_gemini.py`, `test_llm_adapter_gemini_stream.py`) — update mock targets from `google.generativeai` to `google.genai`. Verify finish_reason enum values still route through `normalize_finish_reason` correctly.
+
+2. **Route-level tests that mock the adapter's SDK import** — these patch `backend.services.llm_adapter.gemini_adapter.genai.GenerativeModel` (pre-migration path). After migration, they need to patch `gemini_adapter.genai_client.models` (or whatever the new client attribute is named in the rewritten adapter). Affected files:
+   - `tests/test_flashcards.py:65-69, 97-101` (patches `gemini_adapter.genai`)
+   - `tests/test_study_guide.py:82-86, 114-118` (same pattern)
+   - `tests/test_slide_generator.py:82-89` (uses `gemini_adapter.genai` for text gen; the image-gen path already uses `google.genai` via slide_generator directly, untouched)
+
+3. **Contract-pinning tests** (new) — add one test per new SDK entry point that asserts the expected response-field names (`finish_reason`, `usage_metadata.prompt_token_count`, `candidates[0].content.parts`). Catches future SDK breaks at test time rather than production time.
 
 **Dependency change:** `google-generativeai` removed from `requirements.in`. `google-genai` stays (already there). Regenerate lockfiles.
+
+**Comment cleanup in `requirements.in`:** the header comment currently says "chat-style text generation (planner_routes, assistant_routes, slide_generator:155)" uses `google-generativeai`. Update this to remove the `google-generativeai` reference entirely — post-PR2, `google-genai` handles both chat and image generation.
 
 **Risk:** the biggest PR in Phase 5b. Subtle SDK field-name differences could surface only at runtime. Mitigation: exercise against captured chunk sequences in the tests before merging.
 
@@ -234,7 +256,7 @@ This makes breaker-open a clean `503 + Retry-After: 60` contract for HTTP caller
 
 ## PR 3 — OpenAI vision `detail: high` hint via `ImagePart.detail`
 
-**Goal:** restore pre-Phase-5a-migration OCR quality. The `assignment_player_routes.py:344` OCR call used `{"detail": "high"}` before migration; the adapter dropped it.
+**Goal:** restore pre-Phase-5a-migration OCR quality. The `assignment_player_routes.py:353-355` OCR call used `{"detail": "high"}` before migration; the adapter dropped it.
 
 **Change in `types.py`:**
 
@@ -259,7 +281,7 @@ elif isinstance(p, ImagePart):
 
 **No changes in `anthropic_adapter.py` or `gemini_adapter.py`** — they ignore the field silently.
 
-**Change in `assignment_player_routes.py:344`:**
+**Change in `assignment_player_routes.py:353-355`:**
 
 ```python
 ImagePart(url=image_data, base64=None, mime_type="image/png", detail="high"),
@@ -314,7 +336,9 @@ def _iterate_stream(self, stream, request):
 
 **Decision flagged for implementation:** if neither `.cancel()` nor `.close()` exists on the `google.genai` sync stream, document the limitation and rely on generator garbage collection. Do NOT block the PR on this — it's a best-effort cleanup, not a correctness requirement.
 
-**(c) `assistant_routes.py` route-level hook** — the SSE route wraps the adapter stream in `stream_with_context(generate())`. Add `GeneratorExit` handling so the adapter's finally runs when Flask signals shutdown:
+**(c) `assistant_routes.py` route-level hook** — the SSE route wraps the adapter stream in `stream_with_context(generate())` and owns non-trivial post-stream cleanup (`tts_stream.close()`, conversation persistence, `cancelled_sessions` teardown — currently at `backend/routes/assistant_routes.py:1403-1424, 1710-1739`). A `GeneratorExit` (client disconnect or Flask teardown) must route through the SAME cleanup path as the normal-completion path, not skip it.
+
+Implementation: factor the route's post-stream cleanup into a `_finalize_assistant_stream()` helper and call it from BOTH normal completion AND the `GeneratorExit` branch. Then re-raise `GeneratorExit` so Flask's generator machinery behaves correctly.
 
 ```python
 def generate():
@@ -322,12 +346,29 @@ def generate():
         for event in adapter.stream_chat(request):
             # existing SSE-event mapping
             yield ...
+        # Normal completion — run cleanup
+        _finalize_assistant_stream(session_id, tts_stream, conversation, cancelled=False)
     except GeneratorExit:
         # Client disconnected or Flask is tearing down the response.
-        # Just let the finally in _iterate_stream run cleanup.
+        # Run the same cleanup path as normal completion; the adapter's
+        # inner finally releases the provider stream, this helper handles
+        # route-owned resources.
         _logger.info("assistant stream generator closed by client disconnect")
+        _finalize_assistant_stream(session_id, tts_stream, conversation, cancelled=True)
         raise
+    except Exception as e:
+        # Existing error-to-SSE-frame handler stays in place.
+        _finalize_assistant_stream(session_id, tts_stream, conversation, cancelled=True)
+        yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 ```
+
+`_finalize_assistant_stream()` is idempotent — safe to call twice. Its body consolidates the existing cleanup code at `assistant_routes.py:1403-1424` and `:1710-1739`. This is extraction-without-behavior-change; the normal-path cleanup doesn't move, just gets deduplicated with the disconnect path.
+
+**Cleanup responsibilities the helper owns:**
+- Close any active `tts_stream` via `tts_stream.close()`.
+- Clear the session from `cancelled_sessions` (whether or not the client actually cancelled — it's cleanup either way).
+- Persist the partial conversation state if the adapter got far enough to emit text/tool events (match current route behavior).
+- Emit `assistant.stream.finalized` via `emit()` with `cancelled` + duration for observability.
 
 **No change needed for Anthropic adapter** — Phase 5a D2's context manager pattern already cleans up correctly.
 
@@ -369,6 +410,8 @@ pending_tool_calls[idx]["arguments"] += fragment
 ```
 
 **Gemini exempt** — it delivers args atomically as whole dicts, not incremental fragments. No unbounded growth path.
+
+**Cap rationale:** 256 KB is a deliberate guardrail, NOT a measured against-prod-data number. Some Graider tool calls are intentionally large (`generate_document.content`, `generate_worksheet.questions`, `save_assignment_config.document_text`, `create_automation.steps`). Overflow emits an observable event rather than silently truncating, so we have data to retune if the cap bites legitimate traffic.
 
 **Streaming error-path tests:** one test per provider. Inject an exception mid-stream, verify:
 - `llm.call.error` emitted with `duration_ms > 0`
@@ -440,7 +483,7 @@ pending_tool_calls[idx]["arguments"] += fragment
 | 2 | Missed install-check string update at `assistant_routes.py:1331` breaks diagnostic error | Grep for "google-generativeai" before merge |
 | 3 | OpenAI vision call regression from wrong `detail` values | Typed `Literal["auto", "low", "high"]` enforces valid values at construction time |
 | 4 | `.cancel()` doesn't exist on new Gemini SDK's sync stream | Best-effort cleanup with fallback; documented limitation, not a blocker |
-| 5 | 256 KB cap blocks legitimate large tool calls | Cap is 10× the largest tool-args we've observed in prod; revisit if `llm.tool_call.args_overflow` events accumulate |
+| 5 | 256 KB cap blocks legitimate large tool calls | Cap is a deliberate guardrail against unbounded growth, NOT a tuned value against observed traffic. Graider's tool surface includes some intentionally-large payloads (`generate_document.content`, `generate_worksheet.questions`, `save_assignment_config.document_text`, `create_automation.steps`). Emitting `llm.tool_call.args_overflow` on overflow gives us observability to retune later; the cap is deliberately on the generous side. Revisit if events accumulate. |
 | 6 | `selenium` accidentally used somewhere we missed | Pre-merge grep verification |
 
 **Rollback per PR:** `git revert <squash-commit>`. No stateful changes (no DB migrations, no RLS policies, no feature flags) in Phase 5b.
@@ -463,9 +506,9 @@ Compressible to ~4-5 days with parallel worktrees for PR 3, PR 6 (non-conflictin
 
 ---
 
-## Deviations from original Codex design-review (2026-04-23)
+## Deviations from Codex reviews (2026-04-23)
 
-Codex flagged 7 items; reconciled as:
+**Round 1 (design-level)** flagged 7 items; reconciled as:
 
 | Codex finding | Resolution |
 |---|---|
@@ -476,6 +519,19 @@ Codex flagged 7 items; reconciled as:
 | Verify Gemini `.cancel()` exists | **Accepted.** PR 4 implementation flagged to check the SDK at implementation time; best-effort fallback documented. |
 | Missing scope: pybreaker install, 503 error contract, Gemini finish-reason map update, PR2 test migration | **All accepted.** Folded into PR 1 (pybreaker + 503) and PR 2 (test migration + finish-reason verification). |
 | PR 4 reframe — adapter cleanup alone doesn't fix Railway worker leak | **Accepted.** PR 4 now includes route-level `GeneratorExit` hook in `assistant_routes.py`. |
+
+**Round 2 (committed-spec review)** flagged 5 additional items; all reconciled:
+
+| Round-2 finding | Resolution |
+|---|---|
+| BYOK-model rationale for breaker keying was wrong ("single credential per provider env var" is false in a BYOK repo) | **Accepted.** Rationale updated: per-(provider, model) is the right altitude because provider-side health is credential-independent; adding credential dimension would grow breakers with teacher count. Decision unchanged; rationale corrected. |
+| Retry math wrong (~25 attempts vs actual ~30) | **Accepted.** Fixed: 1 initial + 5 retries × fail_max=5 = ~30 provider attempts before trip. |
+| PR 2 test-migration scope incomplete (`test_flashcards.py`, `test_study_guide.py`, `test_slide_generator.py` patch the old Gemini SDK) | **Accepted.** PR 2 test section now enumerates all three test files + specifies mock-target updates. |
+| PR 4 `GeneratorExit` sketch bypasses route-owned cleanup (`tts_stream`, conversation persistence, `cancelled_sessions`) | **Accepted.** PR 4 now specifies a `_finalize_assistant_stream()` helper that runs from BOTH normal completion and `GeneratorExit` paths. Idempotent; consolidates existing cleanup from `assistant_routes.py:1403-1424, 1710-1739`. |
+| SSE breaker-open contract wrong — Flask returns `Response(...)` before iteration, so a breaker raise inside `stream_chat()` becomes an SSE `error` frame, not a 503 | **Accepted.** Spec now explicitly documents: non-streaming routes get 503 + Retry-After; SSE route gets an `error` frame (existing handler at `assistant_routes.py:1703-1708`). Preflight check rejected due to TOCTOU race + UI-distinction cost. |
+| Stale `:344` citation (now `:353-355`) | **Fixed.** |
+| Ungrounded "10× observed prod" claim for 256 KB cap | **Fixed.** Cap reframed as deliberate guardrail with observable overflow event, not tuned-to-data value. |
+| `requirements.in` header comment still mentions `google-generativeai` | **Fixed.** PR 2 scope now explicitly includes comment update. |
 
 ---
 
