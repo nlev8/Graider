@@ -145,8 +145,71 @@ def test_state_change_emits_observability_event(monkeypatch):
         b.call(failing)
 
     state_change_events = [e for e in captured if e[0] == "llm.breaker.state_change"]
+    # First transition should be closed -> open (no initial event is emitted
+    # by pybreaker for the lazy-initialized closed state).
     assert len(state_change_events) >= 1
-    last = state_change_events[-1]
-    assert last[1]["provider"] == "anthropic"
-    assert last[1]["model"] == "claude-3-sonnet"
-    assert last[1]["to_state"] == "open"
+    first = state_change_events[0]
+    assert first[1]["provider"] == "anthropic"
+    assert first[1]["model"] == "claude-3-sonnet"
+    assert first[1]["from_state"] == "closed"
+    assert first[1]["to_state"] == "open"
+
+
+def _rewind_opened_at(breaker: pybreaker.CircuitBreaker, seconds: float) -> None:
+    """Rewind the breaker's opened_at timestamp so `reset_timeout` has elapsed.
+
+    Uses pybreaker 1.4.x's state_storage.opened_at setter, which accepts a
+    timezone-aware UTC datetime.
+    """
+    import datetime as _dt
+
+    try:
+        from datetime import UTC as _UTC
+    except ImportError:  # pragma: no cover — Python <3.11
+        _UTC = _dt.timezone.utc
+
+    breaker._state_storage.opened_at = _dt.datetime.now(_UTC) - _dt.timedelta(seconds=seconds)
+
+
+def test_breaker_half_open_after_reset_timeout():
+    """After reset_timeout seconds, the next call transitions open -> half_open
+    -> closed (on probe success)."""
+    b = breakers.get_breaker("openai", "gpt-4o")
+
+    def failing():
+        raise ConnectionError("down")
+
+    for _ in range(5):
+        with pytest.raises(ConnectionError):
+            b.call(failing)
+    assert b.current_state == pybreaker.STATE_OPEN
+
+    _rewind_opened_at(b, breakers.RESET_TIMEOUT + 1.0)
+
+    def succeeds():
+        return "ok"
+
+    # Successful probe closes the breaker
+    result = b.call(succeeds)
+    assert result == "ok"
+    assert b.current_state == pybreaker.STATE_CLOSED
+
+
+def test_breaker_probe_failure_reopens():
+    """A failed probe during half-open re-opens the breaker. With
+    throw_new_error_on_trip=False the probe's original error propagates."""
+    b = breakers.get_breaker("openai", "gpt-4o")
+
+    def failing():
+        raise ConnectionError("down")
+
+    for _ in range(5):
+        with pytest.raises(ConnectionError):
+            b.call(failing)
+    assert b.current_state == pybreaker.STATE_OPEN
+
+    _rewind_opened_at(b, breakers.RESET_TIMEOUT + 1.0)
+
+    with pytest.raises(ConnectionError):
+        b.call(failing)
+    assert b.current_state == pybreaker.STATE_OPEN
