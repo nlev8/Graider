@@ -1,6 +1,7 @@
 """Tests for the Gemini adapter (Phase 5a PR D1)."""
 from __future__ import annotations
 
+import pytest
 from unittest.mock import MagicMock, call, patch
 
 from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
@@ -139,3 +140,33 @@ def test_no_system_prompt_omits_system_instruction(mock_genai):
 
     call_kwargs = mock_genai.GenerativeModel.call_args.kwargs
     assert "system_instruction" not in call_kwargs
+
+
+def test_gemini_chat_uses_breaker():
+    """Pattern matches OpenAI/Anthropic: 5 strikes open breaker within
+    one user call (retries); 6th retry attempt raises CircuitBreakerError
+    (non-retryable). Subsequent calls fast-fail."""
+    import pybreaker
+    from backend.services.llm_adapter import breakers
+
+    breakers._BREAKERS.clear()
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.GenerativeModel") as mock_model_cls:
+        mock_model = MagicMock()
+        mock_model_cls.return_value = mock_model
+        mock_model.generate_content.side_effect = ConnectionError("down")
+
+        from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+        from backend.services.llm_adapter.types import LLMRequest, Message, TextPart
+
+        adapter = GeminiAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gemini-1.5-flash",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        with pytest.raises(pybreaker.CircuitBreakerError):
+            adapter.chat(req)
+
+        with pytest.raises(pybreaker.CircuitBreakerError):
+            adapter.chat(req)
