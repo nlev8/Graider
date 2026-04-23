@@ -437,3 +437,24 @@ class TestRetryIntegration:
         delays = [c.args[0] for c in mock_sleep.call_args_list]
         assert delays == pytest.approx([0.5, 1.0, 2.0, 4.0, 8.0])
         assert sum(delays) == pytest.approx(15.5)
+
+    @patch("backend.retry.time.sleep")
+    def test_with_retry_raises_non_retryable_immediately(self, mock_sleep):
+        """Exceptions listed in non_retryable propagate on first occurrence,
+        even if they would otherwise match is_retryable_error()."""
+
+        class FakeCircuitOpen(Exception):
+            pass
+
+        call_count = {"n": 0}
+
+        def flaky():
+            call_count["n"] += 1
+            raise FakeCircuitOpen("breaker open")
+
+        with pytest.raises(FakeCircuitOpen):
+            with_retry(flaky, max_retries=5, non_retryable=(FakeCircuitOpen,))
+
+        # First-attempt raise — no retries, no sleep loop.
+        assert call_count["n"] == 1
+        mock_sleep.assert_not_called()
