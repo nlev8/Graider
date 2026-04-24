@@ -2,8 +2,8 @@
 
 Uses MagicMock chunk sequences. No live API calls.
 
-Gemini's streaming API (generate_content with stream=True) yields
-GenerateContentResponse chunks with .text and .candidates[0].content.parts
+Gemini's streaming API (google.genai SDK) uses client.models.generate_content_stream()
+which yields GenerateContentResponse chunks with .text and .candidates[0].content.parts
 (which may contain function_call parts).
 """
 from __future__ import annotations
@@ -95,17 +95,17 @@ def _simple_request():
 # Text-only stream
 # ---------------------------------------------------------------------------
 
-@patch("backend.services.llm_adapter.gemini_adapter.genai")
-def test_gemini_stream_text_only(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
+@patch("backend.services.llm_adapter.gemini_adapter.genai.Client")
+def test_gemini_stream_text_only(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
 
     chunks = [
         _text_chunk("Hello"),
         _text_chunk(" world"),
         _final_chunk_with_usage(10, 5, "STOP"),
     ]
-    mock_model.generate_content.return_value = iter(chunks)
+    mock_client.models.generate_content_stream.return_value = iter(chunks)
 
     adapter = GeminiAdapter(api_key="test-key")
     events = list(adapter.stream_chat(_simple_request()))
@@ -130,16 +130,16 @@ def test_gemini_stream_text_only(mock_genai):
 # Tool-call stream
 # ---------------------------------------------------------------------------
 
-@patch("backend.services.llm_adapter.gemini_adapter.genai")
-def test_gemini_stream_tool_call(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
+@patch("backend.services.llm_adapter.gemini_adapter.genai.Client")
+def test_gemini_stream_tool_call(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
 
     chunks = [
         _tool_chunk("get_weather", {"location": "SF"}),
         _final_chunk_with_usage(15, 8, "STOP"),
     ]
-    mock_model.generate_content.return_value = iter(chunks)
+    mock_client.models.generate_content_stream.return_value = iter(chunks)
 
     adapter = GeminiAdapter(api_key="test-key")
     events = list(adapter.stream_chat(_simple_request()))
@@ -158,17 +158,19 @@ def test_gemini_stream_tool_call(mock_genai):
 # stream=True forwarded to generate_content
 # ---------------------------------------------------------------------------
 
-@patch("backend.services.llm_adapter.gemini_adapter.genai")
-def test_gemini_stream_passes_stream_true(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_model.generate_content.return_value = iter([_final_chunk_with_usage()])
+@patch("backend.services.llm_adapter.gemini_adapter.genai.Client")
+def test_gemini_stream_passes_stream_true(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+    mock_client.models.generate_content_stream.return_value = iter([_final_chunk_with_usage()])
 
     adapter = GeminiAdapter(api_key="test-key")
     list(adapter.stream_chat(_simple_request()))
 
-    call_kwargs = mock_model.generate_content.call_args.kwargs
-    assert call_kwargs.get("stream") is True
+    mock_client.models.generate_content_stream.assert_called_once()
+    call_kwargs = mock_client.models.generate_content_stream.call_args.kwargs
+    # New SDK uses a dedicated stream method — no stream=True kwarg needed
+    assert "config" in call_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -176,11 +178,11 @@ def test_gemini_stream_passes_stream_true(mock_genai):
 # ---------------------------------------------------------------------------
 
 @patch("backend.services.llm_adapter.gemini_adapter.emit")
-@patch("backend.services.llm_adapter.gemini_adapter.genai")
-def test_gemini_stream_emits_start_and_complete(mock_genai, mock_emit):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_model.generate_content.return_value = iter([_final_chunk_with_usage()])
+@patch("backend.services.llm_adapter.gemini_adapter.genai.Client")
+def test_gemini_stream_emits_start_and_complete(mock_client_cls, mock_emit):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+    mock_client.models.generate_content_stream.return_value = iter([_final_chunk_with_usage()])
 
     adapter = GeminiAdapter(api_key="test-key")
     list(adapter.stream_chat(_simple_request()))

@@ -34,7 +34,7 @@ def _make_app():
 
 
 def _mock_genai_response(text):
-    """Create a mock response compatible with GeminiAdapter's genai.GenerativeModel."""
+    """Create a mock response compatible with GeminiAdapter's genai.Client."""
     mock_resp = MagicMock()
     mock_resp.text = text
     mock_resp.candidates = [MagicMock(finish_reason=MagicMock(name="STOP"))]
@@ -81,9 +81,9 @@ class TestGenerateStudyGuide:
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
-                mock_model = MagicMock()
-                mock_model.generate_content.return_value = _mock_genai_response(SAMPLE_STUDY_GUIDE)
-                mock_genai.GenerativeModel.return_value = mock_model
+                mock_client = MagicMock()
+                mock_client.models.generate_content.return_value = _mock_genai_response(SAMPLE_STUDY_GUIDE)
+                mock_genai.Client.return_value = mock_client
 
                 resp = client.post('/api/generate-study-guide', json={
                     "title": "Unit 3 Study Guide",
@@ -113,9 +113,9 @@ class TestGenerateStudyGuide:
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
-                mock_model = MagicMock()
-                mock_model.generate_content.side_effect = Exception("API error")
-                mock_genai.GenerativeModel.return_value = mock_model
+                mock_client = MagicMock()
+                mock_client.models.generate_content.side_effect = Exception("API error")
+                mock_genai.Client.return_value = mock_client
 
                 resp = client.post('/api/generate-study-guide', json={
                     "title": "Broken Guide",
@@ -132,7 +132,7 @@ class TestGenerateStudyGuide:
         app = _make_app()
         captured_prompt = []
 
-        def capture(contents, generation_config=None, request_options=None):
+        def capture(model=None, contents=None, config=None, **kwargs):
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
             return _mock_genai_response(SAMPLE_STUDY_GUIDE)
@@ -140,9 +140,9 @@ class TestGenerateStudyGuide:
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
-                mock_model = MagicMock()
-                mock_model.generate_content.side_effect = capture
-                mock_genai.GenerativeModel.return_value = mock_model
+                mock_client = MagicMock()
+                mock_client.models.generate_content.side_effect = capture
+                mock_genai.Client.return_value = mock_client
 
                 resp = client.post('/api/generate-study-guide', json={
                     "title": "Lesson Review",
@@ -165,7 +165,7 @@ class TestGenerateStudyGuide:
         app = _make_app()
         captured_prompt = []
 
-        def capture(contents, generation_config=None, request_options=None):
+        def capture(model=None, contents=None, config=None, **kwargs):
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
             return _mock_genai_response(SAMPLE_STUDY_GUIDE)
@@ -173,9 +173,9 @@ class TestGenerateStudyGuide:
         with app.test_client() as client:
             with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
                  patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
-                mock_model = MagicMock()
-                mock_model.generate_content.side_effect = capture
-                mock_genai.GenerativeModel.return_value = mock_model
+                mock_client = MagicMock()
+                mock_client.models.generate_content.side_effect = capture
+                mock_genai.Client.return_value = mock_client
 
                 resp = client.post('/api/generate-study-guide', json={
                     "title": "Custom Guide",
