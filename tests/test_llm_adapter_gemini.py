@@ -170,3 +170,16 @@ def test_gemini_chat_uses_breaker():
 
         with pytest.raises(pybreaker.CircuitBreakerError):
             adapter.chat(req)
+
+
+def test_gemini_adapter_uses_google_genai_sdk():
+    """Post-migration, the adapter should import from google.genai, not
+    google.generativeai."""
+    import inspect
+    import backend.services.llm_adapter.gemini_adapter as mod
+
+    source = inspect.getsource(mod)
+    assert "import google.generativeai" not in source, (
+        "gemini_adapter.py still imports the deprecated google.generativeai SDK"
+    )
+    assert "from google import genai" in source

@@ -1,9 +1,9 @@
 """Gemini adapter for the Phase 5a LLM adapter layer.
 
-Maps LLMRequest/Response to/from google.generativeai.GenerativeModel.generate_content.
+Maps LLMRequest/Response to/from the google.genai SDK (google-genai package).
 
 Key differences from OpenAI/Anthropic:
-- system_prompt maps to system_instruction= at model creation time
+- system_prompt maps to system_instruction= in GenerateContentConfig
 - messages map to contents= as a list of {role, parts} dicts
 - Gemini uses role "model" not "assistant" — we map "assistant" → "model"
 - Multimodal image input uses {"inline_data": {"mime_type": ..., "data": base64}}
@@ -23,7 +23,8 @@ import uuid
 from typing import Any, Iterator
 
 import pybreaker
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 import sentry_sdk
 
 from backend.services.llm_adapter.breakers import get_breaker
@@ -145,40 +146,38 @@ def _unwrap_protobuf(value: Any) -> Any:
 
 
 class GeminiAdapter:
-    """Adapter for Google's Gemini generative AI API (google.generativeai)."""
+    """Adapter for Google's Gemini generative AI API (google.genai)."""
 
     def __init__(self, api_key: str | None = None):
-        self._api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        resolved_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self._client = genai.Client(api_key=resolved_key)
         self._provider = "gemini"
 
     def chat(self, request: LLMRequest) -> LLMResponse:
-        genai.configure(api_key=self._api_key)
-
-        model_kwargs: dict[str, Any] = {}
-        if request.system_prompt:
-            model_kwargs["system_instruction"] = request.system_prompt
-
-        model = genai.GenerativeModel(request.model, **model_kwargs)
-
         contents = [_message_to_gemini(msg) for msg in request.messages]
 
-        # For single-turn requests with only a user message, Gemini also accepts
-        # a plain string — but we always use the list form for consistency.
-        generation_config: dict[str, Any] = {}
+        # Build GenerateContentConfig kwargs
+        config_kwargs: dict[str, Any] = {}
+        if request.system_prompt:
+            config_kwargs["system_instruction"] = request.system_prompt
         if request.max_tokens is not None:
-            generation_config["max_output_tokens"] = request.max_tokens
+            config_kwargs["max_output_tokens"] = request.max_tokens
         if request.temperature is not None:
-            generation_config["temperature"] = request.temperature
+            config_kwargs["temperature"] = request.temperature
         if request.response_format is not None:
-            # Gemini's generation_config.response_mime_type enforces JSON output
-            # when set to "application/json". json_schema adds response_schema.
+            # Gemini's response_mime_type enforces JSON output when set to
+            # "application/json". json_schema adds response_schema.
             if request.response_format.type in ("json_object", "json_schema"):
-                generation_config["response_mime_type"] = "application/json"
+                config_kwargs["response_mime_type"] = "application/json"
             if request.response_format.type == "json_schema" and request.response_format.schema:
-                generation_config["response_schema"] = request.response_format.schema
+                config_kwargs["response_schema"] = request.response_format.schema
 
-        # Plumb timeout through the SDK's request_options.
-        request_options = {"timeout": request.timeout}
+        # Plumb timeout through HttpOptions (new SDK uses milliseconds).
+        config_kwargs["http_options"] = genai_types.HttpOptions(
+            timeout=int(request.timeout * 1000)
+        )
+
+        config = genai_types.GenerateContentConfig(**config_kwargs)
 
         emit(
             "llm.call.start",
@@ -192,10 +191,10 @@ class GeminiAdapter:
             breaker = get_breaker(self._provider, request.model)
 
             def _raw_call():
-                return model.generate_content(
-                    contents,
-                    generation_config=generation_config if generation_config else None,
-                    request_options=request_options,
+                return self._client.models.generate_content(
+                    model=request.model,
+                    contents=contents,
+                    config=config,
                 )
 
             def _breakered():
@@ -303,7 +302,7 @@ class GeminiAdapter:
     def stream_chat(self, request: LLMRequest) -> Iterator[StreamEvent]:
         """Yield StreamEvent instances from a Gemini streaming response.
 
-        Uses generate_content(stream=True). The initial call is protected
+        Uses generate_content_stream(). The initial call is protected
         by with_retry(); iteration is not (can't retry mid-stream).
 
         Gemini yields full GenerateContentResponse chunks per step.
@@ -311,11 +310,16 @@ class GeminiAdapter:
         candidates[0].content.parts (ToolCallDelta / ToolCallComplete).
         Usage is only present on the final chunk.
         """
-        genai.configure(api_key=self._api_key)
+        contents = [_message_to_gemini(msg) for msg in request.messages]
 
-        model_kwargs: dict[str, Any] = {}
+        # Build GenerateContentConfig kwargs
+        config_kwargs: dict[str, Any] = {}
         if request.system_prompt:
-            model_kwargs["system_instruction"] = request.system_prompt
+            config_kwargs["system_instruction"] = request.system_prompt
+        if request.max_tokens is not None:
+            config_kwargs["max_output_tokens"] = request.max_tokens
+        if request.temperature is not None:
+            config_kwargs["temperature"] = request.temperature
         if request.tools:
             declarations = []
             for t in request.tools:
@@ -325,7 +329,7 @@ class GeminiAdapter:
                     k: {kk: vv for kk, vv in v.items() if kk != "additionalProperties"}
                     for k, v in props.items()
                 }
-                declarations.append(genai.types.FunctionDeclaration(
+                declarations.append(genai_types.FunctionDeclaration(
                     name=t.name,
                     description=t.description,
                     parameters={
@@ -334,18 +338,14 @@ class GeminiAdapter:
                         "required": schema.get("required", []),
                     },
                 ))
-            model_kwargs["tools"] = [genai.types.Tool(function_declarations=declarations)]
+            config_kwargs["tools"] = [genai_types.Tool(function_declarations=declarations)]
 
-        model = genai.GenerativeModel(request.model, **model_kwargs)
-        contents = [_message_to_gemini(msg) for msg in request.messages]
+        # Plumb timeout through HttpOptions (new SDK uses milliseconds).
+        config_kwargs["http_options"] = genai_types.HttpOptions(
+            timeout=int(request.timeout * 1000)
+        )
 
-        generation_config: dict[str, Any] = {}
-        if request.max_tokens is not None:
-            generation_config["max_output_tokens"] = request.max_tokens
-        if request.temperature is not None:
-            generation_config["temperature"] = request.temperature
-
-        request_options = {"timeout": request.timeout}
+        config = genai_types.GenerateContentConfig(**config_kwargs)
 
         emit(
             "llm.call.start",
@@ -360,11 +360,10 @@ class GeminiAdapter:
             stream_breaker = get_breaker(self._provider, request.model)
 
             def _raw_stream_call():
-                return model.generate_content(
-                    contents,
-                    generation_config=generation_config if generation_config else None,
-                    request_options=request_options,
-                    stream=True,
+                return self._client.models.generate_content_stream(
+                    model=request.model,
+                    contents=contents,
+                    config=config,
                 )
 
             def _breakered_stream():
