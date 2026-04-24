@@ -147,3 +147,52 @@ def test_llm_tool_args_overflow_exception_importable():
 def test_llm_tool_args_overflow_exported_from_package():
     from backend.services.llm_adapter import LLMToolArgsOverflow
     assert LLMToolArgsOverflow is not None
+
+
+def test_image_request_defaults():
+    from backend.services.llm_adapter.types import ImageRequest
+    req = ImageRequest(prompt="a cat", model="gemini-2.5-flash-preview-image-generation")
+    assert req.prompt == "a cat"
+    assert req.model == "gemini-2.5-flash-preview-image-generation"
+    assert req.reference_images is None
+    assert req.aspect_ratio is None
+    assert req.retry is False
+    assert req.metadata == {}
+
+
+def test_image_request_with_reference_and_aspect():
+    from backend.services.llm_adapter.types import ImagePart, ImageRequest
+    ref = ImagePart(url=None, base64="aGVsbG8=", mime_type="image/png")
+    req = ImageRequest(
+        prompt="style-matched",
+        model="gemini-2.5-flash-preview-image-generation",
+        reference_images=[ref],
+        aspect_ratio="16:9",
+        retry=True,
+    )
+    assert req.reference_images == [ref]
+    assert req.aspect_ratio == "16:9"
+    assert req.retry is True
+
+
+def test_image_response_shape():
+    from backend.services.llm_adapter.types import ImageResponse
+    resp = ImageResponse(
+        images=[b"\x89PNG\r\n\x1a\n"],
+        mime_type="image/png",
+        provider="gemini",
+        model="gemini-2.5-flash-preview-image-generation",
+        cost_usd=0.04,
+    )
+    assert resp.images == [b"\x89PNG\r\n\x1a\n"]
+    assert resp.mime_type == "image/png"
+    assert resp.provider == "gemini"
+    assert resp.cost_usd == 0.04
+
+
+def test_image_request_is_frozen():
+    from backend.services.llm_adapter.types import ImageRequest
+    import dataclasses
+    req = ImageRequest(prompt="x", model="gemini-2.5-flash-preview-image-generation")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        req.prompt = "mutated"
