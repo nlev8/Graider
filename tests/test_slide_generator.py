@@ -80,13 +80,13 @@ class TestGenerateSlideContent:
         )
 
         with patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
-            mock_model = MagicMock()
-            mock_model.generate_content.return_value = MagicMock(
+            mock_client = MagicMock()
+            mock_client.models.generate_content.return_value = MagicMock(
                 text=json.dumps(SAMPLE_SLIDE_CONTENT),
                 candidates=[MagicMock(finish_reason=MagicMock(name="STOP"))],
                 usage_metadata=MagicMock(prompt_token_count=10, candidates_token_count=5),
             )
-            mock_genai.GenerativeModel.return_value = mock_model
+            mock_genai.Client.return_value = mock_client
 
             result = generate_slide_content(
                 content="The Constitution establishes three branches...",
@@ -273,7 +273,7 @@ class TestDeckFormat:
 
         captured_prompt = []
 
-        def capture_generate_content(contents, generation_config=None, request_options=None):
+        def capture_generate_content(model=None, contents=None, config=None, **kwargs):
             # contents is a list of {"role": ..., "parts": [{"text": ...}]}
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
@@ -284,9 +284,9 @@ class TestDeckFormat:
             )
 
         with patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
-            mock_model = MagicMock()
-            mock_model.generate_content.side_effect = capture_generate_content
-            mock_genai.GenerativeModel.return_value = mock_model
+            mock_client = MagicMock()
+            mock_client.models.generate_content.side_effect = capture_generate_content
+            mock_genai.Client.return_value = mock_client
 
             generate_slide_content(
                 content="Test content", subject="Math", grade="7",
@@ -302,7 +302,7 @@ class TestDeckFormat:
 
         captured_prompt = []
 
-        def capture_generate_content(contents, generation_config=None, request_options=None):
+        def capture_generate_content(model=None, contents=None, config=None, **kwargs):
             prompt_text = contents[0]["parts"][0]["text"] if contents else ""
             captured_prompt.append(prompt_text)
             return MagicMock(
@@ -312,9 +312,9 @@ class TestDeckFormat:
             )
 
         with patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
-            mock_model = MagicMock()
-            mock_model.generate_content.side_effect = capture_generate_content
-            mock_genai.GenerativeModel.return_value = mock_model
+            mock_client = MagicMock()
+            mock_client.models.generate_content.side_effect = capture_generate_content
+            mock_genai.Client.return_value = mock_client
 
             generate_slide_content(
                 content="Test content", subject="Math", grade="7",
