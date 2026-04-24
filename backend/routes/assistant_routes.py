@@ -33,7 +33,7 @@ except ImportError:
     openai_pkg = None
 
 try:
-    import google.generativeai as genai_pkg
+    from google import genai as genai_pkg
 except ImportError:
     genai_pkg = None
 
@@ -1330,7 +1330,7 @@ def assistant_chat():
             return jsonify({"error": "OPENAI_API_KEY not set in .env"}), 500
     elif provider == "gemini":
         if genai_pkg is None:
-            return jsonify({"error": "google-generativeai package not installed. Run: pip install google-generativeai"}), 500
+            return jsonify({"error": "google-genai package not installed. Run: pip install google-genai"}), 500
         api_key = get_api_key('gemini', teacher_id)
         if not api_key:
             return jsonify({"error": "GEMINI_API_KEY not set in .env"}), 500
