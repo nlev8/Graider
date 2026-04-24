@@ -323,3 +323,45 @@ class TestDeckFormat:
 
         assert captured_prompt, "generate_content was not called"
         assert "PRESENTER SLIDES" in captured_prompt[0]
+
+
+def test_generate_slide_images_invokes_adapter_per_image_slide(monkeypatch):
+    """Each slide with an image_prompt triggers one adapter.generate_image call."""
+    from backend.services import slide_generator
+    from backend.services.llm_adapter.types import ImageResponse
+
+    slides = [
+        {"image_prompt": "a cat", "title": "Slide 1"},
+        {"image_prompt": "a dog", "title": "Slide 2"},
+        {"title": "No image"},  # No image_prompt
+    ]
+    theme = {"style_prompt": "flat illustration"}
+
+    calls = []
+
+    def fake_generate_image(self, request):
+        calls.append(request.prompt)
+        return ImageResponse(
+            images=[b"\x89PNG"],
+            mime_type="image/png",
+            provider="gemini",
+            model=request.model,
+            cost_usd=0.04,
+        )
+
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+        fake_generate_image,
+    )
+    # Stub the client constructor so GeminiAdapter.__init__ succeeds without a real key
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.genai.Client",
+        lambda api_key=None: object(),
+    )
+
+    images = slide_generator.generate_slide_images(slides, theme, api_key="test", max_images=5)
+
+    assert len(calls) == 2  # only the two slides with image_prompt
+    assert 0 in images
+    assert 1 in images
+    assert 2 not in images  # no image_prompt for slide 2
