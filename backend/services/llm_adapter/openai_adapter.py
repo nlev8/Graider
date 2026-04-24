@@ -370,78 +370,86 @@ class OpenAIAdapter:
         finish_reason_raw: str | None = None
 
         try:
-            for chunk in stream:
-                choice = chunk.choices[0] if chunk.choices else None
+            try:
+                for chunk in stream:
+                    choice = chunk.choices[0] if chunk.choices else None
 
-                # Usage-only chunk (arrives when stream_options include_usage=True)
-                if chunk.usage and (not choice or not choice.delta.content):
-                    usage_event = UsageEvent(
-                        usage=Usage(
-                            prompt_tokens=chunk.usage.prompt_tokens or 0,
-                            completion_tokens=chunk.usage.completion_tokens or 0,
-                            cost_usd=_estimate_cost_usd(
-                                request.model,
-                                chunk.usage.prompt_tokens or 0,
-                                chunk.usage.completion_tokens or 0,
-                            ),
-                        )
-                    )
-
-                if not choice:
-                    continue
-
-                delta = choice.delta
-
-                # Text content
-                if delta and delta.content:
-                    yield TextDelta(text=delta.content)
-
-                # Tool call deltas
-                if delta and delta.tool_calls:
-                    for tc_delta in delta.tool_calls:
-                        idx = tc_delta.index
-                        if idx not in pending_tool_calls:
-                            pending_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
-
-                        is_first = False
-                        if tc_delta.id:
-                            pending_tool_calls[idx]["id"] = tc_delta.id
-                            is_first = True
-                        if tc_delta.function and tc_delta.function.name:
-                            pending_tool_calls[idx]["name"] = tc_delta.function.name
-                            is_first = True
-                        args_fragment = ""
-                        if tc_delta.function and tc_delta.function.arguments:
-                            args_fragment = tc_delta.function.arguments
-                            pending_tool_calls[idx]["arguments"] += args_fragment
-
-                        yield ToolCallDelta(
-                            tool_call_id=pending_tool_calls[idx]["id"],
-                            name=pending_tool_calls[idx]["name"] if is_first else None,
-                            args_delta=args_fragment,
+                    # Usage-only chunk (arrives when stream_options include_usage=True)
+                    if chunk.usage and (not choice or not choice.delta.content):
+                        usage_event = UsageEvent(
+                            usage=Usage(
+                                prompt_tokens=chunk.usage.prompt_tokens or 0,
+                                completion_tokens=chunk.usage.completion_tokens or 0,
+                                cost_usd=_estimate_cost_usd(
+                                    request.model,
+                                    chunk.usage.prompt_tokens or 0,
+                                    chunk.usage.completion_tokens or 0,
+                                ),
+                            )
                         )
 
-                if choice.finish_reason:
-                    finish_reason_raw = choice.finish_reason
+                    if not choice:
+                        continue
 
-        except Exception as e:
-            duration_ms = int((time.monotonic() - t0) * 1000)
-            emit(
-                "llm.call.error",
-                level="warning",
-                provider=self._provider,
-                model=request.model,
-                duration_ms=duration_ms,
-                streaming=True,
-                error_kind=type(e).__name__,
-            )
-            sentry_sdk.add_breadcrumb(
-                category="llm.call",
-                level="warning",
-                message=f"openai stream iteration failed for {request.model}",
-                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
-            )
-            raise
+                    delta = choice.delta
+
+                    # Text content
+                    if delta and delta.content:
+                        yield TextDelta(text=delta.content)
+
+                    # Tool call deltas
+                    if delta and delta.tool_calls:
+                        for tc_delta in delta.tool_calls:
+                            idx = tc_delta.index
+                            if idx not in pending_tool_calls:
+                                pending_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+
+                            is_first = False
+                            if tc_delta.id:
+                                pending_tool_calls[idx]["id"] = tc_delta.id
+                                is_first = True
+                            if tc_delta.function and tc_delta.function.name:
+                                pending_tool_calls[idx]["name"] = tc_delta.function.name
+                                is_first = True
+                            args_fragment = ""
+                            if tc_delta.function and tc_delta.function.arguments:
+                                args_fragment = tc_delta.function.arguments
+                                pending_tool_calls[idx]["arguments"] += args_fragment
+
+                            yield ToolCallDelta(
+                                tool_call_id=pending_tool_calls[idx]["id"],
+                                name=pending_tool_calls[idx]["name"] if is_first else None,
+                                args_delta=args_fragment,
+                            )
+
+                    if choice.finish_reason:
+                        finish_reason_raw = choice.finish_reason
+
+            except Exception as e:
+                duration_ms = int((time.monotonic() - t0) * 1000)
+                emit(
+                    "llm.call.error",
+                    level="warning",
+                    provider=self._provider,
+                    model=request.model,
+                    duration_ms=duration_ms,
+                    streaming=True,
+                    error_kind=type(e).__name__,
+                )
+                sentry_sdk.add_breadcrumb(
+                    category="llm.call",
+                    level="warning",
+                    message=f"openai stream iteration failed for {request.model}",
+                    data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+                )
+                raise
+        finally:
+            # Phase 5b PR 4 — release upstream HTTP connection on client
+            # disconnect, error, or normal completion.
+            try:
+                stream.close()
+            except Exception:
+                _logger.debug("openai stream.close() raised on cleanup", exc_info=True)
 
         # Emit ToolCallComplete for every accumulated tool call
         for idx in sorted(pending_tool_calls.keys()):
