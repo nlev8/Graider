@@ -135,3 +135,15 @@ def test_imagepart_detail_accepts_literal_values():
     for d in ("auto", "low", "high"):
         ip = ImagePart(url="http://x", base64=None, mime_type="image/png", detail=d)
         assert ip.detail == d
+
+
+def test_llm_tool_args_overflow_exception_importable():
+    from backend.services.llm_adapter.types import LLMToolArgsOverflow
+    exc = LLMToolArgsOverflow("too big")
+    assert isinstance(exc, Exception)
+    assert str(exc) == "too big"
+
+
+def test_llm_tool_args_overflow_exported_from_package():
+    from backend.services.llm_adapter import LLMToolArgsOverflow
+    assert LLMToolArgsOverflow is not None
