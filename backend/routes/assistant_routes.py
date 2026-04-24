@@ -281,6 +281,12 @@ tts_muted_sessions = set()
 # Per-session cancellation flag — stops the tool loop when user clicks Stop
 cancelled_sessions = set()
 
+# Phase 5b PR 4 — finalizer idempotency registry.
+# Prevents double-cleanup when GeneratorExit races with normal-completion
+# yield-from. See docs/superpowers/specs/2026-04-23-phase5b-hardening-design.md § PR 4.
+_finalizing_sessions: set = set()
+_finalizing_lock = threading.Lock()
+
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
 RUBRIC_FILE = os.path.expanduser("~/.graider_rubric.json")
 MEMORY_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
@@ -1160,6 +1166,134 @@ def _record_assistant_cost(input_tokens, output_tokens, model, tts_chars=0):
         "tts_cost": round(tts_cost, 6),
         "total_cost": total_cost,
     }
+
+
+def _finalize_assistant_stream(
+    *,
+    session_id: str,
+    conv: dict,
+    messages: list,
+    tts_stream,
+    sentence_buffer,
+    audio_out_queue,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    total_tts_chars: int,
+    active_model: str,
+    cancelled: bool,
+):
+    """Idempotent cleanup for the assistant SSE stream. Yields SSE audio_chunk
+    frames in normal-completion mode; silent in disconnect mode.
+
+    See docs/superpowers/specs/2026-04-23-phase5b-hardening-design.md § PR 4
+    for the full 9-responsibility behavior spec. Disconnect mode skips
+    step 3 (sentence buffer flush), step 4 (tts wait_for_flush), step 6
+    (audio-chunk yields), and step 9's cost SSE frame — other steps run
+    regardless of client connectivity.
+    """
+    # Round 7 idempotency guard — first call wins.
+    with _finalizing_lock:
+        if session_id in _finalizing_sessions:
+            return
+        _finalizing_sessions.add(session_id)
+
+    try:
+        # 1. conv["messages"] = messages
+        conv["messages"] = messages
+
+        # 2. _persist_conversation(session_id)
+        try:
+            _persist_conversation(session_id)
+        except Exception:
+            logger.exception("_persist_conversation failed for %s", session_id)
+
+        # 3. Sentence buffer flush + send — NORMAL MODE ONLY
+        if not cancelled and tts_stream is not None:
+            if session_id not in tts_muted_sessions and sentence_buffer:
+                remaining = sentence_buffer.flush()
+                if remaining:
+                    text_to_speak = remaining + " "
+                    try:
+                        tts_stream.send_text(text_to_speak)
+                        total_tts_chars += len(text_to_speak)
+                    except Exception:
+                        logger.debug("tts_stream.send_text failed on finalize", exc_info=True)
+
+        # 4. tts_stream.flush() + wait_for_flush — NORMAL MODE ONLY
+        # Skipped in disconnect to avoid blocking a Gunicorn worker for up to
+        # 15 seconds flushing audio that no one will receive (Gemini Round 7).
+        if not cancelled and tts_stream is not None:
+            try:
+                tts_stream.flush()
+                tts_stream.wait_for_flush(timeout=15.0)
+            except Exception:
+                logger.debug("tts_stream.flush/wait_for_flush raised", exc_info=True)
+
+        # 5. tts_stream.close() — both modes
+        if tts_stream is not None:
+            try:
+                tts_stream.close()
+            except Exception:
+                logger.debug("tts_stream.close raised", exc_info=True)
+
+        # 6. Audio-queue drain + yield — NORMAL MODE ONLY
+        if not cancelled and tts_stream is not None:
+            if audio_out_queue and session_id not in tts_muted_sessions:
+                while True:
+                    try:
+                        chunk = audio_out_queue.get(timeout=3.0)
+                        if chunk is None:
+                            break
+                        yield f"data: {json.dumps({'type': 'audio_chunk', 'audio': chunk})}\n\n"
+                    except queue.Empty:
+                        break
+
+        # 7. tts_muted_sessions.discard(session_id)
+        tts_muted_sessions.discard(session_id)
+
+        # 8. cancelled_sessions.discard(session_id)
+        cancelled_sessions.discard(session_id)
+
+        # 9. Cost record + (normal mode only) yield cost SSE frame
+        if total_input_tokens > 0 or total_tts_chars > 0:
+            try:
+                cost_info = _record_assistant_cost(
+                    total_input_tokens, total_output_tokens,
+                    active_model, total_tts_chars,
+                )
+                if cost_info.get("total_cost", 0) > COST_WARNING_THRESHOLD:
+                    cost_info["high_cost"] = True
+                if not cancelled:
+                    yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
+            except Exception:
+                logger.exception("_record_assistant_cost failed")
+
+        # Observability marker
+        try:
+            from backend.observability.events import emit as _emit
+            _emit(
+                "assistant.stream.finalized",
+                session_id=session_id,
+                cancelled=cancelled,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                total_tts_chars=total_tts_chars,
+                active_model=active_model,
+            )
+        except Exception:
+            pass
+    finally:
+        with _finalizing_lock:
+            _finalizing_sessions.discard(session_id)
+
+
+def _finalize_assistant_stream_silent(**kwargs):
+    """Run finalize's state cleanup but discard any SSE yields.
+
+    For the GeneratorExit disconnect path where `yield from` is illegal.
+    """
+    for _ in _finalize_assistant_stream(**kwargs):
+        pass
 
 
 def _cleanup_stale_sessions():
