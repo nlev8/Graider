@@ -185,46 +185,35 @@ def generate_slide_content(content, subject, grade, title, api_key,
 
 # ── Phase 2: Image generation ───────────────────────────────────────────
 
-def _get_genai_client(api_key):
-    """Get the new google-genai client for image generation."""
-    from google import genai
-    return genai.Client(api_key=api_key)
-
-
 def generate_slide_images(slides, theme, api_key, max_images=5):
     """Generate themed images for slides that have image_prompt.
 
-    Uses Gemini 2.5 Flash Image with style reference: the first generated
-    image becomes the reference for all subsequent images, ensuring visual
-    consistency across the deck.
+    Uses GeminiAdapter.generate_image for all observability, retry, and
+    breaker protection. Reference-image style consistency is preserved:
+    the first successful image's bytes + MIME are carried forward as an
+    ImagePart passed via reference_images on subsequent calls.
 
     Args:
-        slides: list of slide dicts (from generate_slide_content)
+        slides: list of slide dicts
         theme: theme dict with style_prompt
         api_key: Gemini API key
-        max_images: cap on number of images generated (cost control)
+        max_images: cap on number of images (cost control)
 
     Returns:
-        dict mapping slide index → PNG image bytes
-
-    Style-reference strategy:
-        The first successfully generated image is stored as a PIL Image
-        object in memory (not disk). It's passed as a reference image to
-        all subsequent Gemini calls in the same request, ensuring visual
-        consistency across the deck. The PIL Image is garbage collected
-        when the function returns — no cleanup needed.
+        dict mapping slide index -> PNG/JPEG image bytes
 
     Error handling:
-        Each image generation is individually try/excepted. If one fails
-        (timeout, safety filter, quota), that slide gets no image — the
-        PPTX assembler renders it as text-only. No retry on image calls
-        (acceptable $0.04 loss vs double-charging on retry). The caller
-        sees how many images succeeded via len(returned dict).
+        Each image generation is try/excepted individually. If one fails
+        (timeout, safety filter, quota, CircuitBreakerError), that slide
+        gets no image — the PPTX assembler renders it as text-only. No
+        retry on image calls (via ImageRequest(retry=False)).
     """
-    from google.genai import types
-    from PIL import Image
+    import base64
+    import pybreaker
+    from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+    from backend.services.llm_adapter.types import ImagePart, ImageRequest
 
-    client = _get_genai_client(api_key)
+    adapter = GeminiAdapter(api_key=api_key)
     style_prompt = theme.get("style_prompt", "flat educational illustration, no text")
 
     # Find slides that need images
@@ -233,59 +222,59 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
         if slide.get("image_prompt"):
             image_slides.append((i, slide["image_prompt"]))
 
-    # Cap at max_images (prioritize first slides — title + early content)
     image_slides = image_slides[:max_images]
 
     images = {}
-    reference_image = None  # PIL Image held in memory for style consistency
+    reference_image_bytes: bytes | None = None
+    reference_image_mime: str = "image/png"  # starts as png; SDK response may update
 
     for idx, (slide_index, image_prompt) in enumerate(image_slides):
         try:
             full_prompt = style_prompt + ". " + image_prompt
-
-            contents = []
-            if reference_image is not None:
-                # Pass the first image as a style reference (PIL Image in memory)
-                contents.append(reference_image)
-                contents.append(
-                    "Generate an illustration in the EXACT same visual style as the reference image above. "
-                    + full_prompt
+            reference_images = None
+            if reference_image_bytes is not None:
+                b64 = base64.b64encode(reference_image_bytes).decode("ascii")
+                reference_images = [ImagePart(
+                    url=None,
+                    base64=b64,
+                    mime_type=reference_image_mime,
+                )]
+                style_note = (
+                    "Generate an illustration in the EXACT same visual style as "
+                    "the reference image above. "
                 )
-            else:
-                contents.append(full_prompt)
+                full_prompt = style_note + full_prompt
 
-            response = client.models.generate_content(
+            response = adapter.generate_image(ImageRequest(
+                prompt=full_prompt,
                 model="gemini-2.5-flash-preview-image-generation",
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE"],
-                    image_config=types.ImageConfig(
-                        aspect_ratio="16:9",
-                    ),
-                ),
-            )
+                reference_images=reference_images,
+                aspect_ratio="16:9",
+                metadata={"feature_label": "slide_generator_image"},
+            ))
 
-            # Extract image bytes from response
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data is not None:
-                    image_data = part.inline_data.data
-                    images[slide_index] = image_data  # Store as bytes in memory
-
-                    # First successful image becomes the style reference
-                    if reference_image is None:
-                        reference_image = Image.open(BytesIO(image_data))
-                        logger.info("Style reference image set from slide %d", slide_index)
-
-                    break
-
+            if response.images:
+                image_data = response.images[0]
+                images[slide_index] = image_data
+                if reference_image_bytes is None:
+                    reference_image_bytes = image_data
+                    reference_image_mime = response.mime_type
+                    logger.info("Style reference image set from slide %d", slide_index)
+            # else: empty response — adapter already emitted llm.image.call.blocked.
+            # Slide will render text-only in PPTX assembly.
         except Exception as e:
-            # Individual image failure — slide renders as text-only (graceful degradation)
-            sentry_sdk.capture_exception(e)
-            logger.warning("Image generation failed for slide %d (will render text-only): %s", slide_index, e)
+            # Filter CircuitBreakerError out of Sentry to avoid alert fatigue
+            # when the breaker stays OPEN across many slides. logger.warning
+            # still fires for every failure so the pattern is visible in logs.
+            if not isinstance(e, pybreaker.CircuitBreakerError):
+                sentry_sdk.capture_exception(e)
+            logger.warning(
+                "Image generation failed for slide %d (will render text-only): %s",
+                slide_index, e,
+            )
             # Do NOT retry — $0.04 loss is acceptable vs double-charging
 
     logger.info("Generated %d/%d slide images", len(images), len(image_slides))
-    # reference_image (PIL Image) is garbage collected when this function returns
     return images
 
 

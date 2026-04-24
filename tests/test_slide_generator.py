@@ -110,42 +110,56 @@ class TestGenerateSlideContent:
 
 
 class TestGenerateSlideImages:
-    def test_generates_images_for_slides_with_prompts(self):
-        """Should generate images only for slides that have image_prompt."""
+    def test_generates_images_for_slides_with_prompts(self, monkeypatch):
+        """Should generate images only for slides that have image_prompt.
+
+        Post-Phase-5c migration: patches `GeminiAdapter.generate_image` instead
+        of the removed `_get_genai_client` helper.
+        """
         from backend.services.slide_generator import generate_slide_images
+        from backend.services.llm_adapter.types import ImageResponse
 
         slides = SAMPLE_SLIDE_CONTENT["slides"]
         theme = SAMPLE_SLIDE_CONTENT["theme"]
 
-        # Create a 1x1 white PNG for the mock
+        # Create a 1x1 white PNG so downstream consumers see a real image
         from PIL import Image
         img = Image.new('RGB', (1024, 576), 'white')
         img_bytes = BytesIO()
         img.save(img_bytes, format='PNG')
         mock_image_data = img_bytes.getvalue()
 
-        mock_part = MagicMock()
-        mock_part.inline_data = MagicMock()
-        mock_part.inline_data.data = mock_image_data
+        def fake_generate_image(self, request):
+            return ImageResponse(
+                images=[mock_image_data],
+                mime_type="image/png",
+                provider="gemini",
+                model=request.model,
+                cost_usd=0.04,
+            )
 
-        mock_response = MagicMock()
-        mock_response.candidates = [MagicMock()]
-        mock_response.candidates[0].content.parts = [mock_part]
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+            fake_generate_image,
+        )
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.genai.Client",
+            lambda api_key=None: object(),
+        )
 
-        with patch('backend.services.slide_generator._get_genai_client') as mock_get:
-            mock_client = MagicMock()
-            mock_client.models.generate_content.return_value = mock_response
-            mock_get.return_value = mock_client
+        images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
 
-            images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
-
-        # Only slides with image_prompt get images (3 out of 5 in sample)
+        # Only slides with image_prompt get images (cap at max_images=5)
         assert len(images) <= 5
         assert len(images) > 0
 
-    def test_respects_max_images_cap(self):
-        """Should not generate more images than max_images."""
+    def test_respects_max_images_cap(self, monkeypatch):
+        """Should not generate more images than max_images.
+
+        Post-Phase-5c migration: patches `GeminiAdapter.generate_image`.
+        """
         from backend.services.slide_generator import generate_slide_images
+        from backend.services.llm_adapter.types import ImageResponse
 
         slides = [{"layout": "content", "image_prompt": "img " + str(i)} for i in range(20)]
         theme = SAMPLE_SLIDE_CONTENT["theme"]
@@ -155,20 +169,25 @@ class TestGenerateSlideImages:
         img_bytes = BytesIO()
         img.save(img_bytes, format='PNG')
 
-        mock_part = MagicMock()
-        mock_part.inline_data = MagicMock()
-        mock_part.inline_data.data = img_bytes.getvalue()
+        def fake_generate_image(self, request):
+            return ImageResponse(
+                images=[img_bytes.getvalue()],
+                mime_type="image/png",
+                provider="gemini",
+                model=request.model,
+                cost_usd=0.04,
+            )
 
-        mock_response = MagicMock()
-        mock_response.candidates = [MagicMock()]
-        mock_response.candidates[0].content.parts = [mock_part]
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+            fake_generate_image,
+        )
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.genai.Client",
+            lambda api_key=None: object(),
+        )
 
-        with patch('backend.services.slide_generator._get_genai_client') as mock_get:
-            mock_client = MagicMock()
-            mock_client.models.generate_content.return_value = mock_response
-            mock_get.return_value = mock_client
-
-            images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
+        images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
 
         assert len(images) <= 5
 
@@ -323,3 +342,183 @@ class TestDeckFormat:
 
         assert captured_prompt, "generate_content was not called"
         assert "PRESENTER SLIDES" in captured_prompt[0]
+
+
+def test_generate_slide_images_invokes_adapter_per_image_slide(monkeypatch):
+    """Each slide with an image_prompt triggers one adapter.generate_image call."""
+    from backend.services import slide_generator
+    from backend.services.llm_adapter.types import ImageResponse
+
+    slides = [
+        {"image_prompt": "a cat", "title": "Slide 1"},
+        {"image_prompt": "a dog", "title": "Slide 2"},
+        {"title": "No image"},  # No image_prompt
+    ]
+    theme = {"style_prompt": "flat illustration"}
+
+    calls = []
+
+    def fake_generate_image(self, request):
+        calls.append(request.prompt)
+        return ImageResponse(
+            images=[b"\x89PNG"],
+            mime_type="image/png",
+            provider="gemini",
+            model=request.model,
+            cost_usd=0.04,
+        )
+
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+        fake_generate_image,
+    )
+    # Stub the client constructor so GeminiAdapter.__init__ succeeds without a real key
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.genai.Client",
+        lambda api_key=None: object(),
+    )
+
+    images = slide_generator.generate_slide_images(slides, theme, api_key="test", max_images=5)
+
+    assert len(calls) == 2  # only the two slides with image_prompt
+    assert 0 in images
+    assert 1 in images
+    assert 2 not in images  # no image_prompt for slide 2
+
+
+def test_generate_slide_images_passes_reference_image_on_subsequent_calls(monkeypatch):
+    """The first successful image's bytes must be passed as a reference
+    image to all subsequent adapter calls (style consistency)."""
+    from backend.services import slide_generator
+    from backend.services.llm_adapter.types import ImageResponse
+
+    slides = [
+        {"image_prompt": "a cat"},
+        {"image_prompt": "a dog"},
+        {"image_prompt": "a bird"},
+    ]
+    theme = {"style_prompt": "flat illustration"}
+
+    received_requests = []
+
+    def fake_generate_image(self, request):
+        received_requests.append(request)
+        # Return distinct bytes per call so we can verify the FIRST is used as ref
+        return ImageResponse(
+            images=[b"\x89PNG" + bytes([len(received_requests)])],
+            mime_type="image/png",
+            provider="gemini",
+            model=request.model,
+            cost_usd=0.04,
+        )
+
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+        fake_generate_image,
+    )
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.genai.Client",
+        lambda api_key=None: object(),
+    )
+
+    slide_generator.generate_slide_images(slides, theme, api_key="test", max_images=5)
+
+    assert len(received_requests) == 3
+    # First call — no reference image
+    assert received_requests[0].reference_images is None
+    # Second + third calls — reference image present, bytes match first response's image
+    for req in received_requests[1:]:
+        assert req.reference_images is not None
+        assert len(req.reference_images) == 1
+        import base64
+        decoded = base64.b64decode(req.reference_images[0].base64)
+        # First response's bytes were b"\x89PNG\x01"
+        assert decoded == b"\x89PNG\x01"
+        # MIME type should match what the first response reported
+        assert req.reference_images[0].mime_type == "image/png"
+
+
+def test_generate_slide_images_mime_type_propagates_from_sdk(monkeypatch):
+    """If the first adapter response returns mime_type='image/jpeg',
+    subsequent calls must send reference_images with mime_type='image/jpeg'
+    (not hardcoded 'image/png')."""
+    from backend.services import slide_generator
+    from backend.services.llm_adapter.types import ImageResponse
+
+    slides = [
+        {"image_prompt": "first"},
+        {"image_prompt": "second"},
+    ]
+    theme = {"style_prompt": "x"}
+
+    received_requests = []
+    call_no = {"n": 0}
+
+    def fake_generate_image(self, request):
+        call_no["n"] += 1
+        received_requests.append(request)
+        # Both responses return JPEG
+        return ImageResponse(
+            images=[b"\xff\xd8\xff"],
+            mime_type="image/jpeg",
+            provider="gemini",
+            model=request.model,
+            cost_usd=0.04,
+        )
+
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+        fake_generate_image,
+    )
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.genai.Client",
+        lambda api_key=None: object(),
+    )
+
+    slide_generator.generate_slide_images(slides, theme, api_key="test", max_images=5)
+
+    # Second call's reference image declares image/jpeg (not png)
+    assert received_requests[1].reference_images[0].mime_type == "image/jpeg"
+
+
+def test_generate_slide_images_suppresses_sentry_capture_for_breaker_error(monkeypatch):
+    """Every slide that hits OPEN breaker must NOT trigger sentry_sdk.capture_exception.
+    logger.warning still fires. Function returns empty images dict."""
+    import pybreaker
+    from backend.services import slide_generator
+
+    slides = [
+        {"image_prompt": "a"},
+        {"image_prompt": "b"},
+        {"image_prompt": "c"},
+    ]
+    theme = {"style_prompt": "x"}
+
+    sentry_captures = []
+    warnings = []
+
+    def fake_generate_image(self, request):
+        raise pybreaker.CircuitBreakerError("open")
+
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+        fake_generate_image,
+    )
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.genai.Client",
+        lambda api_key=None: object(),
+    )
+    monkeypatch.setattr(
+        "backend.services.slide_generator.sentry_sdk.capture_exception",
+        lambda e: sentry_captures.append(e),
+    )
+    monkeypatch.setattr(
+        "backend.services.slide_generator.logger.warning",
+        lambda *args, **kw: warnings.append((args, kw)),
+    )
+
+    images = slide_generator.generate_slide_images(slides, theme, api_key="test", max_images=5)
+
+    assert images == {}  # no slides got an image
+    assert sentry_captures == [], f"breaker errors should NOT hit Sentry; got {len(sentry_captures)}"
+    assert len(warnings) >= 3, "logger.warning should fire for every failure including breaker"
