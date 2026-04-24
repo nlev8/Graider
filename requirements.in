@@ -79,6 +79,10 @@ python-pptx>=1.0.0
 gunicorn>=21.0.0
 flask-wtf>=1.2.0
 sentry-sdk[flask]>=2.0
+
+# Circuit breaker for LLM adapter seam (Phase 5b PR 1)
+pybreaker>=1.0.0
+
 celery==5.4.0
 alembic>=1.13,<2
 psycopg[binary]>=3.2,<4

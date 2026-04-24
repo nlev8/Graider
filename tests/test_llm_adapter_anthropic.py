@@ -1,6 +1,7 @@
 """Tests for the Anthropic adapter (Phase 5a PR D1)."""
 from __future__ import annotations
 
+import pytest
 from unittest.mock import MagicMock, patch
 
 from backend.services.llm_adapter.anthropic_adapter import AnthropicAdapter
@@ -182,3 +183,37 @@ def test_no_system_prompt_omits_system_kwarg(mock_cls):
 
     kwargs = mock_client.messages.create.call_args.kwargs
     assert "system" not in kwargs
+
+
+def test_anthropic_chat_uses_breaker():
+    """With MAX_RETRIES=5 and fail_max=5, one user call exhausts the
+    breaker: network raises ConnectionError 5 times (retries within the
+    call), 6th retry attempt hits OPEN breaker and raises
+    CircuitBreakerError (non-retryable, propagates). Next call fast-fails."""
+    import pybreaker
+    from backend.services.llm_adapter import breakers
+
+    breakers._BREAKERS.clear()
+
+    with patch("backend.services.llm_adapter.anthropic_adapter.anthropic.Anthropic") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.messages.create.side_effect = ConnectionError("down")
+
+        from backend.services.llm_adapter.anthropic_adapter import AnthropicAdapter
+        from backend.services.llm_adapter.types import LLMRequest, Message, TextPart
+
+        adapter = AnthropicAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="claude-3-sonnet-20240229",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        # First user call exhausts 5 strikes internally via retries; the 6th
+        # retry attempt hits the newly-OPEN breaker and raises CircuitBreakerError.
+        with pytest.raises(pybreaker.CircuitBreakerError):
+            adapter.chat(req)
+
+        # Next call fast-fails
+        with pytest.raises(pybreaker.CircuitBreakerError):
+            adapter.chat(req)

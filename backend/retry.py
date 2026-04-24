@@ -122,7 +122,7 @@ def is_retryable_error(error):
     return False
 
 
-def with_retry(fn, max_retries=MAX_RETRIES, label="", max_delay_s=MAX_DELAY_S):
+def with_retry(fn, max_retries=MAX_RETRIES, label="", max_delay_s=MAX_DELAY_S, non_retryable=()):
     """Call *fn()* with automatic retry on transient failures.
 
     Args:
@@ -130,6 +130,10 @@ def with_retry(fn, max_retries=MAX_RETRIES, label="", max_delay_s=MAX_DELAY_S):
         max_retries: Maximum number of retry attempts (after the initial call).
         label: Human-readable label for log messages.
         max_delay_s: Maximum backoff delay in seconds.
+        non_retryable: Tuple of exception classes that should propagate
+            immediately without retry, even if they'd match
+            is_retryable_error(). Used for pybreaker.CircuitBreakerError
+            so open-circuit raises fail-fast rather than backing off.
 
     Returns:
         The return value of *fn()* on success.
@@ -146,6 +150,9 @@ def with_retry(fn, max_retries=MAX_RETRIES, label="", max_delay_s=MAX_DELAY_S):
             return fn()
         except Exception as exc:
             last_error = exc
+
+            if non_retryable and isinstance(exc, non_retryable):
+                raise
 
             if not is_retryable_error(exc):
                 raise

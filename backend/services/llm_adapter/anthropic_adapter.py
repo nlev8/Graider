@@ -18,10 +18,12 @@ import time
 from typing import Any, Iterator
 
 import anthropic
+import pybreaker
 import sentry_sdk
 
 from backend.observability.events import emit
 from backend.retry import with_retry
+from backend.services.llm_adapter.breakers import get_breaker
 from backend.services.llm_adapter.streaming import (
     FinishEvent,
     StreamEvent,
@@ -166,9 +168,18 @@ class AnthropicAdapter:
         t0 = time.monotonic()
 
         try:
+            breaker = get_breaker(self._provider, request.model)
+
+            def _raw_call():
+                return self._client.messages.create(**kwargs)
+
+            def _breakered():
+                return breaker.call(_raw_call)
+
             raw = with_retry(
-                lambda: self._client.messages.create(**kwargs),
+                _breakered,
                 label=f"anthropic.messages.create({request.model})",
+                non_retryable=(pybreaker.CircuitBreakerError,),
             )
         except Exception as e:
             duration_ms = int((time.monotonic() - t0) * 1000)
@@ -296,6 +307,7 @@ class AnthropicAdapter:
         # iteration begins (yield loop below), we don't retry — that would
         # replay tool-call state inconsistently.
         ctx_holder: list[Any] = [None]
+        stream_breaker = get_breaker(self._provider, request.model)
 
         def _open_stream():
             ctx = self._client.messages.stream(**kwargs)
@@ -303,10 +315,14 @@ class AnthropicAdapter:
             ctx_holder[0] = ctx
             return stream
 
+        def _breakered_open_stream():
+            return stream_breaker.call(_open_stream)
+
         try:
             stream = with_retry(
-                _open_stream,
+                _breakered_open_stream,
                 label=f"anthropic.messages.stream({request.model})",
+                non_retryable=(pybreaker.CircuitBreakerError,),
             )
         except Exception as e:
             duration_ms = int((time.monotonic() - t0) * 1000)

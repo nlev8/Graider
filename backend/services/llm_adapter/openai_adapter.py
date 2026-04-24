@@ -10,10 +10,12 @@ import os
 import time
 from typing import Any, Iterator
 
+import pybreaker
 import sentry_sdk
 from openai import OpenAI
 
 from backend.observability.events import emit
+from backend.services.llm_adapter.breakers import get_breaker
 from backend.retry import with_retry
 from backend.services.llm_adapter.streaming import (
     FinishEvent,
@@ -204,10 +206,19 @@ class OpenAIAdapter:
         )
         t0 = time.monotonic()
 
+        breaker = get_breaker(self._provider, request.model)
+
+        def _raw_call():
+            return self._client.chat.completions.create(**kwargs)
+
+        def _breakered():
+            return breaker.call(_raw_call)
+
         try:
             raw = with_retry(
-                lambda: self._client.chat.completions.create(**kwargs),
+                _breakered,
                 label=f"openai.chat.completions.create({request.model})",
+                non_retryable=(pybreaker.CircuitBreakerError,),
             )
         except Exception as e:
             duration_ms = int((time.monotonic() - t0) * 1000)
@@ -320,10 +331,19 @@ class OpenAIAdapter:
         )
         t0 = time.monotonic()
 
+        stream_breaker = get_breaker(self._provider, request.model)
+
+        def _raw_stream_call():
+            return self._client.chat.completions.create(**kwargs)
+
+        def _breakered_stream():
+            return stream_breaker.call(_raw_stream_call)
+
         try:
             stream = with_retry(
-                lambda: self._client.chat.completions.create(**kwargs),
+                _breakered_stream,
                 label=f"openai.chat.completions.create(stream, {request.model})",
+                non_retryable=(pybreaker.CircuitBreakerError,),
             )
         except Exception as e:
             duration_ms = int((time.monotonic() - t0) * 1000)

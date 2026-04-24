@@ -22,8 +22,11 @@ import time
 import uuid
 from typing import Any, Iterator
 
+import pybreaker
 import google.generativeai as genai
 import sentry_sdk
+
+from backend.services.llm_adapter.breakers import get_breaker
 
 from backend.observability.events import emit
 from backend.retry import with_retry
@@ -186,13 +189,22 @@ class GeminiAdapter:
         t0 = time.monotonic()
 
         try:
-            raw = with_retry(
-                lambda: model.generate_content(
+            breaker = get_breaker(self._provider, request.model)
+
+            def _raw_call():
+                return model.generate_content(
                     contents,
                     generation_config=generation_config if generation_config else None,
                     request_options=request_options,
-                ),
+                )
+
+            def _breakered():
+                return breaker.call(_raw_call)
+
+            raw = with_retry(
+                _breakered,
                 label=f"gemini.generate_content({request.model})",
+                non_retryable=(pybreaker.CircuitBreakerError,),
             )
         except Exception as e:
             duration_ms = int((time.monotonic() - t0) * 1000)
@@ -345,14 +357,23 @@ class GeminiAdapter:
         t0 = time.monotonic()
 
         try:
-            stream = with_retry(
-                lambda: model.generate_content(
+            stream_breaker = get_breaker(self._provider, request.model)
+
+            def _raw_stream_call():
+                return model.generate_content(
                     contents,
                     generation_config=generation_config if generation_config else None,
                     request_options=request_options,
                     stream=True,
-                ),
+                )
+
+            def _breakered_stream():
+                return stream_breaker.call(_raw_stream_call)
+
+            stream = with_retry(
+                _breakered_stream,
                 label=f"gemini.generate_content(stream, {request.model})",
+                non_retryable=(pybreaker.CircuitBreakerError,),
             )
         except Exception as e:
             duration_ms = int((time.monotonic() - t0) * 1000)

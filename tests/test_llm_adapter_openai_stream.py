@@ -254,3 +254,36 @@ def test_stream_chat_emits_start_and_complete(mock_cls, mock_emit):
     event_names = [call.args[0] for call in mock_emit.call_args_list]
     assert "llm.call.start" in event_names
     assert "llm.call.complete" in event_names
+
+
+def test_openai_stream_chat_fast_fails_when_breaker_open():
+    """stream_chat() fast-fails with CircuitBreakerError when the breaker
+    is already OPEN. Zero network calls hit the client."""
+    import pybreaker
+    from backend.services.llm_adapter import breakers
+
+    # Pre-open the breaker for (openai, gpt-4o)
+    b = breakers.get_breaker("openai", "gpt-4o")
+    for _ in range(breakers.FAIL_MAX):
+        try:
+            b.call(lambda: (_ for _ in ()).throw(ConnectionError("x")))
+        except (ConnectionError, pybreaker.CircuitBreakerError):
+            pass
+    assert b.current_state == pybreaker.STATE_OPEN
+
+    with patch("backend.services.llm_adapter.openai_adapter.OpenAI") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = iter([])
+
+        adapter = OpenAIAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gpt-4o",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        with pytest.raises(pybreaker.CircuitBreakerError):
+            list(adapter.stream_chat(req))
+
+        # Zero HTTP calls — breaker short-circuited the stream-open
+        mock_client.chat.completions.create.assert_not_called()

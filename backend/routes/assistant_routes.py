@@ -44,7 +44,9 @@ from backend.services.assistant_tools import (
 )
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 import sentry_sdk
+import pybreaker
 
+from backend.services.llm_adapter.breakers import get_breaker
 from backend.services.llm_adapter import (
     AnthropicAdapter,
     GeminiAdapter,
@@ -1334,6 +1336,21 @@ def assistant_chat():
             return jsonify({"error": "GEMINI_API_KEY not set in .env"}), 500
     else:
         return jsonify({"error": f"Unknown provider: {provider}"}), 500
+
+    # Phase 5b PR 1 — SSE preflight breaker check.
+    # Returns a clean 503 + Retry-After for the common case when the breaker
+    # is already OPEN. The TOCTOU fallback (breaker flips closed→open mid-
+    # iteration) is handled by the existing SSE error-frame handler inside
+    # generate()'s except branch — no frontend change required.
+    _preflight_breaker = get_breaker(provider, model_info["model"])
+    if _preflight_breaker.current_state == pybreaker.STATE_OPEN:
+        resp = jsonify({
+            "error": "LLM provider temporarily unavailable — circuit breaker open",
+            "retry_after_seconds": 60,
+        })
+        resp.status_code = 503
+        resp.headers["Retry-After"] = "60"
+        return resp
 
     data = request.json
     if not data or not data.get("messages"):

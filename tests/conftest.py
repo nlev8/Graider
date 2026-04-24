@@ -23,6 +23,25 @@ def _ensure_tools_merged():
     at._merge_submodules()
 
 
+@pytest.fixture(autouse=True)
+def _reset_llm_breaker_registry():
+    """Clear the LLM adapter circuit breaker registry between tests.
+
+    Phase 5b PR 1: breakers are module-level singletons; tests that trip a
+    breaker (adapter tests, preflight tests) would otherwise leave it
+    OPEN for unrelated tests in the same session. Clearing before + after
+    each test avoids ordering-dependent failures in CI.
+    """
+    try:
+        from backend.services.llm_adapter import breakers
+    except ImportError:  # pragma: no cover — module missing is a bigger problem
+        yield
+        return
+    breakers._BREAKERS.clear()
+    yield
+    breakers._BREAKERS.clear()
+
+
 @pytest.fixture
 def fixtures_dir():
     """Return the path to the fixtures directory."""
