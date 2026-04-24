@@ -34,9 +34,9 @@ def _mock_gemini_response(text: str = "hello", finish_name: str = "STOP"):
 
 @patch("backend.services.llm_adapter.gemini_adapter.genai")
 def test_system_prompt_maps_to_system_instruction(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_model.generate_content.return_value = _mock_gemini_response()
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _mock_gemini_response()
 
     adapter = GeminiAdapter(api_key="test-key")
     req = LLMRequest(
@@ -46,16 +46,17 @@ def test_system_prompt_maps_to_system_instruction(mock_genai):
     )
     adapter.chat(req)
 
-    # system_instruction must be passed to GenerativeModel constructor
-    call_kwargs = mock_genai.GenerativeModel.call_args.kwargs
-    assert call_kwargs.get("system_instruction") == "You are a study guide generator."
+    # system_instruction must be passed via the config kwarg to generate_content
+    mock_client.models.generate_content.assert_called_once()
+    kwargs = mock_client.models.generate_content.call_args.kwargs
+    assert kwargs["config"].system_instruction == "You are a study guide generator."
 
 
 @patch("backend.services.llm_adapter.gemini_adapter.genai")
 def test_assistant_role_maps_to_model_role(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_model.generate_content.return_value = _mock_gemini_response()
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _mock_gemini_response()
 
     adapter = GeminiAdapter(api_key="test-key")
     req = LLMRequest(
@@ -68,7 +69,9 @@ def test_assistant_role_maps_to_model_role(mock_genai):
     )
     adapter.chat(req)
 
-    contents = mock_model.generate_content.call_args.args[0]
+    mock_client.models.generate_content.assert_called_once()
+    kwargs = mock_client.models.generate_content.call_args.kwargs
+    contents = kwargs["contents"]
     assert contents[0]["role"] == "user"
     assert contents[1]["role"] == "model"   # "assistant" → "model"
     assert contents[2]["role"] == "user"
@@ -76,9 +79,9 @@ def test_assistant_role_maps_to_model_role(mock_genai):
 
 @patch("backend.services.llm_adapter.gemini_adapter.genai")
 def test_base64_image_maps_to_inline_data(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_model.generate_content.return_value = _mock_gemini_response()
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _mock_gemini_response()
 
     adapter = GeminiAdapter(api_key="test-key")
     req = LLMRequest(
@@ -93,7 +96,9 @@ def test_base64_image_maps_to_inline_data(mock_genai):
     )
     adapter.chat(req)
 
-    contents = mock_model.generate_content.call_args.args[0]
+    mock_client.models.generate_content.assert_called_once()
+    kwargs = mock_client.models.generate_content.call_args.kwargs
+    contents = kwargs["contents"]
     user_parts = contents[0]["parts"]
     img_part = user_parts[0]
     assert "inline_data" in img_part
@@ -103,9 +108,9 @@ def test_base64_image_maps_to_inline_data(mock_genai):
 
 @patch("backend.services.llm_adapter.gemini_adapter.genai")
 def test_text_response_extracted(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_model.generate_content.return_value = _mock_gemini_response(
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _mock_gemini_response(
         text="Here is your study guide."
     )
 
@@ -127,9 +132,9 @@ def test_text_response_extracted(mock_genai):
 
 @patch("backend.services.llm_adapter.gemini_adapter.genai")
 def test_no_system_prompt_omits_system_instruction(mock_genai):
-    mock_model = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_model.generate_content.return_value = _mock_gemini_response()
+    mock_client = MagicMock()
+    mock_genai.Client.return_value = mock_client
+    mock_client.models.generate_content.return_value = _mock_gemini_response()
 
     adapter = GeminiAdapter(api_key="test-key")
     req = LLMRequest(
@@ -138,8 +143,10 @@ def test_no_system_prompt_omits_system_instruction(mock_genai):
     )
     adapter.chat(req)
 
-    call_kwargs = mock_genai.GenerativeModel.call_args.kwargs
-    assert "system_instruction" not in call_kwargs
+    mock_client.models.generate_content.assert_called_once()
+    kwargs = mock_client.models.generate_content.call_args.kwargs
+    # system_instruction must NOT be set on the config object when no system prompt given
+    assert not hasattr(kwargs["config"], "system_instruction") or kwargs["config"].system_instruction is None
 
 
 def test_gemini_chat_uses_breaker():
@@ -151,10 +158,10 @@ def test_gemini_chat_uses_breaker():
 
     breakers._BREAKERS.clear()
 
-    with patch("backend.services.llm_adapter.gemini_adapter.genai.GenerativeModel") as mock_model_cls:
-        mock_model = MagicMock()
-        mock_model_cls.return_value = mock_model
-        mock_model.generate_content.side_effect = ConnectionError("down")
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content.side_effect = ConnectionError("down")
 
         from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
         from backend.services.llm_adapter.types import LLMRequest, Message, TextPart
