@@ -73,12 +73,12 @@ def _content_to_openai(content: list) -> str | list[dict[str, Any]]:
         if isinstance(p, TextPart):
             parts.append({"type": "text", "text": p.text})
         elif isinstance(p, ImagePart):
-            if p.url:
-                parts.append({"type": "image_url", "image_url": {"url": p.url}})
-            else:
-                # base64 data URL
-                data_url = f"data:{p.mime_type};base64,{p.base64}"
-                parts.append({"type": "image_url", "image_url": {"url": data_url}})
+            image_url_obj: dict[str, Any] = {
+                "url": p.url if p.url else f"data:{p.mime_type};base64,{p.base64}"
+            }
+            if p.detail:
+                image_url_obj["detail"] = p.detail
+            parts.append({"type": "image_url", "image_url": image_url_obj})
         # ToolUsePart / ToolResultPart handled at message level by _message_to_openai
     return parts
 
