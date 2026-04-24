@@ -281,6 +281,23 @@ tts_muted_sessions = set()
 # Per-session cancellation flag — stops the tool loop when user clicks Stop
 cancelled_sessions = set()
 
+# Phase 5b PR 4 — finalizer idempotency registry.
+# Prevents double-cleanup when GeneratorExit races with normal-completion
+# yield-from. See docs/superpowers/specs/2026-04-23-phase5b-hardening-design.md § PR 4.
+_finalizing_sessions: set = set()
+_finalizing_lock = threading.Lock()
+
+# Tracks sessions whose cost has already been recorded. Step 9 of the
+# finalizer is the only non-idempotent side effect (it writes a new cost
+# row to disk); the other steps (_persist_conversation, tts_stream.close,
+# set.discard, conv["messages"] assignment) are all idempotent or wrapped
+# in try/except. Guarding step 9 specifically prevents double-billing on
+# the GeneratorExit-mid-drain race where the inner finalizer's finally
+# releases _finalizing_sessions before the outer except GeneratorExit
+# fires the silent wrapper.
+_cost_recorded_sessions: set = set()
+_COST_RECORDED_CAP = 10000  # simple eviction when this many sessions accumulate
+
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
 RUBRIC_FILE = os.path.expanduser("~/.graider_rubric.json")
 MEMORY_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
@@ -1162,6 +1179,150 @@ def _record_assistant_cost(input_tokens, output_tokens, model, tts_chars=0):
     }
 
 
+def _finalize_assistant_stream(
+    *,
+    session_id: str,
+    conv: dict,
+    messages: list,
+    tts_stream,
+    sentence_buffer,
+    audio_out_queue,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    total_tts_chars: int,
+    active_model: str,
+    cancelled: bool,
+):
+    """Idempotent cleanup for the assistant SSE stream. Yields SSE audio_chunk
+    frames in normal-completion mode; silent in disconnect mode.
+
+    See docs/superpowers/specs/2026-04-23-phase5b-hardening-design.md § PR 4
+    for the full 9-responsibility behavior spec. Disconnect mode skips
+    step 3 (sentence buffer flush), step 4 (tts wait_for_flush), step 6
+    (audio-chunk yields), and step 9's cost SSE frame — other steps run
+    regardless of client connectivity.
+    """
+    # Round 7 idempotency guard — first call wins.
+    with _finalizing_lock:
+        if session_id in _finalizing_sessions:
+            return
+        _finalizing_sessions.add(session_id)
+
+    try:
+        # 1. conv["messages"] = messages
+        conv["messages"] = messages
+
+        # 2. _persist_conversation(session_id)
+        try:
+            _persist_conversation(session_id)
+        except Exception:
+            logger.exception("_persist_conversation failed for %s", session_id)
+
+        # 3. Sentence buffer flush + send — NORMAL MODE ONLY
+        if not cancelled and tts_stream is not None:
+            if session_id not in tts_muted_sessions and sentence_buffer:
+                remaining = sentence_buffer.flush()
+                if remaining:
+                    text_to_speak = remaining + " "
+                    try:
+                        tts_stream.send_text(text_to_speak)
+                        total_tts_chars += len(text_to_speak)
+                    except Exception:
+                        logger.debug("tts_stream.send_text failed on finalize", exc_info=True)
+
+        # 4. tts_stream.flush() + wait_for_flush — NORMAL MODE ONLY
+        # Skipped in disconnect to avoid blocking a Gunicorn worker for up to
+        # 15 seconds flushing audio that no one will receive (Gemini Round 7).
+        if not cancelled and tts_stream is not None:
+            try:
+                tts_stream.flush()
+                tts_stream.wait_for_flush(timeout=15.0)
+            except Exception:
+                logger.debug("tts_stream.flush/wait_for_flush raised", exc_info=True)
+
+        # 5. tts_stream.close() — both modes
+        if tts_stream is not None:
+            try:
+                tts_stream.close()
+            except Exception:
+                logger.debug("tts_stream.close raised", exc_info=True)
+
+        # 6. Audio-queue drain + yield — NORMAL MODE ONLY
+        if not cancelled and tts_stream is not None:
+            if audio_out_queue and session_id not in tts_muted_sessions:
+                while True:
+                    try:
+                        chunk = audio_out_queue.get(timeout=3.0)
+                        if chunk is None:
+                            break
+                        yield f"data: {json.dumps({'type': 'audio_chunk', 'audio': chunk})}\n\n"
+                    except queue.Empty:
+                        break
+
+        # 7. tts_muted_sessions.discard(session_id)
+        tts_muted_sessions.discard(session_id)
+
+        # 8. cancelled_sessions.discard(session_id)
+        cancelled_sessions.discard(session_id)
+
+        # 9. Cost record + (normal mode only) yield cost SSE frame.
+        # At-most-once semantics via _cost_recorded_sessions guard — critical
+        # for the GeneratorExit-mid-drain race where the inner finalizer's
+        # finally releases _finalizing_sessions before the outer silent
+        # wrapper fires. Without this guard, a disconnect during step 6
+        # (audio drain) would record cost twice.
+        if total_input_tokens > 0 or total_tts_chars > 0:
+            with _finalizing_lock:
+                already_recorded = session_id in _cost_recorded_sessions
+                if not already_recorded:
+                    _cost_recorded_sessions.add(session_id)
+                    # Simple eviction: if the set grows past the cap, clear it.
+                    # Cost records are per-request; the cap is generous enough
+                    # that eviction is a rare no-op in practice.
+                    if len(_cost_recorded_sessions) > _COST_RECORDED_CAP:
+                        _cost_recorded_sessions.clear()
+                        _cost_recorded_sessions.add(session_id)
+            if not already_recorded:
+                try:
+                    cost_info = _record_assistant_cost(
+                        total_input_tokens, total_output_tokens,
+                        active_model, total_tts_chars,
+                    )
+                    if cost_info.get("total_cost", 0) > COST_WARNING_THRESHOLD:
+                        cost_info["high_cost"] = True
+                    if not cancelled:
+                        yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
+                except Exception:
+                    logger.exception("_record_assistant_cost failed")
+
+        # Observability marker
+        try:
+            from backend.observability.events import emit as _emit
+            _emit(
+                "assistant.stream.finalized",
+                session_id=session_id,
+                cancelled=cancelled,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                total_tts_chars=total_tts_chars,
+                active_model=active_model,
+            )
+        except Exception:
+            pass
+    finally:
+        with _finalizing_lock:
+            _finalizing_sessions.discard(session_id)
+
+
+def _finalize_assistant_stream_silent(**kwargs):
+    """Run finalize's state cleanup but discard any SSE yields.
+
+    For the GeneratorExit disconnect path where `yield from` is illegal.
+    """
+    for _ in _finalize_assistant_stream(**kwargs):
+        pass
+
+
 def _cleanup_stale_sessions():
     """Remove conversations older than TTL."""
     now = time.time()
@@ -1479,293 +1640,287 @@ def assistant_chat():
         system_prompt = _build_system_prompt()
         max_rounds = MAX_TOOL_ROUNDS
         executed_tools_this_turn = []  # Track all tool calls across rounds for claim checking
-        for _round_idx in range(max_rounds):
-            try:
-                # Per-round cost check — warn and stop if getting expensive
-                if _round_idx > 0 and total_input_tokens > 0:
-                    from assignment_grader import MODEL_PRICING
-                    _pricing = MODEL_PRICING.get(active_model, {"input": 0, "output": 0})
-                    _est_cost = (total_input_tokens * _pricing["input"] + total_output_tokens * _pricing["output"]) / 1_000_000
-                    if _est_cost > COST_WARNING_THRESHOLD:
-                        yield f"data: {json.dumps({'type': 'cost_warning', 'estimated_cost': round(_est_cost, 4), 'rounds_used': _round_idx})}\n\n"
-                        break  # Stop the tool loop — too expensive
+        try:
+            for _round_idx in range(max_rounds):
+                try:
+                    # Per-round cost check — warn and stop if getting expensive
+                    if _round_idx > 0 and total_input_tokens > 0:
+                        from assignment_grader import MODEL_PRICING
+                        _pricing = MODEL_PRICING.get(active_model, {"input": 0, "output": 0})
+                        _est_cost = (total_input_tokens * _pricing["input"] + total_output_tokens * _pricing["output"]) / 1_000_000
+                        if _est_cost > COST_WARNING_THRESHOLD:
+                            yield f"data: {json.dumps({'type': 'cost_warning', 'estimated_cost': round(_est_cost, 4), 'rounds_used': _round_idx})}\n\n"
+                            break  # Stop the tool loop — too expensive
 
-                full_response_text = ""
-                tool_use_blocks = []
-                deferred_tool_starts = []  # Yield after TTS flush so voice finishes first
+                    full_response_text = ""
+                    tool_use_blocks = []
+                    deferred_tool_starts = []  # Yield after TTS flush so voice finishes first
 
-                # Ensure all submodule tools are registered before passing to API
-                _merge_submodules()
+                    # Ensure all submodule tools are registered before passing to API
+                    _merge_submodules()
 
-                # ── ADAPTER STREAMING (all providers) ──
-                llm_req = _build_llm_request(
-                    model=active_model,
-                    messages=messages,
-                    system_prompt=system_prompt,
-                    tools=TOOL_DEFINITIONS,
-                    max_tokens=MAX_TOKENS,
-                )
+                    # ── ADAPTER STREAMING (all providers) ──
+                    llm_req = _build_llm_request(
+                        model=active_model,
+                        messages=messages,
+                        system_prompt=system_prompt,
+                        tools=TOOL_DEFINITIONS,
+                        max_tokens=MAX_TOKENS,
+                    )
 
-                if active_provider == "anthropic":
-                    _stream_adapter = AnthropicAdapter(api_key=api_key)
-                elif active_provider == "openai":
-                    _stream_adapter = OpenAIAdapter(api_key=api_key)
-                elif active_provider == "gemini":
-                    _stream_adapter = GeminiAdapter(api_key=api_key)
-                else:
-                    raise ValueError(f"Unknown provider: {active_provider}")
+                    if active_provider == "anthropic":
+                        _stream_adapter = AnthropicAdapter(api_key=api_key)
+                    elif active_provider == "openai":
+                        _stream_adapter = OpenAIAdapter(api_key=api_key)
+                    elif active_provider == "gemini":
+                        _stream_adapter = GeminiAdapter(api_key=api_key)
+                    else:
+                        raise ValueError(f"Unknown provider: {active_provider}")
 
-                # in-progress tool call: tool_call_id -> {id, name, args_fragments}
-                _pending_tool: dict[str, dict] = {}
+                    # in-progress tool call: tool_call_id -> {id, name, args_fragments}
+                    _pending_tool: dict[str, dict] = {}
 
-                for stream_event in _stream_adapter.stream_chat(llm_req):
+                    for stream_event in _stream_adapter.stream_chat(llm_req):
+                        if session_id in cancelled_sessions:
+                            break
+
+                        if isinstance(stream_event, TextDelta):
+                            full_response_text += stream_event.text
+                            yield f"data: {json.dumps({'type': 'text_delta', 'content': stream_event.text})}\n\n"
+                            if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                                for sent in sentence_buffer.add(stream_event.text):
+                                    text_to_speak = sent + " "
+                                    tts_stream.send_text(text_to_speak)
+                                    total_tts_chars += len(text_to_speak)
+
+                        elif isinstance(stream_event, ToolCallDelta):
+                            tcid = stream_event.tool_call_id
+                            if tcid not in _pending_tool:
+                                _pending_tool[tcid] = {"id": tcid, "name": "", "args_json": ""}
+                            if stream_event.name:
+                                _pending_tool[tcid]["name"] = stream_event.name
+                                # Defer tool_start SSE until after TTS flush
+                                deferred_tool_starts.append({
+                                    'type': 'tool_start',
+                                    'tool': stream_event.name,
+                                    'id': tcid,
+                                })
+                            _pending_tool[tcid]["args_json"] += stream_event.args_delta
+
+                        elif isinstance(stream_event, ToolCallComplete):
+                            tc = stream_event.tool_call
+                            tool_use_blocks.append({
+                                "id": tc.tool_call_id,
+                                "name": tc.name,
+                                "input_json": json.dumps(tc.args),
+                            })
+
+                        elif isinstance(stream_event, UsageEvent):
+                            total_input_tokens += stream_event.usage.prompt_tokens
+                            total_output_tokens += stream_event.usage.completion_tokens
+
+                        # FinishEvent — nothing to do; finish_reason recorded if needed
+
+                        yield from _flush_audio_queue()
+
+                    # ── POST-STREAM (shared across all providers) ──
+
+                    # If cancelled or no tool calls, we're done
                     if session_id in cancelled_sessions:
+                        if full_response_text:
+                            conv["messages"].append({"role": "assistant", "content": full_response_text})
                         break
 
-                    if isinstance(stream_event, TextDelta):
-                        full_response_text += stream_event.text
-                        yield f"data: {json.dumps({'type': 'text_delta', 'content': stream_event.text})}\n\n"
-                        if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
-                            for sent in sentence_buffer.add(stream_event.text):
-                                text_to_speak = sent + " "
-                                tts_stream.send_text(text_to_speak)
-                                total_tts_chars += len(text_to_speak)
+                    if not tool_use_blocks:
+                        # Post-response claim check: detect if AI claims actions it didn't perform
+                        from backend.services.assistant_tool_guards import check_false_claims
+                        logger.info("CLAIM CHECK: response=%r, tools=%s", full_response_text[:200], [t["name"] for t in executed_tools_this_turn])
+                        _claim_correction = check_false_claims(full_response_text, executed_tools_this_turn)
+                        logger.info("CLAIM CHECK RESULT: %r", _claim_correction)
+                        if _claim_correction:
+                            logger.warning("False claim detected in assistant response, appending correction")
+                            yield f"data: {json.dumps({'type': 'text', 'content': _claim_correction})}\n\n"
+                            full_response_text += _claim_correction
+                        conv["messages"].append({"role": "assistant", "content": full_response_text})
+                        break
 
-                    elif isinstance(stream_event, ToolCallDelta):
-                        tcid = stream_event.tool_call_id
-                        if tcid not in _pending_tool:
-                            _pending_tool[tcid] = {"id": tcid, "name": "", "args_json": ""}
-                        if stream_event.name:
-                            _pending_tool[tcid]["name"] = stream_event.name
-                            # Defer tool_start SSE until after TTS flush
-                            deferred_tool_starts.append({
-                                'type': 'tool_start',
-                                'tool': stream_event.name,
-                                'id': tcid,
-                            })
-                        _pending_tool[tcid]["args_json"] += stream_event.args_delta
+                    # Flush TTS sentence buffer and wait for ALL audio to be generated
+                    # before tool execution, so the voice finishes its sentence first
+                    if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                        remaining = sentence_buffer.flush()
+                        if remaining:
+                            text_to_speak = remaining + " "
+                            tts_stream.send_text(text_to_speak)
+                            total_tts_chars += len(text_to_speak)
+                        tts_stream.flush()
+                        tts_stream.wait_for_flush(timeout=15.0)
+                        yield from _flush_audio_queue()
 
-                    elif isinstance(stream_event, ToolCallComplete):
-                        tc = stream_event.tool_call
-                        tool_use_blocks.append({
-                            "id": tc.tool_call_id,
-                            "name": tc.name,
-                            "input_json": json.dumps(tc.args),
+                    # Now that voice audio is fully sent, notify frontend about tool calls
+                    for ts_event in deferred_tool_starts:
+                        yield f"data: {json.dumps(ts_event)}\n\n"
+
+                    # Build the assistant message with all content blocks (Anthropic format for conversation store)
+                    assistant_content = []
+                    if full_response_text:
+                        assistant_content.append({"type": "text", "text": full_response_text})
+
+                    tool_results = []
+                    # Track resolved students across tool calls in this round
+                    # so we can detect mismatches (e.g., lookup returns "London" but
+                    # send_focus_comms uses "Cayden" from earlier conversation context)
+                    _resolved_students = []  # [{name, student_id}] from lookup_student_info
+
+                    for tb in tool_use_blocks:
+                        if session_id in cancelled_sessions:
+                            break
+
+                        try:
+                            tool_input = json.loads(tb["input_json"]) if tb["input_json"] else {}
+                        except json.JSONDecodeError:
+                            tool_input = {}
+
+                        assistant_content.append({
+                            "type": "tool_use",
+                            "id": tb["id"],
+                            "name": tb["name"],
+                            "input": tool_input
                         })
 
-                    elif isinstance(stream_event, UsageEvent):
-                        total_input_tokens += stream_event.usage.prompt_tokens
-                        total_output_tokens += stream_event.usage.completion_tokens
+                        yield from _flush_audio_queue()
 
-                    # FinishEvent — nothing to do; finish_reason recorded if needed
+                        _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
+                        logger.info("TOOL DISPATCH: name=%s, round=%d", tb["name"], _round_idx)
+                        # Inject teacher_id for tools that need per-teacher context
+                        # Uses teacher_id captured at top of assistant_chat() (line ~1145)
+                        tool_input["teacher_id"] = teacher_id
 
-                    yield from _flush_audio_queue()
+                        # ── Pre-execution guards (must short-circuit before execute_tool) ──
 
-                # ── POST-STREAM (shared across all providers) ──
+                        result = None  # None = no guard triggered, proceed to execute
 
-                # If cancelled or no tool calls, we're done
-                if session_id in cancelled_sessions:
-                    if full_response_text:
-                        conv["messages"].append({"role": "assistant", "content": full_response_text})
-                    break
+                        # Block confirmation tools from executing in the same turn as their preview tool
+                        from backend.services.assistant_tool_guards import GUARDED_ACTIONS
+                        _confirmation_tools = {entry["confirm_tool"] for entry in GUARDED_ACTIONS.values() if entry.get("type") == "preview_confirm"}
+                        _preview_tools_this_turn = [e["name"] for e in executed_tools_this_turn if GUARDED_ACTIONS.get(e["name"], {}).get("type") == "preview_confirm"]
+                        if tb["name"] in _confirmation_tools and _preview_tools_this_turn:
+                            result = {
+                                "error": "Cannot confirm in the same turn as the preview. "
+                                "Show the preview to the teacher and wait for their confirmation before calling " + tb["name"] + "."
+                            }
 
-                if not tool_use_blocks:
-                    # Post-response claim check: detect if AI claims actions it didn't perform
-                    from backend.services.assistant_tool_guards import check_false_claims
-                    logger.info("CLAIM CHECK: response=%r, tools=%s", full_response_text[:200], [t["name"] for t in executed_tools_this_turn])
-                    _claim_correction = check_false_claims(full_response_text, executed_tools_this_turn)
-                    logger.info("CLAIM CHECK RESULT: %r", _claim_correction)
-                    if _claim_correction:
-                        logger.warning("False claim detected in assistant response, appending correction")
-                        yield f"data: {json.dumps({'type': 'text', 'content': _claim_correction})}\n\n"
-                        full_response_text += _claim_correction
-                    conv["messages"].append({"role": "assistant", "content": full_response_text})
-                    break
+                        # Send-tool guards: require lookup + user-message name match
+                        if result is None:
+                            result = _check_send_tool_guard(
+                                tb["name"], tool_input, _resolved_students, _last_user_text
+                            )
 
-                # Flush TTS sentence buffer and wait for ALL audio to be generated
-                # before tool execution, so the voice finishes its sentence first
-                if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
-                    remaining = sentence_buffer.flush()
-                    if remaining:
-                        text_to_speak = remaining + " "
-                        tts_stream.send_text(text_to_speak)
-                        total_tts_chars += len(text_to_speak)
-                    tts_stream.flush()
-                    tts_stream.wait_for_flush(timeout=15.0)
-                    yield from _flush_audio_queue()
+                        # ── Execute tool (only if no guard blocked it) ──
+                        if result is None:
+                            result = execute_tool(tb["name"], tool_input)
 
-                # Now that voice audio is fully sent, notify frontend about tool calls
-                for ts_event in deferred_tool_starts:
-                    yield f"data: {json.dumps(ts_event)}\n\n"
+                        # Record execution for post-response claim checking
+                        executed_tools_this_turn.append({"name": tb["name"], "result": result})
 
-                # Build the assistant message with all content blocks (Anthropic format for conversation store)
-                assistant_content = []
-                if full_response_text:
-                    assistant_content.append({"type": "text", "text": full_response_text})
+                        # Inject verification message for guarded tools
+                        from backend.services.assistant_tool_guards import get_verification_message
+                        _verification_msg = get_verification_message(tb["name"], result)
 
-                tool_results = []
-                # Track resolved students across tool calls in this round
-                # so we can detect mismatches (e.g., lookup returns "London" but
-                # send_focus_comms uses "Cayden" from earlier conversation context)
-                _resolved_students = []  # [{name, student_id}] from lookup_student_info
+                        # Cross-tool guardrail: track students from lookup calls
+                        if tb["name"] == "lookup_student_info" and isinstance(result, dict):
+                            students = result.get("students", [])
+                            if isinstance(students, list) and students:
+                                _resolved_students = [{"name": s.get("name", ""), "student_id": s.get("student_id", "")} for s in students]
 
-                for tb in tool_use_blocks:
+                        result_str = json.dumps(result)
+                        if _verification_msg:
+                            logger.info("VERIFICATION INJECTED for %s: %s", tb["name"], _verification_msg[:100])
+                            result_str = result_str + "\n\n" + _verification_msg
+                        if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
+                            result_str = result_str[:MAX_TOOL_RESPONSE_CHARS] + '... [TRUNCATED from ' + str(len(result_str)) + ' chars. Use a more specific query for full details.]'
+
+                        yield from _flush_audio_queue()
+
+                        preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
+                        event_data = {'type': 'tool_result', 'tool': tb['name'], 'id': tb['id'], 'result_preview': preview}
+
+                        if isinstance(result, dict):
+                            dl_url = result.get('download_url')
+                            dl_name = result.get('filename')
+                            if dl_url:
+                                event_data['download_url'] = dl_url
+                                event_data['download_filename'] = dl_name
+                            dl_urls = result.get('download_urls')
+                            if dl_urls:
+                                event_data['download_urls'] = dl_urls
+                            if result.get('NOT_SENT'):
+                                event_data['pending_send'] = True
+                                # Include payload so frontend can send directly
+                                pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+                                try:
+                                    if os.path.exists(pending_path):
+                                        with open(pending_path, 'r') as _pf:
+                                            event_data['pending_payload'] = json.load(_pf)
+                                except Exception:
+                                    pass
+
+                        yield f"data: {json.dumps(event_data)}\n\n"
+
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tb["id"],
+                            "content": result_str
+                        })
+
                     if session_id in cancelled_sessions:
                         break
 
-                    try:
-                        tool_input = json.loads(tb["input_json"]) if tb["input_json"] else {}
-                    except json.JSONDecodeError:
-                        tool_input = {}
+                    # Add assistant message and tool results to conversation (stored in Anthropic format)
+                    messages.append({"role": "assistant", "content": assistant_content})
+                    messages.append({"role": "user", "content": tool_results})
 
-                    assistant_content.append({
-                        "type": "tool_use",
-                        "id": tb["id"],
-                        "name": tb["name"],
-                        "input": tool_input
-                    })
-
-                    yield from _flush_audio_queue()
-
-                    _audit_log("tool_call", f"tool={tb['name']} session={session_id}")
-                    logger.info("TOOL DISPATCH: name=%s, round=%d", tb["name"], _round_idx)
-                    # Inject teacher_id for tools that need per-teacher context
-                    # Uses teacher_id captured at top of assistant_chat() (line ~1145)
-                    tool_input["teacher_id"] = teacher_id
-
-                    # ── Pre-execution guards (must short-circuit before execute_tool) ──
-
-                    result = None  # None = no guard triggered, proceed to execute
-
-                    # Block confirmation tools from executing in the same turn as their preview tool
-                    from backend.services.assistant_tool_guards import GUARDED_ACTIONS
-                    _confirmation_tools = {entry["confirm_tool"] for entry in GUARDED_ACTIONS.values() if entry.get("type") == "preview_confirm"}
-                    _preview_tools_this_turn = [e["name"] for e in executed_tools_this_turn if GUARDED_ACTIONS.get(e["name"], {}).get("type") == "preview_confirm"]
-                    if tb["name"] in _confirmation_tools and _preview_tools_this_turn:
-                        result = {
-                            "error": "Cannot confirm in the same turn as the preview. "
-                            "Show the preview to the teacher and wait for their confirmation before calling " + tb["name"] + "."
-                        }
-
-                    # Send-tool guards: require lookup + user-message name match
-                    if result is None:
-                        result = _check_send_tool_guard(
-                            tb["name"], tool_input, _resolved_students, _last_user_text
-                        )
-
-                    # ── Execute tool (only if no guard blocked it) ──
-                    if result is None:
-                        result = execute_tool(tb["name"], tool_input)
-
-                    # Record execution for post-response claim checking
-                    executed_tools_this_turn.append({"name": tb["name"], "result": result})
-
-                    # Inject verification message for guarded tools
-                    from backend.services.assistant_tool_guards import get_verification_message
-                    _verification_msg = get_verification_message(tb["name"], result)
-
-                    # Cross-tool guardrail: track students from lookup calls
-                    if tb["name"] == "lookup_student_info" and isinstance(result, dict):
-                        students = result.get("students", [])
-                        if isinstance(students, list) and students:
-                            _resolved_students = [{"name": s.get("name", ""), "student_id": s.get("student_id", "")} for s in students]
-
-                    result_str = json.dumps(result)
-                    if _verification_msg:
-                        logger.info("VERIFICATION INJECTED for %s: %s", tb["name"], _verification_msg[:100])
-                        result_str = result_str + "\n\n" + _verification_msg
-                    if len(result_str) > MAX_TOOL_RESPONSE_CHARS:
-                        result_str = result_str[:MAX_TOOL_RESPONSE_CHARS] + '... [TRUNCATED from ' + str(len(result_str)) + ' chars. Use a more specific query for full details.]'
-
-                    yield from _flush_audio_queue()
-
-                    preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
-                    event_data = {'type': 'tool_result', 'tool': tb['name'], 'id': tb['id'], 'result_preview': preview}
-
-                    if isinstance(result, dict):
-                        dl_url = result.get('download_url')
-                        dl_name = result.get('filename')
-                        if dl_url:
-                            event_data['download_url'] = dl_url
-                            event_data['download_filename'] = dl_name
-                        dl_urls = result.get('download_urls')
-                        if dl_urls:
-                            event_data['download_urls'] = dl_urls
-                        if result.get('NOT_SENT'):
-                            event_data['pending_send'] = True
-                            # Include payload so frontend can send directly
-                            pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
-                            try:
-                                if os.path.exists(pending_path):
-                                    with open(pending_path, 'r') as _pf:
-                                        event_data['pending_payload'] = json.load(_pf)
-                            except Exception:
-                                pass
-
-                    yield f"data: {json.dumps(event_data)}\n\n"
-
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tb["id"],
-                        "content": result_str
-                    })
-
-                if session_id in cancelled_sessions:
+                except Exception as e:
+                    error_msg = str(e)
+                    if "APIError" in type(e).__name__ or "AuthenticationError" in type(e).__name__:
+                        error_msg = f"API error ({active_provider}): {error_msg}"
+                    yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
                     break
 
-                # Add assistant message and tool results to conversation (stored in Anthropic format)
-                messages.append({"role": "assistant", "content": assistant_content})
-                messages.append({"role": "user", "content": tool_results})
 
-            except Exception as e:
-                error_msg = str(e)
-                if "APIError" in type(e).__name__ or "AuthenticationError" in type(e).__name__:
-                    error_msg = f"API error ({active_provider}): {error_msg}"
-                yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
-                break
-
-        # Update stored conversation with the final messages and persist to disk
-        conv["messages"] = messages
-        _persist_conversation(session_id)
-
-        # Flush remaining TTS audio (skip if muted)
-        if tts_stream:
-            if session_id not in tts_muted_sessions and sentence_buffer:
-                remaining = sentence_buffer.flush()
-                if remaining:
-                    text_to_speak = remaining + " "
-                    tts_stream.send_text(text_to_speak)
-                    total_tts_chars += len(text_to_speak)
-                tts_stream.flush()
-                tts_stream.wait_for_flush(timeout=15.0)
-            tts_stream.close()
-            # Drain final audio chunks (only if not muted)
-            if audio_out_queue and session_id not in tts_muted_sessions:
-                while True:
-                    try:
-                        chunk = audio_out_queue.get(timeout=3.0)
-                        if chunk is None:
-                            break
-                        yield f"data: {json.dumps({'type': 'audio_chunk', 'audio': chunk})}\n\n"
-                    except queue.Empty:
-                        break
-            # Clear mute flag for next request
-            tts_muted_sessions.discard(session_id)
-
-        # Clear cancel flag
-        cancelled_sessions.discard(session_id)
-
-        # Record and send cost summary
-        if total_input_tokens > 0 or total_tts_chars > 0:
-            cost_info = _record_assistant_cost(
-                total_input_tokens, total_output_tokens,
-                active_model, total_tts_chars
+            # Normal completion — finalizer replaces inline cleanup.
+            # Disconnect mode is handled by the GeneratorExit branch below.
+            yield from _finalize_assistant_stream(
+                session_id=session_id,
+                conv=conv,
+                messages=messages,
+                tts_stream=tts_stream,
+                sentence_buffer=sentence_buffer,
+                audio_out_queue=audio_out_queue,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                total_tts_chars=total_tts_chars,
+                active_model=active_model,
+                cancelled=False,
             )
-            if cost_info.get("total_cost", 0) > COST_WARNING_THRESHOLD:
-                cost_info["high_cost"] = True
-            yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
-
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except GeneratorExit:
+            # Client disconnected. Run state cleanup without yields (yield-from
+            # is illegal while handling GeneratorExit).
+            logger.info("assistant stream closed by client (session=%s)", session_id)
+            _finalize_assistant_stream_silent(
+                session_id=session_id,
+                conv=conv,
+                messages=messages,
+                tts_stream=tts_stream,
+                sentence_buffer=sentence_buffer,
+                audio_out_queue=audio_out_queue,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                total_tts_chars=total_tts_chars,
+                active_model=active_model,
+                cancelled=True,
+            )
+            raise
 
     return Response(
         stream_with_context(generate()),

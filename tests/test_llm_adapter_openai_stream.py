@@ -287,3 +287,77 @@ def test_openai_stream_chat_fast_fails_when_breaker_open():
 
         # Zero HTTP calls — breaker short-circuited the stream-open
         mock_client.chat.completions.create.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# stream.close() lifecycle tests (Phase 5b PR 4)
+# ---------------------------------------------------------------------------
+
+def test_openai_stream_closes_on_exception():
+    """If the caller raises during iteration, the adapter must call
+    stream.close() via finally."""
+    close_calls = []
+
+    class FakeStream:
+        def __init__(self):
+            chunk = MagicMock()
+            chunk.choices = [MagicMock(delta=MagicMock(content="hi", tool_calls=None), finish_reason=None)]
+            chunk.usage = None
+            self._chunks = iter([chunk])
+
+        def __iter__(self):
+            return self._chunks
+
+        def close(self):
+            close_calls.append("closed")
+
+    with patch("backend.services.llm_adapter.openai_adapter.OpenAI") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = FakeStream()
+
+        adapter = OpenAIAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gpt-4o",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        gen = adapter.stream_chat(req)
+        next(gen)
+        gen.close()  # triggers GeneratorExit → propagates through finally
+
+        assert close_calls == ["closed"]
+
+
+def test_openai_stream_closes_on_normal_completion():
+    """stream.close() is called after the iteration loop completes normally."""
+    close_calls = []
+
+    class FakeStream:
+        def __init__(self):
+            chunk = MagicMock()
+            chunk.choices = [MagicMock(delta=MagicMock(content="hi", tool_calls=None), finish_reason="stop")]
+            chunk.usage = None
+            self._chunks = iter([chunk])
+
+        def __iter__(self):
+            return self._chunks
+
+        def close(self):
+            close_calls.append("closed")
+
+    with patch("backend.services.llm_adapter.openai_adapter.OpenAI") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = FakeStream()
+
+        adapter = OpenAIAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gpt-4o",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        # Exhaust the generator
+        list(adapter.stream_chat(req))
+
+        assert close_calls == ["closed"]
