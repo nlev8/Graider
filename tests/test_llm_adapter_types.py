@@ -122,3 +122,16 @@ def test_normalize_finish_reason_none_and_unknown():
     assert normalize_finish_reason("") == "stop"
     # Unknown values pass through lowercased — operators still see provider's native word.
     assert normalize_finish_reason("weird_new_reason") == "weird_new_reason"
+
+
+def test_imagepart_detail_field_optional_default_none():
+    from backend.services.llm_adapter.types import ImagePart
+    ip = ImagePart(url="http://x", base64=None, mime_type="image/png")
+    assert ip.detail is None
+
+
+def test_imagepart_detail_accepts_literal_values():
+    from backend.services.llm_adapter.types import ImagePart
+    for d in ("auto", "low", "high"):
+        ip = ImagePart(url="http://x", base64=None, mime_type="image/png", detail=d)
+        assert ip.detail == d
