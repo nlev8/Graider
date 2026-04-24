@@ -337,10 +337,10 @@ return images
 
 **Retained behavior:**
 - Per-image try/except (one failure doesn't stop the whole deck)
-- `sentry_sdk.capture_exception(e)` on each individual failure
+- `sentry_sdk.capture_exception(e)` on individual failures **except** `pybreaker.CircuitBreakerError` — Gemini Round-1 #2 flagged that open-breaker would spam Sentry with up to `max_images` identical events per request. Per-slide `logger.warning` still fires for every failure (including breaker) so operators see the pattern in logs; aggregate breaker state is tracked via `llm.breaker.state_change`.
 - `logger.info("Style reference image set from slide %d", slide_index)` on first successful image
 - `logger.info("Generated %d/%d slide images", ...)` at the end
-- `logger.warning("Image generation failed for slide %d...")` on each failure
+- `logger.warning("Image generation failed for slide %d...")` on each failure (including `CircuitBreakerError`)
 - No retry by default (via `ImageRequest.retry=False`)
 - Same `image_slides[:max_images]` cap
 
