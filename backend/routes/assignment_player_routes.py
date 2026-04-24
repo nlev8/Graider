@@ -351,7 +351,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
                 role="user",
                 content=[
                     TextPart(text=f"Read and transcribe the student's handwritten answer to this question: {question_text}"),
-                    ImagePart(url=image_data, base64=None, mime_type="image/png"),
+                    ImagePart(url=image_data, base64=None, mime_type="image/png", detail="high"),
                 ],
             )],
             max_tokens=1000,
