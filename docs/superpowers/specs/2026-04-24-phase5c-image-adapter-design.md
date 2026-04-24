@@ -146,16 +146,43 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
 
     # Extract bytes from response
     images: list[bytes] = []
-    mime_type = "image/png"
+    mime_type = "image/png"  # only used when images is non-empty; overwritten from SDK when available
     for part in raw.candidates[0].content.parts:
         if hasattr(part, "inline_data") and part.inline_data is not None:
             images.append(part.inline_data.data)
             mime_type = getattr(part.inline_data, "mime_type", None) or mime_type
 
+    # Safety-filter / policy-block detection (Codex Round-1 finding #2).
+    # Gemini may return a candidate with NO inline_data when the prompt is
+    # blocked (safety, recitation, prohibited content, etc.) or when provider
+    # drift changes the response shape. Rather than silently return
+    # ImageResponse(images=[]) with cost=0 (which looks like success),
+    # emit a distinct `blocked` event with the finish_reason so operators
+    # see the why. Return empty list so callers can still fall back
+    # gracefully (slide_generator renders the slide text-only) — this
+    # matches the caller's current try/except behavior without forcing
+    # a new exception type on every consumer.
+    finish_reason_raw = None
+    try:
+        fr = raw.candidates[0].finish_reason
+        finish_reason_raw = fr.name if hasattr(fr, "name") else str(fr)
+    except Exception:
+        pass
+    if not images:
+        emit(
+            "llm.image.call.blocked",
+            level="warning",
+            provider=self._provider,
+            model=request.model,
+            duration_ms=duration_ms,
+            finish_reason=finish_reason_raw or "unknown",
+        )
+
     cost_usd = _estimate_image_cost_usd(request.model, len(images))
 
     emit("llm.image.call.complete", provider=self._provider, model=request.model,
-         duration_ms=duration_ms, image_count=len(images), cost_usd=cost_usd)
+         duration_ms=duration_ms, image_count=len(images), cost_usd=cost_usd,
+         finish_reason=finish_reason_raw)
 
     return ImageResponse(
         images=images,
@@ -200,6 +227,9 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
 - `test_gemini_generate_image_retry_enabled_on_request_flag` — inject `ConnectionError` then success; with `retry=True`, assert second attempt succeeds.
 - `test_gemini_generate_image_emits_observability_events` — monkeypatch `emit`; assert `llm.image.call.start` + `llm.image.call.complete` fire.
 - `test_gemini_generate_image_emits_error_on_failure` — inject exception; assert `llm.image.call.error` + sentry breadcrumb.
+- `test_gemini_generate_image_safety_block_returns_empty_and_emits_blocked_event` — response has `candidates[0].finish_reason.name == "SAFETY"` and zero parts with `inline_data`. Assert `ImageResponse.images == []`, `cost_usd == 0.0`, and `llm.image.call.blocked` event fires with `finish_reason="SAFETY"`.
+- `test_gemini_generate_image_mime_type_from_sdk` — response has `part.inline_data.mime_type = "image/jpeg"`. Assert `ImageResponse.mime_type == "image/jpeg"` (not the hardcoded "image/png" default).
+- `test_gemini_generate_image_metadata_propagates_to_emit` — pass `ImageRequest(metadata={"feature_label": "test"})`; assert `llm.image.call.start` event received `feature_label="test"`.
 - `test_openai_adapter_generate_image_raises_not_implemented` — instantiate OpenAIAdapter, call `generate_image`, assert `NotImplementedError`.
 - `test_anthropic_adapter_generate_image_raises_not_implemented` — same for AnthropicAdapter.
 - `test_llm_adapter_protocol_includes_generate_image` — runtime isinstance check against `LLMAdapter` protocol.
@@ -221,23 +251,25 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
 Replace the image-gen loop body (currently at ~lines 242-290) with adapter calls. Replace the direct `client.models.generate_content` call with:
 
 ```python
+import base64
 from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
 from backend.services.llm_adapter.types import ImageRequest, ImagePart
-from PIL import Image
-from io import BytesIO
 
 adapter = GeminiAdapter(api_key=api_key)
-# ... existing loop over image_slides ...
+
+reference_image_bytes: bytes | None = None
+reference_image_mime: str = "image/png"   # track MIME from SDK, don't hardcode (Codex Round-1 #1)
+
 for idx, (slide_index, image_prompt) in enumerate(image_slides):
     try:
         full_prompt = style_prompt + ". " + image_prompt
         reference_images = None
         if reference_image_bytes is not None:
-            # Convert PIL-kept reference to ImagePart
-            import base64
             b64 = base64.b64encode(reference_image_bytes).decode("ascii")
             reference_images = [ImagePart(
-                url=None, base64=b64, mime_type="image/png"
+                url=None,
+                base64=b64,
+                mime_type=reference_image_mime,   # use SDK-returned MIME
             )]
             style_note = "Generate an illustration in the EXACT same visual style as the reference image above. "
             full_prompt = style_note + full_prompt
@@ -254,24 +286,38 @@ for idx, (slide_index, image_prompt) in enumerate(image_slides):
             image_data = response.images[0]
             images[slide_index] = image_data
             if reference_image_bytes is None:
-                reference_image_bytes = image_data  # first image becomes style reference (bytes, not PIL)
+                reference_image_bytes = image_data
+                reference_image_mime = response.mime_type   # propagate MIME
+                logger.info("Style reference image set from slide %d", slide_index)   # preserve parity with current code
+        # else: response.images is empty — adapter already emitted llm.image.call.blocked;
+        # nothing to do here. Slide renders text-only in PPTX assembly.
     except Exception as e:
-        logger.warning("Image generation failed for slide %d: %s", slide_index, e)
-        continue
+        # Individual image failure — slide renders as text-only (graceful degradation).
+        # Preserve current code's Sentry capture + warning log.
+        sentry_sdk.capture_exception(e)
+        logger.warning("Image generation failed for slide %d (will render text-only): %s", slide_index, e)
+        # Do NOT retry — $0.04 loss is acceptable vs double-charging
+
+logger.info("Generated %d/%d slide images", len(images), len(image_slides))
+return images
 ```
 
-**Behavioral change from current code:** reference image is now stored as `bytes` not `PIL.Image`. The adapter's `ImagePart` takes `base64`-encoded bytes, and Gemini's underlying SDK accepts that form. Eliminates one dependency on PIL in the image-gen hot path (PIL is still used elsewhere in slide_generator for PPTX assembly).
+**Behavioral change from current code:**
+- Reference image is now stored as `bytes` + `mime_type` (two locals) rather than a `PIL.Image.Image` held in memory. The adapter's `ImagePart` takes `base64`-encoded bytes + explicit MIME, and Gemini's SDK accepts that form. Eliminates one PIL-in-hot-path dependency in this function (PIL is still used elsewhere in slide_generator for PPTX assembly).
+- MIME type is propagated from the SDK response rather than hardcoded — if Gemini ever returns JPEG or WEBP, the style-reference call will correctly declare it.
 
 **Retained behavior:**
 - Per-image try/except (one failure doesn't stop the whole deck)
+- `sentry_sdk.capture_exception(e)` on each individual failure
+- `logger.info("Style reference image set from slide %d", slide_index)` on first successful image
+- `logger.info("Generated %d/%d slide images", ...)` at the end
+- `logger.warning("Image generation failed for slide %d...")` on each failure
 - No retry by default (via `ImageRequest.retry=False`)
 - Same `image_slides[:max_images]` cap
-- Same logger.info on style-reference set
 
 **Removed:**
 - `_get_genai_client` helper — adapter's `__init__` owns client creation now.
-- Direct `from google.genai import types` import at function top.
-- Direct `from google import genai` import.
+- Direct `from google.genai import types` / `from google import genai` / `from PIL import Image` / `from io import BytesIO` imports at function top — no longer needed.
 
 ### Consumer side: `backend/routes/planner_routes.py`
 
@@ -282,6 +328,8 @@ No change required — `_run_slide_generator()` calls `generate_slide_images(sli
 - Update `tests/test_slide_generator.py` mocks that currently patch `backend.services.slide_generator._get_genai_client`. After migration, mocks target `backend.services.llm_adapter.gemini_adapter.genai.Client` (adapter's client) OR `GeminiAdapter.generate_image` directly.
 - Add `test_slide_generator_invokes_adapter_for_each_image` — mock `GeminiAdapter.generate_image`; verify called once per `image_prompt` slide, up to `max_images`.
 - Add `test_slide_generator_reference_image_passed_to_subsequent_calls` — mock adapter returns bytes; verify second adapter call receives `reference_images=[ImagePart(base64=...)]`.
+- Add `test_slide_generator_reference_image_mime_type_propagates` — mock first adapter call returns `mime_type="image/jpeg"`; verify second call's `reference_images[0].mime_type == "image/jpeg"` (not hardcoded "image/png").
+- Add `test_slide_generator_handles_empty_images_response` — mock adapter returns `ImageResponse(images=[], ...)` (simulating safety-block). Verify that slide's index is absent from `images` dict but other slides still processed. Verify `logger.info("Generated %d/%d slide images", ...)` at end reports the reduced count.
 - Keep existing `test_slide_generator` happy-path tests passing.
 
 ### Acceptance
@@ -321,8 +369,11 @@ No other phase dependencies.
 | PR | Risk | Mitigation |
 |---|---|---|
 | 1 | Breaker trip during image gen blocks all subsequent image requests for 60s | Same `(gemini, model)` key as chat — operators see unified breaker state in `llm.breaker.state_change` events. Accept as correct fail-fast behavior. |
+| 1 | Future Gemini model that does both chat AND image on the same model name would share one breaker across capabilities (Codex Round-1 finding #4) | **Accepted limitation for 5c.** Today `gemini-2.5-flash-preview-image-generation` (image) and `gemini-1.5-flash` (chat) are distinct model strings, so breakers are separate. If a future multi-modal model name is shared across chat+image, operators will see unified fail-fast. Revisit with a `(provider, capability, model)` key if evidence accumulates. YAGNI for now. |
+| 1 | Silent safety-block (Gemini returns a candidate with zero `inline_data` parts) would masquerade as `ImageResponse(images=[], cost=0)` success | `generate_image` detects zero-image outcomes and emits a distinct `llm.image.call.blocked` event with `finish_reason` so operators see the why. Empty list is the correct caller contract (existing slide_generator already handles failure-per-slide gracefully). |
 | 1 | `NotImplementedError` on OpenAI/Anthropic is accidentally thrown by a caller that expects silent fallback | PR 1 tests + grep verification that only `slide_generator.py` calls `generate_image` today. |
 | 2 | Reference-image bytes→base64 round-trip corrupts PNG data | Unit test with a real PNG sample verifies byte-for-byte round-trip. |
+| 2 | Hardcoded `mime_type="image/png"` on reference image misrepresents a JPEG/WEBP response | Migration propagates `response.mime_type` from SDK to the next iteration's `ImagePart.mime_type`. Test enforces it. |
 | 2 | Cost accounting drift — `ImageResponse.cost_usd` might not match actual Gemini billing | `_estimate_image_cost_usd` uses the same $0.04 constant the current code implies; no behavior change. |
 
 **Rollback per PR:** `git revert <squash-commit>`. No stateful changes (no DB migrations, no feature flags).
@@ -354,6 +405,19 @@ Much smaller than Phase 5b (6-8 days). Low complexity because:
 | Test coverage | 9 | 9.25 (new adapter method fully covered + migration tests) |
 
 Phase 5c moves composite average from ~7.6 (post-5b) to ~7.65.
+
+---
+
+## Deviations from review rounds (2026-04-24)
+
+**Round 1 (Codex pre-review)** flagged 4 items; all reconciled:
+
+| Codex finding | Severity | Resolution |
+|---|---|---|
+| MIME type hardcoded in PR 2 migration (ref-image ImagePart declares `image/png` regardless of SDK response) | MAJOR | **Accepted.** Migration now propagates `response.mime_type` from adapter to next iteration's `reference_image_mime`. New test `test_slide_generator_reference_image_mime_type_propagates`. Adapter extracts mime from `part.inline_data.mime_type` when available. |
+| Silent empty-image success path — safety-blocked response returns `ImageResponse(images=[])` with cost=0, indistinguishable from genuine success | MAJOR | **Accepted.** Adapter now emits distinct `llm.image.call.blocked` event with `finish_reason` when zero inline_data parts returned. Returns empty list to preserve caller's existing per-slide graceful-degradation contract. New tests: `test_gemini_generate_image_safety_block_returns_empty_and_emits_blocked_event`, `test_slide_generator_handles_empty_images_response`. |
+| Observability regression in PR 2 migration — dropped `sentry_sdk.capture_exception(e)` + `logger.info("Generated N/M slide images")` + `logger.info("Style reference image set from slide %d")` from current code | MAJOR | **Accepted.** Migration code sketch now preserves all three observability calls verbatim. Listed explicitly under "Retained behavior." |
+| Breaker key `(provider, model)` future-couples chat + image on any shared model name | MINOR | **Accepted as documented limitation.** Risk-table entry added. YAGNI — today's Gemini image-gen model name is distinct from chat models, so breakers are naturally separate. Revisit if a future Gemini multi-modal model blurs the boundary. |
 
 ---
 
