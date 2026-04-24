@@ -1657,7 +1657,6 @@ packaging==26.1 \
     #   kombu
     #   limits
     #   matplotlib
-    #   webdriver-manager
 pillow==12.2.0 \
     --hash=sha256:00a2865911330191c0b818c59103b58a5e697cae67042366970a6b6f1b20b7f9 \
     --hash=sha256:01afa7cf67f74f09523699b4e88c73fb55c13346d212a59a2db1f86b0a63e8c5 \
@@ -2271,9 +2270,7 @@ python-docx==1.2.0 \
 python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
-    # via
-    #   -r requirements.in
-    #   webdriver-manager
+    # via -r requirements.in
 python-pptx==1.0.2 \
     --hash=sha256:160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba \
     --hash=sha256:479a8af0eaf0f0d76b6f00b0887732874ad2e3188230315290cd1f9dd9cc7095
@@ -2300,7 +2297,6 @@ requests==2.33.1 \
     #   pyiceberg
     #   resend
     #   stripe
-    #   webdriver-manager
 resend==2.29.0 \
     --hash=sha256:aad7c6097c26cf2dbe46534a1fc8d92637fbdea28243b00a3363c8d3136331de \
     --hash=sha256:cd905809a64128b29d5beda1d4a5bda8d60d438a66942ed736ca40238e9d2331
@@ -2484,10 +2480,6 @@ wcwidth==0.6.0 \
     --hash=sha256:1a3a1e510b553315f8e146c54764f4fb6264ffad731b3d78088cdb1478ffbdad \
     --hash=sha256:cdc4e4262d6ef9a1a57e018384cbeb1208d8abbc64176027e2c2455c81313159
     # via prompt-toolkit
-webdriver-manager==4.0.2 \
-    --hash=sha256:75908d92ecc45ff2b9953614459c633db8f9aa1ff30181cefe8696e312908129 \
-    --hash=sha256:efedf428f92fd6d5c924a0d054e6d1322dd77aab790e834ee767af392b35590f
-    # via -r requirements.in
 websocket-client==1.9.0 \
     --hash=sha256:9e813624b6eb619999a97dc7958469217c3176312b3a16a4bd1bc7e08a46ec98 \
     --hash=sha256:af248a825037ef591efbf6ed20cc5faa03d3b47b9e5a2230a529eeee1c1fc3ef

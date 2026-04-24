@@ -1,5 +1,5 @@
 # Graider runtime dependencies. Non-runtime dev tooling (pytest-cov,
-# py2app, selenium) lives in requirements-dev.txt.
+# py2app) lives in requirements-dev.txt.
 #
 # Gemini SDK: google-genai handles BOTH chat-style text generation (via
 # backend/services/llm_adapter/gemini_adapter.py, used by planner_routes,
@@ -23,7 +23,6 @@ python-docx>=0.8.11
 openpyxl>=3.0.0
 python-dotenv>=0.19.0
 Pillow>=9.0.0
-webdriver-manager>=4.0.0
 reportlab>=4.0.0
 pymupdf>=1.23.0
 mammoth>=1.6.0
