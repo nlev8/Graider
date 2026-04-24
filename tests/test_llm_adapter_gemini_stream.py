@@ -190,3 +190,122 @@ def test_gemini_stream_emits_start_and_complete(mock_client_cls, mock_emit):
     event_names = [call.args[0] for call in mock_emit.call_args_list]
     assert "llm.call.start" in event_names
     assert "llm.call.complete" in event_names
+
+
+# ---------------------------------------------------------------------------
+# Phase 5b PR 4 — best-effort stream cancel/close on exit
+# ---------------------------------------------------------------------------
+
+def test_gemini_stream_calls_cancel_if_available():
+    """Best-effort cleanup: if the stream exposes .cancel(), it's called on exit."""
+    cancel_calls = []
+
+    class FakeStream:
+        def __iter__(self):
+            part = MagicMock()
+            part.text = "hi"
+            part.function_call = None
+            chunk = MagicMock()
+            chunk.candidates = [MagicMock()]
+            chunk.candidates[0].content.parts = [part]
+            chunk.candidates[0].finish_reason = None
+            chunk.usage_metadata = None
+            return iter([chunk])
+
+        def cancel(self):
+            cancel_calls.append("cancelled")
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content_stream.return_value = FakeStream()
+
+        from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+        from backend.services.llm_adapter.types import LLMRequest, Message, TextPart
+
+        adapter = GeminiAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gemini-1.5-flash",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        gen = adapter.stream_chat(req)
+        next(gen)
+        gen.close()
+
+        assert cancel_calls == ["cancelled"]
+
+
+def test_gemini_stream_falls_back_to_close_when_cancel_missing():
+    """If .cancel() doesn't exist but .close() does, .close() is called."""
+    close_calls = []
+
+    class FakeStream:
+        def __iter__(self):
+            part = MagicMock()
+            part.text = "hi"
+            part.function_call = None
+            chunk = MagicMock()
+            chunk.candidates = [MagicMock()]
+            chunk.candidates[0].content.parts = [part]
+            chunk.candidates[0].finish_reason = None
+            chunk.usage_metadata = None
+            return iter([chunk])
+
+        def close(self):
+            close_calls.append("closed")
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content_stream.return_value = FakeStream()
+
+        from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+        from backend.services.llm_adapter.types import LLMRequest, Message, TextPart
+
+        adapter = GeminiAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gemini-1.5-flash",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        gen = adapter.stream_chat(req)
+        next(gen)
+        gen.close()
+
+        assert close_calls == ["closed"]
+
+
+def test_gemini_stream_graceful_when_neither_cancel_nor_close_exists():
+    """If the stream exposes neither method, adapter does not raise."""
+    class FakeStream:
+        def __iter__(self):
+            part = MagicMock()
+            part.text = "hi"
+            part.function_call = None
+            chunk = MagicMock()
+            chunk.candidates = [MagicMock()]
+            chunk.candidates[0].content.parts = [part]
+            chunk.candidates[0].finish_reason = None
+            chunk.usage_metadata = None
+            return iter([chunk])
+        # No cancel(), no close()
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content_stream.return_value = FakeStream()
+
+        from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+        from backend.services.llm_adapter.types import LLMRequest, Message, TextPart
+
+        adapter = GeminiAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gemini-1.5-flash",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        # Must not raise
+        gen = adapter.stream_chat(req)
+        next(gen)
+        gen.close()

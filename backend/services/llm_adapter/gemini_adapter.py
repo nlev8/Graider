@@ -398,96 +398,110 @@ class GeminiAdapter:
         finish_reason_raw: str | None = None
 
         try:
-            for chunk in stream:
-                # Text delta — chunk.text raises if the response has function calls
-                try:
-                    text = chunk.text
-                    if text:
-                        yield TextDelta(text=text)
-                except (ValueError, AttributeError):
-                    pass
+            try:
+                for chunk in stream:
+                    # Text delta — chunk.text raises if the response has function calls
+                    try:
+                        text = chunk.text
+                        if text:
+                            yield TextDelta(text=text)
+                    except (ValueError, AttributeError):
+                        pass
 
-                # Function call parts — treated as atomic ToolCallDelta + ToolCallComplete
-                # (Gemini doesn't stream incremental JSON fragments, it delivers the
-                # whole function_call at once in a part)
-                try:
-                    for candidate in chunk.candidates:
-                        for part in candidate.content.parts:
-                            if hasattr(part, "function_call") and part.function_call:
-                                fc = part.function_call
-                                tool_id = f"gemini_{fc.name}_{uuid.uuid4().hex[:8]}"
-                                # Use _unwrap_protobuf so nested dicts/lists survive
-                                # JSON serialization. `dict(fc.args)` alone only
-                                # unwraps one level — nested Struct/ListValue values
-                                # would crash json.dumps.
-                                try:
-                                    args = _unwrap_protobuf(fc.args) if fc.args else {}
-                                    if not isinstance(args, dict):
+                    # Function call parts — treated as atomic ToolCallDelta + ToolCallComplete
+                    # (Gemini doesn't stream incremental JSON fragments, it delivers the
+                    # whole function_call at once in a part)
+                    try:
+                        for candidate in chunk.candidates:
+                            for part in candidate.content.parts:
+                                if hasattr(part, "function_call") and part.function_call:
+                                    fc = part.function_call
+                                    tool_id = f"gemini_{fc.name}_{uuid.uuid4().hex[:8]}"
+                                    # Use _unwrap_protobuf so nested dicts/lists survive
+                                    # JSON serialization. `dict(fc.args)` alone only
+                                    # unwraps one level — nested Struct/ListValue values
+                                    # would crash json.dumps.
+                                    try:
+                                        args = _unwrap_protobuf(fc.args) if fc.args else {}
+                                        if not isinstance(args, dict):
+                                            args = {}
+                                    except Exception as unwrap_err:
+                                        _logger.warning(
+                                            "Failed to unwrap Gemini tool args for %s: %s — treating as empty",
+                                            fc.name, unwrap_err,
+                                        )
+                                        sentry_sdk.add_breadcrumb(
+                                            category="llm.tool_call",
+                                            level="warning",
+                                            message=f"gemini tool args unwrap failed for {fc.name}",
+                                            data={"provider": "gemini", "tool_name": fc.name, "error_kind": type(unwrap_err).__name__},
+                                        )
                                         args = {}
-                                except Exception as unwrap_err:
-                                    _logger.warning(
-                                        "Failed to unwrap Gemini tool args for %s: %s — treating as empty",
-                                        fc.name, unwrap_err,
-                                    )
-                                    sentry_sdk.add_breadcrumb(
-                                        category="llm.tool_call",
-                                        level="warning",
-                                        message=f"gemini tool args unwrap failed for {fc.name}",
-                                        data={"provider": "gemini", "tool_name": fc.name, "error_kind": type(unwrap_err).__name__},
-                                    )
-                                    args = {}
-                                # Single delta that is also complete (no incremental JSON)
-                                yield ToolCallDelta(
-                                    tool_call_id=tool_id,
-                                    name=fc.name,
-                                    args_delta=_json.dumps(args),
-                                )
-                                yield ToolCallComplete(
-                                    tool_call=ToolCall(
+                                    # Single delta that is also complete (no incremental JSON)
+                                    yield ToolCallDelta(
                                         tool_call_id=tool_id,
                                         name=fc.name,
-                                        args=args,
+                                        args_delta=_json.dumps(args),
                                     )
-                                )
-                except Exception as loop_err:
-                    _logger.warning("Gemini tool-call scan failed mid-stream: %s", loop_err)
+                                    yield ToolCallComplete(
+                                        tool_call=ToolCall(
+                                            tool_call_id=tool_id,
+                                            name=fc.name,
+                                            args=args,
+                                        )
+                                    )
+                    except Exception as loop_err:
+                        _logger.warning("Gemini tool-call scan failed mid-stream: %s", loop_err)
 
-                # Usage metadata — only on final chunk
-                try:
-                    if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
-                        prompt_tokens = getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0
-                        completion_tokens = getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0
-                except Exception:
-                    pass
+                    # Usage metadata — only on final chunk
+                    try:
+                        if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+                            prompt_tokens = getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0
+                            completion_tokens = getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0
+                    except Exception:
+                        pass
 
-                # Finish reason — from candidate (may only be set on last chunk)
-                try:
-                    candidate = chunk.candidates[0]
-                    fr = candidate.finish_reason
-                    raw = fr.name if hasattr(fr, "name") else str(fr)
-                    if raw and raw not in ("", "FINISH_REASON_UNSPECIFIED", "0"):
-                        finish_reason_raw = raw
-                except Exception:
-                    pass
+                    # Finish reason — from candidate (may only be set on last chunk)
+                    try:
+                        candidate = chunk.candidates[0]
+                        fr = candidate.finish_reason
+                        raw = fr.name if hasattr(fr, "name") else str(fr)
+                        if raw and raw not in ("", "FINISH_REASON_UNSPECIFIED", "0"):
+                            finish_reason_raw = raw
+                    except Exception:
+                        pass
 
-        except Exception as e:
-            duration_ms = int((time.monotonic() - t0) * 1000)
-            emit(
-                "llm.call.error",
-                level="warning",
-                provider=self._provider,
-                model=request.model,
-                duration_ms=duration_ms,
-                streaming=True,
-                error_kind=type(e).__name__,
-            )
-            sentry_sdk.add_breadcrumb(
-                category="llm.call",
-                level="warning",
-                message=f"gemini stream iteration failed for {request.model}",
-                data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
-            )
-            raise
+            except Exception as e:
+                duration_ms = int((time.monotonic() - t0) * 1000)
+                emit(
+                    "llm.call.error",
+                    level="warning",
+                    provider=self._provider,
+                    model=request.model,
+                    duration_ms=duration_ms,
+                    streaming=True,
+                    error_kind=type(e).__name__,
+                )
+                sentry_sdk.add_breadcrumb(
+                    category="llm.call",
+                    level="warning",
+                    message=f"gemini stream iteration failed for {request.model}",
+                    data={"provider": self._provider, "model": request.model, "error_kind": type(e).__name__, "duration_ms": duration_ms},
+                )
+                raise
+        finally:
+            # Phase 5b PR 4 — best-effort upstream cancel on exit.
+            # Tries .cancel() first (preferred semantic); falls back to .close()
+            # if only that exists. If neither is exposed by the SDK version,
+            # we rely on generator garbage collection.
+            for method_name in ("cancel", "close"):
+                method = getattr(stream, method_name, None)
+                if callable(method):
+                    try:
+                        method()
+                    except Exception:
+                        _logger.debug("gemini stream %s() raised on cleanup", method_name, exc_info=True)
+                    break
 
         usage = Usage(
             prompt_tokens=prompt_tokens,
