@@ -217,3 +217,100 @@ def test_finalize_after_first_completion_second_call_runs_independently():
 
     # Second call ran independently
     tts_stream_b.close.assert_called_once()
+
+
+def test_cost_recorded_at_most_once_across_race_path(monkeypatch):
+    """Simulates the GeneratorExit-mid-drain race: inner finalizer runs
+    step 9 (records cost), then outer silent wrapper fires and must NOT
+    double-record. Critical for not double-billing teachers on mid-stream
+    disconnect.
+    """
+    from backend.routes import assistant_routes
+
+    assistant_routes._finalizing_sessions.clear()
+    assistant_routes._cost_recorded_sessions.clear()
+
+    record_calls = []
+
+    def fake_record(input_tokens, output_tokens, model, tts_chars=0):
+        record_calls.append((input_tokens, output_tokens, model, tts_chars))
+        return {"total_cost": 0.001, "claude_cost": 0.001, "tts_cost": 0.0}
+
+    monkeypatch.setattr(assistant_routes, "_record_assistant_cost", fake_record)
+
+    tts_stream = MagicMock()
+    audio_queue = MagicMock()
+    audio_queue.get.return_value = None
+
+    # First call — runs to completion (including step 9 cost record)
+    list(assistant_routes._finalize_assistant_stream(
+        session_id="session-COST-RACE",
+        conv={"messages": []},
+        messages=[],
+        tts_stream=tts_stream,
+        sentence_buffer=None,
+        audio_out_queue=audio_queue,
+        total_input_tokens=100,
+        total_output_tokens=50,
+        total_tts_chars=500,
+        active_model="gpt-4o",
+        cancelled=False,
+    ))
+
+    assert len(record_calls) == 1
+    assert "session-COST-RACE" in assistant_routes._cost_recorded_sessions
+    # _finalizing_sessions was released by the finally
+    assert "session-COST-RACE" not in assistant_routes._finalizing_sessions
+
+    # Now simulate the race: outer except GeneratorExit fires and calls
+    # the silent wrapper. The _cost_recorded_sessions guard MUST skip step 9.
+    assistant_routes._finalize_assistant_stream_silent(
+        session_id="session-COST-RACE",
+        conv={"messages": []},
+        messages=[],
+        tts_stream=tts_stream,
+        sentence_buffer=None,
+        audio_out_queue=audio_queue,
+        total_input_tokens=100,
+        total_output_tokens=50,
+        total_tts_chars=500,
+        active_model="gpt-4o",
+        cancelled=True,
+    )
+
+    # Cost was NOT recorded a second time
+    assert len(record_calls) == 1, f"Cost double-recorded: {record_calls}"
+
+
+def test_cost_recorded_on_interrupted_first_call():
+    """If the inner finalizer was interrupted BEFORE reaching step 9, the
+    silent wrapper's step 9 MUST still record cost (at-least-once). The
+    guard doesn't mark cost as recorded until _record_assistant_cost is
+    actually called."""
+    from backend.routes import assistant_routes
+
+    assistant_routes._finalizing_sessions.clear()
+    assistant_routes._cost_recorded_sessions.clear()
+
+    tts_stream = MagicMock()
+    audio_queue = MagicMock()
+    audio_queue.get.return_value = None
+
+    # Simulate interrupted first call: session is NOT in _cost_recorded_sessions.
+    # Silent wrapper fires (GeneratorExit path) — step 9 should run.
+    assistant_routes._finalize_assistant_stream_silent(
+        session_id="session-INTERRUPTED",
+        conv={"messages": []},
+        messages=[],
+        tts_stream=tts_stream,
+        sentence_buffer=None,
+        audio_out_queue=audio_queue,
+        total_input_tokens=100,
+        total_output_tokens=50,
+        total_tts_chars=500,
+        active_model="gpt-4o",
+        cancelled=True,
+    )
+
+    # Cost WAS recorded (session is now in the guard set)
+    assert "session-INTERRUPTED" in assistant_routes._cost_recorded_sessions

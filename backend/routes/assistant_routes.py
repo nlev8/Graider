@@ -287,6 +287,17 @@ cancelled_sessions = set()
 _finalizing_sessions: set = set()
 _finalizing_lock = threading.Lock()
 
+# Tracks sessions whose cost has already been recorded. Step 9 of the
+# finalizer is the only non-idempotent side effect (it writes a new cost
+# row to disk); the other steps (_persist_conversation, tts_stream.close,
+# set.discard, conv["messages"] assignment) are all idempotent or wrapped
+# in try/except. Guarding step 9 specifically prevents double-billing on
+# the GeneratorExit-mid-drain race where the inner finalizer's finally
+# releases _finalizing_sessions before the outer except GeneratorExit
+# fires the silent wrapper.
+_cost_recorded_sessions: set = set()
+_COST_RECORDED_CAP = 10000  # simple eviction when this many sessions accumulate
+
 SETTINGS_FILE = os.path.expanduser("~/.graider_settings.json")
 RUBRIC_FILE = os.path.expanduser("~/.graider_rubric.json")
 MEMORY_FILE = os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
@@ -1254,19 +1265,35 @@ def _finalize_assistant_stream(
         # 8. cancelled_sessions.discard(session_id)
         cancelled_sessions.discard(session_id)
 
-        # 9. Cost record + (normal mode only) yield cost SSE frame
+        # 9. Cost record + (normal mode only) yield cost SSE frame.
+        # At-most-once semantics via _cost_recorded_sessions guard — critical
+        # for the GeneratorExit-mid-drain race where the inner finalizer's
+        # finally releases _finalizing_sessions before the outer silent
+        # wrapper fires. Without this guard, a disconnect during step 6
+        # (audio drain) would record cost twice.
         if total_input_tokens > 0 or total_tts_chars > 0:
-            try:
-                cost_info = _record_assistant_cost(
-                    total_input_tokens, total_output_tokens,
-                    active_model, total_tts_chars,
-                )
-                if cost_info.get("total_cost", 0) > COST_WARNING_THRESHOLD:
-                    cost_info["high_cost"] = True
-                if not cancelled:
-                    yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
-            except Exception:
-                logger.exception("_record_assistant_cost failed")
+            with _finalizing_lock:
+                already_recorded = session_id in _cost_recorded_sessions
+                if not already_recorded:
+                    _cost_recorded_sessions.add(session_id)
+                    # Simple eviction: if the set grows past the cap, clear it.
+                    # Cost records are per-request; the cap is generous enough
+                    # that eviction is a rare no-op in practice.
+                    if len(_cost_recorded_sessions) > _COST_RECORDED_CAP:
+                        _cost_recorded_sessions.clear()
+                        _cost_recorded_sessions.add(session_id)
+            if not already_recorded:
+                try:
+                    cost_info = _record_assistant_cost(
+                        total_input_tokens, total_output_tokens,
+                        active_model, total_tts_chars,
+                    )
+                    if cost_info.get("total_cost", 0) > COST_WARNING_THRESHOLD:
+                        cost_info["high_cost"] = True
+                    if not cancelled:
+                        yield f"data: {json.dumps({'type': 'cost', 'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens, 'tts_chars': total_tts_chars, **cost_info})}\n\n"
+                except Exception:
+                    logger.exception("_record_assistant_cost failed")
 
         # Observability marker
         try:
