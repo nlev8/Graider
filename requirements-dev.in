@@ -3,7 +3,6 @@
 
 # Testing & Coverage
 pytest-cov>=4.0
-selenium>=4.15.0
 # Note: playwright is a RUNTIME dep (subprocess in outlook_sender.py) —
 # see requirements.txt. Do NOT add it here.
 
