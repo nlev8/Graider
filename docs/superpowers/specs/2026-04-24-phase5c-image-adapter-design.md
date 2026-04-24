@@ -134,7 +134,7 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
             raw = _breakered()  # breaker-only, no retry
     except Exception as e:
         duration_ms = int((time.monotonic() - t0) * 1000)
-        # Gemini Round-1 finding #3: CircuitBreakerError is a LOCAL fast-fail,
+        # Gemini Round-2 finding #3: CircuitBreakerError is a LOCAL fast-fail,
         # not a genuine upstream LLM error. It's already tracked via
         # llm.breaker.state_change. Emitting it via llm.image.call.error
         # pollutes the provider-error metric and triggers alert fatigue when
@@ -153,7 +153,7 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     # Extract bytes from response.
-    # Gemini Round-1 finding #1: guard against empty candidates or None content.
+    # Gemini Round-2 finding #1: guard against empty candidates or None content.
     # When Gemini fully blocks a prompt (safety, recitation, prohibited content),
     # response.candidates may be [] or candidates[0].content may be None.
     # Unconditional indexing would raise IndexError/AttributeError, converting
@@ -247,9 +247,9 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
 - `test_gemini_generate_image_retry_enabled_on_request_flag` — inject `ConnectionError` then success; with `retry=True`, assert second attempt succeeds.
 - `test_gemini_generate_image_emits_observability_events` — monkeypatch `emit`; assert `llm.image.call.start` + `llm.image.call.complete` fire.
 - `test_gemini_generate_image_emits_error_on_failure` — inject non-breaker exception (e.g. `ConnectionError`); assert `llm.image.call.error` + sentry breadcrumb fire.
-- `test_gemini_generate_image_suppresses_error_event_for_circuit_breaker` — pre-open breaker; assert `CircuitBreakerError` propagates BUT `llm.image.call.error` does NOT fire and no sentry breadcrumb is added (Gemini Round-1 #3). Breaker state is tracked via `llm.breaker.state_change` separately.
+- `test_gemini_generate_image_suppresses_error_event_for_circuit_breaker` — pre-open breaker; assert `CircuitBreakerError` propagates BUT `llm.image.call.error` does NOT fire and no sentry breadcrumb is added (Gemini Round-2 #3). Breaker state is tracked via `llm.breaker.state_change` separately.
 - `test_gemini_generate_image_safe_on_empty_candidates` — mock response with `raw.candidates = []`; assert `ImageResponse(images=[])` returned (no `IndexError`), `llm.image.call.blocked` event with `finish_reason="unknown"`.
-- `test_gemini_generate_image_safe_on_none_content` — mock response with `raw.candidates = [candidate]` where `candidate.content is None`; assert `ImageResponse(images=[])` returned (no `AttributeError`), `llm.image.call.blocked` event fired (Gemini Round-1 #1).
+- `test_gemini_generate_image_safe_on_none_content` — mock response with `raw.candidates = [candidate]` where `candidate.content is None`; assert `ImageResponse(images=[])` returned (no `AttributeError`), `llm.image.call.blocked` event fired (Gemini Round-2 #1).
 - `test_gemini_generate_image_safety_block_returns_empty_and_emits_blocked_event` — response has `candidates[0].finish_reason.name == "SAFETY"` and zero parts with `inline_data`. Assert `ImageResponse.images == []`, `cost_usd == 0.0`, and `llm.image.call.blocked` event fires with `finish_reason="SAFETY"`.
 - `test_gemini_generate_image_mime_type_from_sdk` — response has `part.inline_data.mime_type = "image/jpeg"`. Assert `ImageResponse.mime_type == "image/jpeg"` (not the hardcoded "image/png" default).
 - `test_gemini_generate_image_metadata_propagates_to_emit` — pass `ImageRequest(metadata={"feature_label": "test"})`; assert `llm.image.call.start` event received `feature_label="test"`.
@@ -321,7 +321,7 @@ for idx, (slide_index, image_prompt) in enumerate(image_slides):
         # Sentry to avoid alert-fatigue — when the breaker opens, every remaining
         # slide in this request will hit the open-state and raise. Breaker state
         # is already tracked via the llm.breaker.state_change observability event;
-        # per-slide Sentry captures add no signal. (Gemini Round-1 finding #2.)
+        # per-slide Sentry captures add no signal. (Gemini Round-2 finding #2.)
         if not isinstance(e, pybreaker.CircuitBreakerError):
             sentry_sdk.capture_exception(e)
         logger.warning("Image generation failed for slide %d (will render text-only): %s", slide_index, e)
@@ -337,7 +337,7 @@ return images
 
 **Retained behavior:**
 - Per-image try/except (one failure doesn't stop the whole deck)
-- `sentry_sdk.capture_exception(e)` on individual failures **except** `pybreaker.CircuitBreakerError` — Gemini Round-1 #2 flagged that open-breaker would spam Sentry with up to `max_images` identical events per request. Per-slide `logger.warning` still fires for every failure (including breaker) so operators see the pattern in logs; aggregate breaker state is tracked via `llm.breaker.state_change`.
+- `sentry_sdk.capture_exception(e)` on individual failures **except** `pybreaker.CircuitBreakerError` — Gemini Round-2 #2 flagged that open-breaker would spam Sentry with up to `max_images` identical events per request. Per-slide `logger.warning` still fires for every failure (including breaker) so operators see the pattern in logs; aggregate breaker state is tracked via `llm.breaker.state_change`.
 - `logger.info("Style reference image set from slide %d", slide_index)` on first successful image
 - `logger.info("Generated %d/%d slide images", ...)` at the end
 - `logger.warning("Image generation failed for slide %d...")` on each failure (including `CircuitBreakerError`)
@@ -359,7 +359,7 @@ No change required — `_run_slide_generator()` calls `generate_slide_images(sli
 - Add `test_slide_generator_reference_image_passed_to_subsequent_calls` — mock adapter returns bytes; verify second adapter call receives `reference_images=[ImagePart(base64=...)]`.
 - Add `test_slide_generator_reference_image_mime_type_propagates` — mock first adapter call returns `mime_type="image/jpeg"`; verify second call's `reference_images[0].mime_type == "image/jpeg"` (not hardcoded "image/png").
 - Add `test_slide_generator_handles_empty_images_response` — mock adapter returns `ImageResponse(images=[], ...)` (simulating safety-block). Verify that slide's index is absent from `images` dict but other slides still processed. Verify `logger.info("Generated %d/%d slide images", ...)` at end reports the reduced count.
-- Add `test_slide_generator_suppresses_sentry_capture_for_breaker_error` — mock adapter to raise `pybreaker.CircuitBreakerError` on ALL calls (simulating open breaker). Patch `sentry_sdk.capture_exception`. Verify `capture_exception` is NEVER called across the loop (Gemini Round-1 #2: avoid alert fatigue on open breaker). Verify `logger.warning` IS called per-slide (operators still see the pattern in logs). Verify the function returns an empty `images` dict gracefully.
+- Add `test_slide_generator_suppresses_sentry_capture_for_breaker_error` — mock adapter to raise `pybreaker.CircuitBreakerError` on ALL calls (simulating open breaker). Patch `sentry_sdk.capture_exception`. Verify `capture_exception` is NEVER called across the loop (Gemini Round-2 #2: avoid alert fatigue on open breaker). Verify `logger.warning` IS called per-slide (operators still see the pattern in logs). Verify the function returns an empty `images` dict gracefully.
 - Keep existing `test_slide_generator` happy-path tests passing.
 
 ### Acceptance
@@ -446,7 +446,7 @@ Phase 5c moves composite average from ~7.6 (post-5b) to ~7.65.
 |---|---|---|
 | MIME type hardcoded in PR 2 migration (ref-image ImagePart declares `image/png` regardless of SDK response) | MAJOR | **Accepted.** Migration now propagates `response.mime_type` from adapter to next iteration's `reference_image_mime`. New test `test_slide_generator_reference_image_mime_type_propagates`. Adapter extracts mime from `part.inline_data.mime_type` when available. |
 | Silent empty-image success path — safety-blocked response returns `ImageResponse(images=[])` with cost=0, indistinguishable from genuine success | MAJOR | **Accepted.** Adapter now emits distinct `llm.image.call.blocked` event with `finish_reason` when zero inline_data parts returned. Returns empty list to preserve caller's existing per-slide graceful-degradation contract. New tests: `test_gemini_generate_image_safety_block_returns_empty_and_emits_blocked_event`, `test_slide_generator_handles_empty_images_response`. |
-| Observability regression in PR 2 migration — dropped `sentry_sdk.capture_exception(e)` + `logger.info("Generated N/M slide images")` + `logger.info("Style reference image set from slide %d")` from current code | MAJOR | **Accepted.** Migration code sketch now preserves all three observability calls verbatim. Listed explicitly under "Retained behavior." |
+| Observability regression in PR 2 migration — dropped `sentry_sdk.capture_exception(e)` + `logger.info("Generated N/M slide images")` + `logger.info("Style reference image set from slide %d")` from current code | MAJOR | **Accepted.** Migration code sketch restores all three observability calls. Listed explicitly under "Retained behavior." (Round-2 #2 subsequently scoped the Sentry call to filter `CircuitBreakerError` for alert-fatigue reasons; both `logger.info` calls remain unconditional.) |
 | Breaker key `(provider, model)` future-couples chat + image on any shared model name | MINOR | **Accepted as documented limitation.** Risk-table entry added. YAGNI — today's Gemini image-gen model name is distinct from chat models, so breakers are naturally separate. Revisit if a future Gemini multi-modal model blurs the boundary. |
 
 **Round 2 (Gemini pre-review)** flagged 3 items; all reconciled:
