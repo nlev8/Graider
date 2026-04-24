@@ -25,3 +25,15 @@ def test_llm_adapter_protocol_declares_generate_image():
     # Runtime-checkable protocol recognition — instances must match structurally.
     openai = OpenAIAdapter(api_key="test-key")
     assert isinstance(openai, LLMAdapter)
+
+
+def test_estimate_image_cost_known_model():
+    from backend.services.llm_adapter.gemini_adapter import _estimate_image_cost_usd
+    assert _estimate_image_cost_usd("gemini-2.5-flash-preview-image-generation", 1) == 0.04
+    assert _estimate_image_cost_usd("gemini-2.5-flash-preview-image-generation", 3) == 0.12
+
+
+def test_estimate_image_cost_unknown_model_defaults_to_base_rate():
+    from backend.services.llm_adapter.gemini_adapter import _estimate_image_cost_usd
+    assert _estimate_image_cost_usd("gemini-future-unknown", 1) == 0.04
+    assert _estimate_image_cost_usd("gemini-future-unknown", 0) == 0.0
