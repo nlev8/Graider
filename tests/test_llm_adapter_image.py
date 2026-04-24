@@ -379,3 +379,147 @@ def test_gemini_generate_image_suppresses_error_event_for_circuit_breaker(monkey
     errors = [e for e in captured if e[0] == "llm.image.call.error"]
     assert errors == [], f"CircuitBreakerError should NOT emit llm.image.call.error; got {errors}"
     assert breadcrumbs == [], f"CircuitBreakerError should NOT add a breadcrumb; got {breadcrumbs}"
+
+
+def test_gemini_generate_image_safety_block_zero_inline_data(monkeypatch):
+    """Response has candidate.finish_reason='SAFETY' and ZERO parts with inline_data.
+    Expected: ImageResponse(images=[], cost_usd=0.0); llm.image.call.blocked fires."""
+    _clear_breakers()
+    from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+    from backend.services.llm_adapter.types import ImageRequest
+
+    captured = []
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.emit",
+        lambda name, **kw: captured.append((name, kw)),
+    )
+
+    empty_part = MagicMock()
+    empty_part.inline_data = None
+    candidate = MagicMock()
+    candidate.content = MagicMock()
+    candidate.content.parts = [empty_part]
+    candidate.finish_reason = MagicMock()
+    candidate.finish_reason.name = "SAFETY"
+    resp = MagicMock()
+    resp.candidates = [candidate]
+    resp.prompt_feedback = None
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content.return_value = resp
+
+        adapter = GeminiAdapter(api_key="test-key")
+        result = adapter.generate_image(ImageRequest(
+            prompt="x",
+            model="gemini-2.5-flash-preview-image-generation",
+        ))
+
+    assert result.images == []
+    assert result.cost_usd == 0.0
+    blocked = [e for e in captured if e[0] == "llm.image.call.blocked"]
+    assert len(blocked) == 1
+    assert blocked[0][1]["finish_reason"] == "SAFETY"
+
+
+def test_gemini_generate_image_safe_on_empty_candidates(monkeypatch):
+    """raw.candidates=[] AND prompt_feedback absent.
+    Expected: empty ImageResponse, finish_reason='unknown'."""
+    _clear_breakers()
+    from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+    from backend.services.llm_adapter.types import ImageRequest
+
+    captured = []
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.emit",
+        lambda name, **kw: captured.append((name, kw)),
+    )
+
+    resp = _make_empty_candidates_response(prompt_feedback_reason_name=None)
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content.return_value = resp
+
+        adapter = GeminiAdapter(api_key="test-key")
+        result = adapter.generate_image(ImageRequest(
+            prompt="x",
+            model="gemini-2.5-flash-preview-image-generation",
+        ))
+
+    assert result.images == []
+    blocked = [e for e in captured if e[0] == "llm.image.call.blocked"]
+    assert len(blocked) == 1
+    assert blocked[0][1]["finish_reason"] == "unknown"
+
+
+def test_gemini_generate_image_safe_on_none_content(monkeypatch):
+    """raw.candidates=[candidate] where candidate.content is None.
+    Expected: empty ImageResponse (no AttributeError)."""
+    _clear_breakers()
+    from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+    from backend.services.llm_adapter.types import ImageRequest
+
+    captured = []
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.emit",
+        lambda name, **kw: captured.append((name, kw)),
+    )
+
+    candidate = MagicMock()
+    candidate.content = None
+    candidate.finish_reason = MagicMock()
+    candidate.finish_reason.name = "RECITATION"
+    resp = MagicMock()
+    resp.candidates = [candidate]
+    resp.prompt_feedback = None
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content.return_value = resp
+
+        adapter = GeminiAdapter(api_key="test-key")
+        result = adapter.generate_image(ImageRequest(
+            prompt="x",
+            model="gemini-2.5-flash-preview-image-generation",
+        ))
+
+    assert result.images == []
+    blocked = [e for e in captured if e[0] == "llm.image.call.blocked"]
+    assert len(blocked) == 1
+    assert blocked[0][1]["finish_reason"] == "RECITATION"
+
+
+def test_gemini_generate_image_empty_candidates_uses_prompt_feedback_block_reason(monkeypatch):
+    """raw.candidates=[] AND raw.prompt_feedback.block_reason.name='SAFETY'.
+    Expected: finish_reason='SAFETY' (Gemini Round-3 observability polish)."""
+    _clear_breakers()
+    from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+    from backend.services.llm_adapter.types import ImageRequest
+
+    captured = []
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.emit",
+        lambda name, **kw: captured.append((name, kw)),
+    )
+
+    resp = _make_empty_candidates_response(prompt_feedback_reason_name="SAFETY")
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content.return_value = resp
+
+        adapter = GeminiAdapter(api_key="test-key")
+        result = adapter.generate_image(ImageRequest(
+            prompt="x",
+            model="gemini-2.5-flash-preview-image-generation",
+        ))
+
+    assert result.images == []
+    blocked = [e for e in captured if e[0] == "llm.image.call.blocked"]
+    assert len(blocked) == 1
+    assert blocked[0][1]["finish_reason"] == "SAFETY"
