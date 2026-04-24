@@ -36,6 +36,7 @@ from backend.services.llm_adapter.types import (
     ImagePart,
     LLMRequest,
     LLMResponse,
+    LLMToolArgsOverflow,
     Message,
     TextPart,
     ToolCall,
@@ -46,6 +47,10 @@ from backend.services.llm_adapter.types import (
 )
 
 _logger = logging.getLogger(__name__)
+
+# Phase 5b PR 5 — memory cap for streaming tool-call argument accumulation.
+# See openai_adapter.py::_MAX_TOOL_ARGS_BYTES for rationale.
+_MAX_TOOL_ARGS_BYTES = 5 * 1024 * 1024
 
 
 def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
@@ -381,6 +386,19 @@ class AnthropicAdapter:
                         fragment = getattr(delta, "partial_json", "")
                         meta = block_meta.get(event.index, {})
                         is_first = not meta.get("accumulated_json")
+                        projected = len(meta.get("accumulated_json", "")) + len(fragment)
+                        if projected > _MAX_TOOL_ARGS_BYTES:
+                            emit(
+                                "llm.tool_call.args_overflow",
+                                provider=self._provider,
+                                model=request.model,
+                                tool_name=meta.get("name") or "unknown",
+                                bytes_accumulated=len(meta.get("accumulated_json", "")),
+                            )
+                            raise LLMToolArgsOverflow(
+                                f"tool_call args exceeded {_MAX_TOOL_ARGS_BYTES} bytes "
+                                f"for tool {meta.get('name')!r} on {self._provider}"
+                            )
                         meta["accumulated_json"] = meta.get("accumulated_json", "") + fragment
                         yield ToolCallDelta(
                             tool_call_id=meta.get("id", ""),

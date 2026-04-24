@@ -240,3 +240,41 @@ def test_anthropic_stream_emits_start_and_complete(mock_cls, mock_emit):
     event_names = [call.args[0] for call in mock_emit.call_args_list]
     assert "llm.call.start" in event_names
     assert "llm.call.complete" in event_names
+
+
+@patch("backend.services.llm_adapter.anthropic_adapter.anthropic.Anthropic")
+def test_anthropic_stream_raises_overflow_on_large_tool_args(mock_cls, monkeypatch):
+    """When accumulated input_json_delta fragments exceed 5 MB, the adapter
+    raises LLMToolArgsOverflow and emits the observability event."""
+    from backend.services.llm_adapter.types import LLMToolArgsOverflow
+
+    mock_client = MagicMock()
+    mock_cls.return_value = mock_client
+
+    big = "x" * (6 * 1024 * 1024)  # single-fragment overflow
+
+    events = [
+        _message_start_event(input_tokens=10),
+        _content_block_start_tool(1, "toolu_big", "huge_tool"),
+        _tool_delta_event(big, 1),
+    ]
+    stream_ctx = MagicMock()
+    stream_ctx.__enter__ = MagicMock(return_value=iter(events))
+    stream_ctx.__exit__ = MagicMock(return_value=False)
+    mock_client.messages.stream.return_value = stream_ctx
+
+    captured_events = []
+
+    def fake_emit(name, **kw):
+        captured_events.append((name, kw))
+
+    monkeypatch.setattr("backend.services.llm_adapter.anthropic_adapter.emit", fake_emit)
+
+    adapter = AnthropicAdapter(api_key="test-key")
+    with pytest.raises(LLMToolArgsOverflow):
+        list(adapter.stream_chat(_simple_request()))
+
+    overflow_events = [e for e in captured_events if e[0] == "llm.tool_call.args_overflow"]
+    assert len(overflow_events) >= 1
+    assert overflow_events[0][1]["tool_name"] == "huge_tool"
+    assert overflow_events[0][1]["provider"] == "anthropic"
