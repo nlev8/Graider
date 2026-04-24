@@ -5,6 +5,8 @@ from backend.services.llm_adapter.types import (
     ContentPart,
     DEFAULT_TIMEOUT,
     ImagePart,
+    ImageRequest,
+    ImageResponse,
     LLMRequest,
     LLMResponse,
     LLMToolArgsOverflow,
@@ -50,6 +52,8 @@ class LLMAdapter(Protocol):
 
     def stream_chat(self, request: LLMRequest) -> Iterator[StreamEvent]: ...
 
+    def generate_image(self, request: ImageRequest) -> ImageResponse: ...
+
 
 __all__ = [
     # Adapters + Protocol
@@ -61,6 +65,8 @@ __all__ = [
     "ContentPart",
     "DEFAULT_TIMEOUT",
     "ImagePart",
+    "ImageRequest",
+    "ImageResponse",
     "LLMRequest",
     "LLMResponse",
     "LLMToolArgsOverflow",
