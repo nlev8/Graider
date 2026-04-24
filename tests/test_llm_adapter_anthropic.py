@@ -217,3 +217,41 @@ def test_anthropic_chat_uses_breaker():
         # Next call fast-fails
         with pytest.raises(pybreaker.CircuitBreakerError):
             adapter.chat(req)
+
+
+def test_anthropic_adapter_silently_ignores_image_detail():
+    """Anthropic doesn't support the detail field; adapter should accept
+    ImagePart(detail="high") without raising and without passing detail
+    to the provider."""
+    from backend.services.llm_adapter.anthropic_adapter import AnthropicAdapter
+    from backend.services.llm_adapter.types import LLMRequest, Message, TextPart, ImagePart
+
+    with patch("backend.services.llm_adapter.anthropic_adapter.anthropic.Anthropic") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        mock_resp = MagicMock()
+        mock_block = MagicMock()
+        mock_block.type = "text"
+        mock_block.text = "hello"
+        mock_resp.content = [mock_block]
+        mock_resp.usage.input_tokens = 5
+        mock_resp.usage.output_tokens = 3
+        mock_resp.stop_reason = "end_turn"
+        mock_resp.model = "claude-3-sonnet-20240229"
+        mock_client.messages.create.return_value = mock_resp
+
+        adapter = AnthropicAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="claude-3-sonnet-20240229",
+            messages=[Message(
+                role="user",
+                content=[
+                    TextPart(text="hi"),
+                    ImagePart(url=None, base64="aGVsbG8=", mime_type="image/png", detail="high"),
+                ],
+            )],
+        )
+
+        resp = adapter.chat(req)
+        assert resp.provider == "anthropic"

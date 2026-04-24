@@ -25,6 +25,10 @@ class ImagePart:
     url: str | None
     base64: str | None
     mime_type: str  # e.g. "image/png", "image/jpeg"
+    # OpenAI-only vision-detail hint. Valid values: "auto" (default),
+    # "low" (512x512 thumbnail, ~85 tokens), "high" (original resolution,
+    # up to ~170 tokens per 512-px tile). Other providers silently ignore.
+    detail: Literal["auto", "low", "high"] | None = None
 
 
 @dataclass(frozen=True)

@@ -233,3 +233,53 @@ def test_openai_chat_breaker_error_is_not_retried():
 
         # Zero network calls — breaker short-circuited, retry didn't cycle
         assert call_count["n"] == 0
+
+
+@patch("backend.services.llm_adapter.openai_adapter.OpenAI")
+def test_openai_adapter_passes_image_detail_through(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+    mock_client.chat.completions.create.return_value = _mock_openai_response()
+
+    adapter = OpenAIAdapter(api_key="test-key")
+    req = LLMRequest(
+        model="gpt-4o",
+        messages=[Message(
+            role="user",
+            content=[
+                TextPart(text="OCR this"),
+                ImagePart(url="http://img", base64=None, mime_type="image/png", detail="high"),
+            ],
+        )],
+    )
+    adapter.chat(req)
+
+    kwargs = mock_client.chat.completions.create.call_args.kwargs
+    user_msg = kwargs["messages"][0]
+    image_part = next(p for p in user_msg["content"] if p["type"] == "image_url")
+    assert image_part["image_url"]["detail"] == "high"
+
+
+@patch("backend.services.llm_adapter.openai_adapter.OpenAI")
+def test_openai_adapter_omits_image_detail_when_none(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+    mock_client.chat.completions.create.return_value = _mock_openai_response()
+
+    adapter = OpenAIAdapter(api_key="test-key")
+    req = LLMRequest(
+        model="gpt-4o",
+        messages=[Message(
+            role="user",
+            content=[
+                TextPart(text="hi"),
+                ImagePart(url="http://img", base64=None, mime_type="image/png"),
+            ],
+        )],
+    )
+    adapter.chat(req)
+
+    kwargs = mock_client.chat.completions.create.call_args.kwargs
+    user_msg = kwargs["messages"][0]
+    image_part = next(p for p in user_msg["content"] if p["type"] == "image_url")
+    assert "detail" not in image_part["image_url"]
