@@ -29,6 +29,7 @@ from backend.services.llm_adapter.types import (
     ImagePart,
     LLMRequest,
     LLMResponse,
+    LLMToolArgsOverflow,
     Message,
     TextPart,
     ToolCall,
@@ -37,6 +38,13 @@ from backend.services.llm_adapter.types import (
     Usage,
     normalize_finish_reason,
 )
+
+# Phase 5b PR 5 — memory cap for streaming tool-call argument accumulation.
+# Prevents a runaway model producing unbounded args JSON from consuming
+# gigabytes of worker memory. 5 MB accommodates known-large Graider tool
+# payloads (generate_document.content, save_assignment_config.document_text,
+# generate_worksheet.questions, create_automation.steps) with ~10x headroom.
+_MAX_TOOL_ARGS_BYTES = 5 * 1024 * 1024
 
 _logger = logging.getLogger(__name__)
 
@@ -414,6 +422,19 @@ class OpenAIAdapter:
                             args_fragment = ""
                             if tc_delta.function and tc_delta.function.arguments:
                                 args_fragment = tc_delta.function.arguments
+                                projected = len(pending_tool_calls[idx]["arguments"]) + len(args_fragment)
+                                if projected > _MAX_TOOL_ARGS_BYTES:
+                                    emit(
+                                        "llm.tool_call.args_overflow",
+                                        provider=self._provider,
+                                        model=request.model,
+                                        tool_name=pending_tool_calls[idx]["name"] or "unknown",
+                                        bytes_accumulated=len(pending_tool_calls[idx]["arguments"]),
+                                    )
+                                    raise LLMToolArgsOverflow(
+                                        f"tool_call args exceeded {_MAX_TOOL_ARGS_BYTES} bytes "
+                                        f"for tool {pending_tool_calls[idx]['name']!r} on {self._provider}"
+                                    )
                                 pending_tool_calls[idx]["arguments"] += args_fragment
 
                             yield ToolCallDelta(

@@ -361,3 +361,56 @@ def test_openai_stream_closes_on_normal_completion():
         list(adapter.stream_chat(req))
 
         assert close_calls == ["closed"]
+
+
+def test_openai_stream_raises_overflow_on_large_tool_args(monkeypatch):
+    """When cumulative tool_call.arguments exceeds 5 MB, the adapter raises
+    LLMToolArgsOverflow and emits the observability event."""
+    from backend.services.llm_adapter.types import LLMToolArgsOverflow
+
+    # 6 MB fragment to overflow the 5 MB cap in one go
+    big = "x" * (6 * 1024 * 1024)
+
+    def _chunk(args_fragment):
+        chunk = MagicMock()
+        tc_delta = MagicMock()
+        tc_delta.index = 0
+        tc_delta.id = "call_123"
+        tc_delta.function.name = "huge_tool"
+        tc_delta.function.arguments = args_fragment
+        chunk.choices = [MagicMock(delta=MagicMock(content=None, tool_calls=[tc_delta]), finish_reason=None)]
+        chunk.usage = None
+        return chunk
+
+    class FakeStream:
+        def __iter__(self):
+            return iter([_chunk(big)])
+
+        def close(self):
+            pass
+
+    captured_events = []
+
+    def fake_emit(name, **kw):
+        captured_events.append((name, kw))
+
+    monkeypatch.setattr("backend.services.llm_adapter.openai_adapter.emit", fake_emit)
+
+    with patch("backend.services.llm_adapter.openai_adapter.OpenAI") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = FakeStream()
+
+        adapter = OpenAIAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gpt-4o",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        with pytest.raises(LLMToolArgsOverflow):
+            list(adapter.stream_chat(req))
+
+    overflow_events = [e for e in captured_events if e[0] == "llm.tool_call.args_overflow"]
+    assert len(overflow_events) >= 1
+    assert overflow_events[0][1]["tool_name"] == "huge_tool"
+    assert overflow_events[0][1]["provider"] == "openai"
