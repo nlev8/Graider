@@ -110,42 +110,56 @@ class TestGenerateSlideContent:
 
 
 class TestGenerateSlideImages:
-    def test_generates_images_for_slides_with_prompts(self):
-        """Should generate images only for slides that have image_prompt."""
+    def test_generates_images_for_slides_with_prompts(self, monkeypatch):
+        """Should generate images only for slides that have image_prompt.
+
+        Post-Phase-5c migration: patches `GeminiAdapter.generate_image` instead
+        of the removed `_get_genai_client` helper.
+        """
         from backend.services.slide_generator import generate_slide_images
+        from backend.services.llm_adapter.types import ImageResponse
 
         slides = SAMPLE_SLIDE_CONTENT["slides"]
         theme = SAMPLE_SLIDE_CONTENT["theme"]
 
-        # Create a 1x1 white PNG for the mock
+        # Create a 1x1 white PNG so downstream consumers see a real image
         from PIL import Image
         img = Image.new('RGB', (1024, 576), 'white')
         img_bytes = BytesIO()
         img.save(img_bytes, format='PNG')
         mock_image_data = img_bytes.getvalue()
 
-        mock_part = MagicMock()
-        mock_part.inline_data = MagicMock()
-        mock_part.inline_data.data = mock_image_data
+        def fake_generate_image(self, request):
+            return ImageResponse(
+                images=[mock_image_data],
+                mime_type="image/png",
+                provider="gemini",
+                model=request.model,
+                cost_usd=0.04,
+            )
 
-        mock_response = MagicMock()
-        mock_response.candidates = [MagicMock()]
-        mock_response.candidates[0].content.parts = [mock_part]
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+            fake_generate_image,
+        )
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.genai.Client",
+            lambda api_key=None: object(),
+        )
 
-        with patch('backend.services.slide_generator._get_genai_client') as mock_get:
-            mock_client = MagicMock()
-            mock_client.models.generate_content.return_value = mock_response
-            mock_get.return_value = mock_client
+        images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
 
-            images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
-
-        # Only slides with image_prompt get images (3 out of 5 in sample)
+        # Only slides with image_prompt get images (cap at max_images=5)
         assert len(images) <= 5
         assert len(images) > 0
 
-    def test_respects_max_images_cap(self):
-        """Should not generate more images than max_images."""
+    def test_respects_max_images_cap(self, monkeypatch):
+        """Should not generate more images than max_images.
+
+        Post-Phase-5c migration: patches `GeminiAdapter.generate_image`.
+        """
         from backend.services.slide_generator import generate_slide_images
+        from backend.services.llm_adapter.types import ImageResponse
 
         slides = [{"layout": "content", "image_prompt": "img " + str(i)} for i in range(20)]
         theme = SAMPLE_SLIDE_CONTENT["theme"]
@@ -155,20 +169,25 @@ class TestGenerateSlideImages:
         img_bytes = BytesIO()
         img.save(img_bytes, format='PNG')
 
-        mock_part = MagicMock()
-        mock_part.inline_data = MagicMock()
-        mock_part.inline_data.data = img_bytes.getvalue()
+        def fake_generate_image(self, request):
+            return ImageResponse(
+                images=[img_bytes.getvalue()],
+                mime_type="image/png",
+                provider="gemini",
+                model=request.model,
+                cost_usd=0.04,
+            )
 
-        mock_response = MagicMock()
-        mock_response.candidates = [MagicMock()]
-        mock_response.candidates[0].content.parts = [mock_part]
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.generate_image",
+            fake_generate_image,
+        )
+        monkeypatch.setattr(
+            "backend.services.llm_adapter.gemini_adapter.genai.Client",
+            lambda api_key=None: object(),
+        )
 
-        with patch('backend.services.slide_generator._get_genai_client') as mock_get:
-            mock_client = MagicMock()
-            mock_client.models.generate_content.return_value = mock_response
-            mock_get.return_value = mock_client
-
-            images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
+        images = generate_slide_images(slides, theme, api_key="fake-key", max_images=5)
 
         assert len(images) <= 5
 
