@@ -44,7 +44,9 @@ from backend.services.assistant_tools import (
 )
 from backend.services.assistant_tools_reports import _extract_pdf_text, _extract_docx_text
 import sentry_sdk
+import pybreaker
 
+from backend.services.llm_adapter.breakers import get_breaker
 from backend.services.llm_adapter import (
     AnthropicAdapter,
     GeminiAdapter,
@@ -1340,10 +1342,8 @@ def assistant_chat():
     # is already OPEN. The TOCTOU fallback (breaker flips closed→open mid-
     # iteration) is handled by the existing SSE error-frame handler inside
     # generate()'s except branch — no frontend change required.
-    import pybreaker as _pybreaker
-    from backend.services.llm_adapter.breakers import get_breaker as _get_breaker
-    _preflight_breaker = _get_breaker(provider, model_info["model"])
-    if _preflight_breaker.current_state == _pybreaker.STATE_OPEN:
+    _preflight_breaker = get_breaker(provider, model_info["model"])
+    if _preflight_breaker.current_state == pybreaker.STATE_OPEN:
         resp = jsonify({
             "error": "LLM provider temporarily unavailable — circuit breaker open",
             "retry_after_seconds": 60,
