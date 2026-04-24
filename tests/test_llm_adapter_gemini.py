@@ -190,3 +190,51 @@ def test_gemini_adapter_uses_google_genai_sdk():
         "gemini_adapter.py still imports the deprecated google.generativeai SDK"
     )
     assert "from google import genai" in source
+
+
+@pytest.fixture
+def mock_genai_response():
+    """Build a MagicMock with the google.genai response shape we depend on."""
+    def _make():
+        resp = MagicMock()
+        part = MagicMock()
+        part.text = "hello"
+        part.function_call = None
+        resp.candidates = [MagicMock()]
+        resp.candidates[0].content.parts = [part]
+        resp.candidates[0].finish_reason = MagicMock()
+        resp.candidates[0].finish_reason.name = "STOP"
+        resp.usage_metadata.prompt_token_count = 10
+        resp.usage_metadata.candidates_token_count = 5
+        return resp
+    return _make
+
+
+def test_gemini_response_shape_contract(mock_genai_response):
+    """Contract-pin the response field names we read. If google.genai
+    ever renames these, this test fails at CI time rather than in prod."""
+    resp = mock_genai_response()
+
+    assert hasattr(resp, "candidates")
+    assert hasattr(resp.candidates[0], "content")
+    assert hasattr(resp.candidates[0].content, "parts")
+    assert hasattr(resp.candidates[0], "finish_reason")
+    assert hasattr(resp, "usage_metadata")
+    assert hasattr(resp.usage_metadata, "prompt_token_count")
+    assert hasattr(resp.usage_metadata, "candidates_token_count")
+
+
+def test_gemini_finish_reason_enum_names_route_through_normalize():
+    """Verify normalize_finish_reason handles the finish_reason enum
+    names google.genai emits."""
+    from backend.services.llm_adapter.types import normalize_finish_reason
+
+    # google.genai emits uppercased enum names. normalize lowercases internally.
+    assert normalize_finish_reason("STOP") == "stop"
+    assert normalize_finish_reason("MAX_TOKENS") == "length"
+    assert normalize_finish_reason("SAFETY") == "content_filter"
+    assert normalize_finish_reason("RECITATION") == "content_filter"
+    assert normalize_finish_reason("OTHER") == "stop"
+    assert normalize_finish_reason("MALFORMED_FUNCTION_CALL") == "tool_use"
+    assert normalize_finish_reason("PROHIBITED_CONTENT") == "content_filter"
+    assert normalize_finish_reason("FINISH_REASON_UNSPECIFIED") == "stop"
