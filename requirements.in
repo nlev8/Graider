@@ -1,10 +1,11 @@
 # Graider runtime dependencies. Non-runtime dev tooling (pytest-cov,
 # py2app, selenium) lives in requirements-dev.txt.
 #
-# Dual Gemini SDK note: `google-generativeai` is used for chat-style text
-# generation (planner_routes, assistant_routes, slide_generator:155);
-# `google.genai` is used for image generation (slide_generator:258).
-# Phase 5b's adapter unification will collapse these if possible.
+# Gemini SDK: google-genai handles BOTH chat-style text generation (via
+# backend/services/llm_adapter/gemini_adapter.py, used by planner_routes,
+# assistant_routes, slide_generator text gen, flashcards, study_guide)
+# AND image generation (slide_generator image gen). The deprecated
+# `google-generativeai` SDK was removed in Phase 5b PR 2.
 #
 # Runtime Playwright note: `playwright` is a RUNTIME dependency because
 # backend/services/outlook_sender.py imports it inside a subprocess
@@ -69,9 +70,7 @@ httpx>=0.24.0
 Flask-Session>=0.5.0
 redis>=5.0.0
 
-# Google Gemini (old SDK — used by grading, study guides, flashcards)
-google-generativeai>=0.8.0
-# Slide Deck Generator (new SDK for image gen + PowerPoint assembly)
+# Google Gemini (unified SDK — chat + image generation)
 google-genai>=1.0.0
 python-pptx>=1.0.0
 
