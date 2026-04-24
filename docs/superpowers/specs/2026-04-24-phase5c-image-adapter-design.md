@@ -433,7 +433,7 @@ Phase 5c moves composite average from ~7.6 (post-5b) to ~7.65.
 **3. Scope check:** 2 PRs is appropriately small. Each PR is self-contained and reviewable in one sitting. No PR mixes unrelated concerns.
 
 **4. Ambiguity check:**
-- Reference-image shape: explicit — `ImagePart(base64=..., mime_type="image/png")` bytes form, not PIL Image.
+- Reference-image shape: explicit — `ImagePart(base64=..., mime_type=<SDK-returned MIME>)` bytes form, not PIL Image. MIME type is captured from the adapter's response and threaded back into the next iteration's `ImagePart` rather than hardcoded (Codex Round-1 finding #1).
 - Retry default: explicit — `False` to preserve cost-sensitive current behavior.
 - Image count return shape: explicit — `list[bytes]` even when Gemini always returns one.
 
