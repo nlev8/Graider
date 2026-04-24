@@ -188,6 +188,20 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
             finish_reason_raw = fr.name if hasattr(fr, "name") else str(fr)
         except Exception:
             pass
+    # Pre-candidate policy block fallback (Gemini Round-3 observability polish).
+    # When Gemini rejects the prompt before producing any candidate at all,
+    # raw.candidates is empty — candidate.finish_reason doesn't exist. The
+    # true block reason is instead on raw.prompt_feedback.block_reason.
+    # Extract that so operators see the real reason instead of "unknown".
+    if finish_reason_raw is None:
+        try:
+            pf = getattr(raw, "prompt_feedback", None)
+            if pf is not None:
+                br = getattr(pf, "block_reason", None)
+                if br is not None:
+                    finish_reason_raw = br.name if hasattr(br, "name") else str(br)
+        except Exception:
+            pass
     if not images:
         emit(
             "llm.image.call.blocked",
@@ -250,6 +264,7 @@ def generate_image(self, request: ImageRequest) -> ImageResponse:
 - `test_gemini_generate_image_suppresses_error_event_for_circuit_breaker` — pre-open breaker; assert `CircuitBreakerError` propagates BUT `llm.image.call.error` does NOT fire and no sentry breadcrumb is added (Gemini Round-2 #3). Breaker state is tracked via `llm.breaker.state_change` separately.
 - `test_gemini_generate_image_safe_on_empty_candidates` — mock response with `raw.candidates = []`; assert `ImageResponse(images=[])` returned (no `IndexError`), `llm.image.call.blocked` event with `finish_reason="unknown"`.
 - `test_gemini_generate_image_safe_on_none_content` — mock response with `raw.candidates = [candidate]` where `candidate.content is None`; assert `ImageResponse(images=[])` returned (no `AttributeError`), `llm.image.call.blocked` event fired (Gemini Round-2 #1).
+- `test_gemini_generate_image_empty_candidates_uses_prompt_feedback_block_reason` — mock response with `raw.candidates = []` AND `raw.prompt_feedback.block_reason.name == "SAFETY"`. Assert the emitted `llm.image.call.blocked` event's `finish_reason == "SAFETY"` (not `"unknown"`) — Gemini Round-3 observability polish.
 - `test_gemini_generate_image_safety_block_returns_empty_and_emits_blocked_event` — response has `candidates[0].finish_reason.name == "SAFETY"` and zero parts with `inline_data`. Assert `ImageResponse.images == []`, `cost_usd == 0.0`, and `llm.image.call.blocked` event fires with `finish_reason="SAFETY"`.
 - `test_gemini_generate_image_mime_type_from_sdk` — response has `part.inline_data.mime_type = "image/jpeg"`. Assert `ImageResponse.mime_type == "image/jpeg"` (not the hardcoded "image/png" default).
 - `test_gemini_generate_image_metadata_propagates_to_emit` — pass `ImageRequest(metadata={"feature_label": "test"})`; assert `llm.image.call.start` event received `feature_label="test"`.
@@ -456,6 +471,12 @@ Phase 5c moves composite average from ~7.6 (post-5b) to ~7.65.
 | Uncaught exception in safety-block path — `raw.candidates[0].content.parts` indexing would raise `IndexError` on empty `candidates` or `AttributeError` on `content=None`, converting a graceful empty-image fallback into a 500 | MAJOR | **Accepted.** Adapter now guards: `candidate = raw.candidates[0] if raw.candidates else None`, then inspects `candidate.content` before iterating. Falls through to the existing `blocked`-event detection. Two new tests: `test_gemini_generate_image_safe_on_empty_candidates`, `test_gemini_generate_image_safe_on_none_content`. |
 | Sentry noise amplification on breaker open — PR 2's per-slide `sentry_sdk.capture_exception(e)` fires for every `CircuitBreakerError` across up to `max_images` slides per request, creating alert fatigue | MAJOR | **Accepted.** Migration's except branch now filters `pybreaker.CircuitBreakerError` out of Sentry capture: `if not isinstance(e, pybreaker.CircuitBreakerError): sentry_sdk.capture_exception(e)`. Operators still see per-slide warnings in logs; breaker state is visible via `llm.breaker.state_change`. New test: `test_slide_generator_suppresses_sentry_capture_for_breaker_error`. |
 | Metric pollution from breaker exceptions — adapter's `llm.image.call.error` fires for local fast-fails, mixing them with genuine upstream network failures in the provider error metric | MAJOR | **Accepted.** Adapter's except branch now skips the `llm.image.call.error` emit AND the Sentry breadcrumb when `isinstance(e, pybreaker.CircuitBreakerError)`. Breaker state is already tracked via `llm.breaker.state_change` — no duplicate signal. `CircuitBreakerError` still propagates cleanly to the caller. New test: `test_gemini_generate_image_suppresses_error_event_for_circuit_breaker`. |
+
+**Round 3 (Gemini follow-up)** flagged 1 MINOR optional polish; accepted:
+
+| Gemini finding | Severity | Resolution |
+|---|---|---|
+| Pre-candidate policy block leaves `llm.image.call.blocked` event with `finish_reason="unknown"`. Gemini surfaces the real reason on `raw.prompt_feedback.block_reason` when `raw.candidates == []` | MINOR | **Accepted.** Adapter's safety-block detection now falls back to `raw.prompt_feedback.block_reason` when no candidate-level `finish_reason` is available. Operators see `finish_reason="SAFETY"` (or the real reason) instead of `"unknown"`. New test: `test_gemini_generate_image_empty_candidates_uses_prompt_feedback_block_reason`. |
 
 ---
 
