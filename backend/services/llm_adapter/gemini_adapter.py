@@ -41,6 +41,8 @@ from backend.services.llm_adapter.streaming import (
 )
 from backend.services.llm_adapter.types import (
     ImagePart,
+    ImageRequest,
+    ImageResponse,
     LLMRequest,
     LLMResponse,
     Message,
@@ -64,6 +66,16 @@ def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -
     }
     in_rate, out_rate = rates.get(model, (0.0001, 0.0004))
     return round(prompt_tokens * in_rate / 1000 + completion_tokens * out_rate / 1000, 6)
+
+
+def _estimate_image_cost_usd(model: str, image_count: int) -> float:
+    """Per-image flat-rate pricing. Verify against
+    https://ai.google.dev/gemini-api/docs/pricing when adding a new model."""
+    rates = {
+        # $0.04 per image as of 2026-04
+        "gemini-2.5-flash-preview-image-generation": 0.04,
+    }
+    return round(rates.get(model, 0.04) * image_count, 6)
 
 
 def _part_to_gemini(p: Any) -> dict[str, Any]:
@@ -529,4 +541,141 @@ class GeminiAdapter:
             completion_tokens=completion_tokens,
             cost_usd=usage.cost_usd,
             finish_reason=finish_reason,
+        )
+
+    def generate_image(self, request: ImageRequest) -> ImageResponse:
+        """Generate image(s) from a text prompt via Gemini's image-gen model.
+
+        Gemini uses the SAME client.models.generate_content entrypoint as chat,
+        differentiated by response_modalities=["IMAGE"] on the config. Retry
+        defaults to OFF because each image call is ~$0.04 and a 5xx after
+        provider billing would double-charge on retry.
+        """
+        contents: list[Any] = []
+        if request.reference_images:
+            for ref in request.reference_images:
+                contents.append(_part_to_gemini(ref))
+        contents.append(request.prompt)
+
+        config_kwargs: dict[str, Any] = {
+            "response_modalities": ["IMAGE"],
+        }
+        if request.aspect_ratio:
+            config_kwargs["image_config"] = genai_types.ImageConfig(aspect_ratio=request.aspect_ratio)
+        if request.timeout:
+            config_kwargs["http_options"] = genai_types.HttpOptions(timeout=int(request.timeout * 1000))
+        config = genai_types.GenerateContentConfig(**config_kwargs)
+
+        emit(
+            "llm.image.call.start",
+            provider=self._provider,
+            model=request.model,
+            **{k: v for k, v in request.metadata.items() if isinstance(v, (str, int, float, bool))},
+        )
+        t0 = time.monotonic()
+
+        breaker = get_breaker(self._provider, request.model)
+
+        def _raw_call():
+            return self._client.models.generate_content(
+                model=request.model,
+                contents=contents,
+                config=config,
+            )
+
+        def _breakered():
+            return breaker.call(_raw_call)
+
+        try:
+            if request.retry:
+                raw = with_retry(
+                    _breakered,
+                    label=f"gemini.generate_image({request.model})",
+                    non_retryable=(pybreaker.CircuitBreakerError,),
+                )
+            else:
+                raw = _breakered()
+        except Exception as e:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            if not isinstance(e, pybreaker.CircuitBreakerError):
+                emit(
+                    "llm.image.call.error",
+                    level="warning",
+                    provider=self._provider,
+                    model=request.model,
+                    duration_ms=duration_ms,
+                    error_kind=type(e).__name__,
+                )
+                sentry_sdk.add_breadcrumb(
+                    category="llm.image.call",
+                    level="warning",
+                    message=f"gemini.generate_image failed for {request.model}",
+                    data={
+                        "provider": self._provider,
+                        "model": request.model,
+                        "error_kind": type(e).__name__,
+                        "duration_ms": duration_ms,
+                    },
+                )
+            raise
+
+        duration_ms = int((time.monotonic() - t0) * 1000)
+
+        images: list[bytes] = []
+        mime_type = "image/png"
+        candidate = None
+        if raw.candidates:
+            candidate = raw.candidates[0]
+        if candidate is not None and getattr(candidate, "content", None) is not None:
+            parts = getattr(candidate.content, "parts", None) or []
+            for part in parts:
+                if hasattr(part, "inline_data") and part.inline_data is not None:
+                    images.append(part.inline_data.data)
+                    mime_type = getattr(part.inline_data, "mime_type", None) or mime_type
+
+        finish_reason_raw = None
+        if candidate is not None:
+            try:
+                fr = candidate.finish_reason
+                finish_reason_raw = fr.name if hasattr(fr, "name") else str(fr)
+            except Exception:
+                pass
+        if finish_reason_raw is None:
+            try:
+                pf = getattr(raw, "prompt_feedback", None)
+                if pf is not None:
+                    br = getattr(pf, "block_reason", None)
+                    if br is not None:
+                        finish_reason_raw = br.name if hasattr(br, "name") else str(br)
+            except Exception:
+                pass
+
+        if not images:
+            emit(
+                "llm.image.call.blocked",
+                level="warning",
+                provider=self._provider,
+                model=request.model,
+                duration_ms=duration_ms,
+                finish_reason=finish_reason_raw or "unknown",
+            )
+
+        cost_usd = _estimate_image_cost_usd(request.model, len(images))
+
+        emit(
+            "llm.image.call.complete",
+            provider=self._provider,
+            model=request.model,
+            duration_ms=duration_ms,
+            image_count=len(images),
+            cost_usd=cost_usd,
+            finish_reason=finish_reason_raw,
+        )
+
+        return ImageResponse(
+            images=images,
+            mime_type=mime_type,
+            provider=self._provider,
+            model=request.model,
+            cost_usd=cost_usd,
         )

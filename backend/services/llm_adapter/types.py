@@ -176,3 +176,34 @@ class LLMToolArgsOverflow(Exception):
 
     Phase 5b PR 5 — see docs/superpowers/specs/2026-04-23-phase5b-hardening-design.md
     """
+
+
+# ---- Image Generation --------------------------------------------------
+
+@dataclass(frozen=True)
+class ImageRequest:
+    """Request for image generation via an LLMAdapter.
+
+    Gemini is the only implementation in Phase 5c. OpenAI + Anthropic
+    raise NotImplementedError.
+    """
+    prompt: str
+    model: str                                        # e.g. "gemini-2.5-flash-preview-image-generation"
+    reference_images: list[ImagePart] | None = None   # style-consistency references (Gemini prepends to contents)
+    aspect_ratio: str | None = None                   # e.g. "16:9", "1:1", "9:16" — provider may ignore
+    timeout: float = DEFAULT_TIMEOUT
+    metadata: dict[str, Any] = field(default_factory=dict)
+    # Default OFF — image gen is cost-sensitive (~$0.04/call); retrying on
+    # transient 5xx after the provider has already billed risks double charges.
+    # Callers that want retry (e.g., for rate-limited batch workflows) can opt in.
+    retry: bool = False
+
+
+@dataclass(frozen=True)
+class ImageResponse:
+    """Response from an LLMAdapter.generate_image call."""
+    images: list[bytes]        # one entry per image; Gemini returns exactly one
+    mime_type: str             # "image/png" | "image/jpeg" | ... — from the SDK response
+    provider: str              # "openai" | "anthropic" | "gemini"
+    model: str
+    cost_usd: float            # flat-rate per-image pricing (NOT token-based)

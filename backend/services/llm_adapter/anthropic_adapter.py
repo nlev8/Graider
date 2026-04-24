@@ -34,6 +34,8 @@ from backend.services.llm_adapter.streaming import (
 )
 from backend.services.llm_adapter.types import (
     ImagePart,
+    ImageRequest,
+    ImageResponse,
     LLMRequest,
     LLMResponse,
     LLMToolArgsOverflow,
@@ -496,4 +498,11 @@ class AnthropicAdapter:
             completion_tokens=output_tokens,
             cost_usd=usage.cost_usd,
             finish_reason=finish_reason,
+        )
+
+    def generate_image(self, request: ImageRequest) -> ImageResponse:
+        """Not supported — Anthropic does not provide an image-generation API."""
+        raise NotImplementedError(
+            "image generation is not supported by the anthropic adapter "
+            "(anthropic does not provide an image-generation api)"
         )
