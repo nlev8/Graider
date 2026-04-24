@@ -309,3 +309,50 @@ def test_gemini_stream_graceful_when_neither_cancel_nor_close_exists():
         gen = adapter.stream_chat(req)
         next(gen)
         gen.close()
+
+
+def test_gemini_stream_error_mid_iteration_emits_breadcrumb_and_event(monkeypatch):
+    """A mid-iteration exception during Gemini stream iteration fires
+    llm.call.error + sentry breadcrumb; the exception propagates."""
+    captured_events = []
+    breadcrumbs = []
+    monkeypatch.setattr("backend.services.llm_adapter.gemini_adapter.emit",
+                       lambda name, **kw: captured_events.append((name, kw)))
+    monkeypatch.setattr("backend.services.llm_adapter.gemini_adapter.sentry_sdk.add_breadcrumb",
+                       lambda **kw: breadcrumbs.append(kw))
+
+    class FailingStream:
+        def __iter__(self):
+            part = MagicMock()
+            part.text = "hi"
+            part.function_call = None
+            chunk = MagicMock()
+            chunk.candidates = [MagicMock()]
+            chunk.candidates[0].content.parts = [part]
+            chunk.candidates[0].finish_reason = None
+            chunk.usage_metadata = None
+            yield chunk
+            raise ConnectionError("died mid-stream")
+
+    with patch("backend.services.llm_adapter.gemini_adapter.genai.Client") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.models.generate_content_stream.return_value = FailingStream()
+
+        from backend.services.llm_adapter.gemini_adapter import GeminiAdapter
+        from backend.services.llm_adapter.types import LLMRequest, Message, TextPart
+
+        adapter = GeminiAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gemini-1.5-flash",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        with pytest.raises(ConnectionError):
+            list(adapter.stream_chat(req))
+
+    errors = [e for e in captured_events if e[0] == "llm.call.error"]
+    assert len(errors) >= 1
+    assert errors[-1][1]["error_kind"] == "ConnectionError"
+    assert errors[-1][1]["streaming"] is True
+    assert len(breadcrumbs) >= 1

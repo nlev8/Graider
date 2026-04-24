@@ -414,3 +414,45 @@ def test_openai_stream_raises_overflow_on_large_tool_args(monkeypatch):
     assert len(overflow_events) >= 1
     assert overflow_events[0][1]["tool_name"] == "huge_tool"
     assert overflow_events[0][1]["provider"] == "openai"
+
+
+def test_openai_stream_error_mid_iteration_emits_breadcrumb_and_event(monkeypatch):
+    """A mid-iteration exception fires llm.call.error + sentry breadcrumb,
+    and the exception propagates to the caller."""
+    captured_events = []
+    breadcrumbs = []
+    monkeypatch.setattr("backend.services.llm_adapter.openai_adapter.emit",
+                       lambda name, **kw: captured_events.append((name, kw)))
+    monkeypatch.setattr("backend.services.llm_adapter.openai_adapter.sentry_sdk.add_breadcrumb",
+                       lambda **kw: breadcrumbs.append(kw))
+
+    class FailingStream:
+        def __iter__(self):
+            chunk = MagicMock()
+            chunk.choices = [MagicMock(delta=MagicMock(content="hi", tool_calls=None), finish_reason=None)]
+            chunk.usage = None
+            yield chunk
+            raise ConnectionError("died mid-stream")
+
+        def close(self):
+            pass
+
+    with patch("backend.services.llm_adapter.openai_adapter.OpenAI") as mock_client_cls:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = FailingStream()
+
+        adapter = OpenAIAdapter(api_key="test-key")
+        req = LLMRequest(
+            model="gpt-4o",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+
+        with pytest.raises(ConnectionError):
+            list(adapter.stream_chat(req))
+
+    errors = [e for e in captured_events if e[0] == "llm.call.error"]
+    assert len(errors) >= 1
+    assert errors[-1][1]["error_kind"] == "ConnectionError"
+    assert errors[-1][1]["streaming"] is True
+    assert len(breadcrumbs) >= 1

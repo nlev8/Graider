@@ -278,3 +278,40 @@ def test_anthropic_stream_raises_overflow_on_large_tool_args(mock_cls, monkeypat
     assert len(overflow_events) >= 1
     assert overflow_events[0][1]["tool_name"] == "huge_tool"
     assert overflow_events[0][1]["provider"] == "anthropic"
+
+
+@patch("backend.services.llm_adapter.anthropic_adapter.anthropic.Anthropic")
+def test_anthropic_stream_error_mid_iteration_emits_breadcrumb_and_event(mock_cls, monkeypatch):
+    """A mid-iteration exception during stream iteration fires
+    llm.call.error + sentry breadcrumb; the exception propagates."""
+    captured_events = []
+    breadcrumbs = []
+    monkeypatch.setattr("backend.services.llm_adapter.anthropic_adapter.emit",
+                       lambda name, **kw: captured_events.append((name, kw)))
+    monkeypatch.setattr("backend.services.llm_adapter.anthropic_adapter.sentry_sdk.add_breadcrumb",
+                       lambda **kw: breadcrumbs.append(kw))
+
+    mock_client = MagicMock()
+    mock_cls.return_value = mock_client
+
+    # Iterator that yields one event then raises mid-stream
+    def failing_iter():
+        yield _message_start_event(input_tokens=10)
+        yield _content_block_start_text(0)
+        yield _text_delta_event("hi", 0)
+        raise ConnectionError("died mid-stream")
+
+    stream_ctx = MagicMock()
+    stream_ctx.__enter__ = MagicMock(return_value=failing_iter())
+    stream_ctx.__exit__ = MagicMock(return_value=False)
+    mock_client.messages.stream.return_value = stream_ctx
+
+    adapter = AnthropicAdapter(api_key="test-key")
+    with pytest.raises(ConnectionError):
+        list(adapter.stream_chat(_simple_request()))
+
+    errors = [e for e in captured_events if e[0] == "llm.call.error"]
+    assert len(errors) >= 1
+    assert errors[-1][1]["error_kind"] == "ConnectionError"
+    assert errors[-1][1]["streaming"] is True
+    assert len(breadcrumbs) >= 1
