@@ -523,3 +523,23 @@ def test_gemini_generate_image_empty_candidates_uses_prompt_feedback_block_reaso
     blocked = [e for e in captured if e[0] == "llm.image.call.blocked"]
     assert len(blocked) == 1
     assert blocked[0][1]["finish_reason"] == "SAFETY"
+
+
+def test_openai_adapter_generate_image_raises_not_implemented():
+    from backend.services.llm_adapter.openai_adapter import OpenAIAdapter
+    from backend.services.llm_adapter.types import ImageRequest
+
+    adapter = OpenAIAdapter(api_key="test-key")
+    with pytest.raises(NotImplementedError) as excinfo:
+        adapter.generate_image(ImageRequest(prompt="x", model="dall-e-3"))
+    assert "openai" in str(excinfo.value).lower()
+
+
+def test_anthropic_adapter_generate_image_raises_not_implemented():
+    from backend.services.llm_adapter.anthropic_adapter import AnthropicAdapter
+    from backend.services.llm_adapter.types import ImageRequest
+
+    adapter = AnthropicAdapter(api_key="test-key")
+    with pytest.raises(NotImplementedError) as excinfo:
+        adapter.generate_image(ImageRequest(prompt="x", model="claude-3-opus"))
+    assert "anthropic" in str(excinfo.value).lower()

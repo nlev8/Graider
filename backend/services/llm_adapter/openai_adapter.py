@@ -27,6 +27,8 @@ from backend.services.llm_adapter.streaming import (
 )
 from backend.services.llm_adapter.types import (
     ImagePart,
+    ImageRequest,
+    ImageResponse,
     LLMRequest,
     LLMResponse,
     LLMToolArgsOverflow,
@@ -521,4 +523,12 @@ class OpenAIAdapter:
             completion_tokens=completion_tokens,
             cost_usd=usage_event.usage.cost_usd if usage_event else 0.0,
             finish_reason=finish_reason,
+        )
+
+    def generate_image(self, request: ImageRequest) -> ImageResponse:
+        """Not supported on OpenAI adapter yet — DALL-E integration is
+        Phase 5d+ scope (no current consumer)."""
+        raise NotImplementedError(
+            "image generation is not supported by the openai adapter yet "
+            "(add DALL-E implementation when a consumer requires it)"
         )
