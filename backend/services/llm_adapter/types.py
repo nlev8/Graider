@@ -165,3 +165,14 @@ class LLMResponse:
     finish_reason: str  # "stop" | "length" | "tool_use" | "content_filter"
     provider: str  # "openai" | "anthropic" | "gemini"
     model: str
+
+
+class LLMToolArgsOverflow(Exception):
+    """Tool-call args exceeded the adapter's streaming buffer cap.
+
+    Raised from streaming adapters (OpenAI, Anthropic) when accumulated
+    tool_call.arguments payload would exceed MAX_TOOL_ARGS_BYTES. Gemini
+    is exempt — it delivers args atomically, no incremental growth path.
+
+    Phase 5b PR 5 — see docs/superpowers/specs/2026-04-23-phase5b-hardening-design.md
+    """
