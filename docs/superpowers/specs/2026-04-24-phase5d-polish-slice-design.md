@@ -24,15 +24,15 @@ Close out the remaining Plan A Phase 5 ("excellence tier") items not already shi
 |---|---|---|
 | 1 | RFC 7807 error responses (backward-compatible) — applies ONLY to `error_response` + `handle_route_errors`. Ad-hoc `jsonify({"error": ...})` call sites are NOT swept in this PR (deferred). | Error handling |
 | 2 | mypy strict CI job — config + new CI step with `continue-on-error: true` so untyped modules don't break the build | Code quality |
-| 3a | Fix type errors mypy uncovers on 3 small critical modules (auth_decorators, observability.events, supabase_client + supabase_resilient + retry) | Code quality |
+| 3a | Fix type errors mypy uncovers on 5 small critical modules (auth_decorators, observability.events, supabase_client, supabase_resilient, retry). Grading is its own PR (3b) because it's the largest. | Code quality |
 | 3b | Fix type errors in the grading package (grading.state, grading.thread, grading.pipeline) — its own PR because it's the largest module. Final commit flips `continue-on-error: false` and adds the mypy job to branch protection. | Code quality |
-| 4 | Mutation testing baseline (mutmut) on 5 critical modules — NOT a CI gate | Test coverage |
+| 4 | Mutation testing baseline (mutmut) on 6 critical modules — NOT a CI gate | Test coverage |
 
 **Explicitly deferred to later phases:**
 - Pydantic request/response models for API payloads (~200 routes)
 - OpenAPI/Swagger generation (depends on Pydantic)
 - APM tracing enablement (Sentry billing-blocked)
-- mypy strict expansion beyond the 4 critical modules
+- mypy strict expansion beyond the 6 critical modules
 - Mutation testing as CI gate (too slow for per-PR; revisit if survivors accumulate)
 
 ---
@@ -237,7 +237,7 @@ def handle_route_errors(f):
 
 **Branch:** `phase5d/pr2-mypy-config` off `main` (after PR 1 merges).
 
-**Goal:** add the type-check infrastructure. Strict on the 4 critical modules; loose elsewhere. PR 3 fixes the errors this surfaces.
+**Goal:** add the type-check infrastructure. Strict on the 6 critical modules; loose elsewhere. PR 3 fixes the errors this surfaces.
 
 ### Add `mypy.ini` at repo root
 
@@ -251,7 +251,7 @@ no_implicit_optional = True
 
 # Repo-wide: lenient — everything ELSE in backend/ runs mypy in non-strict mode
 # so we don't drown in pre-existing untyped code. Strict mode applies only to
-# the 5 critical modules below via `strict = True`.
+# the 6 critical modules below via `strict = True`.
 disallow_untyped_defs = False
 check_untyped_defs = False
 
@@ -424,7 +424,7 @@ The final `chore(ci)` commit:
 
 **Branch:** `phase5d/pr4-mutation-testing` off `main` (after PR 3 merges).
 
-**Goal:** measure how well our tests actually catch bugs in the 4 critical modules. Baseline result is documentation, not a CI gate (mutmut runtime is too slow per PR — minutes-to-hours).
+**Goal:** measure how well our tests actually catch bugs in the 6 critical modules. Baseline result is documentation, not a CI gate (mutmut runtime is too slow per PR — minutes-to-hours).
 
 ### Add to `requirements-dev.in`
 
@@ -471,7 +471,7 @@ Document:
 
 ### Acceptance
 
-- mutmut runs successfully on all 4 critical modules in dev (one-shot, may take 30-60 min)
+- mutmut runs successfully on all 6 critical modules in dev (one-shot, may take 30-60 min)
 - Baseline survivor counts recorded in `docs/operations/mutation-testing.md`
 - NOT added to CI; this is a manual audit tool
 
