@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import threading
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 import sentry_sdk
 
@@ -85,7 +85,7 @@ def load_saved_results(teacher_id: str = 'local-dev') -> list[dict[str, Any]]:
                 cleaned = _sanitize_student_name(sn)
                 if cleaned != sn:
                     r['student_name'] = cleaned
-            return list(data)
+            return cast(list[dict[str, Any]], data)
     # Fallback to direct file read
     if os.path.exists(RESULTS_FILE):
         try:
