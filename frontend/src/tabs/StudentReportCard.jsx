@@ -50,6 +50,14 @@ export default function StudentReportCard({ classId, studentId, attemptMode, onC
     return function() { cancelled = true; };
   }, [classId, studentId, attemptMode]);
 
+  useEffect(function() {
+    function onKey(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return function() { window.removeEventListener('keydown', onKey); };
+  }, [onClose]);
+
   // Drawer (z-index 9500, BELOW cell popover at 9999)
   return (
     <div
