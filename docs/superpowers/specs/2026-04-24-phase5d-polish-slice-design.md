@@ -18,14 +18,15 @@ Close out the remaining Plan A Phase 5 ("excellence tier") items not already shi
 
 ## Scope — what's IN and OUT
 
-**In Phase 5d (4 PRs):**
+**In Phase 5d (5 PRs):**
 
 | PR | Item | Primary dimension(s) |
 |---|---|---|
-| 1 | RFC 7807 error responses (backward-compatible) | Error handling |
-| 2 | mypy strict CI job — config + new CI step (no code fixes yet) | Code quality |
-| 3 | Fix type errors mypy uncovers on 4 critical modules | Code quality |
-| 4 | Mutation testing baseline (mutmut) on same 4 critical modules — NOT a CI gate | Test coverage |
+| 1 | RFC 7807 error responses (backward-compatible) — applies ONLY to `error_response` + `handle_route_errors`. Ad-hoc `jsonify({"error": ...})` call sites are NOT swept in this PR (deferred). | Error handling |
+| 2 | mypy strict CI job — config + new CI step with `continue-on-error: true` so untyped modules don't break the build | Code quality |
+| 3a | Fix type errors mypy uncovers on 3 small critical modules (auth_decorators, observability.events, supabase_client + supabase_resilient + retry) | Code quality |
+| 3b | Fix type errors in the grading package (grading.state, grading.thread, grading.pipeline) — its own PR because it's the largest module. Final commit flips `continue-on-error: false` and adds the mypy job to branch protection. | Code quality |
+| 4 | Mutation testing baseline (mutmut) on 5 critical modules — NOT a CI gate | Test coverage |
 
 **Explicitly deferred to later phases:**
 - Pydantic request/response models for API payloads (~200 routes)
@@ -50,11 +51,13 @@ Close out the remaining Plan A Phase 5 ("excellence tier") items not already shi
 
 ---
 
-## PR 1 — RFC 7807 error responses (backward-compatible)
+## PR 1 — RFC 7807 error responses (compatibility layer)
 
 **Branch:** `phase5d/pr1-rfc7807-errors` off `main`.
 
 **Goal:** standard error envelope so external API consumers (district webhook callbacks, gradebook passback clients, future SDK consumers) get a typed shape they can program against. **Backward compat preserved:** existing `error` field stays alongside the new RFC 7807 fields so the React frontend keeps working without any frontend change.
+
+**Scope limit (Codex Round-1 finding):** PR 1 standardizes responses from `error_response()` and `handle_route_errors()` ONLY. Routes that bypass those helpers and return raw `jsonify({"error": ...})` directly (e.g., `assistant_routes.py:1482-1518` breaker preflight, scattered throughout other route files) keep their current shape. Sweeping those ad-hoc sites to use `error_response()` is **explicitly deferred** to a follow-up PR (5d follow-on or 5e). The risk table entry below documents this gap so it's visible to future readers.
 
 ### Change in `backend/utils/errors.py`
 
@@ -223,9 +226,10 @@ def handle_route_errors(f):
 
 | Risk | Mitigation |
 |---|---|
-| Frontend breaks because response shape changed | Backward-compat `error` field preserved; `Content-Type` change is mostly invisible to fetch callers reading JSON |
+| Frontend breaks because response shape changed | Backward-compat `error` field preserved; `Content-Type` change is mostly invisible to fetch callers reading JSON. Verified: `frontend/src/services/api.js:75-106` reads `errData.error` via `response.json()` without strict MIME matching. |
 | Some routes call `error_response` with positional args that no longer line up | `error_response(message, status_code, code)` signature unchanged |
 | `code` extension field collides with RFC 7807 reserved members | Reserved members per RFC 7807 § 3.1 are `type`, `title`, `status`, `detail`, `instance`. `code` is permitted as an extension. |
+| Partial RFC 7807 rollout — many routes still return raw `jsonify({"error": ...})` and bypass the helpers (Codex Round-1 finding) | Acknowledged. PR 1 covers the helper paths only. Follow-up sweep tracked as a known gap; not a 5d blocker because: (a) the helpers cover ~25 decorated routes including all `@handle_route_errors` paths, (b) the React frontend reads `response.error` everywhere so user-facing UX is unaffected, (c) external API consumers are minimal today (district webhooks not yet shipped). |
 
 ---
 
@@ -240,56 +244,40 @@ def handle_route_errors(f):
 ```ini
 [mypy]
 python_version = 3.12
-plugins =
 warn_unused_ignores = True
 warn_redundant_casts = True
+warn_unused_configs = True
 no_implicit_optional = True
 
 # Repo-wide: lenient — everything ELSE in backend/ runs mypy in non-strict mode
 # so we don't drown in pre-existing untyped code. Strict mode applies only to
-# the 4 critical modules below.
+# the 5 critical modules below via `strict = True`.
 disallow_untyped_defs = False
 check_untyped_defs = False
 
+# Each strict-module section uses `strict = True` (mypy's preset that turns on
+# disallow_untyped_defs, disallow_incomplete_defs, check_untyped_defs,
+# warn_return_any, no_implicit_reexport, strict_equality, disallow_any_generics,
+# disallow_subclassing_any, warn_unused_ignores, no_implicit_optional —
+# all the strictness knobs). Per https://mypy.readthedocs.io/en/stable/config_file.html#confval-strict
+
 [mypy-backend.utils.auth_decorators]
-disallow_untyped_defs = True
-disallow_incomplete_defs = True
-check_untyped_defs = True
-warn_return_any = True
-no_implicit_reexport = True
-strict_equality = True
+strict = True
 
 [mypy-backend.observability.events]
-disallow_untyped_defs = True
-disallow_incomplete_defs = True
-check_untyped_defs = True
-warn_return_any = True
-no_implicit_reexport = True
-strict_equality = True
+strict = True
 
 [mypy-backend.supabase_client]
-disallow_untyped_defs = True
-disallow_incomplete_defs = True
-check_untyped_defs = True
-warn_return_any = True
-no_implicit_reexport = True
-strict_equality = True
+strict = True
 
 [mypy-backend.supabase_resilient]
-disallow_untyped_defs = True
-disallow_incomplete_defs = True
-check_untyped_defs = True
-warn_return_any = True
-no_implicit_reexport = True
-strict_equality = True
+strict = True
+
+[mypy-backend.retry]
+strict = True
 
 [mypy-backend.grading.*]
-disallow_untyped_defs = True
-disallow_incomplete_defs = True
-check_untyped_defs = True
-warn_return_any = True
-no_implicit_reexport = True
-strict_equality = True
+strict = True
 
 # Ignore third-party untyped imports — Supabase/postgrest don't ship type stubs.
 [mypy-supabase.*]
@@ -322,6 +310,11 @@ In `.github/workflows/ci.yml`, after the `Ruff Lint` job, add:
   mypy-strict:
     name: Mypy Strict (Critical Modules)
     runs-on: ubuntu-latest
+    # Phase 5d PR 2: untyped modules will produce many errors until PR 3a/3b
+    # land the type fixes. Allow this job to fail without blocking the build.
+    # The final PR 3b commit removes this `continue-on-error` AND adds the job
+    # to branch protection's required-status-checks list.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -335,10 +328,13 @@ In `.github/workflows/ci.yml`, after the `Ruff Lint` job, add:
           pip install --require-hashes -r requirements-dev.txt
       - name: Run mypy on critical modules
         run: |
-          mypy backend/utils/auth_decorators.py backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/grading/
+          mypy backend/utils/auth_decorators.py backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/retry.py backend/grading/
 ```
 
-**Critical:** add `Mypy Strict (Critical Modules)` to branch protection's required-status-checks list AFTER PR 3 lands (don't block on it during PR 2/3).
+**Critical:**
+- PR 2 ships the job with `continue-on-error: true` — mypy will fail loudly but the CI build stays green so PRs can still merge.
+- PR 3a fixes `auth_decorators`, `observability.events`, `supabase_client`, `supabase_resilient`, `retry`. The job's failure-set should shrink by the end of PR 3a.
+- PR 3b's final commit fixes `grading.*`, removes `continue-on-error`, AND updates branch protection to require `Mypy Strict (Critical Modules)`.
 
 ### Tests
 
@@ -347,24 +343,26 @@ In `.github/workflows/ci.yml`, after the `Ruff Lint` job, add:
 
 ---
 
-## PR 3 — Fix type errors in 4 critical modules
+## PR 3a — Fix type errors in 5 small critical modules
 
-**Branch:** `phase5d/pr3-mypy-fixes` off `main` (after PR 2 merges).
+**Branch:** `phase5d/pr3a-mypy-fixes-small-modules` off `main` (after PR 2 merges).
 
-**Goal:** make `mypy --strict` pass on the 4 critical modules. Add annotations where missing. Fix any actual type bugs uncovered.
+**Goal:** make per-module `strict = True` mypy pass on the 5 small critical modules. Add annotations where missing. Fix any actual type bugs uncovered.
 
-### Approach: one module at a time
+### Approach: one module per commit
 
-Each commit fixes ONE module:
+```
+fix(mypy): typed auth_decorators
+fix(mypy): typed observability.events
+fix(mypy): typed retry
+fix(mypy): typed supabase_client + supabase_resilient
+```
 
-1. `backend/utils/auth_decorators.py` (~58 lines, 3 decorators) — straightforward
-2. `backend/observability/events.py` — `emit()` signature is `**kwargs` heavy; may need `# type: ignore` on the `_logger.log(level, msg)` line if mypy can't infer level
-3. `backend/supabase_client.py` + `backend/supabase_resilient.py` — Supabase client is untyped; expect heavy use of `Any` for postgrest return values, but the resilient wrapper's signatures should be precise
-4. `backend/grading/state.py`, `backend/grading/thread.py`, `backend/grading/pipeline.py` — biggest module; may need significant annotation work
+Each commit must keep `mypy <module>` green for the module(s) it touches. The mypy CI job (`continue-on-error: true` from PR 2) will progressively report fewer errors as commits land.
 
 ### Strategy for unavoidable `Any`
 
-Where Supabase returns are genuinely untyped (`postgrest` doesn't ship stubs), use `Any` explicitly with a comment:
+Where Supabase / postgrest returns are genuinely untyped, use `Any` explicitly with a comment:
 
 ```python
 def _fetch_class(class_id: str) -> Any:  # postgrest response — untyped upstream
@@ -373,22 +371,10 @@ def _fetch_class(class_id: str) -> Any:  # postgrest response — untyped upstre
 
 vs reaching for `# type: ignore` (which is louder and harder to grep for).
 
-### Commits per module
-
-```
-fix(mypy): typed auth_decorators
-fix(mypy): typed observability.events
-fix(mypy): typed supabase_client + supabase_resilient
-fix(mypy): typed grading package
-```
-
-Each commit must keep `mypy <module>` green for that module. Don't bundle.
-
 ### Acceptance
 
-- `mypy backend/utils/auth_decorators.py backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/grading/` exits 0 locally.
-- All 7 CI jobs green, including `Mypy Strict (Critical Modules)`.
-- Add `Mypy Strict (Critical Modules)` to branch protection required checks list.
+- `mypy backend/utils/auth_decorators.py backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/retry.py` exits 0 locally.
+- The mypy CI job's error count drops to ZERO for these 5 modules. (Job is still `continue-on-error: true` until PR 3b finishes the grading package.)
 
 ### Risks
 
@@ -396,7 +382,41 @@ Each commit must keep `mypy <module>` green for that module. Don't bundle.
 |---|---|
 | mypy uncovers a real type bug that needs a code change beyond annotations | If pure annotation isn't sufficient, fix the bug + add a regression test in the same commit |
 | `Any` proliferates because postgrest is untyped | Comment each `Any` with the upstream-untyped reason; revisit if `postgrest-stubs` ever ships |
-| Strict mypy is too brittle on grading package | If grading needs more time, split PR 3 into PR 3a (auth + observability + supabase) and PR 3b (grading) |
+
+---
+
+## PR 3b — Fix type errors in grading package
+
+**Branch:** `phase5d/pr3b-mypy-fixes-grading` off `main` (after PR 3a merges).
+
+**Goal:** make `strict = True` mypy pass on `backend/grading/state.py`, `backend/grading/thread.py`, `backend/grading/pipeline.py`. Final commit removes `continue-on-error: true` from the CI job and updates branch protection.
+
+### Approach: per-file commits within the package
+
+```
+fix(mypy): typed grading.state
+fix(mypy): typed grading.thread
+fix(mypy): typed grading.pipeline
+chore(ci): require Mypy Strict job + remove continue-on-error
+```
+
+The final `chore(ci)` commit:
+- Removes `continue-on-error: true` from the `mypy-strict` job in `.github/workflows/ci.yml`.
+- Documents the branch-protection update step the operator must take post-merge: add `Mypy Strict (Critical Modules)` to required-status-checks via `gh api -X PATCH ...` or the GitHub UI.
+
+### Acceptance
+
+- `mypy backend/grading/` exits 0 locally.
+- Full critical-module mypy run exits 0: `mypy backend/utils/auth_decorators.py backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/retry.py backend/grading/`.
+- All 8 CI jobs green (the original 7 + `Mypy Strict (Critical Modules)` now required).
+- Branch protection updated post-merge.
+
+### Risks
+
+| Risk | Mitigation |
+|---|---|
+| Grading package has more type complexity than expected (state-machine logic, dynamic dispatch) | Each file is a separate commit; if one file blows up the PR, isolate it with `# type: ignore[attr-defined]` and a TODO comment, then revisit in 5e |
+| Removing `continue-on-error` accidentally fails a future PR's CI on an unrelated module | The mypy run is scoped to the 6 named files only; broader code can still merge with mypy errors elsewhere |
 
 ---
 
@@ -414,22 +434,25 @@ mutmut>=2.5
 
 Regenerate `requirements-dev.txt`.
 
-### Add `mutmut.ini` config
+### Add mutmut config in `setup.cfg`
+
+mutmut reads its config from `setup.cfg` (`[mutmut]` section) or `pyproject.toml` (`[tool.mutmut]`). It does NOT support a top-level `mutmut.ini` or arbitrary lambda filters.
+
+Append to existing `setup.cfg` (create the file if it doesn't exist):
 
 ```ini
 [mutmut]
-paths_to_mutate =
-    backend/utils/auth_decorators.py,
-    backend/observability/events.py,
-    backend/supabase_client.py,
-    backend/supabase_resilient.py,
-    backend/grading/
-
-runner = python -m pytest tests/ -x --quiet --no-header
-
-# Skip mutations in lines matching these patterns (logging, imports, debug)
-filter = lambda line: not line.startswith(("import ", "from ", "logger.", "_logger."))
+paths_to_mutate=backend/utils/auth_decorators.py,backend/observability/events.py,backend/supabase_client.py,backend/supabase_resilient.py,backend/retry.py,backend/grading/
+runner=python -m pytest tests/ -x --quiet --no-header
+# Skip lines we don't want mutated. mutmut respects `# pragma: no mutate` per-line
+# and the `do_not_mutate` config knob for whole-pattern excludes. We don't list
+# per-line excludes here — operators triage survivors and add `# pragma: no mutate`
+# inline as needed (the documented mutmut workflow per
+# https://mutmut.readthedocs.io/en/latest/).
+mutate_only_covered_lines=True
 ```
+
+`mutate_only_covered_lines=True` skips lines that pytest-cov shows uncovered — useful because mutating uncovered code surfaces test-coverage gaps, not test-quality gaps, and we already have a coverage CI check.
 
 ### Add `docs/operations/mutation-testing.md`
 
@@ -463,14 +486,15 @@ Document:
 
 ## Sequencing
 
-**Merge order:** PR 1 → PR 2 → PR 3 → PR 4. Strictly sequential.
+**Merge order:** PR 1 → PR 2 → PR 3a → PR 3b → PR 4. Strictly sequential.
 
 **Hard dependencies:**
 - PR 2 depends on PR 1 only because we want one PR per concern.
-- PR 3 depends on PR 2 (mypy.ini + CI job + dependencies).
-- PR 4 depends on PR 3 (PR 3's annotations help mutmut produce more meaningful mutations on typed code).
+- PR 3a depends on PR 2 (mypy.ini + CI job + dependencies).
+- PR 3b depends on PR 3a (less critical — could parallelize, but keeping sequential for review-load smoothing).
+- PR 4 depends on PR 3b (PR 3's annotations help mutmut produce more meaningful mutations on typed code).
 
-**Branch-protection update:** add `Mypy Strict (Critical Modules)` to required checks AFTER PR 3 merges. Don't block PRs 2-3 on it.
+**Branch-protection update:** PR 2 ships the `Mypy Strict (Critical Modules)` job with `continue-on-error: true` so untyped modules don't break the build. PR 3b's final commit removes `continue-on-error` AND requires the operator to add the job to required-status-checks via `gh api -X PATCH /repos/nlev8/Graider/branches/main/protection ...`. Don't block PRs 2 / 3a on the mypy job.
 
 ---
 
@@ -508,9 +532,10 @@ Document:
 |---|---|
 | 1 | 1 |
 | 2 | 0.5 |
-| 3 | 2-3 |
+| 3a | 1.5-2 |
+| 3b | 1-2 |
 | 4 | 0.5-1 |
-| **Total** | **4-5.5 days** |
+| **Total** | **4.5-6.5 days** |
 
 ---
 
@@ -526,17 +551,34 @@ Phase 5d completes Plan A Phase 5. Composite avg moves from ~7.65 → **~9.1+** 
 
 ---
 
+## Deviations from review rounds (2026-04-24)
+
+**Round 1 (Codex pre-review)** flagged 4 MAJOR + 2 MINOR; all reconciled:
+
+| Codex finding | Severity | Resolution |
+|---|---|---|
+| PR 2/PR 3 CI contract contradiction — config-only PR adds a job that will fail on untyped modules while spec claims each PR stays green | MAJOR | **Accepted.** PR 2's mypy job now ships with `continue-on-error: true`. PR 3b's final commit removes `continue-on-error` AND adds the job to branch protection. |
+| `strict` underspecified — config enumerates a subset of strictness flags, CI runs plain `mypy`, but PR 3 acceptance says `mypy --strict` should pass | MAJOR | **Accepted.** Config now uses `strict = True` per-module-section (mypy preset that enables all strictness flags including `disallow_any_generics`, `disallow_subclassing_any`, etc.). Added `warn_unused_configs = True` at top. PR 3a/3b acceptance criteria reworded to "`mypy <files>` exits 0 locally" (no `--strict` flag — config has it). |
+| PR 1 scope narrower than goal — `error_response()` + `handle_route_errors()` won't standardize all errors because many routes call `jsonify({"error": ...})` directly | MAJOR | **Accepted as documented limitation.** PR 1 is now explicitly framed as a "compatibility layer" for the helper paths only. Risk-table entry documents that ad-hoc `jsonify({"error": ...})` sites (`assistant_routes.py:1482-1518` etc.) are NOT swept; a follow-up sweep is deferred. Acceptable because: (a) the React frontend reads `response.error` everywhere so user-facing UX is unaffected, (b) external API consumers are minimal today. |
+| mutmut config wrong — `mutmut.ini` + `filter = lambda` aren't real mutmut config knobs | MAJOR | **Accepted.** Config moved to `setup.cfg` `[mutmut]` section per https://mutmut.readthedocs.io/en/latest/. Replaced fictional `filter = lambda` with `mutate_only_covered_lines=True` (real knob) + per-line `# pragma: no mutate` comments for survivor triage. |
+| PR 3 sizing optimistic — grading is the largest piece and shouldn't be a "fallback split" | MINOR | **Accepted.** PR 3 split into PR 3a (5 small modules: auth_decorators, observability.events, supabase_client, supabase_resilient, retry) + PR 3b (grading package). PR count is now 5 (1 + 2 + 3a + 3b + 4). |
+| Add `backend/retry.py` to strict scope — `supabase_resilient` depends on its retry contract directly | MINOR | **Accepted.** `backend/retry.py` added to mypy.ini strict module list and to the CI job's run command. Typed in PR 3a. |
+
+---
+
 ## Self-review (2026-04-24)
 
 **1. Placeholder scan:** none. Every PR section has concrete config, code, file refs, and command examples.
 
 **2. Internal consistency:** sequencing is strictly linear (1→2→3→4). Dependencies between PRs are explicit. PR 1's backward-compat `error` field is referenced consistently across "Changes" + "Tests" + "Risks." PR 3's per-module commit strategy maps to the modules listed in PR 2's `mypy.ini`.
 
-**3. Scope check:** 4 PRs; each is small enough to review in one sitting. No PR mixes concerns (PR 1 = errors only, PR 2 = config only, PR 3 = type fixes only, PR 4 = mutmut only).
+**3. Scope check:** 5 PRs (1, 2, 3a, 3b, 4); each is small enough to review in one sitting. No PR mixes concerns (PR 1 = errors helpers, PR 2 = mypy config + non-blocking job, PR 3a/3b = type fixes only, PR 4 = mutmut only).
 
 **4. Ambiguity check:**
 - RFC 7807 backward-compat: explicit — `error` field preserved.
-- mypy strict scope: explicit — 4 modules listed by name.
+- RFC 7807 sweep beyond helpers: explicitly DEFERRED — risk-table entry calls it out as known gap.
+- mypy strict scope: explicit — 6 modules listed by name (auth_decorators, observability.events, supabase_client, supabase_resilient, retry, grading.*).
+- mypy CI gating: explicit — `continue-on-error: true` in PR 2, removed in PR 3b's final commit.
 - Mutation testing as CI gate: explicit — NO, manual baseline only.
 - `Content-Type` on errors: explicit — `application/problem+json`.
 
