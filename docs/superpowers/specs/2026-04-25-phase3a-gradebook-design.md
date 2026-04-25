@@ -104,22 +104,35 @@ The gradebook endpoint doesn't render `standards_mastery` directly, but it fetch
   6. Fetch all sibling submissions (`.eq('student_id', sub.student_id).eq('content_id', sub.content_id)`) for the attempt selector. Sort ASC by `attempt_number`, then by `submitted_at`.
   7. Read `results.questions` for the per-question breakdown. Field-name normalization (the existing graders write inconsistent keys — verified during spec authoring; rules below).
 
+**Coalescing helper:** All field-mapping rules below use a `coalesce` pattern that picks the FIRST non-None value (NOT first truthy — a legitimate `0` for `points_earned` must not fall through to a fallback). Implement once at the top of the route handler:
+
+```python
+def _coalesce(*vals, default=None):
+    """Return the first non-None value, or `default` if all are None."""
+    for v in vals:
+        if v is not None:
+            return v
+    return default
+```
+
+Use `_coalesce(...)` everywhere a fallback chain appears below. Do NOT use Python's `or` for these because `or` short-circuits on falsy values (0, "", False) — which would corrupt grades when the legitimate value is 0 or an empty string.
+
 **Top-level score field mapping:**
 The existing graders write `score` and `total_points` (NOT `points_earned` and `points_possible`) at the top level of `results`. There is also a `score` column on the `student_submissions` row itself. Normalize:
-- `points_earned = results.get('score') or row.get('score') or 0`
-- `points_possible = results.get('total_points') or row.get('total_points') or 0`
+- `points_earned = _coalesce(results.get('score'), row.get('score'), default=0)`
+- `points_possible = _coalesce(results.get('total_points'), row.get('total_points'), default=0)`
 - `percentage = row.percentage` (already populated by graders)
 
 **Per-question field normalization:**
 The instant grader and multipass grader write different keys. Apply these fallback rules per question entry (where each `q` is the entry from `results.questions[i]`):
-- `question_text = q.get('question') or q.get('question_text') or ''`
-- `question_type = q.get('type') or q.get('question_type') or 'unknown'`
-- `student_answer = q.get('student_answer') or q.get('answer') or ''`
+- `question_text = _coalesce(q.get('question'), q.get('question_text'), default='')`
+- `question_type = _coalesce(q.get('type'), q.get('question_type'), default='unknown')`
+- `student_answer = _coalesce(q.get('student_answer'), q.get('answer'), default='')`
 - `correct_answer = q.get('correct_answer')` — may be `None` (e.g., free-response). Pass through.
 - `is_correct = q.get('is_correct')` — may be `None` for written/free-response. Pass through.
-- `ai_feedback = q.get('feedback') or q.get('reasoning') or q.get('quality') or ''`
-- `points_earned = q.get('points_earned') or q.get('score') or 0`
-- `points_possible = q.get('points_possible') or q.get('points') or 0`
+- `ai_feedback = _coalesce(q.get('feedback'), q.get('reasoning'), q.get('quality'), default='')`
+- `points_earned = _coalesce(q.get('points_earned'), q.get('score'), default=0)`
+- `points_possible = _coalesce(q.get('points_possible'), q.get('points'), default=0)`
 - If a question entry is non-dict, skip it and log a WARNING (do NOT 500).
 
 If `results.questions` itself is missing or non-list, return `questions: []` — do NOT 500. Log a WARNING.
@@ -170,14 +183,9 @@ If `results.questions` itself is missing or non-list, return `questions: []` —
 |---|---|
 | `attempt_number` | From the submission row. |
 | `total_attempts` | `len(sibling_attempts)`. |
-| `questions[i].question_text` | From `results.questions[i].question` (or `results.questions[i].question_text` — match what the existing grader writes; verify by reading `assignment_grader.py` before implementing). |
-| `questions[i].student_answer` | From `results.questions[i].student_answer` (or equivalent). |
-| `questions[i].correct_answer` | Optional — only present for question types where it's known (multiple_choice, fitb). May be `null` for free-response. |
-| `questions[i].is_correct` | Optional — present for auto-graded types. |
-| `questions[i].ai_feedback` | From `results.questions[i].feedback` (or whatever key the grader writes). Verify before implementation. |
-| `points_earned` / `points_possible` | Per-question. From `results.questions[i]`. |
-
-The exact key names in `results.questions[i]` need to be verified during Task 1 implementation by reading `assignment_grader.py` and `backend/routes/student_portal_routes.py::grade_instant_only` (the join-code grading path) and `backend/grading/pipeline.py` (the class-based grading path). The implementation must adapt to whatever the existing grader writes — no schema migration.
+| `questions[i].correct_answer` | Optional — present for auto-graded types (multiple_choice, fitb, true_false). May be `null` for free-response. Pass through whatever the grader wrote. |
+| `questions[i].is_correct` | Optional — present for auto-graded types. May be `null` for written/free-response. Pass through. |
+| Other `questions[i]` fields | See "Per-question field normalization" above for the concrete fallback rules — those are the source of truth, not this table. |
 
 ---
 
@@ -237,7 +245,7 @@ The exact key names in `results.questions[i]` need to be verified during Task 1 
 
 **Sections:**
 1. Header: student name + assessment title + score line ("87% — 26 of 30 pts — attempt 2 of 3 — submitted MM/DD").
-2. Attempt selector: row of small buttons, one per `sibling_attempts` entry. Click → updates `submissionId` to that attempt's id (re-fetches). Active attempt highlighted.
+2. Attempt selector: row of small buttons, one per `sibling_attempts` entry. Click → updates `activeSubmissionId` (LOCAL state) to that attempt's id, which triggers the data fetch. Active attempt highlighted.
 3. Per-question accordion:
    - Each row collapsed by default. Shows question text + per-question score badge (color-coded same as gradebook cells).
    - Click row to expand. Expanded view shows: student answer, correct answer (if present), `is_correct` icon (if present), AI feedback.
