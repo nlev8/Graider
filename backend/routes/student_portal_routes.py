@@ -1448,15 +1448,55 @@ def get_student_report_card(class_id, student_id):
         (student_row.data[0].get('last_name') or '')
     ).strip()
 
-    # Skeleton: empty arrays. Happy-path data fetch + aggregation lands in Task 4.
+    # 4) Fetch all class assessments/assignments
+    content_rows = db.table('published_content').select(
+        'id, title, content_type'
+    ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
+    content_ids = [c['id'] for c in (content_rows.data or [])]
+    content_titles = {c['id']: c.get('title', '') for c in (content_rows.data or [])}
+
+    if not content_ids:
+        return jsonify({
+            "student_id": student_id,
+            "student_name": student_name,
+            "class_id": class_id,
+            "class_name": class_name,
+            "attempt_mode": attempt_mode,
+            "trajectory": [],
+            "standards_breakdown": [],
+        })
+
+    # 5) Fetch all non-draft submissions for this student in those contents
+    subs_rows = db.table('student_submissions').select(
+        'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+    ).eq('student_id', student_id).in_('content_id', content_ids).neq(
+        'status', 'draft'
+    ).execute()
+    submissions = subs_rows.data or []
+
+    # 6) Build trajectory from ALL submissions chronologically
+    trajectory = _build_trajectory_for_student(submissions, content_titles)
+
+    # 7) Build standards_breakdown via existing helpers + bridge code
+    from collections import defaultdict
+    subs_by_content = defaultdict(list)
+    for s in submissions:
+        cid = s.get('content_id')
+        if cid:
+            subs_by_content[cid].append(s)
+    selected = _select_submissions_by_mode(subs_by_content, attempt_mode)
+    mastery_by_code = _aggregate_mastery_for_student(selected, content_titles, attempt_mode)
+    submission_lookup = {s.get('id'): s for s in submissions if s.get('id')}
+    standards_breakdown = _build_standards_breakdown_for_student(mastery_by_code, submission_lookup)
+
     return jsonify({
         "student_id": student_id,
         "student_name": student_name,
         "class_id": class_id,
         "class_name": class_name,
         "attempt_mode": attempt_mode,
-        "trajectory": [],
-        "standards_breakdown": [],
+        "trajectory": trajectory,
+        "standards_breakdown": standards_breakdown,
     })
 
 

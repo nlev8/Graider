@@ -264,3 +264,78 @@ class TestReportCardAuthz:
                           headers=teacher_headers)
         assert resp.status_code == 404
 
+
+class TestReportCardHappyPath:
+    """Happy-path data assembly: trajectory + breakdown."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_happy_path_returns_trajectory_and_breakdown(self, mock_sb_fn, client, teacher_headers):
+        # Two assessments, two submissions for our student
+        mastery_a = {
+            "MA.6.AR.1.1": {"points_earned": 8, "points_possible": 10, "question_count": 2},
+        }
+        mastery_b = {
+            "MA.6.AR.1.1": {"points_earned": 5, "points_possible": 10, "question_count": 2},
+            "MA.6.AR.2.1": {"points_earned": 2, "points_possible": 10, "question_count": 2},
+        }
+        subs = [
+            {"id": "sub-1", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z",
+             "percentage": 80, "results": {"standards_mastery": mastery_a,
+                                            "points_earned": 8, "points_possible": 10},
+             "status": "graded"},
+            {"id": "sub-2", "student_id": "stu-1", "content_id": "ct-2",
+             "attempt_number": 1, "submitted_at": "2026-04-15T10:00:00Z",
+             "percentage": 35, "results": {"standards_mastery": mastery_b,
+                                            "points_earned": 7, "points_possible": 20},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'Period 3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'Jane', 'last_name': 'Doe'}],
+            'published_content': [
+                {'id': 'ct-1', 'title': 'Quiz 1', 'content_type': 'assessment'},
+                {'id': 'ct-2', 'title': 'Quiz 2', 'content_type': 'assessment'},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['student_id'] == 'stu-1'
+        assert body['student_name'] == 'Jane Doe'
+        assert body['class_id'] == 'cls-1'
+        assert body['class_name'] == 'Period 3'
+        assert body['attempt_mode'] == 'latest'
+        # Trajectory is ASC by submitted_at (oldest first)
+        assert [t['submission_id'] for t in body['trajectory']] == ['sub-1', 'sub-2']
+        # Each trajectory entry includes full shape per spec
+        assert body['trajectory'][0]['title'] == 'Quiz 1'
+        assert body['trajectory'][0]['percentage'] == 80
+        # standards_breakdown sorted worst-first
+        codes = [s['code'] for s in body['standards_breakdown']]
+        assert codes[0] == 'MA.6.AR.2.1'  # 20% — worst
+        # contributing_submissions enriched with submitted_at + percentage + submission_id
+        cs = body['standards_breakdown'][0]['contributing_submissions'][0]
+        assert cs['submission_id'] == 'sub-2'
+        assert cs['submitted_at'] == '2026-04-15T10:00:00Z'
+        assert 'percentage' in cs
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_no_submissions_returns_empty_arrays_with_200(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'Jane', 'last_name': 'Doe'}],
+            'published_content': [],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['trajectory'] == []
+        assert body['standards_breakdown'] == []
+
