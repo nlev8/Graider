@@ -179,11 +179,6 @@ jobs:
   mypy-strict:
     name: Mypy Strict (Critical Modules)
     runs-on: ubuntu-latest
-    # Phase 5d PR 2: untyped modules will produce many errors until PR 3a/3b
-    # land the type fixes. Allow this job to fail without blocking the build.
-    # The final PR 3b commit removes this `continue-on-error` AND adds the job
-    # to branch protection's required-status-checks list.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python

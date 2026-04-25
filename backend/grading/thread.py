@@ -5,11 +5,35 @@ own key) context management then delegates to the pipeline module for
 the actual grading logic. Thin wrapper (~27 LOC) — lifecycle concerns
 ONLY; business logic lives in backend.grading.pipeline.
 """
+from typing import Any, Optional
+
 from backend.grading.pipeline import _run_grading_thread_inner
 from backend.grading.state import _get_state
 
 
-def run_grading_thread(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard', teacher_id='local-dev', user_api_keys=None):
+def run_grading_thread(
+    assignments_folder: str,
+    output_folder: str,
+    roster_file: str,
+    assignment_config: Optional[dict[str, Any]] = None,
+    global_ai_notes: str = '',
+    grading_period: str = 'Q3',
+    grade_level: str = '7',
+    subject: str = 'Social Studies',
+    teacher_name: str = '',
+    school_name: str = '',
+    selected_files: Optional[list[str]] = None,
+    ai_model: str = 'gpt-4o-mini',
+    skip_verified: bool = False,
+    class_period: str = '',
+    rubric: Optional[dict[str, Any]] = None,
+    ensemble_models: Optional[list[str]] = None,
+    extraction_mode: str = 'structured',
+    trusted_students: Optional[list[str]] = None,
+    grading_style: str = 'standard',
+    teacher_id: str = 'local-dev',
+    user_api_keys: Optional[dict[str, str]] = None,
+) -> None:
     """Run the grading process in a background thread.
 
     Args:
@@ -24,6 +48,8 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
     """
     # Resolve per-teacher state for try/finally
     state = _get_state(teacher_id)
+    # Silence unused-variable warning — state is referenced to ensure lazy-init
+    _ = state
 
     # BYOK: Set per-user API keys in contextvars for this thread + child workers.
     # set_thread_keys() is moved INSIDE the try/finally so a partial or raising
@@ -34,7 +60,12 @@ def run_grading_thread(assignments_folder, output_folder, roster_file, assignmen
     try:
         if user_api_keys:
             set_thread_keys(user_api_keys)
-        _run_grading_thread_inner(assignments_folder, output_folder, roster_file, assignment_config, global_ai_notes, grading_period, grade_level, subject, teacher_name, school_name, selected_files, ai_model, skip_verified, class_period, rubric, ensemble_models, extraction_mode, trusted_students, grading_style, teacher_id)
+        _run_grading_thread_inner(
+            assignments_folder, output_folder, roster_file, assignment_config,
+            global_ai_notes, grading_period, grade_level, subject, teacher_name,
+            school_name, selected_files, ai_model, skip_verified, class_period,
+            rubric, ensemble_models, extraction_mode, trusted_students,
+            grading_style, teacher_id,
+        )
     finally:
-        clear_thread_keys()
-
+        clear_thread_keys()  # type: ignore[no-untyped-call]

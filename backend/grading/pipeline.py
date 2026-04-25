@@ -20,6 +20,7 @@ import threading
 import concurrent.futures
 from pathlib import Path
 from datetime import datetime
+from typing import Any, Optional
 import logging
 import sentry_sdk
 
@@ -28,13 +29,13 @@ try:
     from backend.student_history import add_assignment_to_history, detect_baseline_deviation, build_history_context
 except ImportError:
     try:
-        from student_history import add_assignment_to_history, detect_baseline_deviation, build_history_context
+        from student_history import add_assignment_to_history, detect_baseline_deviation, build_history_context  # type: ignore[import-not-found,no-redef]
     except ImportError:
-        def add_assignment_to_history(student_id, result):
+        def add_assignment_to_history(student_id: str, result: dict[str, Any]) -> None:  # type: ignore[misc]
             return None
-        def detect_baseline_deviation(student_id, result):
+        def detect_baseline_deviation(student_id: str, result: dict[str, Any]) -> dict[str, Any]:  # type: ignore[misc]
             return {"flag": "normal", "reasons": [], "details": {}}
-        def build_history_context(student_id):
+        def build_history_context(student_id: str) -> str:
             return ""
 
 # accommodation helpers (with fallback stubs matching app.py)
@@ -42,9 +43,9 @@ try:
     from backend.accommodations import build_accommodation_prompt
 except ImportError:
     try:
-        from accommodations import build_accommodation_prompt
+        from accommodations import build_accommodation_prompt  # type: ignore[import-not-found,no-redef]
     except ImportError:
-        def build_accommodation_prompt(student_id, teacher_id=None):
+        def build_accommodation_prompt(student_id: str, teacher_id: str = '') -> str:
             return ""
 
 # State helpers from canonical grading.state module
@@ -65,7 +66,7 @@ DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
 # body). Only caller was _run_grading_thread_inner below, so the definition
 # moves with its consumer. Removed from app.py to avoid stale duplicate.
 # ---------------------------------------------------------------------------
-def _check_batch_calibration(results: list) -> dict:
+def _check_batch_calibration(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Check if grading results have anomalous distribution.
 
     Runs after a full class is graded to catch systematic issues.
@@ -117,7 +118,7 @@ def _check_batch_calibration(results: list) -> dict:
 # so pipeline cannot import app without a circular dependency).
 # Extracted to a shared module in PR4.
 # ---------------------------------------------------------------------------
-def load_support_documents_for_grading(subject: str = None) -> str:
+def load_support_documents_for_grading(subject: Optional[str] = None) -> str:
     """
     Load relevant support documents to include in AI grading context.
 
@@ -166,7 +167,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                         continue
                 elif filepath.endswith('.pdf'):
                     try:
-                        import fitz  # PyMuPDF
+                        import fitz  # type: ignore[import-untyped]  # PyMuPDF lacks py.typed
                         pdf = fitz.open(filepath)
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
@@ -201,12 +202,33 @@ def load_support_documents_for_grading(subject: str = None) -> str:
 
 
 
-def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, assignment_config=None, global_ai_notes='', grading_period='Q3', grade_level='7', subject='Social Studies', teacher_name='', school_name='', selected_files=None, ai_model='gpt-4o-mini', skip_verified=False, class_period='', rubric=None, ensemble_models=None, extraction_mode='structured', trusted_students=None, grading_style='standard', teacher_id='local-dev'):
+def _run_grading_thread_inner(
+    assignments_folder: str,
+    output_folder: str,
+    roster_file: str,
+    assignment_config: Optional[dict[str, Any]] = None,
+    global_ai_notes: str = '',
+    grading_period: str = 'Q3',
+    grade_level: str = '7',
+    subject: str = 'Social Studies',
+    teacher_name: str = '',
+    school_name: str = '',
+    selected_files: Optional[list[str]] = None,
+    ai_model: str = 'gpt-4o-mini',
+    skip_verified: bool = False,
+    class_period: str = '',
+    rubric: Optional[dict[str, Any]] = None,
+    ensemble_models: Optional[list[str]] = None,
+    extraction_mode: str = 'structured',
+    trusted_students: Optional[list[str]] = None,
+    grading_style: str = 'standard',
+    teacher_id: str = 'local-dev',
+) -> None:
     """Inner grading logic (extracted so run_grading_thread can wrap with BYOK context)."""
     # Shadow globals with per-teacher locals — all 100+ references below just work unchanged
     grading_state = _get_state(teacher_id)
     grading_lock = _get_lock(teacher_id)
-    def _update_state(**kwargs):
+    def _update_state(**kwargs: Any) -> None:
         with grading_lock:
             grading_state.update(kwargs)
 
@@ -218,10 +240,11 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         _logger.info("[GRADING] No Global AI Instructions provided")
 
     # Format rubric and log status
-    rubric_prompt = format_rubric_for_prompt(rubric)
+    rubric_prompt = format_rubric_for_prompt(rubric)  # type: ignore[no-untyped-call]
     if rubric_prompt:
-        _logger.info("[GRADING] Custom rubric loaded: %d categories", len(rubric.get('categories', [])))
-        grading_state["log"].append(f"📋 Using custom rubric ({len(rubric.get('categories', []))} categories)")
+        cat_count = len(rubric.get('categories', [])) if rubric else 0
+        _logger.info("[GRADING] Custom rubric loaded: %d categories", cat_count)
+        grading_state["log"].append(f"📋 Using custom rubric ({cat_count} categories)")
     else:
         _logger.info("[GRADING] No custom rubric - using default")
 
@@ -252,7 +275,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                 except Exception:
                     pass
 
-    def extract_content_fingerprints(config_data):
+    def extract_content_fingerprints(config_data: dict[str, Any]) -> set[str]:
         """Extract unique phrases from assignment's imported document for content matching."""
         fingerprints = set()
         imported_doc = config_data.get('importedDoc') or {}
@@ -282,7 +305,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
 
         return fingerprints
 
-    def fuzzy_match_score(text1, text2):
+    def fuzzy_match_score(text1: str, text2: str) -> float:
         """Calculate fuzzy match score between two strings."""
         if not text1 or not text2:
             return 0
@@ -327,7 +350,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
 
         return word_score
 
-    def find_matching_config(filename, file_content=None):
+    def find_matching_config(filename: str, file_content: Optional[str] = None) -> Optional[dict[str, Any]]:
         """Find matching config for a filename, with alias and fuzzy matching."""
         filename_lower = filename.lower()
 
@@ -367,7 +390,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         assignment_part = assignment_candidates[0] if assignment_candidates else fallback
 
         best_match = None
-        best_score = 0
+        best_score: float = 0
         match_reason = ""
 
         for config_name, config_data in all_configs.items():
@@ -378,7 +401,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
             for candidate in assignment_candidates:
                 # 1. Exact name/title match (highest priority)
                 if config_name == candidate or config_title == candidate:
-                    return config_data  # Perfect match, return immediately
+                    return config_data  # type: ignore[no-any-return]  # config_data is Any from json.load
 
                 # 2. Substring match on name/title
                 if config_name in candidate or candidate in config_name:
@@ -443,7 +466,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
 
         return best_match
 
-    def calculate_late_penalty(filepath, matched_config):
+    def calculate_late_penalty(filepath: Any, matched_config: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         """Calculate late penalty based on file modification time and assignment config.
 
         Returns dict with penalty info or None if no penalty applies.
@@ -485,8 +508,8 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         max_penalty = late_penalty_cfg.get('maxPenalty', 50) or 50
         tiers = late_penalty_cfg.get('tiers', [])
 
-        penalty_percent = 0
-        penalty_points = 0
+        penalty_percent: float = 0
+        penalty_points: float = 0
 
         if penalty_type == 'points_per_day':
             penalty_points = min(days_late * amount, max_penalty)
@@ -513,7 +536,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
     fallback_notes = ''
     fallback_sections = []
     fallback_exclude_markers = []
-    fallback_imported_doc = {}
+    fallback_imported_doc: dict[str, Any] = {}
     fallback_rubric_type = 'standard'
     fallback_custom_rubric = None
     fallback_completion_only = False
@@ -631,13 +654,13 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         if os.path.exists(master_file):
             try:
                 from backend.staging import canonicalize_filename as _canon_csv
-                with open(master_file, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
+                with open(master_file, 'r', encoding='utf-8') as fh:
+                    reader = csv.DictReader(fh)
                     for row in reader:
                         filename = row.get('Filename', '')
                         if filename:
                             already_graded.add(filename)
-                            already_graded.add(_canon_csv(filename))  # also add canonical form
+                            already_graded.add(_canon_csv(filename))  # type: ignore[no-untyped-call]
             except Exception:
                 pass
 
@@ -649,11 +672,11 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         for r in grading_state.get("results", []):
             if r.get("filename"):
                 already_graded.add(r["filename"])
-                already_graded.add(_canon(r["filename"]))  # also add canonical form
+                already_graded.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
                 # Track verified status for skip_verified filtering
                 if r.get("marker_status") == "verified":
                     verified_files.add(r["filename"])
-                    verified_files.add(_canon(r["filename"]))
+                    verified_files.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
 
         if already_graded:
             grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
@@ -666,19 +689,19 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
 
         # Stage files: canonicalize names and deduplicate (keeps newest per student+assignment)
         from backend.staging import stage_files
-        stage_result = stage_files(assignments_folder, log_fn=grading_state["log"].append)
+        stage_result = stage_files(assignments_folder, log_fn=grading_state["log"].append)  # type: ignore[no-untyped-call]
         staging_folder = stage_result["staging_folder"]
         resubmissions = stage_result.get("resubmissions", set())
 
         staging_path = Path(staging_folder)
-        all_files = []
+        all_files: list[Any] = []
         for ext in ['*.docx', '*.txt', '*.jpg', '*.jpeg', '*.png', '*.pdf']:
             all_files.extend(staging_path.glob(ext))
 
         # Filter by selected files if provided (match canonical names)
         if selected_files is not None and len(selected_files) > 0:
             from backend.staging import canonicalize_filename as _canon
-            selected_canonical = set(_canon(f) for f in selected_files)
+            selected_canonical = set(_canon(f) for f in selected_files)  # type: ignore[no-untyped-call]
             all_files = [f for f in all_files if f.name in selected_canonical]
             grading_state["log"].append(f"Matched {len(all_files)} of {len(selected_files)} selected files")
         else:
@@ -720,7 +743,7 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
         # ═══════════════════════════════════════════════════════════
         # PARALLEL GRADING HELPER FUNCTION
         # ═══════════════════════════════════════════════════════════
-        def grade_single_file(filepath, file_index, total_files):
+        def grade_single_file(filepath: Any, file_index: int, total_files: int) -> dict[str, Any]:
             """Grade a single file - designed for parallel execution."""
             try:
                 parsed = parse_filename(filepath.name)
@@ -935,8 +958,8 @@ def _run_grading_thread_inner(assignments_folder, output_folder, roster_file, as
                         _question_types = [k for k, v in _section_cats.items() if v]
                     if not _question_types:
                         _question_types = ['short_answer', 'multiple_choice', 'extended_writing']
-                    _correction_ctx = build_correction_context(
-                        teacher_id, config.get('subject', ''), _question_types
+                    _correction_ctx = build_correction_context(  # type: ignore[no-untyped-call]
+                        teacher_id, matched_config.get('subject', '') if matched_config else '', _question_types
                     )
                     if _correction_ctx:
                         file_ai_notes += "\n\n" + _correction_ctx
@@ -1217,13 +1240,15 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     else:
                         file_rubric_weights = None  # Default weights, no override needed
 
+                # file_rubric_weights / marker_config are Optional[list] but grading functions
+                # declare list[Any] — None means "use defaults", handled gracefully at runtime.
                 if ensemble_models and len(ensemble_models) >= 2:
                     grade_result = grade_with_ensemble(
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ensemble_models, student_info.get('student_id'),
                         assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode, grading_style,
-                        rubric_weights=file_rubric_weights
+                        marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+                        rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
                     )
                 elif is_trusted:
                     # Trusted student: Use full multi-pass pipeline, skip detection only
@@ -1231,8 +1256,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'),
                         assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode, grading_style,
-                        student_history=history_context, rubric_weights=file_rubric_weights
+                        marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+                        student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
                     )
                     grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
                     grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
@@ -1242,8 +1267,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode, grading_style=grading_style,
-                        rubric_weights=file_rubric_weights
+                        marker_config, effort_points, extraction_mode, grading_style=grading_style,  # type: ignore[arg-type]
+                        rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
                     )
                     grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
                     grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
@@ -1252,9 +1277,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         student_info['student_name'], grade_data, file_ai_notes,
                         grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
                         rubric_prompt, file_markers, file_exclude_markers,
-                        marker_config, effort_points, extraction_mode, grading_style,
-                        student_history=history_context,
-                        rubric_weights=file_rubric_weights
+                        marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+                        student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
                     )
 
                 # Check for errors
@@ -1321,7 +1345,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 }
 
             except Exception as e:
-                logger.error("Grading failed for %s: %s", filepath, str(e))
+                _logger.error("Grading failed for %s: %s", filepath, str(e))
                 return {"success": False, "error": "Grading failed for this file", "filepath": filepath}
 
         # ═══════════════════════════════════════════════════════════
@@ -1356,8 +1380,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 # Wait for batch to complete, check stop between results
                 for future in concurrent.futures.as_completed(future_to_file):
                     if grading_state.get("stop_requested", False):
-                        for f in future_to_file:
-                            f.cancel()
+                        for fut in future_to_file:
+                            fut.cancel()
                         grading_state["log"].append("")
                         grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
                         stop_break = True
@@ -1401,8 +1425,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                                 grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
                             grading_state["log"].append("=" * 50)
                             _update_state(error=f"{'Network' if is_network else 'API'} Error: {err_msg}")
-                            for f in future_to_file:
-                                f.cancel()
+                            for fut in future_to_file:
+                                fut.cancel()
                             stop_break = True
                             break
                         continue
@@ -1519,7 +1543,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                         canon_name = filepath.name
                         grading_state["results"] = [r for r in grading_state["results"]
                                                     if r.get("filename") != canon_name
-                                                    and _canon_dedup(r.get("filename", "")) != canon_name]
+                                                    and _canon_dedup(r.get("filename", "")) != canon_name]  # type: ignore[no-untyped-call]
                         if is_resub and previous_result:
                             sid = student_info.get('student_id', '')
                             assign = result["matched_title"]
@@ -1596,8 +1620,8 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "ai_response": r.get("ai_response", "")
                 })
             try:
-                with open(audit_path, 'w') as f:
-                    json.dump(audit_data, f, indent=2)
+                with open(audit_path, 'w') as fh:
+                    json.dump(audit_data, fh, indent=2)
                 grading_state["log"].append("  Audit trail saved")
             except Exception as e:
                 grading_state["log"].append(f"  Audit trail error: {str(e)}")
