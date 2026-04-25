@@ -1190,7 +1190,7 @@ class TestSubmissionDetailHappyPath:
 ```bash
 pytest tests/test_submission_detail.py::TestSubmissionDetailHappyPath -v
 ```
-Expected: 3 FAIL (placeholder still empty).
+Expected: 2 FAIL (the normalization test and the zero-score-not-falsy test require the per-question parsing logic that Task 6 adds; the missing-questions / malformed-non-list / single-attempt-sibling tests already pass under the placeholder because they all expect `questions: []` or non-question-shape behavior).
 
 - [ ] **Step 6.3: Replace the `questions = []` placeholder with normalization logic**
 
@@ -1831,7 +1831,7 @@ Tasks 1-4 are pure backend (gradebook endpoint). Tasks 5-6 are pure backend (sub
 
 - 18 backend tests on the gradebook endpoint (4 coalesce + 2 authz + 5 happy path + 4 attempt modes + 3 edge cases).
 - 9 backend tests on the submission-detail endpoint (4 authz + 5 happy path / edge cases including malformed-questions-list and single-attempt sibling case).
-- Total new backend tests: 24.
+- Total new backend tests: 27.
 - Frontend: build verification only (consistent with Phase 2 / 2b).
 - Existing 1671+ unit tests + 24 from Phase 2b must still pass on each commit.
 - All 8 CI jobs must pass.
