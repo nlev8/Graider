@@ -564,3 +564,39 @@ class TestReportCardEdgeCases:
         # Null submitted_at must be LAST in trajectory
         assert [t['submission_id'] for t in body['trajectory']] == ['sub-dated', 'sub-null']
 
+
+class TestProgressRankToleratesMalformedMastery:
+    """Regression: the grid endpoint must also tolerate malformed
+    standards_mastery (Phase 2b extracted the sanitizer to a shared helper)."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_grid_endpoint_does_not_500_on_malformed_mastery(self, mock_sb_fn, client, teacher_headers):
+        good_mastery = {"MA.6.AR.1.1": {"points_earned": 8, "points_possible": 10, "question_count": 2}}
+        subs = [
+            {"id": "sub-good", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z",
+             "percentage": 80, "results": {"standards_mastery": good_mastery,
+                                            "points_earned": 8, "points_possible": 10},
+             "status": "graded"},
+            {"id": "sub-bad", "student_id": "stu-1", "content_id": "ct-2",
+             "attempt_number": 1, "submitted_at": "2026-04-12T10:00:00Z",
+             "percentage": 60, "results": {"standards_mastery": ["malformed", "list"],
+                                            "points_earned": 6, "points_possible": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [
+                {'id': 'ct-1', 'title': 'Q1', 'content_type': 'assessment'},
+                {'id': 'ct-2', 'title': 'Q2', 'content_type': 'assessment'},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/progress-rank', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Only the well-formed row's standard appears in the column union
+        assert body['standards'] == ['MA.6.AR.1.1']
+

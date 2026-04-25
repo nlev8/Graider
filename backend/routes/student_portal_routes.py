@@ -321,6 +321,42 @@ def _build_trajectory_for_student(submissions, content_titles):
     return out
 
 
+def _sanitize_standards_mastery(sub):
+    """Sanitize standards_mastery in a submission dict IN PLACE.
+
+    Replaces missing/non-dict outer values with {} and drops individual
+    non-dict entries. Logs a WARNING per malformed case.
+    Shared between get_student_report_card and get_class_progress_rank.
+    Phase 2b extracted this from get_student_report_card to share between endpoints.
+    """
+    results = sub.get('results') or {}
+    raw = results.get('standards_mastery')
+    if raw is None:
+        results['standards_mastery'] = {}
+        sub['results'] = results
+        return
+    if not isinstance(raw, dict):
+        _logger.warning(
+            "malformed standards_mastery (type=%s) in submission %s — treating as empty",
+            type(raw).__name__, sub.get('id'),
+        )
+        results['standards_mastery'] = {}
+        sub['results'] = results
+        return
+    # Valid dict at the outer level; drop individual non-dict values.
+    cleaned = {}
+    for code, m in raw.items():
+        if isinstance(m, dict):
+            cleaned[code] = m
+        else:
+            _logger.warning(
+                "malformed standards_mastery entry (code=%s, type=%s) in submission %s — skipping entry",
+                code, type(m).__name__, sub.get('id'),
+            )
+    results['standards_mastery'] = cleaned
+    sub['results'] = results
+
+
 # ============ Teacher Endpoints ============
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
@@ -1365,6 +1401,12 @@ def get_class_progress_rank(class_id):
             'submitted_at', desc=True
         ).execute()
 
+        # Sanitize malformed standards_mastery in place so column-union and
+        # aggregation don't 500 on a single corrupt row. Phase 2b extracted
+        # this from get_student_report_card to share between endpoints.
+        for s in subs.data or []:
+            _sanitize_standards_mastery(s)
+
         # Group submissions by (student_id, content_id)
         from collections import defaultdict
         subs_by_student_content = defaultdict(lambda: defaultdict(list))
@@ -1483,34 +1525,6 @@ def get_student_report_card(class_id, student_id):
     # still sees every submission. A malformed-mastery submission stays
     # selectable (so 'latest' picks the truly latest attempt), but its
     # mastery contribution is empty.
-    def _sanitize_standards_mastery(sub):
-        results = sub.get('results') or {}
-        raw = results.get('standards_mastery')
-        if raw is None:
-            results['standards_mastery'] = {}
-            sub['results'] = results
-            return
-        if not isinstance(raw, dict):
-            _logger.warning(
-                "malformed standards_mastery (type=%s) in submission %s — treating as empty",
-                type(raw).__name__, sub.get('id'),
-            )
-            results['standards_mastery'] = {}
-            sub['results'] = results
-            return
-        # Valid dict at the outer level; drop individual non-dict values.
-        cleaned = {}
-        for code, m in raw.items():
-            if isinstance(m, dict):
-                cleaned[code] = m
-            else:
-                _logger.warning(
-                    "malformed standards_mastery entry (code=%s, type=%s) in submission %s — skipping entry",
-                    code, type(m).__name__, sub.get('id'),
-                )
-        results['standards_mastery'] = cleaned
-        sub['results'] = results
-
     for s in submissions:
         _sanitize_standards_mastery(s)
 
