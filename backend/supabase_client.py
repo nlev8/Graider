@@ -12,11 +12,14 @@ get_raw_supabase() when you specifically need to bypass the retry wrapper.
 """
 import os
 import threading
+from typing import Any
 
-from supabase import create_client, Client
+from supabase import create_client
 
-_supabase_raw: Client = None
-_supabase_resilient = None
+# supabase.Client is untyped upstream (postgrest-py has no stubs); we use Any
+# for the singleton variables so strict mypy doesn't reject `None` assignments.
+_supabase_raw: Any = None
+_supabase_resilient: Any = None
 
 # Guards cold-start singleton initialization across Flask request threads and
 # background grading threads. The GIL makes attribute reads atomic, but the
@@ -27,7 +30,7 @@ _supabase_resilient = None
 _init_lock = threading.RLock()
 
 
-def get_raw_supabase() -> Client:
+def get_raw_supabase() -> Any:  # returns supabase.Client — untyped upstream
     """Lazy-init raw Supabase admin client WITHOUT retry wrapping.
 
     Use this only when you need the underlying client — e.g. for long-running
@@ -48,7 +51,7 @@ def get_raw_supabase() -> Client:
     return _supabase_raw
 
 
-def get_supabase():
+def get_supabase() -> Any:  # returns ResilientClient | None — postgrest-py is untyped upstream
     """Lazy-init Supabase admin client with automatic retry wrapping.
 
     Returns a ResilientClient instance (behaves like the raw client but
@@ -68,7 +71,7 @@ def get_supabase():
     return _supabase_resilient
 
 
-def get_supabase_or_raise():
+def get_supabase_or_raise() -> Any:  # returns ResilientClient — raises if not configured
     """Lazy-init resilient Supabase client. Raises if not configured.
 
     Names the specific missing env var so misconfigurations are easy to diagnose.
