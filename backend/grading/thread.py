@@ -60,7 +60,7 @@ def run_grading_thread(
     try:
         if user_api_keys:
             set_thread_keys(user_api_keys)
-        _run_grading_thread_inner(  # type: ignore[no-untyped-call]
+        _run_grading_thread_inner(
             assignments_folder, output_folder, roster_file, assignment_config,
             global_ai_notes, grading_period, grade_level, subject, teacher_name,
             school_name, selected_files, ai_model, skip_verified, class_period,
