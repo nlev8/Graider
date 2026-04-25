@@ -231,6 +231,55 @@ def _aggregate_mastery_for_student(selected_submissions_by_content, content_titl
     return result
 
 
+def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
+    """Convert _aggregate_mastery_for_student's dict output to the
+    standards_breakdown array shape required by the report-card endpoint.
+
+    - Sorts ASC by percentage (worst-first) per Phase 2b spec.
+    - Enriches each contributing_submission with `submitted_at` and
+      `percentage` (computed from points_earned / points_possible).
+      Pulls `submitted_at` from `submission_lookup` (a dict keyed by
+      submission_id). Keeps the existing 10-cap from the upstream helper.
+
+    Args:
+        mastery_by_code: dict from _aggregate_mastery_for_student
+        submission_lookup: dict[submission_id -> submission row] for enrichment
+    Returns:
+        list[dict] sorted by percentage ASC; each dict has
+        {code, percentage, points_earned, points_possible, question_count,
+         contributing_submissions: [...]} with each contributing_submission
+        having submission_id, title, attempt_number, points_earned,
+        points_possible, percentage, submitted_at.
+    """
+    rows = []
+    for code, m in mastery_by_code.items():
+        enriched_contribs = []
+        for c in m.get("contributing_submissions", []):
+            pts_poss = c.get("points_possible") or 0
+            pts_earned = c.get("points_earned") or 0
+            pct = round((pts_earned / pts_poss) * 100, 1) if pts_poss > 0 else 0
+            sub_row = submission_lookup.get(c.get("submission_id")) or {}
+            enriched_contribs.append({
+                "submission_id": c.get("submission_id"),
+                "title": c.get("title", ""),
+                "attempt_number": c.get("attempt_number"),
+                "points_earned": pts_earned,
+                "points_possible": pts_poss,
+                "percentage": pct,
+                "submitted_at": sub_row.get("submitted_at"),
+            })
+        rows.append({
+            "code": code,
+            "percentage": m.get("percentage", 0),
+            "points_earned": m.get("points_earned", 0),
+            "points_possible": m.get("points_possible", 0),
+            "question_count": m.get("question_count", 0),
+            "contributing_submissions": enriched_contribs,
+        })
+    rows.sort(key=lambda r: r["percentage"])  # ASC = worst-first
+    return rows
+
+
 # ============ Teacher Endpoints ============
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
