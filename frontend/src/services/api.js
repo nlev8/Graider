@@ -1650,6 +1650,16 @@ export async function getClassProgressRank(classId, attemptMode) {
   return fetchApi('/api/teacher/class/' + classId + '/progress-rank?attempt_mode=' + mode);
 }
 
+export async function getStudentReportCard(classId, studentId, attemptMode) {
+  var mode = attemptMode || 'latest';
+  var params = new URLSearchParams({ attempt_mode: mode });
+  return fetchApi(
+    '/api/teacher/class/' + encodeURIComponent(classId) +
+    '/student/' + encodeURIComponent(studentId) +
+    '/report-card?' + params.toString()
+  );
+}
+
 export async function getTeacherTags() {
   return fetchApi('/api/teacher/tags');
 }

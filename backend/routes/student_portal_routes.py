@@ -24,7 +24,7 @@ student_portal_bp = Blueprint('student_portal', __name__)
 _logger = logging.getLogger(__name__)
 
 from backend.utils.auth_decorators import require_teacher
-from backend.utils.errors import handle_route_errors
+from backend.utils.errors import error_response, handle_route_errors
 from backend.extensions import limiter
 from backend.services.grading_service import grade_deterministic_question, grade_student_submission, grade_instant_only
 from backend.observability import critical_path
@@ -229,6 +229,132 @@ def _aggregate_mastery_for_student(selected_submissions_by_content, content_titl
             'contributing_submissions': contributing,
         }
     return result
+
+
+def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
+    """Convert _aggregate_mastery_for_student's dict output to the
+    standards_breakdown array shape required by the report-card endpoint.
+
+    - Sorts ASC by percentage (worst-first) per Phase 2b spec.
+    - Enriches each contributing_submission with `submitted_at` and
+      `percentage` (computed from points_earned / points_possible).
+      Pulls `submitted_at` from `submission_lookup` (a dict keyed by
+      submission_id). Keeps the existing 10-cap from the upstream helper.
+
+    Args:
+        mastery_by_code: dict from _aggregate_mastery_for_student
+        submission_lookup: dict[submission_id -> submission row] for enrichment
+    Returns:
+        list[dict] sorted by percentage ASC; each dict has
+        {code, percentage, points_earned, points_possible, question_count,
+         contributing_submissions: [...]} with each contributing_submission
+        having submission_id, title, attempt_number, points_earned,
+        points_possible, percentage, submitted_at.
+    """
+    rows = []
+    for code, m in mastery_by_code.items():
+        enriched_contribs = []
+        for c in m.get("contributing_submissions", []):
+            pts_poss = c.get("points_possible") or 0
+            pts_earned = c.get("points_earned") or 0
+            pct = round((pts_earned / pts_poss) * 100, 1) if pts_poss > 0 else 0.0
+            sub_row = submission_lookup.get(c.get("submission_id")) or {}
+            enriched_contribs.append({
+                "submission_id": c.get("submission_id"),
+                "title": c.get("title", ""),
+                "attempt_number": c.get("attempt_number"),
+                "points_earned": pts_earned,
+                "points_possible": pts_poss,
+                "percentage": pct,
+                "submitted_at": sub_row.get("submitted_at"),
+            })
+        rows.append({
+            "code": code,
+            "percentage": m.get("percentage", 0),
+            "points_earned": m.get("points_earned", 0),
+            "points_possible": m.get("points_possible", 0),
+            "question_count": m.get("question_count", 0),
+            "contributing_submissions": enriched_contribs,
+        })
+    rows.sort(key=lambda r: r["percentage"])  # ASC = worst-first
+    return rows
+
+
+def _build_trajectory_for_student(submissions, content_titles):
+    """Build the chronological trajectory array for the report card.
+
+    Sorted ASC by submitted_at; submissions with null submitted_at are
+    appended at the END (we treat them as the "most recent" since their
+    real position is unknown, and we'd rather not pollute the early-trend
+    reading).
+
+    Args:
+        submissions: list of submission rows (id, content_id, submitted_at,
+                     percentage, attempt_number, results.points_earned/possible).
+        content_titles: dict[content_id -> title] for the title field.
+    Returns:
+        list[dict] of {submission_id, content_id, title, submitted_at,
+                       percentage, attempt_number, points_earned,
+                       points_possible}.
+    """
+    def sort_key(s):
+        ts = s.get("submitted_at")
+        # Use _parse_ts so mixed ISO formats ("Z" vs "+00:00" suffix) sort
+        # by actual instant rather than by raw string. Null/empty timestamps
+        # sort to bucket 1 (END), non-null to bucket 0 (chronological).
+        return (0, _parse_ts(ts)) if ts else (1, datetime.min)
+
+    sorted_subs = sorted(submissions, key=sort_key)
+    out = []
+    for s in sorted_subs:
+        results = s.get("results") or {}
+        out.append({
+            "submission_id": s.get("id"),
+            "content_id": s.get("content_id"),
+            "title": content_titles.get(s.get("content_id"), ""),
+            "submitted_at": s.get("submitted_at"),
+            "percentage": s.get("percentage"),
+            "attempt_number": s.get("attempt_number"),
+            "points_earned": results.get("points_earned"),
+            "points_possible": results.get("points_possible"),
+        })
+    return out
+
+
+def _sanitize_standards_mastery(sub):
+    """Sanitize standards_mastery in a submission dict IN PLACE.
+
+    Replaces missing/non-dict outer values with {} and drops individual
+    non-dict entries. Logs a WARNING per malformed case.
+    Shared between get_student_report_card and get_class_progress_rank.
+    Phase 2b extracted this from get_student_report_card to share between endpoints.
+    """
+    results = sub.get('results') or {}
+    raw = results.get('standards_mastery')
+    if raw is None:
+        results['standards_mastery'] = {}
+        sub['results'] = results
+        return
+    if not isinstance(raw, dict):
+        _logger.warning(
+            "malformed standards_mastery (type=%s) in submission %s — treating as empty",
+            type(raw).__name__, sub.get('id'),
+        )
+        results['standards_mastery'] = {}
+        sub['results'] = results
+        return
+    # Valid dict at the outer level; drop individual non-dict values.
+    cleaned = {}
+    for code, m in raw.items():
+        if isinstance(m, dict):
+            cleaned[code] = m
+        else:
+            _logger.warning(
+                "malformed standards_mastery entry (code=%s, type=%s) in submission %s — skipping entry",
+                code, type(m).__name__, sub.get('id'),
+            )
+    results['standards_mastery'] = cleaned
+    sub['results'] = results
 
 
 # ============ Teacher Endpoints ============
@@ -1275,6 +1401,12 @@ def get_class_progress_rank(class_id):
             'submitted_at', desc=True
         ).execute()
 
+        # Sanitize malformed standards_mastery in place so column-union and
+        # aggregation don't 500 on a single corrupt row. Phase 2b extracted
+        # this from get_student_report_card to share between endpoints.
+        for s in subs.data or []:
+            _sanitize_standards_mastery(s)
+
         # Group submissions by (student_id, content_id)
         from collections import defaultdict
         subs_by_student_content = defaultdict(lambda: defaultdict(list))
@@ -1314,6 +1446,109 @@ def get_class_progress_rank(class_id):
     except Exception as e:
         _logger.exception("Progress rank error")
         return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/class/<class_id>/student/<student_id>/report-card', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_student_report_card(class_id, student_id):
+    """Return per-student report card: trajectory + standards breakdown.
+
+    Class-scoped view of a single student's mastery within ONE class.
+    Reuses _select_submissions_by_mode + _aggregate_mastery_for_student
+    + bridge helpers to assemble the response.
+
+    Spec: docs/superpowers/specs/2026-04-25-phase2b-student-report-card-design.md
+    """
+    db = _get_teacher_supabase()
+
+    attempt_mode = request.args.get('attempt_mode', 'latest')
+    if attempt_mode not in ('latest', 'best', 'average'):
+        attempt_mode = 'latest'
+
+    # 1) Class ownership check
+    cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+    class_name = cls.data[0].get('name')
+
+    # 2) Student-in-class check
+    enrollment = db.table('class_students').select('student_id').eq(
+        'class_id', class_id
+    ).eq('student_id', student_id).execute()
+    if not enrollment.data:
+        return error_response("Student not in class", 404)
+
+    # 3) Fetch student name (orphan-enrollment guard)
+    student_row = db.table('students').select(
+        'id, first_name, last_name'
+    ).eq('id', student_id).execute()
+    if not student_row.data:
+        return error_response("Student not in class", 404)
+    student_name = (
+        (student_row.data[0].get('first_name') or '') + ' ' +
+        (student_row.data[0].get('last_name') or '')
+    ).strip()
+
+    # 4) Fetch all class assessments/assignments
+    content_rows = db.table('published_content').select(
+        'id, title, content_type'
+    ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
+    content_ids = [c['id'] for c in (content_rows.data or [])]
+    content_titles = {c['id']: c.get('title', '') for c in (content_rows.data or [])}
+
+    if not content_ids:
+        return jsonify({
+            "student_id": student_id,
+            "student_name": student_name,
+            "class_id": class_id,
+            "class_name": class_name,
+            "attempt_mode": attempt_mode,
+            "trajectory": [],
+            "standards_breakdown": [],
+        })
+
+    # 5) Fetch all non-draft submissions for this student in those contents
+    subs_rows = db.table('student_submissions').select(
+        'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+    ).eq('student_id', student_id).in_('content_id', content_ids).neq(
+        'status', 'draft'
+    ).execute()
+    submissions = subs_rows.data or []
+
+    # 6) Build trajectory from ALL submissions chronologically
+    # (trajectory tolerates missing standards_mastery — only uses
+    # submitted_at + percentage from the row.)
+    trajectory = _build_trajectory_for_student(submissions, content_titles)
+
+    # 7) Sanitize standards_mastery IN PLACE so attempt-mode selection
+    # still sees every submission. A malformed-mastery submission stays
+    # selectable (so 'latest' picks the truly latest attempt), but its
+    # mastery contribution is empty.
+    for s in submissions:
+        _sanitize_standards_mastery(s)
+
+    # 8) Build standards_breakdown via existing helpers + bridge code
+    from collections import defaultdict
+    subs_by_content = defaultdict(list)
+    for s in submissions:
+        cid = s.get('content_id')
+        if cid:
+            subs_by_content[cid].append(s)
+    selected = _select_submissions_by_mode(subs_by_content, attempt_mode)
+    mastery_by_code = _aggregate_mastery_for_student(selected, content_titles, attempt_mode)
+    submission_lookup = {s.get('id'): s for s in submissions if s.get('id')}
+    standards_breakdown = _build_standards_breakdown_for_student(mastery_by_code, submission_lookup)
+
+    return jsonify({
+        "student_id": student_id,
+        "student_name": student_name,
+        "class_id": class_id,
+        "class_name": class_name,
+        "attempt_mode": attempt_mode,
+        "trajectory": trajectory,
+        "standards_breakdown": standards_breakdown,
+    })
 
 
 @student_portal_bp.route('/api/teacher/tags', methods=['GET'])
