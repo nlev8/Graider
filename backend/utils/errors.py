@@ -9,7 +9,8 @@ See https://datatracker.ietf.org/doc/html/rfc7807 for the full spec.
 """
 import logging
 import functools
-from flask import jsonify, request
+from typing import Any, Callable
+from flask import Response, jsonify, request
 import pybreaker
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 PROBLEM_BASE_URI = "https://graider.live/errors"
 
 
-def _slug_from_status(status_code):
+def _slug_from_status(status_code: int) -> str:
     return {
         400: "bad-request",
         401: "unauthenticated",
@@ -36,7 +37,7 @@ def _slug_from_status(status_code):
     }.get(status_code, f"http-{status_code}")
 
 
-def _title_from_status(status_code):
+def _title_from_status(status_code: int) -> str:
     return {
         400: "Bad Request",
         401: "Authentication Required",
@@ -50,9 +51,12 @@ def _title_from_status(status_code):
     }.get(status_code, f"HTTP {status_code}")
 
 
-def _problem_response(*, type_slug, title, status, detail=None, extra_headers=None):
+def _problem_response(*, type_slug: str, title: str, status: int, detail: str | None = None, extra_headers: dict[str, str] | None = None) -> Response:
     """Build an RFC 7807 problem+json response with a backward-compat
     `error` field that duplicates `detail`.
+
+    Must be called within a Flask app context — `jsonify()` requires one.
+    In practice every caller is a route handler, which always provides one.
     """
     body = {
         "type": f"{PROBLEM_BASE_URI}/{type_slug}",
@@ -76,10 +80,12 @@ def _problem_response(*, type_slug, title, status, detail=None, extra_headers=No
     return resp
 
 
-def error_response(message, status_code=400, code=None):
+def error_response(message: str, status_code: int = 400, code: str | None = None) -> Response:
     """Return a consistent JSON error response with proper HTTP status code.
 
-    Backward-compatible signature — every existing caller continues to work.
+    Call signature unchanged from the pre-RFC 7807 version. The return type
+    is now a Flask Response rather than a (Response, status) tuple, since
+    handle_route_errors no longer relies on the tuple form.
     Internally emits RFC 7807 problem+json. The `code` arg (if provided)
     becomes the type slug AND a top-level extension field, per RFC 7807 § 3.2
     (which permits non-reserved members).
@@ -98,7 +104,7 @@ def error_response(message, status_code=400, code=None):
     return resp
 
 
-def handle_route_errors(f):
+def handle_route_errors(f: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that catches unhandled exceptions and returns RFC 7807 problem+json.
 
     Specializes pybreaker.CircuitBreakerError → 503 with `Retry-After: 60`,
@@ -107,7 +113,7 @@ def handle_route_errors(f):
     Logs the full traceback server-side but never exposes it to the client.
     """
     @functools.wraps(f)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return f(*args, **kwargs)
         except pybreaker.CircuitBreakerError as e:
