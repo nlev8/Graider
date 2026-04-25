@@ -87,3 +87,48 @@ class TestBuildStandardsBreakdownForStudent:
         assert cs["percentage"] == 75.0  # 15/20 — computed from points, not lookup
 
 
+class TestBuildTrajectoryForStudent:
+    """_build_trajectory_for_student: list[submission] → chronological list."""
+
+    def test_empty_input_returns_empty_array(self):
+        from backend.routes.student_portal_routes import _build_trajectory_for_student
+        assert _build_trajectory_for_student([], {}) == []
+
+    def test_orders_ascending_by_submitted_at(self):
+        from backend.routes.student_portal_routes import _build_trajectory_for_student
+        subs = [
+            {"id": "s2", "content_id": "c1", "submitted_at": "2026-04-15T10:00:00Z",
+             "percentage": 80, "attempt_number": 1, "results": {"points_earned": 8, "points_possible": 10}},
+            {"id": "s1", "content_id": "c1", "submitted_at": "2026-04-10T10:00:00Z",
+             "percentage": 60, "attempt_number": 1, "results": {"points_earned": 6, "points_possible": 10}},
+            {"id": "s3", "content_id": "c1", "submitted_at": "2026-04-20T10:00:00Z",
+             "percentage": 90, "attempt_number": 2, "results": {"points_earned": 9, "points_possible": 10}},
+        ]
+        content_titles = {"c1": "Quiz 1"}
+        result = _build_trajectory_for_student(subs, content_titles)
+        assert [r["submission_id"] for r in result] == ["s1", "s2", "s3"]
+        assert result[0]["title"] == "Quiz 1"
+        assert result[0]["percentage"] == 60
+        assert result[0]["points_earned"] == 6
+        assert result[0]["points_possible"] == 10
+
+    def test_null_submitted_at_sorted_to_end(self):
+        from backend.routes.student_portal_routes import _build_trajectory_for_student
+        subs = [
+            {"id": "s_null", "content_id": "c1", "submitted_at": None,
+             "percentage": 50, "attempt_number": 1, "results": {}},
+            {"id": "s_dated", "content_id": "c1", "submitted_at": "2026-04-10T10:00:00Z",
+             "percentage": 70, "attempt_number": 1, "results": {}},
+        ]
+        result = _build_trajectory_for_student(subs, {"c1": "Q"})
+        # Null sorts to END
+        assert [r["submission_id"] for r in result] == ["s_dated", "s_null"]
+
+    def test_missing_content_title_uses_empty_string(self):
+        from backend.routes.student_portal_routes import _build_trajectory_for_student
+        subs = [
+            {"id": "s1", "content_id": "c-missing", "submitted_at": "2026-04-10T10:00:00Z",
+             "percentage": 70, "attempt_number": 1, "results": {}},
+        ]
+        result = _build_trajectory_for_student(subs, {})
+        assert result[0]["title"] == ""

@@ -280,6 +280,45 @@ def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
     return rows
 
 
+def _build_trajectory_for_student(submissions, content_titles):
+    """Build the chronological trajectory array for the report card.
+
+    Sorted ASC by submitted_at; submissions with null submitted_at are
+    appended at the END (we treat them as the "most recent" since their
+    real position is unknown, and we'd rather not pollute the early-trend
+    reading).
+
+    Args:
+        submissions: list of submission rows (id, content_id, submitted_at,
+                     percentage, attempt_number, results.points_earned/possible).
+        content_titles: dict[content_id -> title] for the title field.
+    Returns:
+        list[dict] of {submission_id, content_id, title, submitted_at,
+                       percentage, attempt_number, points_earned,
+                       points_possible}.
+    """
+    def sort_key(s):
+        ts = s.get("submitted_at")
+        # None sorts last: tuple key (1, "") for null, (0, ts) for non-null
+        return (0, ts) if ts else (1, "")
+
+    sorted_subs = sorted(submissions, key=sort_key)
+    out = []
+    for s in sorted_subs:
+        results = s.get("results") or {}
+        out.append({
+            "submission_id": s.get("id"),
+            "content_id": s.get("content_id"),
+            "title": content_titles.get(s.get("content_id"), ""),
+            "submitted_at": s.get("submitted_at"),
+            "percentage": s.get("percentage"),
+            "attempt_number": s.get("attempt_number"),
+            "points_earned": results.get("points_earned"),
+            "points_possible": results.get("points_possible"),
+        })
+    return out
+
+
 # ============ Teacher Endpoints ============
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
