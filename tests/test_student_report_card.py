@@ -132,3 +132,23 @@ class TestBuildTrajectoryForStudent:
         ]
         result = _build_trajectory_for_student(subs, {})
         assert result[0]["title"] == ""
+
+    def test_mixed_iso_formats_sort_chronologically(self):
+        """Submitted_at with 'Z' vs '+00:00' suffix must sort by actual
+        instant, not lexicographically. Z (0x5A) > + (0x2B) in ASCII so
+        a naive string sort would put '+00:00' before 'Z' even when the
+        '+00:00' instant is later."""
+        from backend.routes.student_portal_routes import _build_trajectory_for_student
+        subs = [
+            # Z form, 15:30:00
+            {"id": "z-earlier", "content_id": "c1", "submitted_at": "2026-04-12T15:30:00Z",
+             "percentage": 80, "attempt_number": 1, "results": {}},
+            # +00:00 form, 15:30:01 (one second LATER)
+            {"id": "plus-later", "content_id": "c1", "submitted_at": "2026-04-12T15:30:01+00:00",
+             "percentage": 80, "attempt_number": 1, "results": {}},
+        ]
+        result = _build_trajectory_for_student(subs, {"c1": "Q"})
+        # Chronological order: Z-earlier first (15:30:00), then plus-later (15:30:01).
+        # If the sort uses raw strings, "+" sorts before "Z" so plus-later would
+        # come first — that's the regression we're guarding against.
+        assert [r["submission_id"] for r in result] == ["z-earlier", "plus-later"]

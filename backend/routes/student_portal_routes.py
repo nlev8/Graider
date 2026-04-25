@@ -257,7 +257,7 @@ def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
         for c in m.get("contributing_submissions", []):
             pts_poss = c.get("points_possible") or 0
             pts_earned = c.get("points_earned") or 0
-            pct = round((pts_earned / pts_poss) * 100, 1) if pts_poss > 0 else 0
+            pct = round((pts_earned / pts_poss) * 100, 1) if pts_poss > 0 else 0.0
             sub_row = submission_lookup.get(c.get("submission_id")) or {}
             enriched_contribs.append({
                 "submission_id": c.get("submission_id"),
@@ -299,8 +299,10 @@ def _build_trajectory_for_student(submissions, content_titles):
     """
     def sort_key(s):
         ts = s.get("submitted_at")
-        # None sorts last: tuple key (1, "") for null, (0, ts) for non-null
-        return (0, ts) if ts else (1, "")
+        # Use _parse_ts so mixed ISO formats ("Z" vs "+00:00" suffix) sort
+        # by actual instant rather than by raw string. Null/empty timestamps
+        # sort to bucket 1 (END), non-null to bucket 0 (chronological).
+        return (0, _parse_ts(ts)) if ts else (1, datetime.min)
 
     sorted_subs = sorted(submissions, key=sort_key)
     out = []
