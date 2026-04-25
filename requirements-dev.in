@@ -25,3 +25,6 @@ ruff>=0.3  # T20 print-check + future lint rules
 # Type checking (Phase 5d PR 2)
 mypy>=1.10
 types-requests
+
+# Mutation testing (Phase 5d PR 4 — manual baseline only, NOT a CI gate)
+mutmut>=2.5
