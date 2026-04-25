@@ -165,25 +165,27 @@ Submissions with `submitted_at = NULL` are sorted to the END of the trajectory (
 
 **Modify:** `frontend/src/tabs/ProgressRankGrid.jsx`
 
-The student-name `<td>` at line 146-148 currently has no `onClick`. Add it:
+The student-name `<td>` at line 146-148 currently has no `onClick`. First add component-level state and the helper that opens the drawer (closing any open cell popover to avoid overlapping overlays):
+
+```javascript
+var [selectedStudent, setSelectedStudent] = useState(null);
+
+function openReportCard(student) {
+  setSelectedCell(null);          // close any open cell popover (z-index 9999)
+  setSelectedStudent(student);    // drawer opens at z-index 9500
+}
+```
+
+Then wire the click handler on the student-name cell to use this helper (NOT `setSelectedStudent` directly — that would leave a stale popover stacked above the drawer):
 
 ```javascript
 <td
-  onClick={function() { setSelectedStudent(student); }}
+  onClick={function() { openReportCard(student); }}
   style={{ ..., cursor: 'pointer' }}
   ...
 >
   {student.student_name}
 </td>
-```
-
-Add component-level state `var [selectedStudent, setSelectedStudent] = useState(null);` and render the drawer at the bottom. **When opening the drawer, also close any open cell popover** to avoid two overlapping overlays:
-
-```javascript
-function openReportCard(student) {
-  setSelectedCell(null);          // close any open cell popover
-  setSelectedStudent(student);
-}
 ```
 
 ```javascript
@@ -296,12 +298,11 @@ After local backend + frontend changes, verify:
 ## Files touched
 
 **Created:**
-- `backend/routes/student_portal_routes.py` — new route handler `get_student_report_card` added in-place
 - `frontend/src/tabs/StudentReportCard.jsx` — new component (~200 LOC)
 - `tests/test_student_report_card.py` — new test file
 
 **Modified:**
-- `backend/routes/student_portal_routes.py` — add the new route handler
+- `backend/routes/student_portal_routes.py` — add the new route handler `get_student_report_card`
 - `frontend/src/tabs/ProgressRankGrid.jsx` — add click handler on student-name cell + render the drawer
 - `frontend/src/services/api.js` — add `getStudentReportCard` client function
 
