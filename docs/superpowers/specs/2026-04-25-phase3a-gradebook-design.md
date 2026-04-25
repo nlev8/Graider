@@ -10,7 +10,7 @@
 
 ## Architecture
 
-A second sub-tab inside the existing Analytics tab, alongside the Phase 2 "Progress Rank" sub-tab. Both views share the same class selector (introduced in Phase 2) and the same attempt-mode toggle (latest / best / average). The gradebook reuses the foundation from Phase 1 (`student_submissions.results`), Phase 2 (`_select_submissions_by_mode`, `_aggregate_mastery_for_student`), and Phase 2b (`_sanitize_standards_mastery`) without modification.
+A second sub-tab inside the existing Analytics tab, alongside the Phase 2 "Progress Rank" sub-tab. Both views share the same class selector (introduced in Phase 2). Each sub-tab owns its own local `attemptMode` state (matching Phase 2's pattern). The gradebook reuses the foundation from Phase 1 (`student_submissions.results`), Phase 2 (`_select_submissions_by_mode` only — NOT the mastery-specific `_aggregate_mastery_for_student`), and Phase 2b (`_sanitize_standards_mastery`) without modification. Phase 2b's bridge helpers (`_build_standards_breakdown_for_student`, `_build_trajectory_for_student`) are NOT used — gradebook is per-cell-percentage, not mastery-or-trajectory.
 
 The gradebook is read-only. Manual grade overrides, re-grade buttons, and grade-passback wiring are explicitly Phase 3a.2 territory; this spec ships the view-and-drill experience first.
 
@@ -30,15 +30,18 @@ The gradebook is read-only. Manual grade overrides, re-grade buttons, and grade-
 
 **Implementation:**
 - Add the route handler to `backend/routes/student_portal_routes.py` (after `get_student_report_card`).
-- Reuse `_select_submissions_by_mode` (line 111) and `_sanitize_standards_mastery` (now module-level after Phase 2b's extraction).
+- Reuses `_select_submissions_by_mode` (line 111) and `_sanitize_standards_mastery` (module-level after Phase 2b's extraction). Does NOT use `_aggregate_mastery_for_student` or any of Phase 2b's bridge helpers — gradebook is per-cell-percentage only, no mastery rollup.
 - Fetch path:
   1. Verify class ownership via `error_response`-based 403.
-  2. Fetch class roster: `class_students` rows + `students` rows. Sort students alphabetically by full name (`(first_name + ' ' + last_name).strip()`).
+  2. Fetch class roster: `class_students` rows + `students` rows. **Orphan-enrollment handling:** if a `class_students.student_id` has no matching `students` row, skip the student silently (matches Phase 2's grid behavior at `student_portal_routes.py:1231`). Log a debug-level message; do NOT 500. Sort surviving students alphabetically by full name (`(first_name + ' ' + last_name).strip()`).
   3. Fetch all `published_content` for the class with `content_type IN ('assessment', 'assignment')`. Sort assessments ASC by `publish_date` (oldest-first; left-to-right scanning matches term progression). Tie-break by `id` for stability.
   4. Fetch all non-draft `student_submissions` for those contents. Sanitize-in-place via `_sanitize_standards_mastery` (defensive — gradebook doesn't render mastery directly but uses the same submission rows that other endpoints do).
   5. Group submissions by `(student_id, content_id)` into `subs_by_student_content`.
-  6. For each `(student_id, content_id)` pair, run `_select_submissions_by_mode({content_id: subs}, attempt_mode)` → pick the canonical submission. Pull `submission_id`, `percentage`, `attempt_number`, `submitted_at` from it; `total_attempts` is `len(subs_by_student_content[student_id][content_id])`.
-  7. Build the `grades` map only for pairs where a canonical submission exists. Missing pairs are absent from the map (frontend renders `—`).
+  6. For each `(student_id, content_id)` pair, run `_select_submissions_by_mode({content_id: subs}, attempt_mode)`. The helper returns:
+     - For `latest` / `best`: a list with one selected submission. The cell's `percentage` is that submission's `percentage`, and `submission_id` / `attempt_number` / `submitted_at` come from it.
+     - For `average`: a list of ALL submissions (no selection). The cell's `percentage` is the mean of `[s['percentage'] for s in subs]` rounded to 1 decimal. For drilldown anchoring, pick the LATEST attempt as `submission_id` / `attempt_number` / `submitted_at` (so clicking an averaged cell opens the most-recent attempt's detail). Document this in the response shape's `attempt_mode=average` note.
+  7. `total_attempts` is `len(subs_by_student_content[student_id][content_id])` regardless of attempt_mode.
+  8. Build the `grades` map only for pairs where at least one submission exists. Missing pairs are absent from the map (frontend renders `—`).
 
 **Response shape:**
 
@@ -94,12 +97,32 @@ The gradebook endpoint doesn't render `standards_mastery` directly, but it fetch
 - Add the route handler to `backend/routes/student_portal_routes.py` (after `get_class_gradebook`).
 - Fetch path:
   1. Look up the submission by id (`student_submissions.select('*').eq('id', submission_id)`).
-  2. If missing, 404.
-  3. Look up the published_content row to get `title` and `class_id`.
-  4. Verify class ownership.
-  5. Look up the student row for the `student_name`.
+  2. If missing, return `error_response("Submission not found", 404)`.
+  3. Look up the `published_content` row to get `title` and `class_id`. If the content row is missing (e.g., deleted after submission), return `error_response("Submission's content no longer exists", 404)` — distinct from the ownership 403 to avoid leaking whether a deleted content was OWNED by the requester.
+  4. Verify class ownership: `classes.teacher_id == g.teacher_id`. If mismatched, return `error_response("Not authorized", 403)`.
+  5. Look up the student row for the `student_name`. If missing (orphan), 404 with `error_response("Student not found", 404)` — same pattern as Phase 2b.
   6. Fetch all sibling submissions (`.eq('student_id', sub.student_id).eq('content_id', sub.content_id)`) for the attempt selector. Sort ASC by `attempt_number`, then by `submitted_at`.
-  7. Read `results.questions` for the per-question breakdown. If `results.questions` is missing or non-list, return an empty `questions` array — do NOT 500. Log a WARNING.
+  7. Read `results.questions` for the per-question breakdown. Field-name normalization (the existing graders write inconsistent keys — verified during spec authoring; rules below).
+
+**Top-level score field mapping:**
+The existing graders write `score` and `total_points` (NOT `points_earned` and `points_possible`) at the top level of `results`. There is also a `score` column on the `student_submissions` row itself. Normalize:
+- `points_earned = results.get('score') or row.get('score') or 0`
+- `points_possible = results.get('total_points') or row.get('total_points') or 0`
+- `percentage = row.percentage` (already populated by graders)
+
+**Per-question field normalization:**
+The instant grader and multipass grader write different keys. Apply these fallback rules per question entry (where each `q` is the entry from `results.questions[i]`):
+- `question_text = q.get('question') or q.get('question_text') or ''`
+- `question_type = q.get('type') or q.get('question_type') or 'unknown'`
+- `student_answer = q.get('student_answer') or q.get('answer') or ''`
+- `correct_answer = q.get('correct_answer')` — may be `None` (e.g., free-response). Pass through.
+- `is_correct = q.get('is_correct')` — may be `None` for written/free-response. Pass through.
+- `ai_feedback = q.get('feedback') or q.get('reasoning') or q.get('quality') or ''`
+- `points_earned = q.get('points_earned') or q.get('score') or 0`
+- `points_possible = q.get('points_possible') or q.get('points') or 0`
+- If a question entry is non-dict, skip it and log a WARNING (do NOT 500).
+
+If `results.questions` itself is missing or non-list, return `questions: []` — do NOT 500. Log a WARNING.
 
 **Response shape:**
 
@@ -202,12 +225,13 @@ The exact key names in `results.questions[i]` need to be verified during Task 1 
 
 **`frontend/src/tabs/SubmissionDetail.jsx`** (~250 LOC, mirrors `StudentReportCard.jsx`'s overlay pattern)
 
-**Props:** `{ submissionId, onClose }`
+**Props:** `{ submissionId, onClose }` — `submissionId` is the INITIAL submission to display; the attempt selector mutates LOCAL state, not the prop.
 
 **Behavior:**
-- On mount and when `submissionId` changes, fetch via `api.getSubmissionDetail(submissionId)`.
-- Local state: `data`, `loading`, `error`, `expandedQuestionIndex` (or `null`).
-- z-index `9500`, same as `StudentReportCard.jsx`. (Both drawers can't be open simultaneously because they live in different sub-tabs — Gradebook drawer in Gradebook sub-tab, ReportCard drawer in Progress Rank sub-tab — so no z-index collision.)
+- Local state: `activeSubmissionId` initialized from prop on mount, then updated by the attempt selector. `data`, `loading`, `error`, `expandedQuestionIndex` (or `null`).
+- On mount and when `activeSubmissionId` changes, fetch via `api.getSubmissionDetail(activeSubmissionId)`.
+- The parent (`Gradebook.jsx`) does NOT re-render the drawer when the user picks a different attempt — only the drawer's internal `activeSubmissionId` changes, triggering a re-fetch within the same drawer instance. This keeps the drawer mounted (no flicker) and preserves `expandedQuestionIndex`.
+- z-index `9500`, same as `StudentReportCard.jsx`. The two drawers can't be open simultaneously because the parent sub-tab switcher (`Progress Rank` ↔ `Gradebook`) **conditionally unmounts the inactive sub-tab's component tree**, dropping any open drawer with it. Document this in the wire-up section's switcher implementation.
 - Esc key closes the drawer (same `useEffect` pattern as `StudentReportCard.jsx`).
 - Click backdrop or `×` closes; click drawer panel calls `e.stopPropagation()`.
 
@@ -220,13 +244,29 @@ The exact key names in `results.questions[i]` need to be verified during Task 1 
    - Empty `questions` array → "Per-question detail not available for this submission."
 4. Footer note: "Read-only view. Manual grade overrides will arrive in a future phase."
 
+**Attempt selector implementation:**
+```javascript
+function pickAttempt(submId) { setActiveSubmissionId(submId); }
+// In the selector row:
+{data.sibling_attempts.map(function(a) {
+  var isActive = a.submission_id === activeSubmissionId;
+  return (
+    <button key={a.submission_id} onClick={function() { pickAttempt(a.submission_id); }}
+            disabled={isActive} ...>
+      Attempt {a.attempt_number} ({a.percentage}%)
+    </button>
+  );
+})}
+```
+
 ### Wire-up — `AnalyticsTab.jsx`
 
 - Add a sub-tab switcher above the existing class-scoped content. State: `var [classView, setClassView] = useState('progressRank');` with values `'progressRank' | 'gradebook'`.
-- When `selectedClassForGrid !== 'all'`, render the sub-tab switcher (two buttons: "Progress Rank" / "Gradebook") plus the active sub-tab's component.
+- When `selectedClassForGrid !== 'all'`, render the sub-tab switcher (two buttons: "Progress Rank" / "Gradebook") plus **only the active sub-tab's component** (conditional render with `{classView === 'progressRank' ? <ProgressRankGrid ...> : <Gradebook ...>}`). The inactive sub-tab is unmounted, which guarantees its drawer (`StudentReportCard` for Progress Rank, `SubmissionDetail` for Gradebook) cannot remain open across sub-tab switches.
 - Default sub-tab: `'progressRank'` (preserves existing behavior).
 - When `selectedClassForGrid === 'all'`, hide the sub-tab switcher entirely (only the existing all-classes analytics renders, no class-scoped views).
-- Switching between sub-tabs preserves `selectedClassForGrid` (no re-fetch unless class changes).
+- Switching between sub-tabs preserves `selectedClassForGrid` (no re-fetch on class data unless class changes), but DOES unmount the inactive component (each sub-tab re-fetches on mount when re-selected — minor cost, simpler architecture).
+- **Attempt mode toggle scope:** each sub-tab owns its OWN `attemptMode` state (Phase 2's `ProgressRankGrid` already does; the new `Gradebook` will too). They're not shared. Lifting state to `AnalyticsTab` is rejected because: (a) Phase 2 already shipped with local state, (b) sharing would force re-fetch of both sub-tabs on every toggle, (c) teachers may want different modes per view (e.g., latest in gradebook for grading-now, best in progress-rank for full-class-trend).
 
 ### API client — `frontend/src/services/api.js`
 
@@ -256,7 +296,10 @@ export async function getSubmissionDetail(submissionId) {
 | Unauthenticated request | 401 | Plain `{"error": "Authentication required"}` | Frontend redirects to login (existing fetchApi behavior) |
 | Class not owned (gradebook) | 403 | RFC 7807 via `error_response("Not authorized", 403)` | Gradebook shows error message |
 | Submission not found | 404 | RFC 7807 via `error_response("Submission not found", 404)` | Drawer shows error message |
+| Submission's content row deleted | 404 | RFC 7807 via `error_response("Submission's content no longer exists", 404)` | Drawer shows error message |
+| Submission's student row missing (orphan) | 404 | RFC 7807 via `error_response("Student not found", 404)` | Drawer shows error message |
 | Submission's class not owned | 403 | RFC 7807 via `error_response("Not authorized", 403)` | Drawer shows error message |
+| Class roster orphan enrollment (in gradebook listing) | Skipped silently | (No response change) | Affected student row absent from gradebook; debug-level log |
 | Empty class / no assessments / no submissions | 200 + empty arrays | Standard JSON | Gradebook shows empty-state message |
 | Malformed `results.questions` for a submission | 200 with `questions: []` + WARNING log | Standard JSON | Drawer shows "Per-question detail not available" message |
 | Backend exception | 500 with RFC 7807 envelope via `@handle_route_errors` | RFC 7807 | Gradebook/drawer shows generic error; teacher can retry by reopening |
@@ -275,7 +318,7 @@ The 401 from `require_teacher` is plain JSON; pre-existing dashboard behavior, N
 - `test_empty_class_returns_empty_arrays` — no enrolled students.
 - `test_class_with_no_assessments_returns_empty_assessments` — students enrolled, no published content.
 - `test_class_with_no_submissions_returns_empty_grades` — content + students, but no submissions.
-- `test_happy_path_returns_full_grid` — 2 students × 2 assessments × multiple attempts; verify `attempts_count`, ordering, sticky sort.
+- `test_happy_path_returns_full_grid` — 2 students × 2 assessments × multiple attempts; verify `total_attempts`, ordering, sticky sort.
 - `test_attempt_mode_latest_picks_most_recent_per_pair` — ensure each (student, content) cell uses the latest attempt under `attempt_mode=latest`.
 - `test_attempt_mode_best_picks_highest_per_pair` — same setup, `attempt_mode=best`.
 - `test_attempt_mode_average_aggregates` — same setup, `attempt_mode=average`. Verify the cell percentage is the mean of attempt percentages.
@@ -343,7 +386,7 @@ The 401 from `require_teacher` is plain JSON; pre-existing dashboard behavior, N
 - `frontend/src/services/api.js` — add `getClassGradebook` + `getSubmissionDetail` clients.
 
 **Not touched:**
-- Any helper unrelated to the new routes (`_select_submissions_by_mode`, `_aggregate_mastery_for_student`, `_sanitize_standards_mastery`, `_build_*` helpers from Phase 2b — all reused without modification).
+- Any helper unrelated to the new routes. Reused: `_select_submissions_by_mode`, `_sanitize_standards_mastery`. NOT used: `_aggregate_mastery_for_student`, `_build_standards_breakdown_for_student`, `_build_trajectory_for_student` — those are mastery-specific and not relevant to per-cell percentage display.
 - Any SIS / SSO / roster file.
 - `mypy.ini` / `.github/workflows/ci.yml` / `setup.cfg` / `requirements*.{in,txt}`.
 - `backend/services/grading_service.py` — verified read-only during research; no changes.
