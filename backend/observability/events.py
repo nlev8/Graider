@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ _LEVEL_MAP = {
 }
 
 
-def emit(event: str, level: str = "info", **fields) -> None:
+def emit(event: str, level: str = "info", **fields: Any) -> None:
     """Emit a structured event as a JSON payload inside the log record's message.
 
     Args:

@@ -54,7 +54,7 @@ def _is_supabase_retryable(error: BaseException) -> bool:
     """
     if isinstance(error, (httpcore.NetworkError, httpcore.TimeoutException, httpcore.ProtocolError)):
         return True
-    return is_retryable_error(error)
+    return bool(is_retryable_error(error))
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +165,7 @@ def _resilient_execute(query: Any) -> Any:
                 )
                 raise
 
-            base = BASE_DELAY_S * (2 ** (attempt - 1))
+            base: float = BASE_DELAY_S * (2 ** (attempt - 1))
             base = min(base, MAX_DELAY_S)
             delay = base + random.random() * JITTER_FACTOR * base
             logger.warning(
@@ -174,7 +174,8 @@ def _resilient_execute(query: Any) -> Any:
             )
             time.sleep(delay)
 
-    raise last_error  # type: ignore[misc]
+    assert last_error is not None
+    raise last_error
 
 
 # ---------------------------------------------------------------------------
@@ -184,16 +185,16 @@ def _resilient_execute(query: Any) -> Any:
 class _ExecuteProxy:
     """Wraps a postgrest query builder so .execute() routes through retry."""
 
-    def __init__(self, inner):
+    def __init__(self, inner: Any) -> None:
         self._inner = inner
 
-    def execute(self):
+    def execute(self) -> Any:
         return _resilient_execute(self._inner)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         result = getattr(self._inner, name)
         if callable(result):
-            def wrapped(*args, **kwargs):
+            def wrapped(*args: Any, **kwargs: Any) -> Any:
                 sub = result(*args, **kwargs)
                 # If the sub-result has a .execute, it's still a query builder — wrap it
                 if hasattr(sub, "execute"):
@@ -203,7 +204,7 @@ class _ExecuteProxy:
         return result
 
 
-def _wrap_if_builder(obj):
+def _wrap_if_builder(obj: Any) -> Any:
     """Wrap any object that looks like a postgrest query builder.
 
     A builder is anything that exposes `.execute()` — direct table/from_ chains,
@@ -230,25 +231,25 @@ class ResilientClient:
     (auth, storage, realtime, functions) pass through unchanged.
     """
 
-    def __init__(self, raw_client):
+    def __init__(self, raw_client: Any) -> None:
         self._raw = raw_client
 
-    def table(self, name: str):
+    def table(self, name: str) -> _ExecuteProxy:
         return _ExecuteProxy(self._raw.table(name))
 
-    def from_(self, name: str):
+    def from_(self, name: str) -> _ExecuteProxy:
         return _ExecuteProxy(self._raw.from_(name))
 
-    def rpc(self, fn: str, params=None):
+    def rpc(self, fn: str, params: Any = None) -> Any:
         # supabase-py signature: rpc(fn, params=None)
         builder = self._raw.rpc(fn, params) if params is not None else self._raw.rpc(fn)
         return _wrap_if_builder(builder)
 
-    def schema(self, name: str):
+    def schema(self, name: str) -> Any:
         sub_client = self._raw.schema(name)
         return _wrap_if_builder(sub_client)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         # Pass through non-postgrest attributes (auth, storage, realtime, functions).
         # We deliberately do NOT auto-wrap here — these subsystems have their own
         # APIs and don't expose `.execute()`, so wrapping would be a no-op at best
