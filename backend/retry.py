@@ -48,12 +48,18 @@ def _get_status_code(error: BaseException) -> int | None:
     """Extract HTTP status code from an exception, if available."""
     code = getattr(error, "status_code", None)
     if code is not None:
-        return int(code)
+        try:
+            return int(code)
+        except (ValueError, TypeError):
+            return None
     resp = getattr(error, "response", None)
     if resp is not None:
         code = getattr(resp, "status_code", None)
         if code is not None:
-            return int(code)
+            try:
+                return int(code)
+            except (ValueError, TypeError):
+                return None
     return None
 
 
@@ -186,4 +192,5 @@ def with_retry(
             time.sleep(delay)
 
     # Should never reach here, but just in case.
-    raise last_error  # type: ignore[misc]
+    assert last_error is not None
+    raise last_error

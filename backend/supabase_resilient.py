@@ -174,7 +174,8 @@ def _resilient_execute(query: Any) -> Any:
             )
             time.sleep(delay)
 
-    raise last_error  # type: ignore[misc]
+    assert last_error is not None
+    raise last_error
 
 
 # ---------------------------------------------------------------------------
