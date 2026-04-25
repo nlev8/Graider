@@ -21,3 +21,7 @@ psycopg2-binary>=2.9.9,<3  # Postgres driver used by the smoke test (testcontain
 
 # Linting
 ruff>=0.3  # T20 print-check + future lint rules
+
+# Type checking (Phase 5d PR 2)
+mypy>=1.10
+types-requests
