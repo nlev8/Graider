@@ -23,6 +23,14 @@ def test_handle_route_errors_maps_circuit_breaker_to_503():
     body = resp.get_json()
     assert "circuit breaker open" in body["error"].lower()
     assert body["retry_after_seconds"] == 60
+    # RFC 7807 envelope (Phase 5d PR 1)
+    assert resp.headers["Content-Type"] == "application/problem+json"
+    assert body["type"] == "https://graider.live/errors/breaker-open"
+    assert body["title"] == "Service Unavailable"
+    assert body["status"] == 503
+    # Legacy fields still present for backward compat
+    assert "circuit breaker open" in body["error"].lower()
+    assert body["retry_after_seconds"] == 60
 
 
 def test_handle_route_errors_500_still_works_for_other_errors():
@@ -38,3 +46,10 @@ def test_handle_route_errors_500_still_works_for_other_errors():
 
     assert resp.status_code == 500
     assert resp.get_json()["error"] == "Internal server error"
+    # RFC 7807 envelope (Phase 5d PR 1)
+    assert resp.headers["Content-Type"] == "application/problem+json"
+    body = resp.get_json()
+    assert body["type"] == "https://graider.live/errors/internal"
+    assert body["status"] == 500
+    # Legacy field still present
+    assert body["error"] == "Internal server error"
