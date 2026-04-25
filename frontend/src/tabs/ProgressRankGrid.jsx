@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Icon from "../components/Icon";
 import * as api from "../services/api";
+import StudentReportCard from "./StudentReportCard";
 
 function masteryColor(pct) {
   if (pct == null) return { bg: "var(--glass-bg)", text: "var(--text-muted)", label: "—" };
@@ -16,6 +17,12 @@ export default function ProgressRankGrid({ classId }) {
   var [attemptMode, setAttemptMode] = useState('latest');
   var [strugglingOnly, setStrugglingOnly] = useState(false);
   var [selectedCell, setSelectedCell] = useState(null);
+  var [selectedStudent, setSelectedStudent] = useState(null);
+
+  function openReportCard(student) {
+    setSelectedCell(null);          // close any open cell popover (z-index 9999)
+    setSelectedStudent(student);    // drawer opens at z-index 9500
+  }
 
   useEffect(function() {
     if (!classId) return;
@@ -143,7 +150,10 @@ export default function ProgressRankGrid({ classId }) {
               {displayStudents.map(function(student) {
                 return (
                   <tr key={student.student_id}>
-                    <td style={{ position: "sticky", left: 0, background: "var(--card-bg)", zIndex: 1, padding: "10px 14px", fontSize: "0.85rem", fontWeight: 600, borderBottom: "1px solid var(--glass-border)" }}>
+                    <td
+                      onClick={function() { openReportCard(student); }}
+                      style={{ position: "sticky", left: 0, background: "var(--card-bg)", zIndex: 1, padding: "10px 14px", fontSize: "0.85rem", fontWeight: 600, borderBottom: "1px solid var(--glass-border)", cursor: "pointer" }}
+                    >
                       {student.student_name}
                     </td>
                     {standards.map(function(code) {
@@ -224,6 +234,16 @@ export default function ProgressRankGrid({ classId }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Student Report Card drawer (Phase 2b) */}
+      {selectedStudent && (
+        <StudentReportCard
+          classId={classId}
+          studentId={selectedStudent.student_id}
+          attemptMode={attemptMode}
+          onClose={function() { setSelectedStudent(null); }}
+        />
       )}
     </div>
   );
