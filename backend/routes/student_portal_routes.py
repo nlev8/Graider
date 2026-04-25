@@ -1475,9 +1475,46 @@ def get_student_report_card(class_id, student_id):
     submissions = subs_rows.data or []
 
     # 6) Build trajectory from ALL submissions chronologically
+    # (trajectory tolerates missing standards_mastery — only uses
+    # submitted_at + percentage from the row.)
     trajectory = _build_trajectory_for_student(submissions, content_titles)
 
-    # 7) Build standards_breakdown via existing helpers + bridge code
+    # 7) Sanitize standards_mastery IN PLACE so attempt-mode selection
+    # still sees every submission. A malformed-mastery submission stays
+    # selectable (so 'latest' picks the truly latest attempt), but its
+    # mastery contribution is empty.
+    def _sanitize_standards_mastery(sub):
+        results = sub.get('results') or {}
+        raw = results.get('standards_mastery')
+        if raw is None:
+            results['standards_mastery'] = {}
+            sub['results'] = results
+            return
+        if not isinstance(raw, dict):
+            _logger.warning(
+                "malformed standards_mastery (type=%s) in submission %s — treating as empty",
+                type(raw).__name__, sub.get('id'),
+            )
+            results['standards_mastery'] = {}
+            sub['results'] = results
+            return
+        # Valid dict at the outer level; drop individual non-dict values.
+        cleaned = {}
+        for code, m in raw.items():
+            if isinstance(m, dict):
+                cleaned[code] = m
+            else:
+                _logger.warning(
+                    "malformed standards_mastery entry (code=%s, type=%s) in submission %s — skipping entry",
+                    code, type(m).__name__, sub.get('id'),
+                )
+        results['standards_mastery'] = cleaned
+        sub['results'] = results
+
+    for s in submissions:
+        _sanitize_standards_mastery(s)
+
+    # 8) Build standards_breakdown via existing helpers + bridge code
     from collections import defaultdict
     subs_by_content = defaultdict(list)
     for s in submissions:

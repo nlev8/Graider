@@ -339,3 +339,228 @@ class TestReportCardHappyPath:
         assert body['trajectory'] == []
         assert body['standards_breakdown'] == []
 
+
+class TestReportCardAttemptModes:
+    """Verify attempt_mode latest/best/average are honored end-to-end."""
+
+    def _setup_three_attempts(self, mock_sb_fn):
+        """One assessment, three attempts: 50%, 90%, 70%."""
+        masteries = [
+            {"MA.6.AR.1.1": {"points_earned": 5, "points_possible": 10, "question_count": 2}},
+            {"MA.6.AR.1.1": {"points_earned": 9, "points_possible": 10, "question_count": 2}},
+            {"MA.6.AR.1.1": {"points_earned": 7, "points_possible": 10, "question_count": 2}},
+        ]
+        subs = []
+        for i, (pct, mast) in enumerate(zip([50, 90, 70], masteries), start=1):
+            subs.append({
+                "id": f"sub-{i}", "student_id": "stu-1", "content_id": "ct-1",
+                "attempt_number": i, "submitted_at": f"2026-04-{10+i}T10:00:00Z",
+                "percentage": pct, "results": {"standards_mastery": mast,
+                                                "points_earned": pct/10,
+                                                "points_possible": 10},
+                "status": "graded",
+            })
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'title': 'Q', 'content_type': 'assessment'}],
+            'student_submissions': subs,
+        })
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_attempt_mode_latest_picks_most_recent_per_content(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=latest',
+            headers=teacher_headers,
+        )
+        body = resp.get_json()
+        # Latest attempt #3 had 70% on the standard (7/10)
+        assert body['standards_breakdown'][0]['percentage'] == 70.0
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_attempt_mode_best_picks_highest_per_content(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=best',
+            headers=teacher_headers,
+        )
+        body = resp.get_json()
+        # Best attempt #2 had 90% on the standard (9/10)
+        assert body['standards_breakdown'][0]['percentage'] == 90.0
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_attempt_mode_average_aggregates_attempts(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=average',
+            headers=teacher_headers,
+        )
+        body = resp.get_json()
+        # Average across 50/90/70 = 70.0
+        assert body['standards_breakdown'][0]['percentage'] == 70.0
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_invalid_attempt_mode_falls_back_to_latest(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=garbage',
+            headers=teacher_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Should behave as 'latest'
+        assert body['attempt_mode'] == 'latest'
+        assert body['standards_breakdown'][0]['percentage'] == 70.0
+
+
+class TestReportCardEdgeCases:
+    """Malformed mastery, null submitted_at, etc."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_malformed_standards_mastery_skips_submission(self, mock_sb_fn, client, teacher_headers, caplog):
+        # results.standards_mastery is a list (not dict) — should NOT 500
+        import logging
+        caplog.set_level(logging.WARNING, logger="backend.routes.student_portal_routes")
+        subs = [
+            {"id": "sub-good", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 80,
+             "results": {"standards_mastery": {"MA.6.AR.1.1": {"points_earned": 8, "points_possible": 10, "question_count": 2}},
+                         "points_earned": 8, "points_possible": 10},
+             "status": "graded"},
+            {"id": "sub-bad", "student_id": "stu-1", "content_id": "ct-2",
+             "attempt_number": 1, "submitted_at": "2026-04-12T10:00:00Z", "percentage": 60,
+             "results": {"standards_mastery": ["malformed", "list"],  # WRONG TYPE
+                         "points_earned": 6, "points_possible": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [
+                {'id': 'ct-1', 'title': 'Q1', 'content_type': 'assessment'},
+                {'id': 'ct-2', 'title': 'Q2', 'content_type': 'assessment'},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Both submissions in trajectory (trajectory uses submitted_at + percentage,
+        # not standards_mastery — so malformed mastery doesn't drop them here).
+        assert {t['submission_id'] for t in body['trajectory']} == {'sub-good', 'sub-bad'}
+        # Only sub-good's mastery contributes to breakdown — sub-bad's
+        # malformed standards_mastery sanitized to empty.
+        assert len(body['standards_breakdown']) == 1
+        assert body['standards_breakdown'][0]['code'] == 'MA.6.AR.1.1'
+        # WARNING was logged with the submission id
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any('malformed standards_mastery' in r.getMessage() and 'sub-bad' in r.getMessage()
+                   for r in warnings), \
+            "expected a WARNING log mentioning malformed standards_mastery and sub-bad"
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_latest_malformed_does_not_fall_back_to_older_mastery(self, mock_sb_fn, client, teacher_headers):
+        """attempt_mode=latest must still pick the genuinely latest attempt
+        even when its mastery is malformed (sanitized to empty), NOT silently
+        revert to an older attempt's good mastery."""
+        good_mastery = {"MA.6.AR.1.1": {"points_earned": 9, "points_possible": 10, "question_count": 2}}
+        subs = [
+            # Earlier attempt with GOOD mastery
+            {"id": "sub-old", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 90,
+             "results": {"standards_mastery": good_mastery,
+                         "points_earned": 9, "points_possible": 10},
+             "status": "graded"},
+            # LATEST attempt with malformed mastery
+            {"id": "sub-latest", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 2, "submitted_at": "2026-04-15T10:00:00Z", "percentage": 30,
+             "results": {"standards_mastery": "broken",  # WRONG TYPE
+                         "points_earned": 3, "points_possible": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'title': 'Q', 'content_type': 'assessment'}],
+            'student_submissions': subs,
+        })
+        resp = client.get(
+            '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=latest',
+            headers=teacher_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # 'latest' selected sub-latest (attempt 2), whose mastery sanitized
+        # to {}; therefore standards_breakdown is EMPTY — NOT showing the
+        # older attempt's 90% mastery on MA.6.AR.1.1.
+        assert body['standards_breakdown'] == []
+        # Both submissions still appear in trajectory
+        assert len(body['trajectory']) == 2
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_individual_malformed_standard_value_skipped(self, mock_sb_fn, client, teacher_headers, caplog):
+        """A submission whose standards_mastery dict is well-formed at the
+        outer level but has a non-dict value for one entry: that one entry
+        is dropped, the rest of the dict is preserved."""
+        import logging
+        caplog.set_level(logging.WARNING, logger="backend.routes.student_portal_routes")
+        mixed = {
+            "MA.6.AR.1.1": {"points_earned": 8, "points_possible": 10, "question_count": 2},
+            "MA.6.AR.2.1": "not-a-dict-broken",  # WRONG TYPE on this entry
+        }
+        subs = [{
+            "id": "sub-mixed", "student_id": "stu-1", "content_id": "ct-1",
+            "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 80,
+            "results": {"standards_mastery": mixed, "points_earned": 8, "points_possible": 10},
+            "status": "graded",
+        }]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'title': 'Q', 'content_type': 'assessment'}],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Only the well-formed standard appears
+        codes = [s['code'] for s in body['standards_breakdown']]
+        assert codes == ['MA.6.AR.1.1']
+        # WARNING mentions the malformed entry's code
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any('MA.6.AR.2.1' in r.getMessage() for r in warnings), \
+            "expected a WARNING mentioning the malformed entry's standard code"
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_null_submitted_at_sorted_to_end_of_trajectory(self, mock_sb_fn, client, teacher_headers):
+        subs = [
+            {"id": "sub-null", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": None, "percentage": 50,
+             "results": {"standards_mastery": {}, "points_earned": 5, "points_possible": 10},
+             "status": "graded"},
+            {"id": "sub-dated", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 2, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 70,
+             "results": {"standards_mastery": {}, "points_earned": 7, "points_possible": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'title': 'Q', 'content_type': 'assessment'}],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Null submitted_at must be LAST in trajectory
+        assert [t['submission_id'] for t in body['trajectory']] == ['sub-dated', 'sub-null']
+
