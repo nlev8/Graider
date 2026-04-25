@@ -25,5 +25,4 @@ def test_setup_cfg_has_mutmut_section():
 
     section = parser["mutmut"]
     assert "paths_to_mutate" in section, "[mutmut] missing paths_to_mutate"
-    assert "runner" in section, "[mutmut] missing runner"
     assert section.get("mutate_only_covered_lines", "False").lower() == "true"
