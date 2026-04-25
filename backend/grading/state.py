@@ -9,17 +9,26 @@ import logging
 import os
 import re
 import threading
+from typing import Any, Callable, Optional
 
 import sentry_sdk
 
 _logger = logging.getLogger(__name__)
 
-# Import storage abstraction (mirrors the fallback pattern in backend/app.py)
+# Import storage abstraction (mirrors the fallback pattern in backend/app.py).
+# The bare `from storage import` fallback is an unresolvable module name for
+# mypy (it only exists on certain PYTHONPATH configs); suppress with ignore.
+_StorageLoad = Optional[Callable[..., Any]]
+_StorageSave = Optional[Callable[..., Any]]
+
+storage_load: _StorageLoad
+storage_save: _StorageSave
+
 try:
     from backend.storage import load as storage_load, save as storage_save
 except ImportError:
     try:
-        from storage import load as storage_load, save as storage_save
+        from storage import load as storage_load, save as storage_save  # type: ignore[import-not-found,no-redef]
     except ImportError:
         storage_load = None
         storage_save = None
@@ -28,7 +37,7 @@ except ImportError:
 RESULTS_FILE = os.path.expanduser("~/.graider_results.json")
 
 
-def _sanitize_student_name(name):
+def _sanitize_student_name(name: str) -> str:
     """Fix student names that contain assignment titles from bad filename parsing.
 
     Examples of corrupted names:
@@ -63,10 +72,10 @@ def _sanitize_student_name(name):
     return name
 
 
-def load_saved_results(teacher_id='local-dev'):
+def load_saved_results(teacher_id: str = 'local-dev') -> list[dict[str, Any]]:
     """Load results from storage (Supabase in prod, file locally)."""
-    if storage_load:
-        data = storage_load('results', teacher_id)
+    if storage_load is not None:
+        data: Any = storage_load('results', teacher_id)
         if data and isinstance(data, list):
             for r in data:
                 if 'graded_at' not in r:
@@ -76,12 +85,12 @@ def load_saved_results(teacher_id='local-dev'):
                 cleaned = _sanitize_student_name(sn)
                 if cleaned != sn:
                     r['student_name'] = cleaned
-            return data
+            return list(data)
     # Fallback to direct file read
     if os.path.exists(RESULTS_FILE):
         try:
             with open(RESULTS_FILE, 'r') as f:
-                results = json.load(f)
+                results: list[dict[str, Any]] = json.load(f)
                 for r in results:
                     if 'graded_at' not in r:
                         r['graded_at'] = None
@@ -94,9 +103,9 @@ def load_saved_results(teacher_id='local-dev'):
             sentry_sdk.capture_exception(e)
     return []
 
-def save_results(results, teacher_id='local-dev'):
+def save_results(results: list[dict[str, Any]], teacher_id: str = 'local-dev') -> None:
     """Save results to storage (dual-write: file + Supabase)."""
-    if storage_save:
+    if storage_save is not None:
         storage_save('results', results, teacher_id)
     else:
         try:
@@ -107,12 +116,12 @@ def save_results(results, teacher_id='local-dev'):
             sentry_sdk.capture_exception(e)
 
 # ── Per-teacher grading state (dict-of-dicts) ────────────────
-_grading_states = {}   # teacher_id -> state dict
-_grading_locks = {}    # teacher_id -> Lock
+_grading_states: dict[str, dict[str, Any]] = {}   # teacher_id -> state dict
+_grading_locks: dict[str, threading.Lock] = {}    # teacher_id -> Lock
 _states_meta_lock = threading.Lock()
 
 
-def _create_default_state(teacher_id='local-dev'):
+def _create_default_state(teacher_id: str = 'local-dev') -> dict[str, Any]:
     """Create a fresh grading state dict for a teacher."""
     return {
         "is_running": False,
@@ -132,7 +141,7 @@ def _create_default_state(teacher_id='local-dev'):
     }
 
 
-def _get_state(teacher_id='local-dev'):
+def _get_state(teacher_id: str = 'local-dev') -> dict[str, Any]:
     """Get (or lazily create) the grading state dict for a teacher."""
     if teacher_id not in _grading_states:
         with _states_meta_lock:
@@ -142,19 +151,19 @@ def _get_state(teacher_id='local-dev'):
     return _grading_states[teacher_id]
 
 
-def _get_lock(teacher_id='local-dev'):
+def _get_lock(teacher_id: str = 'local-dev') -> threading.Lock:
     """Get (or lazily create) the grading lock for a teacher."""
     _get_state(teacher_id)  # ensure state+lock exist
     return _grading_locks[teacher_id]
 
 
-def _update_state(teacher_id='local-dev', **kwargs):
+def _update_state(teacher_id: str = 'local-dev', **kwargs: Any) -> None:
     """Thread-safe grading_state update for a specific teacher."""
     with _get_lock(teacher_id):
         _get_state(teacher_id).update(kwargs)
 
 
-def reset_state(teacher_id='local-dev', clear_results=False):
+def reset_state(teacher_id: str = 'local-dev', clear_results: bool = False) -> None:
     """Reset grading state for a specific teacher."""
     state = _get_state(teacher_id)
     with _get_lock(teacher_id):
