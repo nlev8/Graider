@@ -7,6 +7,7 @@ for all external service calls (OpenAI, Anthropic, Supabase, Clever, etc.).
 import logging
 import random
 import time
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -43,20 +44,20 @@ _TRANSIENT_KEYWORDS = [
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_status_code(error):
+def _get_status_code(error: BaseException) -> int | None:
     """Extract HTTP status code from an exception, if available."""
     code = getattr(error, "status_code", None)
     if code is not None:
-        return code
+        return int(code)
     resp = getattr(error, "response", None)
     if resp is not None:
         code = getattr(resp, "status_code", None)
         if code is not None:
-            return code
+            return int(code)
     return None
 
 
-def _get_retry_after(error):
+def _get_retry_after(error: BaseException) -> str | None:
     """Extract Retry-After header value from an exception's response."""
     resp = getattr(error, "response", None)
     if resp is None:
@@ -64,14 +65,19 @@ def _get_retry_after(error):
     headers = getattr(resp, "headers", None)
     if headers is None:
         return None
-    return headers.get("Retry-After") or headers.get("retry-after")
+    value: str | None = headers.get("Retry-After") or headers.get("retry-after")
+    return value
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def get_retry_delay(attempt, retry_after=None, max_delay_s=MAX_DELAY_S):
+def get_retry_delay(
+    attempt: int,
+    retry_after: str | int | float | None = None,
+    max_delay_s: float = MAX_DELAY_S,
+) -> float:
     """Compute delay in seconds for a given retry attempt.
 
     Args:
@@ -91,13 +97,13 @@ def get_retry_delay(attempt, retry_after=None, max_delay_s=MAX_DELAY_S):
         except (ValueError, TypeError):
             pass  # fall through to exponential backoff
 
-    base = BASE_DELAY_S * (2 ** (attempt - 1))
+    base: float = BASE_DELAY_S * (2 ** (attempt - 1))
     base = min(base, max_delay_s)
     jitter = random.random() * JITTER_FACTOR * base
     return base + jitter
 
 
-def is_retryable_error(error):
+def is_retryable_error(error: BaseException) -> bool:
     """Determine whether *error* is transient and worth retrying.
 
     Returns True for HTTP 408/429/5xx/529, ConnectionError, TimeoutError,
@@ -122,7 +128,13 @@ def is_retryable_error(error):
     return False
 
 
-def with_retry(fn, max_retries=MAX_RETRIES, label="", max_delay_s=MAX_DELAY_S, non_retryable=()):
+def with_retry(
+    fn: Callable[[], Any],
+    max_retries: int = MAX_RETRIES,
+    label: str = "",
+    max_delay_s: float = MAX_DELAY_S,
+    non_retryable: tuple[type[BaseException], ...] = (),
+) -> Any:
     """Call *fn()* with automatic retry on transient failures.
 
     Args:
