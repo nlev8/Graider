@@ -24,7 +24,7 @@ student_portal_bp = Blueprint('student_portal', __name__)
 _logger = logging.getLogger(__name__)
 
 from backend.utils.auth_decorators import require_teacher
-from backend.utils.errors import handle_route_errors
+from backend.utils.errors import error_response, handle_route_errors
 from backend.extensions import limiter
 from backend.services.grading_service import grade_deterministic_question, grade_student_submission, grade_instant_only
 from backend.observability import critical_path
@@ -1404,6 +1404,60 @@ def get_class_progress_rank(class_id):
     except Exception as e:
         _logger.exception("Progress rank error")
         return jsonify({"error": "An internal error occurred"}), 500
+
+
+@student_portal_bp.route('/api/teacher/class/<class_id>/student/<student_id>/report-card', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_student_report_card(class_id, student_id):
+    """Return per-student report card: trajectory + standards breakdown.
+
+    Class-scoped view of a single student's mastery within ONE class.
+    Reuses _select_submissions_by_mode + _aggregate_mastery_for_student
+    + bridge helpers to assemble the response.
+
+    Spec: docs/superpowers/specs/2026-04-25-phase2b-student-report-card-design.md
+    """
+    db = _get_teacher_supabase()
+
+    attempt_mode = request.args.get('attempt_mode', 'latest')
+    if attempt_mode not in ('latest', 'best', 'average'):
+        attempt_mode = 'latest'
+
+    # 1) Class ownership check
+    cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+    class_name = cls.data[0].get('name')
+
+    # 2) Student-in-class check
+    enrollment = db.table('class_students').select('student_id').eq(
+        'class_id', class_id
+    ).eq('student_id', student_id).execute()
+    if not enrollment.data:
+        return error_response("Student not in class", 404)
+
+    # 3) Fetch student name (orphan-enrollment guard)
+    student_row = db.table('students').select(
+        'id, first_name, last_name'
+    ).eq('id', student_id).execute()
+    if not student_row.data:
+        return error_response("Student not in class", 404)
+    student_name = (
+        (student_row.data[0].get('first_name') or '') + ' ' +
+        (student_row.data[0].get('last_name') or '')
+    ).strip()
+
+    # Skeleton: empty arrays. Happy-path data fetch + aggregation lands in Task 4.
+    return jsonify({
+        "student_id": student_id,
+        "student_name": student_name,
+        "class_id": class_id,
+        "class_name": class_name,
+        "attempt_mode": attempt_mode,
+        "trajectory": [],
+        "standards_breakdown": [],
+    })
 
 
 @student_portal_bp.route('/api/teacher/tags', methods=['GET'])

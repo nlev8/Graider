@@ -152,3 +152,115 @@ class TestBuildTrajectoryForStudent:
         # If the sort uses raw strings, "+" sorts before "Z" so plus-later would
         # come first — that's the regression we're guarding against.
         assert [r["submission_id"] for r in result] == ["z-earlier", "plus-later"]
+
+
+# ============ Route handler tests ============
+
+@pytest.fixture
+def app():
+    """Create Flask app in test mode."""
+    os.environ['FLASK_ENV'] = 'development'
+    os.environ['DEV_USER_ID'] = 'test-teacher-001'
+    from backend.app import app as flask_app
+    flask_app.config['TESTING'] = True
+    return flask_app
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
+
+
+@pytest.fixture
+def teacher_headers():
+    return {'X-Test-Teacher-Id': 'test-teacher-001', 'Content-Type': 'application/json'}
+
+
+def _make_chain(execute_data=None):
+    chain = MagicMock()
+    chain.select.return_value = chain
+    chain.eq.return_value = chain
+    chain.neq.return_value = chain
+    chain.in_.return_value = chain
+    chain.order.return_value = chain
+    chain.limit.return_value = chain
+    chain.execute.return_value = MagicMock(data=execute_data if execute_data is not None else [])
+    return chain
+
+
+def _multi_table_sb(table_map):
+    """Mock supabase that returns different chains per table name."""
+    mock_sb = MagicMock()
+    def table_side_effect(name):
+        val = table_map.get(name)
+        if val is None:
+            return _make_chain([])
+        return _make_chain(val)
+    mock_sb.table.side_effect = table_side_effect
+    return mock_sb
+
+
+@pytest.fixture
+def client_no_auth():
+    """Minimal Flask client with the student_portal blueprint but NO auth
+    middleware — g.user_id is never set, so @require_teacher returns 401.
+    Matches the pattern in test_sso_contracts.py."""
+    from flask import Flask
+    from backend.routes.student_portal_routes import student_portal_bp
+    minimal = Flask(__name__)
+    minimal.config['TESTING'] = True
+    minimal.secret_key = 'test-secret'
+    minimal.register_blueprint(student_portal_bp)
+    return minimal.test_client()
+
+
+class TestReportCardAuthz:
+    """Auth + class-ownership + student-in-class checks."""
+
+    def test_unauthenticated_returns_401(self, client_no_auth):
+        # No auth middleware → g.user_id never set → require_teacher rejects
+        resp = client_no_auth.get('/api/teacher/class/cls-1/student/stu-1/report-card')
+        assert resp.status_code == 401
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_other_teacher_class_returns_403(self, mock_sb_fn, client, teacher_headers):
+        # Class belongs to a different teacher
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'OTHER-teacher'}],
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 403
+        body = resp.get_json()
+        # RFC 7807 envelope (Phase 5d PR 1)
+        assert body.get('type') == 'https://graider.live/errors/forbidden'
+        assert body.get('status') == 403
+        # Backward-compat error field still present
+        assert 'error' in body
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_student_not_in_class_returns_404(self, mock_sb_fn, client, teacher_headers):
+        # Class is owned but class_students has no enrollment for stu-X
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [],  # not enrolled
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-X/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 404
+        body = resp.get_json()
+        assert body.get('type') == 'https://graider.live/errors/not-found'
+        assert body.get('status') == 404
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_orphan_enrollment_returns_404(self, mock_sb_fn, client, teacher_headers):
+        # class_students lists the student but students row is gone
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-orphan'}],
+            'students': [],  # row missing
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-orphan/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 404
+
