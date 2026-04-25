@@ -18,7 +18,7 @@
 
 **Files created:**
 - `frontend/src/tabs/StudentReportCard.jsx` — drawer component (~200 LOC)
-- `tests/test_student_report_card.py` — 11 backend test cases per spec
+- `tests/test_student_report_card.py` — 20 cases total: 12 endpoint cases per spec § Testing + 4 unit tests for `_build_standards_breakdown_for_student` + 4 unit tests for `_build_trajectory_for_student`
 
 **Files modified:**
 - `backend/routes/student_portal_routes.py` — add 1 new route handler `get_student_report_card` + 1 helper `_build_standards_breakdown_for_student`
@@ -566,7 +566,7 @@ class TestReportCardHappyPath:
     """Happy-path data assembly: trajectory + breakdown."""
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_returns_trajectory_and_breakdown(self, mock_sb_fn, client, teacher_headers):
+    def test_happy_path_returns_trajectory_and_breakdown(self, mock_sb_fn, client, teacher_headers):
         # Two assessments, two submissions for our student
         mastery_a = {
             "MA.6.AR.1.1": {"points_earned": 8, "points_possible": 10, "question_count": 2},
@@ -759,7 +759,7 @@ class TestReportCardAttemptModes:
         })
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_attempt_mode_latest_picks_most_recent(self, mock_sb_fn, client, teacher_headers):
+    def test_attempt_mode_latest_picks_most_recent_per_content(self, mock_sb_fn, client, teacher_headers):
         self._setup_three_attempts(mock_sb_fn)
         resp = client.get(
             '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=latest',
@@ -770,7 +770,7 @@ class TestReportCardAttemptModes:
         assert body['standards_breakdown'][0]['percentage'] == 70.0
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_attempt_mode_best_picks_highest(self, mock_sb_fn, client, teacher_headers):
+    def test_attempt_mode_best_picks_highest_per_content(self, mock_sb_fn, client, teacher_headers):
         self._setup_three_attempts(mock_sb_fn)
         resp = client.get(
             '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=best',
@@ -781,7 +781,7 @@ class TestReportCardAttemptModes:
         assert body['standards_breakdown'][0]['percentage'] == 90.0
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_attempt_mode_average_aggregates(self, mock_sb_fn, client, teacher_headers):
+    def test_attempt_mode_average_aggregates_attempts(self, mock_sb_fn, client, teacher_headers):
         self._setup_three_attempts(mock_sb_fn)
         resp = client.get(
             '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=average',
@@ -811,6 +811,8 @@ class TestReportCardEdgeCases:
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_malformed_standards_mastery_skips_submission(self, mock_sb_fn, client, teacher_headers, caplog):
         # results.standards_mastery is a list (not dict) — should NOT 500
+        import logging
+        caplog.set_level(logging.WARNING, logger="backend.routes.student_portal_routes")
         subs = [
             {"id": "sub-good", "student_id": "stu-1", "content_id": "ct-1",
              "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 80,
@@ -840,13 +842,94 @@ class TestReportCardEdgeCases:
         # Both submissions in trajectory (trajectory uses submitted_at + percentage,
         # not standards_mastery — so malformed mastery doesn't drop them here).
         assert {t['submission_id'] for t in body['trajectory']} == {'sub-good', 'sub-bad'}
-        # But only sub-good's mastery contributes to breakdown — sub-bad's
-        # malformed standards_mastery skipped silently.
+        # Only sub-good's mastery contributes to breakdown — sub-bad's
+        # malformed standards_mastery sanitized to empty.
         assert len(body['standards_breakdown']) == 1
         assert body['standards_breakdown'][0]['code'] == 'MA.6.AR.1.1'
+        # WARNING was logged with the submission id
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any('malformed standards_mastery' in r.getMessage() and 'sub-bad' in r.getMessage()
+                   for r in warnings), \
+            "expected a WARNING log mentioning malformed standards_mastery and sub-bad"
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_null_submitted_at_sorted_to_end(self, mock_sb_fn, client, teacher_headers):
+    def test_latest_malformed_does_not_fall_back_to_older_mastery(self, mock_sb_fn, client, teacher_headers):
+        """attempt_mode=latest must still pick the genuinely latest attempt
+        even when its mastery is malformed (sanitized to empty), NOT silently
+        revert to an older attempt's good mastery."""
+        good_mastery = {"MA.6.AR.1.1": {"points_earned": 9, "points_possible": 10, "question_count": 2}}
+        subs = [
+            # Earlier attempt with GOOD mastery
+            {"id": "sub-old", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 90,
+             "results": {"standards_mastery": good_mastery,
+                         "points_earned": 9, "points_possible": 10},
+             "status": "graded"},
+            # LATEST attempt with malformed mastery
+            {"id": "sub-latest", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 2, "submitted_at": "2026-04-15T10:00:00Z", "percentage": 30,
+             "results": {"standards_mastery": "broken",  # WRONG TYPE
+                         "points_earned": 3, "points_possible": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'title': 'Q', 'content_type': 'assessment'}],
+            'student_submissions': subs,
+        })
+        resp = client.get(
+            '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=latest',
+            headers=teacher_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # 'latest' selected sub-latest (attempt 2), whose mastery sanitized
+        # to {}; therefore standards_breakdown is EMPTY — NOT showing the
+        # older attempt's 90% mastery on MA.6.AR.1.1.
+        assert body['standards_breakdown'] == []
+        # Both submissions still appear in trajectory
+        assert len(body['trajectory']) == 2
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_individual_malformed_standard_value_skipped(self, mock_sb_fn, client, teacher_headers, caplog):
+        """A submission whose standards_mastery dict is well-formed at the
+        outer level but has a non-dict value for one entry: that one entry
+        is dropped, the rest of the dict is preserved."""
+        import logging
+        caplog.set_level(logging.WARNING, logger="backend.routes.student_portal_routes")
+        mixed = {
+            "MA.6.AR.1.1": {"points_earned": 8, "points_possible": 10, "question_count": 2},
+            "MA.6.AR.2.1": "not-a-dict-broken",  # WRONG TYPE on this entry
+        }
+        subs = [{
+            "id": "sub-mixed", "student_id": "stu-1", "content_id": "ct-1",
+            "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 80,
+            "results": {"standards_mastery": mixed, "points_earned": 8, "points_possible": 10},
+            "status": "graded",
+        }]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'title': 'Q', 'content_type': 'assessment'}],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card',
+                          headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Only the well-formed standard appears
+        codes = [s['code'] for s in body['standards_breakdown']]
+        assert codes == ['MA.6.AR.1.1']
+        # WARNING mentions the malformed entry's code
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any('MA.6.AR.2.1' in r.getMessage() for r in warnings), \
+            "expected a WARNING mentioning the malformed entry's standard code"
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_null_submitted_at_sorted_to_end_of_trajectory(self, mock_sb_fn, client, teacher_headers):
         subs = [
             {"id": "sub-null", "student_id": "stu-1", "content_id": "ct-1",
              "attempt_number": 1, "submitted_at": None, "percentage": 50,
@@ -882,9 +965,13 @@ Expected:
 - `test_malformed_standards_mastery_skips_submission` will FAIL: the existing `_aggregate_mastery_for_student` calls `mastery.items()` on the list and raises `AttributeError` → 500.
 - `test_null_submitted_at_sorted_to_end` will PASS (already handled by `_build_trajectory_for_student`'s sort key).
 
-- [ ] **Step 5.3: Add defensive malformed handling**
+- [ ] **Step 5.3: Add defensive malformed handling (sanitize-in-place, NOT drop)**
 
-In `backend/routes/student_portal_routes.py`, the bridge code in `get_student_report_card` (Step 4.3) sends submissions to `_aggregate_mastery_for_student` which assumes a dict. Add a pre-filter step in `get_student_report_card` BEFORE building `subs_by_content`:
+The naive approach — filter whole submissions out before `_select_submissions_by_mode` — breaks attempt-mode semantics: if a student's LATEST attempt has malformed mastery and an EARLIER attempt has good mastery, dropping the latest would make `attempt_mode=latest` silently fall back to the earlier attempt and report stale mastery. Wrong outcome.
+
+The correct approach is to sanitize each submission's `standards_mastery` IN PLACE: replace missing/non-dict mastery with `{}` (empty contribution but the submission is still selected by attempt_mode), and drop individual non-dict mastery values within an otherwise-valid dict. Log a WARNING per malformed entry.
+
+Add a small helper INSIDE `get_student_report_card` (or near it as a module-level helper — your choice). Then sanitize submissions BEFORE building `subs_by_content`.
 
 Replace this section (in step 4.3's added code):
 ```python
@@ -907,41 +994,58 @@ With:
     # submitted_at + percentage from the row.)
     trajectory = _build_trajectory_for_student(submissions, content_titles)
 
-    # 7) Filter out submissions with malformed standards_mastery before
-    # passing to aggregation. Trajectory keeps them (the row's percentage
-    # is still valid); only the mastery rollup excludes them.
-    def _has_valid_mastery(sub):
+    # 7) Sanitize standards_mastery IN PLACE so attempt-mode selection
+    # still sees every submission. A malformed-mastery submission stays
+    # selectable (so 'latest' picks the truly latest attempt), but its
+    # mastery contribution is empty.
+    def _sanitize_standards_mastery(sub):
         results = sub.get('results') or {}
-        mastery = results.get('standards_mastery')
-        if mastery is None:
-            return False  # silently skip, no log
-        if not isinstance(mastery, dict):
+        raw = results.get('standards_mastery')
+        if raw is None:
+            results['standards_mastery'] = {}
+            sub['results'] = results
+            return
+        if not isinstance(raw, dict):
             _logger.warning(
-                "malformed standards_mastery (type=%s) in submission %s — skipping mastery aggregation",
-                type(mastery).__name__, sub.get('id'),
+                "malformed standards_mastery (type=%s) in submission %s — treating as empty",
+                type(raw).__name__, sub.get('id'),
             )
-            return False
-        return True
+            results['standards_mastery'] = {}
+            sub['results'] = results
+            return
+        # Valid dict at the outer level; drop individual non-dict values.
+        cleaned = {}
+        for code, m in raw.items():
+            if isinstance(m, dict):
+                cleaned[code] = m
+            else:
+                _logger.warning(
+                    "malformed standards_mastery entry (code=%s, type=%s) in submission %s — skipping entry",
+                    code, type(m).__name__, sub.get('id'),
+                )
+        results['standards_mastery'] = cleaned
+        sub['results'] = results
 
-    valid_subs = [s for s in submissions if _has_valid_mastery(s)]
+    for s in submissions:
+        _sanitize_standards_mastery(s)
 
     # 8) Build standards_breakdown via existing helpers + bridge code
     from collections import defaultdict
     subs_by_content = defaultdict(list)
-    for s in valid_subs:
+    for s in submissions:
         cid = s.get('content_id')
         if cid:
             subs_by_content[cid].append(s)
 ```
 
-(The downstream `_select_submissions_by_mode` and `_aggregate_mastery_for_student` calls don't change — they now operate on `valid_subs` only.)
+(The downstream `_select_submissions_by_mode` and `_aggregate_mastery_for_student` calls don't change — they operate on the sanitized submissions, which always have a `dict` at `results['standards_mastery']`.)
 
 - [ ] **Step 5.4: Run tests to verify all pass**
 
 ```bash
 pytest tests/test_student_report_card.py -v
 ```
-Expected: ALL pass (12 from prior tasks + 6 new = 18).
+Expected: ALL pass (12 from prior tasks + 8 new in this task = 20).
 
 - [ ] **Step 5.5: Commit**
 
@@ -1302,7 +1406,7 @@ git commit -m "feat(report-card): wire drawer into ProgressRankGrid"
 source venv/bin/activate
 python -m backend.app
 ```
-Expected: Flask starts on `http://localhost:5000`. Leave running.
+Expected: Flask starts on `http://localhost:3000`. Leave running.
 
 - [ ] **Step 9.2: Build + serve frontend**
 
@@ -1314,7 +1418,7 @@ Expected: Vite writes assets to `backend/static/`. Backend serves them.
 
 - [ ] **Step 9.3: Open the dashboard**
 
-In a browser, go to `http://localhost:5000`. Sign in (use a teacher account that has at least one class with submitted assessments — pick one from the dashboard's class list).
+In a browser, go to `http://localhost:3000`. Sign in (use a teacher account that has at least one class with submitted assessments — pick one from the dashboard's class list).
 
 - [ ] **Step 9.4: Verify the drawer opens and shows real data**
 
@@ -1403,7 +1507,7 @@ Tasks 1+2 (pure helpers) could theoretically run in parallel — both touch only
 
 ## Testing strategy
 
-- 18 backend tests covering authz, happy path, all 3 attempt modes, malformed mastery, null timestamps, orphan enrollment, empty state.
+- 20 backend tests covering authz (4), happy path (2), all 3 attempt modes + invalid fallback (4), malformed mastery handling (3 — list-shape, latest-malformed-no-fallback, individual-entry-malformed), null timestamps (1), plus 8 helper unit tests for `_build_standards_breakdown_for_student` (4) and `_build_trajectory_for_student` (4).
 - Frontend: build verification only (consistent with how Phase 2 shipped). No new unit tests; manual smoke test covers the integration.
 - Existing 1671+ unit tests must still pass on each commit.
 - The 8 CI jobs (Backend Tests, Frontend Build, Mypy Strict, Migrations Smoke, Lockfile Drift, Ruff Lint, Bandit SAST, Secret Scan) must all pass.
@@ -1430,7 +1534,7 @@ Tasks 1+2 (pure helpers) could theoretically run in parallel — both touch only
 | Frontend component (drawer, z-index 9500, trajectory, breakdown) | Task 7 |
 | Wire-up (openReportCard helper closes selectedCell) | Task 8 |
 | Manual smoke test | Task 9 |
-| 11 backend test cases from spec | Tasks 1-5 cover all 11 + 7 more (helper unit tests) |
+| 12 endpoint test cases from spec § Testing | Tasks 3-5 cover all 12 + 8 helper / extra-edge tests (added per Codex review: latest-malformed-no-fallback + individual-entry-malformed) |
 
 **2. Placeholder scan:** No TBD/TODO/FIXME markers. Every code step has complete code.
 
