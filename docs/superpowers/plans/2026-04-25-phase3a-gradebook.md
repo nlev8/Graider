@@ -6,7 +6,7 @@
 
 **Architecture:** Two new GET endpoints in `backend/routes/student_portal_routes.py` (class gradebook + per-submission detail) reusing Phase 2's `_select_submissions_by_mode` and Phase 2b's `_sanitize_standards_mastery` helpers without modification. Frontend adds two components (`Gradebook.jsx`, `SubmissionDetail.jsx`) and a sub-tab switcher inside `AnalyticsTab.jsx` that conditionally unmounts the inactive sub-tab so drawers can't collide.
 
-**Tech Stack:** Flask + Supabase + recharts. Reuses Phase 1's `student_submissions.results` shape, Phase 2's helpers, Phase 5d's `error_response` + `@handle_route_errors`.
+**Tech Stack:** Flask + Supabase + plain React (no chart libraries — Phase 3a's drawer is text + accordion only; charts are Phase 2b territory). Reuses Phase 1's `student_submissions.results` shape, Phase 2's helpers, Phase 5d's `error_response` + `@handle_route_errors`.
 
 **Spec:** `docs/superpowers/specs/2026-04-25-phase3a-gradebook-design.md` at HEAD `329c4d5` on branch `spec/phase3a-gradebook`. APPROVED after 2 rounds of Codex review.
 
@@ -19,8 +19,8 @@
 **Files created:**
 - `frontend/src/tabs/Gradebook.jsx` — gradebook table component (~220 LOC)
 - `frontend/src/tabs/SubmissionDetail.jsx` — submission-detail side drawer (~250 LOC)
-- `tests/test_gradebook.py` — 13 backend test cases
-- `tests/test_submission_detail.py` — 7 backend test cases
+- `tests/test_gradebook.py` — 18 backend test cases (4 coalesce + 2 authz + 5 happy path + 4 attempt modes + 3 edge cases)
+- `tests/test_submission_detail.py` — 9 backend test cases (4 authz + 5 happy path / edge cases)
 
 **Files modified:**
 - `backend/routes/student_portal_routes.py` — add `_coalesce` module-level helper + 2 new route handlers (`get_class_gradebook`, `get_student_submission_detail`)
@@ -189,19 +189,42 @@ def client_no_auth():
 
 
 def _make_chain(execute_data=None):
+    """Chainable Supabase mock that ACTUALLY APPLIES `.eq()` filters when
+    `.execute()` is called. This makes a single mock-table answer multiple
+    queries with different filters correctly (e.g., looking up one
+    submission by id, then later querying for sibling attempts of the
+    same student/content). Without this, the same data set is returned
+    regardless of filter, which masks query bugs.
+    """
+    data = list(execute_data) if execute_data else []
     chain = MagicMock()
     chain.select.return_value = chain
-    chain.eq.return_value = chain
     chain.neq.return_value = chain
     chain.in_.return_value = chain
     chain.order.return_value = chain
     chain.limit.return_value = chain
-    chain.execute.return_value = MagicMock(data=execute_data if execute_data is not None else [])
+    filters = []  # list of ('eq', field, value)
+
+    def _eq(field, value):
+        filters.append(('eq', field, value))
+        return chain
+    chain.eq.side_effect = _eq
+
+    def _execute():
+        result = data
+        for op, field, value in filters:
+            if op == 'eq':
+                result = [r for r in result if r.get(field) == value]
+        filters.clear()
+        return MagicMock(data=result)
+    chain.execute.side_effect = _execute
     return chain
 
 
 def _multi_table_sb(table_map):
-    """Mock supabase that returns different chains per table name."""
+    """Mock supabase that returns a FRESH `_make_chain` per `db.table(name)`
+    call (so each query gets its own filter list). Same-table queries are
+    distinguished by their `.eq()` filters."""
     mock_sb = MagicMock()
     def table_side_effect(name):
         val = table_map.get(name)
@@ -373,6 +396,26 @@ class TestGradebookHappyPath:
         body = resp.get_json()
         assert body['students'] == []
         assert body['assessments'] == []
+        assert body['grades'] == {}
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_class_with_no_submissions_returns_empty_grades(self, mock_sb_fn, client, teacher_headers):
+        """Class has students AND assessments, but no submissions yet.
+        Distinct from the empty-class case: students/assessments arrays are
+        populated; only the grades map is empty."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'title': 'Q1', 'content_type': 'assessment',
+                                    'publish_date': '2026-04-01T00:00:00Z'}],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert len(body['students']) == 1
+        assert len(body['assessments']) == 1
         assert body['grades'] == {}
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
@@ -589,8 +632,9 @@ In `backend/routes/student_portal_routes.py`, replace the skeleton's `return jso
             total_attempts = len(subs)
             selected = _select_submissions_by_mode({cid: subs}, attempt_mode).get(cid, [])
             if attempt_mode == 'average':
-                # mean percentage across attempts; drilldown anchor = latest
-                pcts = [s.get('percentage') or 0 for s in subs]
+                # mean percentage across attempts; drilldown anchor = latest.
+                # Use _coalesce (NOT `or`) so a legitimate 0 doesn't fall through.
+                pcts = [_coalesce(s.get('percentage'), default=0) for s in subs]
                 mean_pct = round(sum(pcts) / len(pcts), 1) if pcts else 0
                 latest = max(subs, key=lambda s: (s.get('attempt_number') or 0, _parse_ts(s.get('submitted_at'))))
                 per_student[cid] = {
@@ -631,7 +675,7 @@ In `backend/routes/student_portal_routes.py`, replace the skeleton's `return jso
 ```bash
 pytest tests/test_gradebook.py -v
 ```
-Expected: all pass (4 coalesce + 2 authz + 4 happy path + 4 attempt modes = 14 tests).
+Expected: all pass (4 coalesce + 2 authz + 5 happy path + 4 attempt modes = 15 tests so far; edge-case tests in Task 4 add 3 more).
 
 - [ ] **Step 3.5: Commit**
 
@@ -736,7 +780,7 @@ class TestGradebookEdgeCases:
 ```bash
 pytest tests/test_gradebook.py -v
 ```
-Expected: 17 passed.
+Expected: 18 passed.
 
 - [ ] **Step 4.3: Commit**
 
@@ -803,13 +847,33 @@ def client_no_auth():
 
 
 def _make_chain(execute_data=None):
+    """Chainable Supabase mock that ACTUALLY APPLIES `.eq()` filters when
+    `.execute()` is called. Critical for the submission-detail tests
+    because the route looks up `student_submissions` twice — once by id,
+    then again for sibling attempts (same student × same content). Without
+    filter-aware mocking, both queries get the same unfiltered data.
+    """
+    data = list(execute_data) if execute_data else []
     chain = MagicMock()
     chain.select.return_value = chain
-    chain.eq.return_value = chain
     chain.in_.return_value = chain
     chain.order.return_value = chain
     chain.limit.return_value = chain
-    chain.execute.return_value = MagicMock(data=execute_data if execute_data is not None else [])
+    filters = []
+
+    def _eq(field, value):
+        filters.append(('eq', field, value))
+        return chain
+    chain.eq.side_effect = _eq
+
+    def _execute():
+        result = data
+        for op, field, value in filters:
+            if op == 'eq':
+                result = [r for r in result if r.get(field) == value]
+        filters.clear()
+        return MagicMock(data=result)
+    chain.execute.side_effect = _execute
     return chain
 
 
@@ -1084,6 +1148,41 @@ class TestSubmissionDetailHappyPath:
         assert resp.status_code == 200
         body = resp.get_json()
         assert body['questions'] == []
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_malformed_results_questions_returns_empty_array_with_200(self, mock_sb_fn, client, teacher_headers):
+        """results.questions is non-list (e.g., string). Route returns 200
+        with questions: [] and logs a WARNING — does NOT 500."""
+        results = {"score": 8, "total_points": 10, "questions": "broken-not-a-list"}
+        self._setup_with_submission(mock_sb_fn, results)
+        resp = client.get('/api/teacher/submission/sub-1/detail', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['questions'] == []
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_no_sibling_attempts_returns_only_self(self, mock_sb_fn, client, teacher_headers):
+        """Single-attempt case: sibling_attempts should contain only the
+        submission itself. total_attempts == 1."""
+        # Override _setup_with_submission's two-sibling setup with a single one
+        results = {"score": 8, "total_points": 10, "questions": []}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-only', 'student_id': 'stu-1', 'content_id': 'ct-1',
+                 'attempt_number': 1, 'percentage': 80, 'submitted_at': '2026-04-12T10:00:00Z',
+                 'results': results, 'status': 'graded',
+                 'score': 8, 'total_points': 10},
+            ],
+            'published_content': [{'id': 'ct-1', 'title': 'Quiz 1', 'class_id': 'cls-1'}],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-only/detail', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['total_attempts'] == 1
+        assert len(body['sibling_attempts']) == 1
+        assert body['sibling_attempts'][0]['submission_id'] == 'sub-only'
 ```
 
 - [ ] **Step 6.2: Run to confirm failures**
@@ -1131,7 +1230,7 @@ With:
 ```bash
 pytest tests/test_submission_detail.py -v
 ```
-Expected: 7 PASS (4 authz + 3 happy path).
+Expected: 9 PASS (4 authz + 5 happy path / edge cases).
 
 - [ ] **Step 6.5: Commit**
 
@@ -1412,7 +1511,10 @@ export default function SubmissionDetail({ submissionId, onClose }) {
     var cancelled = false;
     setLoading(true);
     setError(null);
-    setExpandedQuestionIndex(null);
+    // NOTE: do NOT reset expandedQuestionIndex on attempt switch — spec says
+    // local activeSubmissionId changes keep the drawer mounted and preserve
+    // the user's expanded question. Reset only when the parent fully unmounts
+    // the drawer (which happens via onClose).
     api.getSubmissionDetail(activeSubmissionId)
       .then(function(res) {
         if (cancelled) return;
@@ -1727,8 +1829,8 @@ Tasks 1-4 are pure backend (gradebook endpoint). Tasks 5-6 are pure backend (sub
 
 ## Testing strategy
 
-- 17 backend tests on the gradebook endpoint (4 coalesce + 2 authz + 4 happy path + 4 attempt modes + 3 edge cases).
-- 7 backend tests on the submission-detail endpoint (4 authz + 3 happy path/normalization).
+- 18 backend tests on the gradebook endpoint (4 coalesce + 2 authz + 5 happy path + 4 attempt modes + 3 edge cases).
+- 9 backend tests on the submission-detail endpoint (4 authz + 5 happy path / edge cases including malformed-questions-list and single-attempt sibling case).
 - Total new backend tests: 24.
 - Frontend: build verification only (consistent with Phase 2 / 2b).
 - Existing 1671+ unit tests + 24 from Phase 2b must still pass on each commit.
