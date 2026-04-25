@@ -106,6 +106,7 @@ def test_handle_route_errors_503_breaker_path_emits_rfc7807():
     assert body["title"] == "Service Unavailable"
     assert body["status"] == 503
     assert "circuit breaker open" in body["detail"].lower()
+    assert body["instance"] == "/test"
     # Legacy fields preserved for backward compat
     assert "circuit breaker open" in body["error"].lower()
     assert body["retry_after_seconds"] == 60

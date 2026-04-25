@@ -58,12 +58,13 @@ def _problem_response(*, type_slug: str, title: str, status: int, detail: str | 
     Must be called within a Flask app context — `jsonify()` requires one.
     In practice every caller is a route handler, which always provides one.
     """
-    body = {
+    body: dict[str, Any] = {
         "type": f"{PROBLEM_BASE_URI}/{type_slug}",
         "title": title,
         "status": status,
-        "instance": request.path if request else None,
     }
+    if request:
+        body["instance"] = request.path
     if detail is not None:
         body["detail"] = detail
         # Backward-compat: legacy clients (Graider's own React frontend, internal
