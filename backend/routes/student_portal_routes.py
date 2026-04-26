@@ -1881,6 +1881,20 @@ def get_class_assessment_comparison(class_id):
 
     class_roster_size = len(valid_student_ids)
 
+    # Local numeric sanitizer — coerce percentage to float or None.
+    # Use this instead of `or` because legitimate 0 must not fall through.
+    def _safe_percentage(val):
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            _logger.warning(
+                "non-numeric percentage value (type=%s, value=%r) — skipping",
+                type(val).__name__, val,
+            )
+            return None
+
     # 7) Fetch non-draft submissions for these students × these contents (paginated)
     submissions = []
     if valid_student_ids:
@@ -1902,12 +1916,22 @@ def get_class_assessment_comparison(class_id):
     for s in submissions:
         _sanitize_standards_mastery(s)
 
-    # 9) Build per-(content) skeleton response. Distribution + standards-matrix come in Tasks 3-5.
+    # 9) Group submissions by (student_id, content_id)
+    from collections import defaultdict
+    import statistics as _stats
+    subs_by_student_content = defaultdict(lambda: defaultdict(list))
+    for s in submissions:
+        sid = s.get('student_id')
+        cid = s.get('content_id')
+        if sid and cid:
+            subs_by_student_content[sid][cid].append(s)
+
     assessments_out = []
+    # Keep selected_per_content for the standards-matrix bridge in Task 4.
+    selected_per_content_per_student = {}
     for cid in content_ids:
         match = next((c for c in found if c.get('id') == cid), None)
-        # Spec: max_points may live on the row OR in content/settings JSON. Use
-        # _coalesce so the first non-None wins (treating legitimate 0 as a valid total).
+        # Same _coalesce fallback ladder as Task 2 — row column → content JSON → settings JSON.
         if match:
             content_json = match.get('content') if isinstance(match.get('content'), dict) else None
             settings_json = match.get('settings') if isinstance(match.get('settings'), dict) else None
@@ -1919,20 +1943,72 @@ def get_class_assessment_comparison(class_id):
             )
         else:
             max_points = 0
+        title = match.get('title', '') if match else ''
+
+        percentages = []
+        selected_for_this_content = {}
+        for sid in valid_student_ids:
+            student_subs = subs_by_student_content.get(sid, {}).get(cid, [])
+            if not student_subs:
+                continue
+            selected = _select_submissions_by_mode({cid: student_subs}, attempt_mode).get(cid, [])
+            if attempt_mode == 'average':
+                # Mean across attempts for this student
+                attempt_pcts = [_safe_percentage(s.get('percentage')) for s in student_subs]
+                attempt_pcts = [p for p in attempt_pcts if p is not None]
+                if not attempt_pcts:
+                    continue
+                student_pct = sum(attempt_pcts) / len(attempt_pcts)
+            else:
+                # latest/best modes — _select_submissions_by_mode picks one submission per
+                # (student, content). NOTE: best mode ranks raw `percentage` values; if any
+                # are non-numeric strings, _select_submissions_by_mode could TypeError before
+                # _safe_percentage runs. Production data is always numeric (int/float per
+                # grading_service.py), so this assumption is safe; if best-mode TypeErrors
+                # are ever observed in logs, normalize percentages on `student_subs` before
+                # calling _select_submissions_by_mode.
+                if not selected:
+                    continue
+                student_pct = _safe_percentage(selected[0].get('percentage'))
+                if student_pct is None:
+                    continue
+            percentages.append(student_pct)
+            selected_for_this_content[sid] = selected
+
+        selected_per_content_per_student[cid] = selected_for_this_content
+
+        n = len(percentages)
+        if n >= 2:
+            sorted_pcts = sorted(percentages)
+            mean_v = round(sum(sorted_pcts) / n, 2)
+            median_v = _stats.median(sorted_pcts)
+            quartiles = _stats.quantiles(sorted_pcts, n=4, method='inclusive')
+            q1_v, q3_v = round(quartiles[0], 2), round(quartiles[2], 2)
+            min_v, max_v = sorted_pcts[0], sorted_pcts[-1]
+        elif n == 1:
+            mean_v = median_v = q1_v = q3_v = min_v = max_v = round(percentages[0], 2)
+        else:
+            mean_v = median_v = q1_v = q3_v = min_v = max_v = 0
+
+        submission_rate = round(n / class_roster_size, 2) if class_roster_size > 0 else 0.0
+
         assessments_out.append({
             "content_id": cid,
-            "title": match.get('title', '') if match else '',
+            "title": title,
             "max_points": max_points,
-            "n": 0,
-            "submission_rate": 0.0,
-            "mean": 0,
-            "median": 0,
-            "min": 0,
-            "max": 0,
-            "q1": 0,
-            "q3": 0,
-            "percentages": [],
+            "n": n,
+            "submission_rate": submission_rate,
+            "mean": mean_v,
+            "median": median_v,
+            "min": min_v,
+            "max": max_v,
+            "q1": q1_v,
+            "q3": q3_v,
+            "percentages": [round(p, 2) for p in percentages],
         })
+
+    # Standards matrix bridge — Task 4 fills this in.
+    standards_matrix = {"standards": [], "cells": {}}
 
     return jsonify({
         "class_id": class_id,
@@ -1940,7 +2016,7 @@ def get_class_assessment_comparison(class_id):
         "attempt_mode": attempt_mode,
         "class_roster_size": class_roster_size,
         "assessments": assessments_out,
-        "standards_matrix": {"standards": [], "cells": {}},
+        "standards_matrix": standards_matrix,
     })
 
 
