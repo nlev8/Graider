@@ -1700,6 +1700,106 @@ def get_class_gradebook(class_id):
     })
 
 
+@student_portal_bp.route('/api/teacher/submission/<submission_id>/detail', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_student_submission_detail(submission_id):
+    """Return per-submission detail: metadata + per-question breakdown + sibling attempts.
+
+    Spec: docs/superpowers/specs/2026-04-25-phase3a-gradebook-design.md
+    """
+    db = _get_teacher_supabase()
+
+    # 1) Look up the submission
+    sub_row = db.table('student_submissions').select(
+        'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status, score, total_points'
+    ).eq('id', submission_id).execute()
+    if not sub_row.data:
+        return error_response("Submission not found", 404)
+    sub = sub_row.data[0]
+
+    # 2) Look up the content
+    content_id = sub.get('content_id')
+    content_row = db.table('published_content').select(
+        'id, title, class_id'
+    ).eq('id', content_id).execute()
+    if not content_row.data:
+        return error_response("Submission's content no longer exists", 404)
+    content = content_row.data[0]
+
+    # 3) Verify class ownership
+    class_row = db.table('classes').select('id, teacher_id').eq('id', content.get('class_id')).execute()
+    if not class_row.data or class_row.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+
+    # 4) Look up the student
+    student_id = sub.get('student_id')
+    student_row = db.table('students').select(
+        'id, first_name, last_name'
+    ).eq('id', student_id).execute()
+    if not student_row.data:
+        return error_response("Student not found", 404)
+    sdata = student_row.data[0]
+    student_name = ((sdata.get('first_name') or '') + ' ' + (sdata.get('last_name') or '')).strip()
+
+    # 5) Sibling attempts (same student × same content)
+    siblings_row = db.table('student_submissions').select(
+        'id, attempt_number, submitted_at, percentage'
+    ).eq('student_id', student_id).eq('content_id', content_id).execute()
+    siblings = sorted(
+        siblings_row.data or [],
+        key=lambda s: (s.get('attempt_number') or 0, _parse_ts(s.get('submitted_at'))),
+    )
+
+    # 6) Top-level score with row + results fallback. Use _coalesce so legitimate 0 isn't lost.
+    results = sub.get('results') or {}
+    points_earned = _coalesce(results.get('score'), sub.get('score'), default=0)
+    points_possible = _coalesce(results.get('total_points'), sub.get('total_points'), default=0)
+
+    # 7) Per-question normalization (spec fallback rules)
+    raw_questions = results.get('questions')
+    questions = []
+    if isinstance(raw_questions, list):
+        for q in raw_questions:
+            if not isinstance(q, dict):
+                _logger.warning("malformed question entry (type=%s) in submission %s — skipping",
+                                type(q).__name__, submission_id)
+                continue
+            questions.append({
+                "question_text": _coalesce(q.get('question'), q.get('question_text'), default=''),
+                "question_type": _coalesce(q.get('type'), q.get('question_type'), default='unknown'),
+                "student_answer": _coalesce(q.get('student_answer'), q.get('answer'), default=''),
+                "correct_answer": q.get('correct_answer'),
+                "is_correct": q.get('is_correct'),
+                "ai_feedback": _coalesce(q.get('feedback'), q.get('reasoning'), q.get('quality'), default=''),
+                "points_earned": _coalesce(q.get('points_earned'), q.get('score'), default=0),
+                "points_possible": _coalesce(q.get('points_possible'), q.get('points'), default=0),
+            })
+    elif raw_questions is not None:
+        _logger.warning("malformed results.questions (type=%s) in submission %s — returning empty",
+                        type(raw_questions).__name__, submission_id)
+
+    return jsonify({
+        "submission_id": sub.get('id'),
+        "student_id": student_id,
+        "student_name": student_name,
+        "content_id": content_id,
+        "content_title": content.get('title', ''),
+        "attempt_number": sub.get('attempt_number'),
+        "total_attempts": len(siblings),
+        "submitted_at": sub.get('submitted_at'),
+        "percentage": sub.get('percentage'),
+        "points_earned": points_earned,
+        "points_possible": points_possible,
+        "questions": questions,
+        "sibling_attempts": [
+            {"submission_id": s.get('id'), "attempt_number": s.get('attempt_number'),
+             "submitted_at": s.get('submitted_at'), "percentage": s.get('percentage')}
+            for s in siblings
+        ],
+    })
+
+
 @student_portal_bp.route('/api/teacher/tags', methods=['GET'])
 @require_teacher
 @handle_route_errors
