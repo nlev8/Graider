@@ -106,12 +106,14 @@ def client_no_auth():
 
 
 def _make_chain(execute_data=None):
-    """Filter-aware Supabase mock — applies .eq() filters at .execute() time."""
+    """Filter-aware Supabase mock — applies .eq() / .in_() / .neq() filters at .execute() time.
+
+    Required: tests must observe `.in_()` (used for student_id/content_id IN ...) and
+    `.neq()` (used for status != 'draft'). A no-op mock would mask draft-exclusion bugs.
+    """
     data = list(execute_data) if execute_data else []
     chain = MagicMock()
     chain.select.return_value = chain
-    chain.neq.return_value = chain
-    chain.in_.return_value = chain
     chain.order.return_value = chain
     chain.limit.return_value = chain
     chain.range.return_value = chain
@@ -122,11 +124,25 @@ def _make_chain(execute_data=None):
         return chain
     chain.eq.side_effect = _eq
 
+    def _in(field, values):
+        filters.append(('in', field, list(values)))
+        return chain
+    chain.in_.side_effect = _in
+
+    def _neq(field, value):
+        filters.append(('neq', field, value))
+        return chain
+    chain.neq.side_effect = _neq
+
     def _execute():
         result = data
         for op, field, value in filters:
             if op == 'eq':
                 result = [r for r in result if r.get(field) == value]
+            elif op == 'in':
+                result = [r for r in result if r.get(field) in value]
+            elif op == 'neq':
+                result = [r for r in result if r.get(field) != value]
         filters.clear()
         return MagicMock(data=result)
     chain.execute.side_effect = _execute
@@ -212,6 +228,24 @@ class TestAssessmentComparisonValidation:
         })
         resp = client.get('/api/teacher/class/cls-1/compare?content_ids=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222', headers=teacher_headers)
         assert resp.status_code == 403
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_content_id_is_assignment_not_assessment_returns_403(self, mock_sb_fn, client, teacher_headers):
+        """Both ids exist in this class, but one has content_type='assignment'.
+        Comparison is assessment-only — assignments must be rejected even if owned."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [],
+            'students': [],
+            'published_content': [
+                {'id': '11111111-1111-1111-1111-111111111111', 'title': 'Q1',
+                 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': '22222222-2222-2222-2222-222222222222', 'title': 'HW1',
+                 'class_id': 'cls-1', 'content_type': 'assignment', 'max_points': 10},
+            ],
+        })
+        resp = client.get('/api/teacher/class/cls-1/compare?content_ids=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222', headers=teacher_headers)
+        assert resp.status_code == 403
 ```
 
 - [ ] **Step 1.2: Run tests to verify they fail**
@@ -220,7 +254,7 @@ class TestAssessmentComparisonValidation:
 source venv/bin/activate
 pytest tests/test_assessment_comparison.py::TestAssessmentComparisonValidation -v
 ```
-Expected: 7 FAIL — endpoint doesn't exist (404 from Flask routing).
+Expected: 8 FAIL — endpoint doesn't exist (404 from Flask routing).
 
 - [ ] **Step 1.3: Add the route handler scaffold + validation**
 
@@ -272,9 +306,11 @@ def get_class_assessment_comparison(class_id):
     content_rows = db.table('published_content').select(
         'id, title, content_type, max_points'
     ).in_('id', content_ids).eq('class_id', class_id).execute()
-    found = content_rows.data or []
+    raw_found = content_rows.data or []
+    # Reject anything that isn't an assessment — assignments must not be comparable here.
+    found = [r for r in raw_found if r.get('content_type') == 'assessment']
     if len(found) < len(content_ids):
-        # One or more content_ids isn't in this class — cross-class injection guard.
+        # One or more content_ids isn't in this class OR isn't an assessment — cross-class/type injection guard.
         return error_response("Not authorized", 403)
 
     # Skeleton: empty data. Happy-path lands in Tasks 2-5.
@@ -293,7 +329,7 @@ def get_class_assessment_comparison(class_id):
 ```bash
 pytest tests/test_assessment_comparison.py::TestAssessmentComparisonValidation -v
 ```
-Expected: 7 PASS.
+Expected: 8 PASS.
 
 - [ ] **Step 1.5: Commit**
 
@@ -363,6 +399,46 @@ class TestAssessmentComparisonRoster:
         assert len(body['assessments']) == 2
         assert all(a['n'] == 0 for a in body['assessments'])
         assert all(a['submission_rate'] == 0.0 for a in body['assessments'])
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_former_student_with_submission_excluded(self, mock_sb_fn, client, teacher_headers):
+        """A submission from a student_id NOT in the current valid roster (former student
+        whose enrollment was removed but whose submission row still exists) must not
+        affect distribution stats — class roster scoping is the source of truth.
+        Tests that the route's `for sid in valid_student_ids` iteration drops orphan submissions."""
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        # Roster: stu-1 only. ex-stu submitted Q1 but is no longer enrolled.
+        subs = [
+            {'id': 'sub-current', 'student_id': 'stu-1', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': 90,
+             'results': {'standards_mastery': {}, 'score': 9, 'total_points': 10},
+             'status': 'graded'},
+            {'id': 'sub-former', 'student_id': 'ex-stu', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': 30,  # Would drag the mean down if included.
+             'results': {'standards_mastery': {}, 'score': 3, 'total_points': 10},
+             'status': 'graded'},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1'}],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
+        # Only stu-1's 90 must count; ex-stu's 30 must NOT affect distribution.
+        assert a_q1['n'] == 1
+        assert a_q1['mean'] == 90
+        assert 30 not in a_q1['percentages']
 ```
 
 - [ ] **Step 2.2: Run tests to verify they fail**
@@ -370,7 +446,7 @@ class TestAssessmentComparisonRoster:
 ```bash
 pytest tests/test_assessment_comparison.py::TestAssessmentComparisonRoster -v
 ```
-Expected: 2 FAIL — `class_roster_size` is 0 in the skeleton (matches one test by coincidence) but `assessments` array is empty (so the empty-class assertion `len(...) == 2` fails).
+Expected: 3 FAIL — `class_roster_size` is 0 in the skeleton (matches one test by coincidence) but `assessments` array is empty (so the empty-class assertion `len(...) == 2` fails); former-student test fails because skeleton returns no distribution.
 
 - [ ] **Step 2.3: Replace the skeleton's return with full data fetch**
 
@@ -450,7 +526,7 @@ In `backend/routes/student_portal_routes.py`, replace the `return jsonify({...em
 ```bash
 pytest tests/test_assessment_comparison.py -v
 ```
-Expected: 9 PASS (7 validation + 2 roster).
+Expected: 11 PASS (8 validation + 3 roster).
 
 - [ ] **Step 2.5: Commit**
 
@@ -638,6 +714,76 @@ class TestAssessmentComparisonDistribution:
         # Warning logged
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert any('non-numeric percentage' in r.getMessage() for r in warnings)
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_numeric_string_percentage_coerced(self, mock_sb_fn, client, teacher_headers):
+        """percentage='80' (numeric string) must be coerced to 80.0, not skipped.
+        Some grading paths historically wrote percentage as a string — _safe_percentage
+        must treat numeric strings as valid input."""
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        subs = [
+            {'id': 'sub-string', 'student_id': 'stu-1', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': '80',  # string, not int — must coerce, not skip.
+             'results': {'standards_mastery': {}, 'score': 8, 'total_points': 10},
+             'status': 'graded'},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1'}],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
+        assert a_q1['n'] == 1
+        assert a_q1['mean'] == 80.0
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_draft_submissions_excluded_from_distribution(self, mock_sb_fn, client, teacher_headers):
+        """Submissions with status='draft' must be filtered out by `.neq('status', 'draft')`
+        on the SQL query — they must not affect n / mean / median / percentages.
+        Without proper SQL exclusion, the filter-aware `_make_chain` would include them
+        and this test would fail."""
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        subs = [
+            {'id': 'sub-graded', 'student_id': 'stu-1', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': 80,
+             'results': {'standards_mastery': {}, 'score': 8, 'total_points': 10},
+             'status': 'graded'},
+            {'id': 'sub-draft', 'student_id': 'stu-2', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': 0,  # Would drag the mean to 40 if included.
+             'results': {'standards_mastery': {}, 'score': 0, 'total_points': 10},
+             'status': 'draft'},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'student_id': 'stu-1'}, {'student_id': 'stu-2'}],
+            'students': [{'id': 'stu-1'}, {'id': 'stu-2'}],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
+        # Only the graded submission counts.
+        assert a_q1['n'] == 1
+        assert a_q1['mean'] == 80
+        assert 0 not in a_q1['percentages']
 ```
 
 - [ ] **Step 3.2: Run tests to verify they fail**
@@ -645,7 +791,7 @@ class TestAssessmentComparisonDistribution:
 ```bash
 pytest tests/test_assessment_comparison.py::TestAssessmentComparisonDistribution -v
 ```
-Expected: 4 FAIL — distribution still hardcoded to zero.
+Expected: 6 FAIL — distribution still hardcoded to zero.
 
 - [ ] **Step 3.3: Implement `_safe_percentage` + distribution computation**
 
@@ -703,6 +849,13 @@ Then replace the placeholder `assessments_out = []` block (Task 2.3's last addit
                     continue
                 student_pct = sum(attempt_pcts) / len(attempt_pcts)
             else:
+                # latest/best modes — _select_submissions_by_mode picks one submission per
+                # (student, content). NOTE: best mode ranks raw `percentage` values; if any
+                # are non-numeric strings, _select_submissions_by_mode could TypeError before
+                # _safe_percentage runs. Production data is always numeric (int/float per
+                # grading_service.py), so this assumption is safe; if best-mode TypeErrors
+                # are ever observed in logs, normalize percentages on `student_subs` before
+                # calling _select_submissions_by_mode.
                 if not selected:
                     continue
                 student_pct = _safe_percentage(selected[0].get('percentage'))
@@ -763,7 +916,7 @@ Then replace the placeholder `assessments_out = []` block (Task 2.3's last addit
 ```bash
 pytest tests/test_assessment_comparison.py -v
 ```
-Expected: 13 PASS (7 validation + 2 roster + 4 distribution).
+Expected: 17 PASS (8 validation + 3 roster + 6 distribution).
 
 - [ ] **Step 3.5: Commit**
 
@@ -954,7 +1107,7 @@ With:
 ```bash
 pytest tests/test_assessment_comparison.py -v
 ```
-Expected: 15 PASS (7 + 2 + 4 + 2).
+Expected: 19 PASS (8 validation + 3 roster + 6 distribution + 2 standards).
 
 - [ ] **Step 4.5: Commit**
 
@@ -1026,7 +1179,11 @@ function gradeColor(pct) {
 }
 
 // Custom SVG box plot — recharts has no native box plot.
-// Math borrowed from frontend/src/components/InteractiveBoxPlot.jsx (read-only port).
+// This is a FIVE-NUMBER-SUMMARY plot (min/Q1/median/Q3/max). No outlier treatment;
+// whiskers extend to absolute min/max (NOT 1.5×IQR fences). If outlier display is
+// ever requested by teachers, port the IQR-fence math from
+// frontend/src/components/InteractiveBoxPlot.jsx (which is the input widget — never
+// modify or import it from here; this read-only component owns its own math).
 function BoxPlotRow({ assessments }) {
   var width = Math.max(600, assessments.length * 110);
   var height = 200;
@@ -1120,7 +1277,15 @@ export default function AssessmentComparison({ classId }) {
           setBootstrapError((res && res.error) || 'Failed to load assessments');
           setAvailable([]);
         } else {
-          setAvailable(res.assessments || []);
+          // Gradebook returns both assessments and assignments. The compare endpoint
+          // also enforces content_type='assessment' as a 403 guard, but we filter
+          // client-side so non-assessments never appear in the picker.
+          // (If the gradebook response omits content_type on a row, fall through —
+          // the backend guard will catch it.)
+          var assessmentsOnly = (res.assessments || []).filter(function(a) {
+            return !a.content_type || a.content_type === 'assessment';
+          });
+          setAvailable(assessmentsOnly);
         }
       })
       .catch(function(e) {
@@ -1267,17 +1432,28 @@ export default function AssessmentComparison({ classId }) {
       ) : data ? (
         <div>
           {/* Stat cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginBottom: "20px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "20px" }}>
             {data.assessments.map(function(a) {
               var color = gradeColor(a.n > 0 ? a.mean : null);
+              var ratePct = Math.round((a.submission_rate || 0) * 100);
               return (
                 <div key={a.content_id} style={{ padding: "12px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: color.bg }}>
                   <div style={{ fontSize: "0.85rem", fontWeight: 700, color: color.text, marginBottom: "4px" }}>{a.title}</div>
-                  <div style={{ fontSize: "1.4rem", fontWeight: 700, color: color.text }}>
-                    {a.n > 0 ? a.mean + "%" : String.fromCharCode(8212)}
+                  {a.n > 0 ? (
+                    <div style={{ fontSize: "1.4rem", fontWeight: 700, color: color.text }}>
+                      {a.mean}%
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-muted)" }}>
+                      No submissions yet
+                    </div>
+                  )}
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                    {a.n} of {data.class_roster_size} {String.fromCharCode(8226)} {ratePct}% submitted
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                    {a.n} of {data.class_roster_size} {String.fromCharCode(8226)} median {a.median}{a.n > 0 ? "%" : ""}
+                    Max points: {a.max_points}
+                    {a.n > 0 ? " " + String.fromCharCode(8226) + " median " + a.median + "%" : ""}
                   </div>
                 </div>
               );
@@ -1506,7 +1682,7 @@ Tasks 1-4 are pure backend (TDD). Task 5 is frontend API client. Task 6 is the h
 
 ## Testing strategy
 
-- 15 backend tests covering validation (7), roster (2), distribution (4), standards matrix (2). All pass on each commit.
+- 19 backend tests covering validation (8), roster (3), distribution (6), standards matrix (2). All pass on each commit.
 - Frontend: build verification only (consistent with Phase 2 / 2b / 3a).
 - All 8 CI jobs must pass.
 - Routes are NOT in mypy strict scope — no annotations required.
@@ -1519,11 +1695,15 @@ Tasks 1-4 are pure backend (TDD). Task 5 is frontend API client. Task 6 is the h
 
 | Spec section | Plan task |
 |---|---|
-| Validation order (auth → parse → UUID → ≥2 → ≤6 → in-class) | Task 1 |
+| Validation order (auth → parse → UUID → ≥2 → ≤6 → in-class assessment) | Task 1 |
 | Class-ownership 403 + cross-class injection guard | Task 1 |
+| Assignment-vs-assessment guard (`content_type='assessment'`) | Task 1 (impl + test) |
 | Roster filtering (class_students JOIN students; skip orphans) | Task 2 |
 | Pagination via `.range()` | Task 2 |
+| Status filter (`status != 'draft'`) on submission fetch | Task 2 (impl) + Task 3 (test) |
+| Former-student-with-submission exclusion (`student_id IN valid_student_ids` semantics) | Task 2 (impl) + Task 2 (test) |
 | `_safe_percentage` local helper (None / non-numeric → skip + warn) | Task 3 |
+| Numeric string percentage coercion (`'80'` → 80.0) | Task 3 (impl + test) |
 | Distribution stats (n, mean, median, q1, q3, min, max) + quartile semantics for n<2 | Task 3 |
 | Submission rate denominator = valid roster size | Task 3 |
 | Attempt mode latest/best/average + invalid fallback | Tasks 1 (parse) + 3 (avg path) |
@@ -1531,9 +1711,10 @@ Tasks 1-4 are pure backend (TDD). Task 5 is frontend API client. Task 6 is the h
 | Sanitize-in-place for malformed mastery | Task 2 (sanitize call) + Task 4 (test) |
 | Frontend API client (URLSearchParams + encodeURIComponent + comma-join) | Task 5 |
 | AssessmentComparison.jsx (chip picker + 3-tier color + box plot + heatmap) | Task 6 |
+| Bootstrap-fetch reuse of getClassGradebook + client-side assessment filter | Task 6 |
+| Stat cards: title, mean (or "No submissions yet"), submission rate, max points, median | Task 6 |
+| Custom SVG box plot — declared as five-number-summary, no outlier treatment | Task 6 |
 | AnalyticsTab 3-way switcher with conditional unmount | Task 7 |
-| Bootstrap-fetch reuse of getClassGradebook | Task 6 |
-| Custom SVG box plot (recharts has no native) | Task 6 |
 | Manual smoke checklist | Task 8 |
 
 **2. Placeholder scan:** No TBD/TODO/FIXME markers. Every code step has complete code blocks.
@@ -1544,6 +1725,25 @@ Tasks 1-4 are pure backend (TDD). Task 5 is frontend API client. Task 6 is the h
 - Response top-level fields: `class_id, class_name, attempt_mode, class_roster_size, assessments[], standards_matrix{standards[], cells{}}` — consistent.
 - Per-assessment: `content_id, title, max_points, n, submission_rate, mean, median, min, max, q1, q3, percentages` — consistent.
 - `_safe_percentage(val)` — same signature throughout the route (None pass-through, str-numeric coerce, non-numeric → None + warn).
+
+**4. Test mock fidelity:**
+- `_make_chain` records `.eq()`, `.in_()`, `.neq()` filters and applies them at `.execute()` time. Required because:
+  - `.in_('student_id', valid_student_ids)` is the SQL filter that excludes former-student submissions.
+  - `.in_('content_id', content_ids)` is the SQL filter that scopes submissions to picked assessments.
+  - `.neq('status', 'draft')` is the ONLY exclusion for draft submissions (no Python-side fallback).
+- A no-op mock for `.neq()` would silently mask draft-inclusion bugs in the test suite.
+
+**5. Edge cases tested:**
+- Auth: 401 unauth, 403 wrong teacher, 403 cross-class injection, 403 assignment-not-assessment.
+- Validation: missing content_ids (400), 1 (400), 7 (400), malformed UUID (400).
+- Roster: empty class (n=0), orphan enrollments dropped, former student with submission dropped.
+- Distribution: n=1 quartile (q1=q3=val), n=0 stats (all 0), draft submissions excluded, non-numeric percentage logged + skipped, numeric string percentage coerced.
+- Standards matrix: union sorting, per-cell mean across students, malformed mastery sanitized.
+
+**6. Known limitations (deferred / not blockers):**
+- Box plot has no outlier treatment (whiskers = absolute min/max, not 1.5×IQR fences). If teachers ask for outlier display, port the IQR-fence math from `InteractiveBoxPlot.jsx`.
+- `max_points` is read only from the row column. If a future migration moves it into a JSON field on `published_content`, swap to `_coalesce(row.max_points, row.json_col.max_points, default=0)` — `_coalesce` already wraps the read site.
+- Best-mode ranking still compares raw `percentage` values via `_select_submissions_by_mode`; non-numeric values would TypeError before `_safe_percentage` runs. Production data is always numeric (per `grading_service.py`), so this assumption is safe.
 
 Plan is internally consistent.
 
