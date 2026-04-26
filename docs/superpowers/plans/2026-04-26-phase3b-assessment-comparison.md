@@ -302,9 +302,11 @@ def get_class_assessment_comparison(class_id):
     if len(content_ids) > 6:
         return error_response("Compare at most 6 assessments at once", 400)
 
-    # 5) Fetch published_content rows scoped to this class
+    # 5) Fetch published_content rows scoped to this class.
+    # Select content + settings (both JSONB) so the max_points read site can fall
+    # back through row column → content.max_points → settings.max_points per spec.
     content_rows = db.table('published_content').select(
-        'id, title, content_type, max_points'
+        'id, title, content_type, max_points, content, settings'
     ).in_('id', content_ids).eq('class_id', class_id).execute()
     raw_found = content_rows.data or []
     # Reject anything that isn't an assessment — assignments must not be comparable here.
@@ -495,7 +497,19 @@ In `backend/routes/student_portal_routes.py`, replace the `return jsonify({...em
     assessments_out = []
     for cid in content_ids:
         match = next((c for c in found if c.get('id') == cid), None)
-        max_points = _coalesce(match.get('max_points') if match else None, default=0)
+        # Spec: max_points may live on the row OR in content/settings JSON. Use
+        # _coalesce so the first non-None wins (treating legitimate 0 as a valid total).
+        if match:
+            content_json = match.get('content') if isinstance(match.get('content'), dict) else None
+            settings_json = match.get('settings') if isinstance(match.get('settings'), dict) else None
+            max_points = _coalesce(
+                match.get('max_points'),
+                content_json.get('max_points') if content_json else None,
+                settings_json.get('max_points') if settings_json else None,
+                default=0,
+            )
+        else:
+            max_points = 0
         assessments_out.append({
             "content_id": cid,
             "title": match.get('title', '') if match else '',
@@ -831,7 +845,18 @@ Then replace the placeholder `assessments_out = []` block (Task 2.3's last addit
     selected_per_content_per_student = {}
     for cid in content_ids:
         match = next((c for c in found if c.get('id') == cid), None)
-        max_points = _coalesce(match.get('max_points') if match else None, default=0)
+        # Same _coalesce fallback ladder as Task 2 — row column → content JSON → settings JSON.
+        if match:
+            content_json = match.get('content') if isinstance(match.get('content'), dict) else None
+            settings_json = match.get('settings') if isinstance(match.get('settings'), dict) else None
+            max_points = _coalesce(
+                match.get('max_points'),
+                content_json.get('max_points') if content_json else None,
+                settings_json.get('max_points') if settings_json else None,
+                default=0,
+            )
+        else:
+            max_points = 0
         title = match.get('title', '') if match else ''
 
         percentages = []
@@ -1727,11 +1752,12 @@ Tasks 1-4 are pure backend (TDD). Task 5 is frontend API client. Task 6 is the h
 - `_safe_percentage(val)` — same signature throughout the route (None pass-through, str-numeric coerce, non-numeric → None + warn).
 
 **4. Test mock fidelity:**
-- `_make_chain` records `.eq()`, `.in_()`, `.neq()` filters and applies them at `.execute()` time. Required because:
-  - `.in_('student_id', valid_student_ids)` is the SQL filter that excludes former-student submissions.
-  - `.in_('content_id', content_ids)` is the SQL filter that scopes submissions to picked assessments.
-  - `.neq('status', 'draft')` is the ONLY exclusion for draft submissions (no Python-side fallback).
-- A no-op mock for `.neq()` would silently mask draft-inclusion bugs in the test suite.
+- `_make_chain` records `.eq()`, `.in_()`, `.neq()` filters and applies them at `.execute()` time.
+- **Load-bearing:** `.neq('status', 'draft')` is the ONLY draft exclusion — there is no Python-side `status != 'draft'` fallback in the route. Without proper `.neq()` mock semantics, `test_draft_submissions_excluded_from_distribution` would pass falsely (draft would be counted as 0%, dragging the mean).
+- **Hygiene only (not load-bearing):**
+  - `.in_('student_id', valid_student_ids)` mock fidelity. The route's Python-side `for sid in valid_student_ids` iteration also drops orphan submissions, so `test_former_student_with_submission_excluded` would pass even with no-op `.in_()`. The mock change keeps tests honest about what the SQL is asking for, but it doesn't gate the test.
+  - `.in_('content_id', content_ids)` — the route's Python-side iteration `for cid in content_ids` also scopes to picked content, so unrelated submissions are dropped at iteration time.
+- The mock change is still worth doing: if a future refactor removes the Python-side iteration as a defense-in-depth, the SQL filter becomes the only line of defense and these tests need to genuinely exercise it.
 
 **5. Edge cases tested:**
 - Auth: 401 unauth, 403 wrong teacher, 403 cross-class injection, 403 assignment-not-assessment.
@@ -1742,8 +1768,8 @@ Tasks 1-4 are pure backend (TDD). Task 5 is frontend API client. Task 6 is the h
 
 **6. Known limitations (deferred / not blockers):**
 - Box plot has no outlier treatment (whiskers = absolute min/max, not 1.5×IQR fences). If teachers ask for outlier display, port the IQR-fence math from `InteractiveBoxPlot.jsx`.
-- `max_points` is read only from the row column. If a future migration moves it into a JSON field on `published_content`, swap to `_coalesce(row.max_points, row.json_col.max_points, default=0)` — `_coalesce` already wraps the read site.
 - Best-mode ranking still compares raw `percentage` values via `_select_submissions_by_mode`; non-numeric values would TypeError before `_safe_percentage` runs. Production data is always numeric (per `grading_service.py`), so this assumption is safe.
+- No dedicated test for the `max_points` JSON-fallback path (content/settings → row). The fallback wires through `_coalesce` (already covered by Phase 3a tests). Adding a JSON-fallback test is a one-line value swap if a regression ever shows up.
 
 Plan is internally consistent.
 
