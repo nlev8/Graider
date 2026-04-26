@@ -25,6 +25,7 @@ import {
 import Icon from "../components/Icon";
 import * as api from "../services/api";
 import ProgressRankGrid from "./ProgressRankGrid";
+import Gradebook from "./Gradebook";
 
 /**
  * AnalyticsTab - Extracted from App.jsx
@@ -2383,6 +2384,8 @@ export default React.memo(function AnalyticsTab({
   const [itemAnalysisOpen, setItemAnalysisOpen] = useState(false);
   // Phase 2: Progress Rank grid class selector
   var [selectedClassForGrid, setSelectedClassForGrid] = useState('all');
+  // Phase 3a: sub-tab switcher inside class-scoped view
+  var [classView, setClassView] = useState('progressRank'); // 'progressRank' | 'gradebook'
 
 
   // --- Effects ---
@@ -2555,7 +2558,41 @@ export default React.memo(function AnalyticsTab({
                   </div>
 
                   {selectedClassForGrid !== 'all' ? (
-                    <ProgressRankGrid classId={selectedClassForGrid} />
+                  <div>
+                    {/* Sub-tab switcher (Phase 3a) */}
+                    <div style={{ display: "flex", gap: "4px", marginBottom: "12px" }}>
+                      <button
+                        onClick={function() { setClassView('progressRank'); }}
+                        style={{
+                          padding: "8px 16px",
+                          borderRadius: "8px",
+                          border: "1px solid " + (classView === 'progressRank' ? "var(--accent-primary)" : "var(--glass-border)"),
+                          background: classView === 'progressRank' ? "rgba(99,102,241,0.15)" : "var(--glass-bg)",
+                          color: classView === 'progressRank' ? "var(--accent-primary)" : "var(--text-secondary)",
+                          fontSize: "0.9rem", fontWeight: 600, cursor: "pointer",
+                        }}>
+                        Progress Rank
+                      </button>
+                      <button
+                        onClick={function() { setClassView('gradebook'); }}
+                        style={{
+                          padding: "8px 16px",
+                          borderRadius: "8px",
+                          border: "1px solid " + (classView === 'gradebook' ? "var(--accent-primary)" : "var(--glass-border)"),
+                          background: classView === 'gradebook' ? "rgba(99,102,241,0.15)" : "var(--glass-bg)",
+                          color: classView === 'gradebook' ? "var(--accent-primary)" : "var(--text-secondary)",
+                          fontSize: "0.9rem", fontWeight: 600, cursor: "pointer",
+                        }}>
+                        Gradebook
+                      </button>
+                    </div>
+                    {/* Conditional render — inactive sub-tab is unmounted so drawers can't collide */}
+                    {classView === 'progressRank' ? (
+                      <ProgressRankGrid classId={selectedClassForGrid} />
+                    ) : (
+                      <Gradebook classId={selectedClassForGrid} />
+                    )}
+                  </div>
                   ) : analyticsLoading ? (
                     <div
                       className="glass-card"
