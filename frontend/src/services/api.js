@@ -1669,6 +1669,18 @@ export async function getClassGradebook(classId, attemptMode) {
   );
 }
 
+export async function getClassAssessmentComparison(classId, contentIds, attemptMode) {
+  var mode = attemptMode || 'latest';
+  var params = new URLSearchParams({
+    content_ids: contentIds.join(','),
+    attempt_mode: mode,
+  });
+  return fetchApi(
+    '/api/teacher/class/' + encodeURIComponent(classId) +
+    '/compare?' + params.toString()
+  );
+}
+
 export async function getSubmissionDetail(submissionId) {
   return fetchApi('/api/teacher/submission/' + encodeURIComponent(submissionId) + '/detail');
 }
