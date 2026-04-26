@@ -55,8 +55,13 @@ def _make_chain(execute_data=None):
     chain.select.return_value = chain
     chain.order.return_value = chain
     chain.limit.return_value = chain
-    chain.range.return_value = chain
     filters = []
+    range_bounds = []  # list of (start, end) tuples; only the LAST call wins (matches PostgREST semantics)
+
+    def _range(start, end):
+        range_bounds.append((start, end))
+        return chain
+    chain.range.side_effect = _range
 
     def _eq(field, value):
         filters.append(('eq', field, value))
@@ -82,6 +87,10 @@ def _make_chain(execute_data=None):
                 result = [r for r in result if r.get(field) in value]
             elif op == 'neq':
                 result = [r for r in result if r.get(field) != value]
+        if range_bounds:
+            start, end = range_bounds[-1]
+            result = result[start:end + 1]
+            range_bounds.clear()
         filters.clear()
         return MagicMock(data=result)
     chain.execute.side_effect = _execute
@@ -185,6 +194,26 @@ class TestAssessmentComparisonValidation:
         })
         resp = client.get('/api/teacher/class/cls-1/compare?content_ids=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222', headers=teacher_headers)
         assert resp.status_code == 403
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_invalid_attempt_mode_falls_back_to_latest(self, mock_sb_fn, client, teacher_headers):
+        """attempt_mode='bogus' must silently fall back to 'latest' (not 400)."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [],
+            'students': [],
+            'published_content': [
+                {'id': '11111111-1111-1111-1111-111111111111', 'title': 'Q1',
+                 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': '22222222-2222-2222-2222-222222222222', 'title': 'Q2',
+                 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/compare?content_ids=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222&attempt_mode=bogus', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['attempt_mode'] == 'latest'
 
 
 class TestAssessmentComparisonRoster:
@@ -472,6 +501,77 @@ class TestAssessmentComparisonDistribution:
         a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
         assert a_q1['n'] == 1
         assert a_q1['mean'] == 80.0
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_best_mode_with_mixed_numeric_string_percentages(self, mock_sb_fn, client, teacher_headers):
+        """best mode must not TypeError on mixed numeric/string percentages.
+        Two attempts: one stored as int (50), one stored as numeric string ('90').
+        Best of [50, '90'] must be coerced and pick 90.0."""
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        subs = [
+            {'id': 'sub-int', 'student_id': 'stu-1', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': 50,
+             'results': {'standards_mastery': {}, 'score': 5, 'total_points': 10},
+             'status': 'graded'},
+            {'id': 'sub-str', 'student_id': 'stu-1', 'content_id': cid_q1,
+             'attempt_number': 2, 'submitted_at': '2026-04-12T10:00:00Z',
+             'percentage': '90',  # numeric string
+             'results': {'standards_mastery': {}, 'score': 9, 'total_points': 10},
+             'status': 'graded'},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'student_id': 'stu-1', 'class_id': 'cls-1'}],
+            'students': [{'id': 'stu-1'}],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}&attempt_mode=best', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
+        # Best is 90 (coerced from string), not 50.
+        assert a_q1['n'] == 1
+        assert a_q1['mean'] == 90.0
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_pagination_handles_more_than_one_page(self, mock_sb_fn, client, teacher_headers):
+        """Submission fetch paginates via .range() — must not truncate at PostgREST's 1000-row cap."""
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        # 1001 students each with one submission. Two pages of 1000 + 1.
+        # Use percentage = (i % 100) so the distribution is non-trivial.
+        student_ids = [f'stu-{i:04d}' for i in range(1, 1002)]
+        subs = []
+        for i, sid in enumerate(student_ids):
+            subs.append({
+                'id': f'sub-{i:04d}', 'student_id': sid, 'content_id': cid_q1,
+                'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+                'percentage': (i % 100),
+                'results': {'standards_mastery': {}, 'score': (i % 100) / 10, 'total_points': 10},
+                'status': 'graded',
+            })
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'student_id': sid, 'class_id': 'cls-1'} for sid in student_ids],
+            'students': [{'id': sid} for sid in student_ids],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
+        # All 1001 submissions counted — no truncation.
+        assert a_q1['n'] == 1001
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_draft_submissions_excluded_from_distribution(self, mock_sb_fn, client, teacher_headers):

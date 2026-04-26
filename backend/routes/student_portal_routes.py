@@ -1915,6 +1915,15 @@ def get_class_assessment_comparison(class_id):
     for s in submissions:
         _sanitize_standards_mastery(s)
 
+    # Normalize percentage to float (or 0.0 sentinel) so best-mode's max(...) doesn't
+    # TypeError on mixed numeric/string values. Distribution stats still call
+    # _safe_percentage downstream on `_raw_percentage`, which converts non-numeric
+    # back to None and skips them — preserving the existing skip contract.
+    for s in submissions:
+        s['_raw_percentage'] = s.get('percentage')
+        coerced = _safe_percentage(s.get('percentage'))
+        s['percentage'] = coerced if coerced is not None else 0.0
+
     # 9) Group submissions by (student_id, content_id)
     from collections import defaultdict
     import statistics as _stats
@@ -1952,23 +1961,24 @@ def get_class_assessment_comparison(class_id):
                 continue
             selected = _select_submissions_by_mode({cid: student_subs}, attempt_mode).get(cid, [])
             if attempt_mode == 'average':
-                # Mean across attempts for this student
-                attempt_pcts = [_safe_percentage(s.get('percentage')) for s in student_subs]
+                # Mean across attempts for this student. Read `_raw_percentage` (set above)
+                # so non-numeric values are still skipped by _safe_percentage instead of
+                # being counted as the 0.0 ranking sentinel.
+                attempt_pcts = [_safe_percentage(s.get('_raw_percentage')) for s in student_subs]
                 attempt_pcts = [p for p in attempt_pcts if p is not None]
                 if not attempt_pcts:
                     continue
                 student_pct = sum(attempt_pcts) / len(attempt_pcts)
             else:
                 # latest/best modes — _select_submissions_by_mode picks one submission per
-                # (student, content). NOTE: best mode ranks raw `percentage` values; if any
-                # are non-numeric strings, _select_submissions_by_mode could TypeError before
-                # _safe_percentage runs. Production data is always numeric (int/float per
-                # grading_service.py), so this assumption is safe; if best-mode TypeErrors
-                # are ever observed in logs, normalize percentages on `student_subs` before
-                # calling _select_submissions_by_mode.
+                # (student, content). The pre-pass normalization above coerced `percentage`
+                # to a float (or 0.0 sentinel for non-numeric), so best-mode's max(...) is
+                # safe. We still read `_raw_percentage` here so submissions with originally
+                # non-numeric percentages get skipped from the distribution rather than
+                # contributing the 0.0 sentinel.
                 if not selected:
                     continue
-                student_pct = _safe_percentage(selected[0].get('percentage'))
+                student_pct = _safe_percentage(selected[0].get('_raw_percentage'))
                 if student_pct is None:
                     continue
             percentages.append(student_pct)
