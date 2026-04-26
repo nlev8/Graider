@@ -81,6 +81,20 @@ def _parse_ts(ts):
         return datetime.min
 
 
+def _coalesce(*vals, default=None):
+    """Return the first non-None value among `vals`, or `default` if all are None.
+
+    Use this instead of Python's `or` for fallback chains where 0 / "" / False
+    are legitimate values. `or` short-circuits on falsy, corrupting numeric/text
+    fallbacks (e.g., a legitimate `points_earned = 0` would silently become the
+    fallback's value).
+    """
+    for v in vals:
+        if v is not None:
+            return v
+    return default
+
+
 def _find_content_row(db, content_id, teacher_id):
     """Locate a published content row by ID in either published_assessments
     or published_content, verifying teacher ownership.
