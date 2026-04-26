@@ -1872,12 +1872,11 @@ def get_class_assessment_comparison(class_id):
     if enrolled_ids:
         students_rows = db.table('students').select('id').in_('id', enrolled_ids).execute()
         existing = {s['id'] for s in (students_rows.data or []) if s.get('id')}
-        valid_student_ids = [sid for sid in enrolled_ids if sid in existing]
-        if len(existing) < len(enrolled_ids):
-            _logger.debug(
-                "Orphan enrollments in class %s: %d students missing from students table",
-                class_id, len(enrolled_ids) - len(existing),
-            )
+        for sid in enrolled_ids:
+            if sid in existing:
+                valid_student_ids.append(sid)
+            else:
+                _logger.debug("Orphan enrollment in class %s: student_id=%s missing from students table", class_id, sid)
 
     class_roster_size = len(valid_student_ids)
 
@@ -1981,7 +1980,7 @@ def get_class_assessment_comparison(class_id):
         if n >= 2:
             sorted_pcts = sorted(percentages)
             mean_v = round(sum(sorted_pcts) / n, 2)
-            median_v = _stats.median(sorted_pcts)
+            median_v = round(_stats.median(sorted_pcts), 2)
             quartiles = _stats.quantiles(sorted_pcts, n=4, method='inclusive')
             q1_v, q3_v = round(quartiles[0], 2), round(quartiles[2], 2)
             min_v, max_v = sorted_pcts[0], sorted_pcts[-1]
@@ -2032,7 +2031,7 @@ def get_class_assessment_comparison(class_id):
         for code, pct_list in by_code.items():
             students_assessed = len(pct_list)
             cells_out[cid][code] = {
-                "percentage": round(sum(pct_list) / students_assessed, 1) if students_assessed > 0 else 0,
+                "percentage": round(sum(pct_list) / students_assessed, 2) if students_assessed > 0 else 0,
                 "students_assessed": students_assessed,
             }
             all_standards.add(code)

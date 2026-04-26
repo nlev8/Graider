@@ -331,7 +331,7 @@ class TestAssessmentComparisonDistribution:
         # Q2: 3 submissions, submission_rate = 0.75 (3/4)
         assert a_q2['n'] == 3
         assert a_q2['submission_rate'] == 0.75
-        assert a_q2['mean'] == round((60 + 75 + 85) / 3, 2) or a_q2['mean'] == round((60 + 75 + 85) / 3, 1)
+        assert a_q2['mean'] == pytest.approx((60 + 75 + 85) / 3, abs=0.01)
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_zero_submissions_assessment_returns_zero_stats(self, mock_sb_fn, client, teacher_headers):
