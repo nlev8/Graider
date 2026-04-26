@@ -26,6 +26,7 @@ import Icon from "../components/Icon";
 import * as api from "../services/api";
 import ProgressRankGrid from "./ProgressRankGrid";
 import Gradebook from "./Gradebook";
+import AssessmentComparison from "./AssessmentComparison";
 
 /**
  * AnalyticsTab - Extracted from App.jsx
@@ -2385,7 +2386,7 @@ export default React.memo(function AnalyticsTab({
   // Phase 2: Progress Rank grid class selector
   var [selectedClassForGrid, setSelectedClassForGrid] = useState('all');
   // Phase 3a: sub-tab switcher inside class-scoped view
-  var [classView, setClassView] = useState('progressRank'); // 'progressRank' | 'gradebook'
+  var [classView, setClassView] = useState('progressRank'); // 'progressRank' | 'gradebook' | 'compare'
 
 
   // --- Effects ---
@@ -2585,12 +2586,26 @@ export default React.memo(function AnalyticsTab({
                         }}>
                         Gradebook
                       </button>
+                      <button
+                        onClick={function() { setClassView('compare'); }}
+                        style={{
+                          padding: "8px 16px",
+                          borderRadius: "8px",
+                          border: "1px solid " + (classView === 'compare' ? "var(--accent-primary)" : "var(--glass-border)"),
+                          background: classView === 'compare' ? "rgba(99,102,241,0.15)" : "var(--glass-bg)",
+                          color: classView === 'compare' ? "var(--accent-primary)" : "var(--text-secondary)",
+                          fontSize: "0.9rem", fontWeight: 600, cursor: "pointer",
+                        }}>
+                        Compare
+                      </button>
                     </div>
                     {/* Conditional render — inactive sub-tab is unmounted so drawers can't collide */}
                     {classView === 'progressRank' ? (
                       <ProgressRankGrid classId={selectedClassForGrid} />
-                    ) : (
+                    ) : classView === 'gradebook' ? (
                       <Gradebook classId={selectedClassForGrid} />
+                    ) : (
+                      <AssessmentComparison classId={selectedClassForGrid} />
                     )}
                   </div>
                   ) : analyticsLoading ? (
