@@ -1660,6 +1660,19 @@ export async function getStudentReportCard(classId, studentId, attemptMode) {
   );
 }
 
+export async function getClassGradebook(classId, attemptMode) {
+  var mode = attemptMode || 'latest';
+  var params = new URLSearchParams({ attempt_mode: mode });
+  return fetchApi(
+    '/api/teacher/class/' + encodeURIComponent(classId) +
+    '/gradebook?' + params.toString()
+  );
+}
+
+export async function getSubmissionDetail(submissionId) {
+  return fetchApi('/api/teacher/submission/' + encodeURIComponent(submissionId) + '/detail');
+}
+
 export async function getTeacherTags() {
   return fetchApi('/api/teacher/tags');
 }

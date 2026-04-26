@@ -81,6 +81,20 @@ def _parse_ts(ts):
         return datetime.min
 
 
+def _coalesce(*vals, default=None):
+    """Return the first non-None value among `vals`, or `default` if all are None.
+
+    Use this instead of Python's `or` for fallback chains where 0 / "" / False
+    are legitimate values. `or` short-circuits on falsy, corrupting numeric/text
+    fallbacks (e.g., a legitimate `points_earned = 0` would silently become the
+    fallback's value).
+    """
+    for v in vals:
+        if v is not None:
+            return v
+    return default
+
+
 def _find_content_row(db, content_id, teacher_id):
     """Locate a published content row by ID in either published_assessments
     or published_content, verifying teacher ownership.
@@ -1548,6 +1562,251 @@ def get_student_report_card(class_id, student_id):
         "attempt_mode": attempt_mode,
         "trajectory": trajectory,
         "standards_breakdown": standards_breakdown,
+    })
+
+
+@student_portal_bp.route('/api/teacher/class/<class_id>/gradebook', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_class_gradebook(class_id):
+    """Return per-(student, assessment) canonical grades for a class.
+
+    Spec: docs/superpowers/specs/2026-04-25-phase3a-gradebook-design.md
+    """
+    db = _get_teacher_supabase()
+
+    attempt_mode = request.args.get('attempt_mode', 'latest')
+    if attempt_mode not in ('latest', 'best', 'average'):
+        attempt_mode = 'latest'
+
+    # 1) Class ownership check
+    cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+    class_name = cls.data[0].get('name')
+
+    # 2) Fetch class roster: enrollments + students. Skip orphans silently.
+    enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
+    student_ids = [row['student_id'] for row in (enrollments.data or []) if row.get('student_id')]
+
+    student_records = []
+    if student_ids:
+        students_rows = db.table('students').select(
+            'id, first_name, last_name'
+        ).in_('id', student_ids).execute()
+        seen = {s['id']: s for s in (students_rows.data or []) if s.get('id')}
+        for sid in student_ids:
+            sdata = seen.get(sid)
+            if sdata is None:
+                _logger.debug("Orphan enrollment in class %s: student_id=%s missing from students table", class_id, sid)
+                continue
+            student_records.append({
+                'student_id': sid,
+                'student_name': ((sdata.get('first_name') or '') + ' ' + (sdata.get('last_name') or '')).strip(),
+            })
+        student_records.sort(key=lambda s: s['student_name'].lower())
+
+    if not student_records:
+        return jsonify({
+            "class_id": class_id, "class_name": class_name, "attempt_mode": attempt_mode,
+            "students": [], "assessments": [], "grades": {},
+        })
+
+    # 3) Fetch all class assessments/assignments. Sort ASC by publish_date.
+    content_rows = db.table('published_content').select(
+        'id, title, content_type, publish_date, due_date'
+    ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
+
+    assessments = sorted(
+        (content_rows.data or []),
+        key=lambda c: (c.get('publish_date') or '', c.get('id') or ''),
+    )
+    content_titles = {c['id']: c.get('title', '') for c in assessments}
+
+    if not assessments:
+        return jsonify({
+            "class_id": class_id, "class_name": class_name, "attempt_mode": attempt_mode,
+            "students": [{'student_id': s['student_id'], 'student_name': s['student_name']} for s in student_records],
+            "assessments": [], "grades": {},
+        })
+
+    # 4) Fetch non-draft submissions for these students × these contents.
+    # Paginate via .range() because PostgREST's default row cap is 1000 —
+    # a real class (30 students x 40 assessments x several attempts each) can
+    # silently truncate without paging. Drop `results` from the SELECT —
+    # gradebook only needs row-level columns (id/percentage/attempt_number
+    # /submitted_at), not the rich per-question results JSON; this also
+    # means we don't need the defensive _sanitize_standards_mastery call here.
+    student_id_set = [s['student_id'] for s in student_records]
+    content_id_set = [c['id'] for c in assessments]
+    page_size = 1000
+    submissions = []
+    start = 0
+    while True:
+        page = db.table('student_submissions').select(
+            'id, student_id, content_id, attempt_number, submitted_at, percentage, status'
+        ).in_('student_id', student_id_set).in_('content_id', content_id_set).neq(
+            'status', 'draft'
+        ).range(start, start + page_size - 1).execute()
+        rows = page.data or []
+        submissions.extend(rows)
+        if len(rows) < page_size:
+            break
+        start += page_size
+
+    # 5) Group by (student_id, content_id) and build the canonical-grade map
+    from collections import defaultdict
+    subs_by_student_content = defaultdict(lambda: defaultdict(list))
+    for s in submissions:
+        sid = s.get('student_id')
+        cid = s.get('content_id')
+        if sid and cid:
+            subs_by_student_content[sid][cid].append(s)
+
+    grades = {}
+    for sid, by_content in subs_by_student_content.items():
+        per_student = {}
+        for cid, subs in by_content.items():
+            if not subs:
+                continue
+            total_attempts = len(subs)
+            selected = _select_submissions_by_mode({cid: subs}, attempt_mode).get(cid, [])
+            if attempt_mode == 'average':
+                # mean percentage across attempts; drilldown anchor = latest.
+                # Use _coalesce (NOT `or`) so a legitimate 0 doesn't fall through.
+                pcts = [_coalesce(s.get('percentage'), default=0) for s in subs]
+                mean_pct = round(sum(pcts) / len(pcts), 1) if pcts else 0
+                latest = max(subs, key=lambda s: (s.get('attempt_number') or 0, _parse_ts(s.get('submitted_at'))))
+                per_student[cid] = {
+                    'submission_id': latest.get('id'),
+                    'percentage': mean_pct,
+                    'attempt_number': latest.get('attempt_number'),
+                    'submitted_at': latest.get('submitted_at'),
+                    'total_attempts': total_attempts,
+                }
+            else:
+                if not selected:
+                    continue
+                chosen = selected[0]
+                per_student[cid] = {
+                    'submission_id': chosen.get('id'),
+                    'percentage': chosen.get('percentage'),
+                    'attempt_number': chosen.get('attempt_number'),
+                    'submitted_at': chosen.get('submitted_at'),
+                    'total_attempts': total_attempts,
+                }
+        if per_student:
+            grades[sid] = per_student
+
+    return jsonify({
+        "class_id": class_id, "class_name": class_name, "attempt_mode": attempt_mode,
+        "students": [{'student_id': s['student_id'], 'student_name': s['student_name']} for s in student_records],
+        "assessments": [
+            {'content_id': c['id'], 'title': c.get('title', ''), 'content_type': c.get('content_type'),
+             'publish_date': c.get('publish_date'), 'due_date': c.get('due_date')}
+            for c in assessments
+        ],
+        "grades": grades,
+    })
+
+
+@student_portal_bp.route('/api/teacher/submission/<submission_id>/detail', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_student_submission_detail(submission_id):
+    """Return per-submission detail: metadata + per-question breakdown + sibling attempts.
+
+    Spec: docs/superpowers/specs/2026-04-25-phase3a-gradebook-design.md
+    """
+    db = _get_teacher_supabase()
+
+    # 1) Look up the submission
+    sub_row = db.table('student_submissions').select(
+        'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status, score, total_points'
+    ).eq('id', submission_id).execute()
+    if not sub_row.data:
+        return error_response("Submission not found", 404)
+    sub = sub_row.data[0]
+
+    # 2) Look up the content
+    content_id = sub.get('content_id')
+    content_row = db.table('published_content').select(
+        'id, title, class_id'
+    ).eq('id', content_id).execute()
+    if not content_row.data:
+        return error_response("Submission's content no longer exists", 404)
+    content = content_row.data[0]
+
+    # 3) Verify class ownership
+    class_row = db.table('classes').select('id, teacher_id').eq('id', content.get('class_id')).execute()
+    if not class_row.data or class_row.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+
+    # 4) Look up the student
+    student_id = sub.get('student_id')
+    student_row = db.table('students').select(
+        'id, first_name, last_name'
+    ).eq('id', student_id).execute()
+    if not student_row.data:
+        return error_response("Student not found", 404)
+    sdata = student_row.data[0]
+    student_name = ((sdata.get('first_name') or '') + ' ' + (sdata.get('last_name') or '')).strip()
+
+    # 5) Sibling attempts (same student × same content)
+    siblings_row = db.table('student_submissions').select(
+        'id, attempt_number, submitted_at, percentage'
+    ).eq('student_id', student_id).eq('content_id', content_id).execute()
+    siblings = sorted(
+        siblings_row.data or [],
+        key=lambda s: (s.get('attempt_number') or 0, _parse_ts(s.get('submitted_at'))),
+    )
+
+    # 6) Top-level score with row + results fallback. Use _coalesce so legitimate 0 isn't lost.
+    results = sub.get('results') or {}
+    points_earned = _coalesce(results.get('score'), sub.get('score'), default=0)
+    points_possible = _coalesce(results.get('total_points'), sub.get('total_points'), default=0)
+
+    # 7) Per-question normalization (spec fallback rules)
+    raw_questions = results.get('questions')
+    questions = []
+    if isinstance(raw_questions, list):
+        for q in raw_questions:
+            if not isinstance(q, dict):
+                _logger.warning("malformed question entry (type=%s) in submission %s — skipping",
+                                type(q).__name__, submission_id)
+                continue
+            questions.append({
+                "question_text": _coalesce(q.get('question'), q.get('question_text'), default=''),
+                "question_type": _coalesce(q.get('type'), q.get('question_type'), default='unknown'),
+                "student_answer": _coalesce(q.get('student_answer'), q.get('answer'), default=''),
+                "correct_answer": q.get('correct_answer'),
+                "is_correct": q.get('is_correct'),
+                "ai_feedback": _coalesce(q.get('feedback'), q.get('reasoning'), q.get('quality'), default=''),
+                "points_earned": _coalesce(q.get('points_earned'), q.get('score'), default=0),
+                "points_possible": _coalesce(q.get('points_possible'), q.get('points'), default=0),
+            })
+    elif raw_questions is not None:
+        _logger.warning("malformed results.questions (type=%s) in submission %s — returning empty",
+                        type(raw_questions).__name__, submission_id)
+
+    return jsonify({
+        "submission_id": sub.get('id'),
+        "student_id": student_id,
+        "student_name": student_name,
+        "content_id": content_id,
+        "content_title": content.get('title', ''),
+        "attempt_number": sub.get('attempt_number'),
+        "total_attempts": len(siblings),
+        "submitted_at": sub.get('submitted_at'),
+        "percentage": sub.get('percentage'),
+        "points_earned": points_earned,
+        "points_possible": points_possible,
+        "questions": questions,
+        "sibling_attempts": [
+            {"submission_id": s.get('id'), "attempt_number": s.get('attempt_number'),
+             "submitted_at": s.get('submitted_at'), "percentage": s.get('percentage')}
+            for s in siblings
+        ],
     })
 
 
