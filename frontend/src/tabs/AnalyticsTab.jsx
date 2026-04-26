@@ -2546,7 +2546,7 @@ export default React.memo(function AnalyticsTab({
                     <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>Class:</label>
                     <select
                       value={selectedClassForGrid}
-                      onChange={function(e) { setSelectedClassForGrid(e.target.value); }}
+                      onChange={function(e) { setSelectedClassForGrid(e.target.value); setClassView('progressRank'); }}
                       className="input"
                       style={{ padding: "6px 12px", fontSize: "0.9rem", minWidth: "200px" }}
                     >

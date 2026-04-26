@@ -110,10 +110,10 @@ export default function Gradebook({ classId }) {
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "600px" }}>
             <thead>
               <tr>
-                <th style={{ position: "sticky", left: 0, background: "var(--card-bg)", zIndex: 2, padding: "10px 14px", textAlign: "left", fontSize: "0.8rem", fontWeight: 700, borderBottom: "1px solid var(--glass-border)", minWidth: "180px" }}>Student</th>
+                <th style={{ position: "sticky", left: 0, top: 0, background: "var(--card-bg)", zIndex: 3, padding: "10px 14px", textAlign: "left", fontSize: "0.8rem", fontWeight: 700, borderBottom: "1px solid var(--glass-border)", minWidth: "180px" }}>Student</th>
                 {assessments.map(function(a) {
                   return (
-                    <th key={a.content_id} style={{ padding: "10px 8px", fontSize: "0.7rem", fontWeight: 700, borderBottom: "1px solid var(--glass-border)", borderLeft: "1px solid var(--glass-border)", minWidth: "100px", textAlign: "center" }}>
+                    <th key={a.content_id} style={{ position: "sticky", top: 0, background: "var(--card-bg)", padding: "10px 8px", fontSize: "0.7rem", fontWeight: 700, borderBottom: "1px solid var(--glass-border)", borderLeft: "1px solid var(--glass-border)", minWidth: "100px", textAlign: "center", zIndex: 2 }}>
                       {a.title}
                     </th>
                   );
