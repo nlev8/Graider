@@ -1565,6 +1565,37 @@ def get_student_report_card(class_id, student_id):
     })
 
 
+@student_portal_bp.route('/api/teacher/class/<class_id>/gradebook', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_class_gradebook(class_id):
+    """Return per-(student, assessment) canonical grades for a class.
+
+    Spec: docs/superpowers/specs/2026-04-25-phase3a-gradebook-design.md
+    """
+    db = _get_teacher_supabase()
+
+    attempt_mode = request.args.get('attempt_mode', 'latest')
+    if attempt_mode not in ('latest', 'best', 'average'):
+        attempt_mode = 'latest'
+
+    # 1) Class ownership check
+    cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+    class_name = cls.data[0].get('name')
+
+    # Skeleton: empty arrays. Happy-path data fetch lands in Task 3.
+    return jsonify({
+        "class_id": class_id,
+        "class_name": class_name,
+        "attempt_mode": attempt_mode,
+        "students": [],
+        "assessments": [],
+        "grades": {},
+    })
+
+
 @student_portal_bp.route('/api/teacher/tags', methods=['GET'])
 @require_teacher
 @handle_route_errors
