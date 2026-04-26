@@ -1630,21 +1630,31 @@ def get_class_gradebook(class_id):
             "assessments": [], "grades": {},
         })
 
-    # 4) Fetch non-draft submissions for these students × these contents
+    # 4) Fetch non-draft submissions for these students × these contents.
+    # Paginate via .range() because PostgREST's default row cap is 1000 —
+    # a real class (30 students x 40 assessments x several attempts each) can
+    # silently truncate without paging. Drop `results` from the SELECT —
+    # gradebook only needs row-level columns (id/percentage/attempt_number
+    # /submitted_at), not the rich per-question results JSON; this also
+    # means we don't need the defensive _sanitize_standards_mastery call here.
     student_id_set = [s['student_id'] for s in student_records]
     content_id_set = [c['id'] for c in assessments]
-    subs_rows = db.table('student_submissions').select(
-        'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
-    ).in_('student_id', student_id_set).in_('content_id', content_id_set).neq(
-        'status', 'draft'
-    ).execute()
-    submissions = subs_rows.data or []
+    page_size = 1000
+    submissions = []
+    start = 0
+    while True:
+        page = db.table('student_submissions').select(
+            'id, student_id, content_id, attempt_number, submitted_at, percentage, status'
+        ).in_('student_id', student_id_set).in_('content_id', content_id_set).neq(
+            'status', 'draft'
+        ).range(start, start + page_size - 1).execute()
+        rows = page.data or []
+        submissions.extend(rows)
+        if len(rows) < page_size:
+            break
+        start += page_size
 
-    # 5) Sanitize results.standards_mastery in place (defensive)
-    for s in submissions:
-        _sanitize_standards_mastery(s)
-
-    # 6) Group by (student_id, content_id) and build the canonical-grade map
+    # 5) Group by (student_id, content_id) and build the canonical-grade map
     from collections import defaultdict
     subs_by_student_content = defaultdict(lambda: defaultdict(list))
     for s in submissions:

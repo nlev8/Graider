@@ -106,7 +106,7 @@ export default function Gradebook({ classId }) {
           All students have submitted everything.
         </p>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid var(--glass-border)", borderRadius: "8px" }}>
+        <div style={{ overflow: "auto", maxHeight: "70vh", border: "1px solid var(--glass-border)", borderRadius: "8px" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "600px" }}>
             <thead>
               <tr>

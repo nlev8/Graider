@@ -84,6 +84,7 @@ def _make_chain(execute_data=None):
     chain.in_.return_value = chain
     chain.order.return_value = chain
     chain.limit.return_value = chain
+    chain.range.return_value = chain
     filters = []  # list of ('eq', field, value)
 
     def _eq(field, value):
