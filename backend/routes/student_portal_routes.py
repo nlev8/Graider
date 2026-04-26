@@ -1810,6 +1810,71 @@ def get_student_submission_detail(submission_id):
     })
 
 
+@student_portal_bp.route('/api/teacher/class/<class_id>/compare', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_class_assessment_comparison(class_id):
+    """Compare 2-6 assessments side-by-side (class-scoped).
+
+    Spec: docs/superpowers/specs/2026-04-26-phase3b-assessment-comparison-design.md
+    """
+    import uuid as _uuid
+
+    db = _get_teacher_supabase()
+
+    attempt_mode = request.args.get('attempt_mode', 'latest')
+    if attempt_mode not in ('latest', 'best', 'average'):
+        attempt_mode = 'latest'
+
+    # 1) Class ownership check
+    cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+    class_name = cls.data[0].get('name')
+
+    # 2) Parse content_ids CSV
+    raw = request.args.get('content_ids', '').strip()
+    if not raw:
+        return error_response("content_ids is required", 400)
+    content_ids = [cid.strip() for cid in raw.split(',') if cid.strip()]
+
+    # 3) UUID validation — catch malformed before Postgres errors out as 500
+    for cid in content_ids:
+        try:
+            _uuid.UUID(cid)
+        except (ValueError, TypeError):
+            return error_response("Invalid content_id", 400)
+
+    # 4) Count bounds
+    if len(content_ids) < 2:
+        return error_response("Pick at least 2 assessments to compare", 400)
+    if len(content_ids) > 6:
+        return error_response("Compare at most 6 assessments at once", 400)
+
+    # 5) Fetch published_content rows scoped to this class.
+    # Select content + settings (both JSONB) so the max_points read site can fall
+    # back through row column → content.max_points → settings.max_points per spec.
+    content_rows = db.table('published_content').select(
+        'id, title, content_type, max_points, content, settings'
+    ).in_('id', content_ids).eq('class_id', class_id).execute()
+    raw_found = content_rows.data or []
+    # Reject anything that isn't an assessment — assignments must not be comparable here.
+    found = [r for r in raw_found if r.get('content_type') == 'assessment']
+    if len(found) < len(content_ids):
+        # One or more content_ids isn't in this class OR isn't an assessment — cross-class/type injection guard.
+        return error_response("Not authorized", 403)
+
+    # Skeleton: empty data. Happy-path lands in Tasks 2-5.
+    return jsonify({
+        "class_id": class_id,
+        "class_name": class_name,
+        "attempt_mode": attempt_mode,
+        "class_roster_size": 0,
+        "assessments": [],
+        "standards_matrix": {"standards": [], "cells": {}},
+    })
+
+
 @student_portal_bp.route('/api/teacher/tags', methods=['GET'])
 @require_teacher
 @handle_route_errors
