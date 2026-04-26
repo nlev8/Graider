@@ -40,30 +40,54 @@ No new shared helpers. The new route handler glues these together for a per-asse
 **Validation (in order):**
 1. Class ownership → 403 via `error_response("Not authorized", 403)`.
 2. Parse `content_ids` (split on comma, strip whitespace, filter empties). If list is empty → 400 via `error_response("content_ids is required", 400)`.
-3. If `len(content_ids) < 2` → 400 via `error_response("Pick at least 2 assessments to compare", 400)`.
-4. If `len(content_ids) > 6` → 400 via `error_response("Compare at most 6 assessments at once", 400)`.
-5. Fetch `published_content` rows where `id IN content_ids AND class_id == <class_id>`. If the count returned is less than `len(content_ids)` → 403 via `error_response("Not authorized", 403)` (one or more `content_ids` is not in this class — prevents cross-class injection).
+3. **UUID validation:** for each `content_id`, run `uuid.UUID(cid)` in a try/except. If any raise `ValueError` → 400 via `error_response("Invalid content_id", 400)`. This prevents Postgres-level UUID parse errors from surfacing as 500s.
+4. If `len(content_ids) < 2` → 400 via `error_response("Pick at least 2 assessments to compare", 400)`.
+5. If `len(content_ids) > 6` → 400 via `error_response("Compare at most 6 assessments at once", 400)`.
+6. Fetch `published_content` rows where `id IN content_ids AND class_id == <class_id>`. If the count returned is less than `len(content_ids)` → 403 via `error_response("Not authorized", 403)` (one or more `content_ids` is not in this class — prevents cross-class injection).
 
 **Implementation:**
 1. Resolve `class_name` from the class row (already fetched for ownership check).
-2. Resolve `assessments` (the 5 `published_content` rows) — keep `(id, title, max_points)` for the response. `max_points` may be on the row or in the content JSON; pull from whichever is available, default 0.
-3. Fetch class roster size (count of `class_students` for the class) → store as `class_roster_size` for the `submission_rate` computation. Skip orphan-student-row checks here (we only need a count; orphan-skip would require fetching students which is wasteful for this endpoint).
-4. Paginate `student_submissions` for `content_id IN content_ids AND status != 'draft'` via `.range()` (matches Phase 3a). SELECT only `id, student_id, content_id, attempt_number, submitted_at, percentage, results, status` — `results` is needed because `standards_mastery` lives there.
+2. Resolve `assessments` (the picked `published_content` rows) — keep `(id, title, max_points)` for the response. `max_points` may be on the row or in the content JSON; pull from whichever is available via `_coalesce`, default 0.
+3. **Resolve the valid roster:** fetch `class_students.student_id` for `class_id`. Then fetch `students.id` for those ids. Build `valid_student_ids = set(intersection)`. Orphan enrollments (in `class_students` but missing `students` row) are skipped — same pattern as Phase 3a's gradebook. Use `class_roster_size = len(valid_student_ids)` as the `submission_rate` denominator.
+4. Paginate `student_submissions` for `content_id IN content_ids AND status != 'draft' AND student_id IN valid_student_ids` via `.range()` (matches Phase 3a). SELECT only `id, student_id, content_id, attempt_number, submitted_at, percentage, results, status` — `results` is needed because `standards_mastery` lives there. **Filtering by `valid_student_ids` prevents former / soft-deleted students' historical submissions from inflating distributions.**
 5. Sanitize-in-place via `_sanitize_standards_mastery`.
-6. Group submissions by `(student_id, content_id)` → `subs_by_student_content`.
-7. For each `content_id`:
-   - Collect submissions for this `content_id` across all students.
-   - For each student, run `_select_submissions_by_mode({content_id: subs}, attempt_mode)` to pick the canonical submission(s).
-   - Build a `percentages: list[float]` where each entry is the canonical percentage for that student.
-     - For `attempt_mode='average'`: percentage = mean of attempt percentages for that student-content pair (using `_coalesce` for null safety).
-     - For `latest`/`best`: percentage = the selected submission's `percentage`.
-   - Compute distribution stats: `n` (length of percentages), `mean`, `median`, `q1`, `q3`, `min`, `max`.
-   - `submission_rate` = `n / class_roster_size` (rounded to 2dp). 0.0 if `class_roster_size == 0`.
-   - Build per-student aggregated `standards_mastery` for THIS content_id only by passing the selected submissions to `_aggregate_mastery_for_student({content_id: selected}, content_titles, attempt_mode)` and collecting the per-standard tallies.
-8. Aggregate across all students per (content_id, standard_code):
-   - `standards_matrix.standards`: sorted union of all standards across all picked assessments.
-   - `standards_matrix.cells[content_id][standard_code]`: `{percentage: <class-mean across students who attempted>, students_assessed: <count>}`. Cells absent from the inner map = standard not covered by that assessment.
-   - "Class-mean" = mean of per-student percentages on that standard, weighted equally per student. Use `_coalesce` to skip students with no contribution.
+6. **Define a local numeric sanitizer for percentage values:**
+   ```python
+   def _safe_percentage(val):
+       """Coerce a percentage value to float, or None if not coercible.
+       Used for distribution computation. Null/missing → None (skip).
+       Numeric strings (e.g., "85.5") → float. Non-numeric → None + warning."""
+       if val is None:
+           return None
+       try:
+           return float(val)
+       except (ValueError, TypeError):
+           _logger.warning("non-numeric percentage value (type=%s, value=%r) — skipping",
+                           type(val).__name__, val)
+           return None
+   ```
+   `None` results are SKIPPED from the distribution arrays (do not contribute to `n`, mean, median, quartiles). This matches the spec's "n is the count of submissions with valid grades" semantics.
+7. Group submissions by `(student_id, content_id)` → `subs_by_student_content`.
+8. For each `content_id`:
+   - For each student in `valid_student_ids`, run `_select_submissions_by_mode({content_id: subs_by_student_content[student][content_id]}, attempt_mode)` to pick the canonical submission(s). Skip students with no submissions for this content.
+   - For each surviving student, compute `student_percentage`:
+     - `latest`/`best`: `_safe_percentage(selected[0].get('percentage'))`. If None, skip this student's contribution to this content's distribution.
+     - `average`: compute mean of `[_safe_percentage(s.get('percentage')) for s in subs if _safe_percentage(...) is not None]`. If the cleaned list is empty, skip.
+   - Append `student_percentage` to `percentages: list[float]` for this content.
+   - Compute distribution stats from `percentages`: `n = len(percentages)`, `mean`, `median`, `q1`, `q3`, `min`, `max`. Quartile computation: `statistics.quantiles(percentages, n=4, method='inclusive')` for `n >= 2`; for `n == 1` set `q1 = q3 = percentages[0]`; for `n == 0` set all stats to 0.
+   - `submission_rate = round(n / class_roster_size, 2) if class_roster_size > 0 else 0.0`.
+9. **Standards matrix bridge code (no new shared helper — this is local to the route handler):**
+   - `cells_accumulator: dict[content_id, dict[standard_code, list[float]]]` — collected per-student percentages per (content, standard).
+   - For each `content_id` × each surviving `student_id`:
+     - Get the canonical submissions for THIS student × THIS content.
+     - Call `_aggregate_mastery_for_student({content_id: selected}, content_titles, attempt_mode)` — returns `{standard_code: {percentage, points_earned, ...}}`.
+     - For each `standard_code` in that per-student rollup, append `_safe_percentage(rollup[standard_code]['percentage'])` to `cells_accumulator[content_id][standard_code]` (skip if None).
+   - After the loop, build the response cells: for each `(content_id, standard_code)` in `cells_accumulator`:
+     - `students_assessed = len(percentages_list)`
+     - `percentage = round(sum(percentages_list) / students_assessed, 1) if students_assessed > 0 else 0`
+   - `standards_matrix.standards = sorted(set().union(*[set(cells[cid].keys()) for cid in cells]))` — sorted union of all standards across all picked assessments.
+
+   This bridge inverts `_aggregate_mastery_for_student`'s per-student rollup shape into the per-(content, standard) class-cell shape the response needs. The 10-cap on `contributing_submissions` inside `_aggregate_mastery_for_student` does NOT affect this aggregation — only `mastery[standard_code]['percentage']` is read, which is computed before the cap is applied.
 
 **Response shape:**
 
@@ -129,6 +153,8 @@ No new shared helpers. The new route handler glues these together for a per-asse
 **Bootstrap fetch:**
 The picker needs the list of assessments published to the class. Reuse the existing `getClassGradebook(classId, 'latest')` endpoint (Phase 3a) and read its `assessments` array — that already returns the right shape (`content_id`, `title`, `publish_date`). Caching: this fetch happens on mount and on `classId` change. Filter results client-side via `searchQuery`.
 
+**Bootstrap-fetch tradeoff:** The gradebook endpoint also returns the full students × assessments grades map, which the picker doesn't need. This is INTENTIONALLY wasteful for MVP — the gradebook fetch is paginated and capped at 1000 rows per page; for a typical class (≤30 students × ≤40 assessments × small attempt counts) it's a single page. Adding a dedicated `GET /api/teacher/class/<id>/assessments` summary endpoint is deferred to Phase 3b.5 (see "Out of scope") if a perf complaint arises.
+
 **Behavior:**
 - On mount and when `classId` changes: fetch the available assessment list. Reset `selectedContentIds` and `data`.
 - When `selectedContentIds.length < 2`: do NOT call the comparison endpoint. Show "Pick at least 2 assessments to compare" placeholder.
@@ -150,7 +176,7 @@ The picker needs the list of assessments published to the class. Reuse the exist
    - Title, N (e.g., "22 of 25"), submission rate (88%), mean %, median %, max points.
    - 3-tier color band on the card based on mean (≥85 green / 70-84 yellow / <70 red).
    - "No submissions yet" empty-state card if `n: 0`.
-6. **Box-plot row**: a single horizontal SVG (custom — recharts doesn't have a native box plot). One box per assessment, colored to match its summary card. Y axis: 0-100%. Reference lines at 70 and 85 (matching Progress Rank thresholds). X axis: assessment titles (truncated if long; full title on hover).
+6. **Box-plot row**: a single horizontal SVG (custom — recharts doesn't expose a native box-plot component; only `recharts` is in `package.json`). One box per assessment, colored to match its summary card. Y axis: 0-100%. Reference lines at 70 and 85 (matching Progress Rank thresholds). X axis: assessment titles (truncated if long; full title on hover). Note: `frontend/src/components/InteractiveBoxPlot.jsx` exists but is an assignment-player input widget, not a read-only viz; borrow its scale/stat-drawing math but write a separate read-only component (don't try to reuse the input component).
 7. **Standards heatmap**:
    - Rows: standards (alphabetical, the union from `standards_matrix.standards`).
    - Columns: assessments (in selection order, abbreviated titles).
