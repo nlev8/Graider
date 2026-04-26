@@ -351,3 +351,84 @@ class TestGradebookAttemptModes:
         assert body['attempt_mode'] == 'latest'
         cell = body['grades']['stu-1']['ct-1']
         assert cell['submission_id'] == 'sub-3'
+
+
+class TestGradebookEdgeCases:
+    """Orphan enrollment, missing pairs, malformed mastery."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_orphan_enrollment_skipped_silently(self, mock_sb_fn, client, teacher_headers):
+        # class_students lists stu-orphan but students table doesn't have that row
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'},
+                                {'class_id': 'cls-1', 'student_id': 'stu-orphan'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            # NO row for stu-orphan
+            'published_content': [],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Orphan dropped; only stu-1 appears
+        assert [s['student_id'] for s in body['students']] == ['stu-1']
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_missing_pair_absent_from_grades_map(self, mock_sb_fn, client, teacher_headers):
+        # stu-1 submits ct-1 only; stu-2 submits nothing.
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'},
+                                {'class_id': 'cls-1', 'student_id': 'stu-2'}],
+            'students': [
+                {'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'},
+                {'id': 'stu-2', 'first_name': 'C', 'last_name': 'D'},
+            ],
+            'published_content': [
+                {'id': 'ct-1', 'class_id': 'cls-1', 'title': 'Q1', 'content_type': 'assessment',
+                 'publish_date': '2026-04-01T00:00:00Z'},
+                {'id': 'ct-2', 'class_id': 'cls-1', 'title': 'Q2', 'content_type': 'assessment',
+                 'publish_date': '2026-04-08T00:00:00Z'},
+            ],
+            'student_submissions': [
+                {"id": "sub-1", "student_id": "stu-1", "content_id": "ct-1",
+                 "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 80,
+                 "results": {"standards_mastery": {}, "score": 8, "total_points": 10},
+                 "status": "graded"},
+            ],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        body = resp.get_json()
+        # stu-1 has ct-1 only; ct-2 absent from inner map
+        assert 'ct-1' in body['grades']['stu-1']
+        assert 'ct-2' not in body['grades']['stu-1']
+        # stu-2 absent from outer map entirely
+        assert 'stu-2' not in body['grades']
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_malformed_standards_mastery_does_not_500(self, mock_sb_fn, client, teacher_headers):
+        # One submission has a list-shape standards_mastery — would 500
+        # without _sanitize_standards_mastery.
+        subs = [
+            {"id": "sub-bad", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z", "percentage": 60,
+             "results": {"standards_mastery": ["malformed"], "score": 6, "total_points": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [
+                {'id': 'ct-1', 'class_id': 'cls-1', 'title': 'Q', 'content_type': 'assessment',
+                 'publish_date': '2026-04-01T00:00:00Z'},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        # 200 not 500. The sanitize step replaced the list with {} so the rest of
+        # the pipeline works. The student's grade is still populated.
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['grades']['stu-1']['ct-1']['percentage'] == 60
