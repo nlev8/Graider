@@ -219,6 +219,7 @@ export default function AssessmentComparison({ classId }) {
             value={searchQuery}
             onChange={function(e) { setSearchQuery(e.target.value); }}
             placeholder="Search assessments..."
+            aria-label="Search assessments"
             className="input"
             style={{ width: "100%", maxWidth: "400px", marginBottom: "10px" }}
           />
@@ -260,6 +261,14 @@ export default function AssessmentComparison({ classId }) {
       ) : error ? (
         <div style={{ padding: "20px", color: "var(--danger)", textAlign: "center" }}>{error}</div>
       ) : data ? (
+        (function() {
+          // O(1) lookup of full assessment-shape object by content_id.
+          // Backend always returns one entry per requested content_id, but
+          // filter just in case to avoid feeding gradebook-shape objects
+          // (which lack distribution stats) into BoxPlotRow.
+          var byId = new Map(data.assessments.map(function(a) { return [a.content_id, a]; }));
+          var orderedFull = orderedSelected.map(function(o) { return byId.get(o.content_id); }).filter(Boolean);
+          return (
         <div>
           {/* Stat cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "20px" }}>
@@ -293,9 +302,7 @@ export default function AssessmentComparison({ classId }) {
           {/* Box plot row */}
           <h4 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "8px" }}>Score distribution</h4>
           <div style={{ overflowX: "auto", marginBottom: "20px", border: "1px solid var(--glass-border)", borderRadius: "8px", padding: "8px" }}>
-            <BoxPlotRow assessments={orderedSelected.map(function(o) {
-              return data.assessments.find(function(a) { return a.content_id === o.content_id; }) || o;
-            })} />
+            <BoxPlotRow assessments={orderedFull} />
           </div>
 
           {/* Standards heatmap */}
@@ -342,6 +349,8 @@ export default function AssessmentComparison({ classId }) {
             </div>
           )}
         </div>
+          );
+        })()
       ) : null}
     </div>
   );
