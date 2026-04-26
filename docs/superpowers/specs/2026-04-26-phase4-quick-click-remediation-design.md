@@ -38,7 +38,7 @@ From the Phase 2 Progress Rank grid, a teacher clicks a red mastery cell or a co
 
 **New route:** `POST /api/teacher/remediate` in `backend/routes/student_portal_routes.py` (analytics surface, alongside Phase 2/2b/3a/3b endpoints). Wraps existing `_post_process_assignment` from `backend/services/assignment_post_processing.py`.
 
-**New shared helper:** `_content_visible_to_student(db, content_id, student_id, class_id) -> bool` — module-level helper added to `backend/routes/student_account_routes.py`. Centralizes the targeting check so all student-facing read AND write paths apply it consistently.
+**New shared helper:** `_content_visible_to_student(db, content_id, student_id, class_id) -> bool` — module-level helper added to `backend/routes/student_account_routes.py`. Centralizes the targeting check so all seven student-facing read AND write paths apply it consistently.
 
 **Hardening of existing route:** `publish_to_class` (in `student_account_routes.py`) currently does NOT verify `g.teacher_id` owns `class_id`. Phase 4 closes that gap as part of extending the route with `target_student_ids` support — the validation is required regardless of whether the publish is targeted.
 
@@ -185,19 +185,19 @@ ALTER TABLE published_content
 
 ### Endpoints requiring visibility-helper application
 
-All six exist in `backend/routes/student_account_routes.py`:
+All seven exist in `backend/routes/student_account_routes.py`:
 
 | Endpoint | Path | Type | Notes |
 |---|---|---|---|
 | `student_dashboard` | `GET /api/student/dashboard` | read (list) | filter `target_student_ids.is.null,target_student_ids.cs.[<student_id>]` in the existing list query |
-| `list_student_resources` | `GET /api/student/resources` | read (list) | same |
-| `get_student_resource` | `GET /api/student/resource/<content_id>` | read (single) | call helper; 404 on deny |
+| `student_resources` | `GET /api/student/resources` | read (list) | same |
+| `student_resource_content` | `GET /api/student/resource/<content_id>` | read (single) | call helper; 404 on deny |
 | `get_student_content` | `GET /api/student/content/<content_id>` | read (single) | call helper; 404 on deny |
 | `submit_student_work` | `POST /api/student/submit/<content_id>` | **write** | call helper; 404 on deny — prevents direct-URL submit bypass |
 | `save_submission_draft` | `POST /api/student/submission/<content_id>/draft` | **write** | call helper; 404 on deny |
 | `get_submission_draft` | `GET /api/student/submission/<content_id>/draft` | read (single) | call helper; 404 on deny |
 
-Plus `_validate_student_session` re-checks `class_students` enrollment via the helper (rather than trusting the session-cached class_id).
+Plus `_validate_student_session` re-checks `class_students` enrollment directly (it has only `student_id` + `class_id` in scope, no `content_id` to feed the visibility helper). The check is a single `class_students.eq('class_id', ...).eq('student_id', ...)` lookup added to the session validator. Both `_validate_student_session` and `_content_visible_to_student` rely on this same enrollment fact, so any future shared "is this student currently enrolled?" helper would naturally consolidate them.
 
 ### PostgREST list query update
 
@@ -313,7 +313,7 @@ After validation step 5 (historical evidence confirmed), the route attempts to e
 
 **FERPA guard:** the existing helper does NOT pass student name to the AI — it builds the segment in terms of accommodation behaviors only. Phase 4 inherits this contract; the route MUST NOT log or pass `student_name` to any prompt-construction step that doesn't already strip it.
 
-**Audit log:** `_logger.info("remediation.accommodations_applied teacher=%s presets=%d", g.teacher_id, len(presets))` after successful append.
+**Audit log:** `_logger.info("remediation.accommodations_applied teacher=%s class=%s student=%s", g.teacher_id, class_id, target_student_id)` after a non-empty accommodation segment is appended. (The log is generic — it doesn't reference the helper's internals like `presets` or `notes` — so it survives any helper-API change without needing edits.)
 
 **Class-wide path:** no accommodations injection. Generation runs at grade level. Phase 4.2 backlog item: per-student generation in class-wide mode (would be N AI calls).
 
@@ -336,11 +336,11 @@ After validation step 5 (historical evidence confirmed), the route attempts to e
 
 ### Sibling-test additions (existing files; piggyback on existing mocks)
 
-- `tests/test_student_account_coverage.py` — add 1 list-filter test per read endpoint (dashboard, resources). +2 tests.
-- `tests/test_student_resources.py` — add 1 list-filter test for the resources path. +1 test.
+- `tests/test_student_account_coverage.py` — add 1 list-filter test for `student_dashboard`. +1 test.
+- `tests/test_student_resources.py` — add 1 list-filter test for the `student_resources` path. +1 test.
 - New `tests/test_student_content_visibility.py` (small, dedicated) — for the 5 single-row endpoints (resource content, content, submit, draft GET, draft POST). Each gets a "non-targeted student → 404" test asserting denial. **The 3 write paths (submit, draft GET, draft POST) get an explicit deny test, not just list-filter coverage.** +5 tests.
 
-**Total new sibling tests:** ~8.
+**Total new sibling tests:** 7.
 
 ### Migration test
 
@@ -387,7 +387,7 @@ Reads only `classes`, `class_students`, `students`, `published_content`, `studen
 This spec maps to **one PR** with the following bundles (detailed in the implementation plan):
 
 1. **Backend route + tests** — new route handler, validation, generation, accommodations integration, ~29 backend tests.
-2. **Migration + visibility helper + publish hardening** — migration file, `_content_visible_to_student` helper, `publish_to_class` ownership + targeting, 5 student-facing route updates, +8 sibling tests.
+2. **Migration + visibility helper + publish hardening** — migration file, `_content_visible_to_student` helper, `publish_to_class` ownership + targeting, 7 student-facing route updates (2 list-filter + 5 single-row/write helper calls), +7 sibling tests.
 3. **Frontend triggers + drawer** — `ProgressRankGrid.jsx` triggers, new `RemediationDrawer.jsx`, slim local editor, pre-publish validation. Build verification.
 
 Total estimated scope: ~600 LOC backend (route + helper + hardening) + ~400 LOC frontend + ~700 LOC tests + 1 migration. ~3 implementation days.
