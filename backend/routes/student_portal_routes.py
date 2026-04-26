@@ -2007,8 +2007,40 @@ def get_class_assessment_comparison(class_id):
             "percentages": [round(p, 2) for p in percentages],
         })
 
-    # Standards matrix bridge — Task 4 fills this in.
-    standards_matrix = {"standards": [], "cells": {}}
+    # 10) Standards-matrix bridge: invert per-student mastery rollups into
+    # per-(content_id, standard_code) class-mean cells.
+    cells_accumulator: dict = {}  # cid -> standard_code -> list[float]
+    content_titles = {c['id']: c.get('title', '') for c in found}
+    for cid in content_ids:
+        cells_accumulator[cid] = {}
+        for sid, selected in selected_per_content_per_student.get(cid, {}).items():
+            if not selected:
+                continue
+            mastery_by_code = _aggregate_mastery_for_student(
+                {cid: selected}, content_titles, attempt_mode,
+            )
+            for code, m in mastery_by_code.items():
+                pct = _safe_percentage(m.get('percentage'))
+                if pct is None:
+                    continue
+                cells_accumulator[cid].setdefault(code, []).append(pct)
+
+    cells_out: dict = {}
+    all_standards: set = set()
+    for cid, by_code in cells_accumulator.items():
+        cells_out[cid] = {}
+        for code, pct_list in by_code.items():
+            students_assessed = len(pct_list)
+            cells_out[cid][code] = {
+                "percentage": round(sum(pct_list) / students_assessed, 1) if students_assessed > 0 else 0,
+                "students_assessed": students_assessed,
+            }
+            all_standards.add(code)
+
+    standards_matrix = {
+        "standards": sorted(all_standards),
+        "cells": cells_out,
+    }
 
     return jsonify({
         "class_id": class_id,

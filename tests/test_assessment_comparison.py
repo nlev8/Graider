@@ -512,3 +512,112 @@ class TestAssessmentComparisonDistribution:
         assert a_q1['n'] == 1
         assert a_q1['mean'] == 80
         assert 0 not in a_q1['percentages']
+
+
+class TestAssessmentComparisonStandardsMatrix:
+    """standards_matrix.standards (sorted union) + cells (class-mean per standard)."""
+
+    def _subs_with_mastery(self, entries):
+        """entries: list of (sub_id, student_id, content_id, percentage, mastery_dict)."""
+        out = []
+        for sub_id, sid, cid, pct, mastery in entries:
+            out.append({
+                'id': sub_id, 'student_id': sid, 'content_id': cid,
+                'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+                'percentage': pct,
+                'results': {
+                    'standards_mastery': mastery,
+                    'score': pct / 10, 'total_points': 10,
+                },
+                'status': 'graded',
+            })
+        return out
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_standards_matrix_union_and_cells_correct(self, mock_sb_fn, client, teacher_headers):
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        # Q1 covers MA.6.AR.1.1, MA.6.AR.1.2; Q2 covers MA.6.AR.1.2, MA.6.AR.1.3.
+        # Union: [1.1, 1.2, 1.3] sorted alphabetically.
+        m_q1 = {
+            'MA.6.AR.1.1': {'points_earned': 8, 'points_possible': 10, 'question_count': 2},
+            'MA.6.AR.1.2': {'points_earned': 6, 'points_possible': 10, 'question_count': 2},
+        }
+        m_q2 = {
+            'MA.6.AR.1.2': {'points_earned': 9, 'points_possible': 10, 'question_count': 2},
+            'MA.6.AR.1.3': {'points_earned': 5, 'points_possible': 10, 'question_count': 2},
+        }
+        # 2 students, both submit both
+        subs = self._subs_with_mastery([
+            ('s-1a', 'stu-1', cid_q1, 70, m_q1),
+            ('s-1b', 'stu-1', cid_q2, 70, m_q2),
+            ('s-2a', 'stu-2', cid_q1, 70, m_q1),
+            ('s-2b', 'stu-2', cid_q2, 70, m_q2),
+        ])
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'},
+                               {'class_id': 'cls-1', 'student_id': 'stu-2'}],
+            'students': [{'id': 'stu-1'}, {'id': 'stu-2'}],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}', headers=teacher_headers)
+        body = resp.get_json()
+        sm = body['standards_matrix']
+        # Sorted union
+        assert sm['standards'] == ['MA.6.AR.1.1', 'MA.6.AR.1.2', 'MA.6.AR.1.3']
+        # Q1 covers 1.1, 1.2 — both at 80 / 60 mastery (same for both students)
+        assert sm['cells'][cid_q1]['MA.6.AR.1.1']['percentage'] == 80
+        assert sm['cells'][cid_q1]['MA.6.AR.1.2']['percentage'] == 60
+        assert 'MA.6.AR.1.3' not in sm['cells'][cid_q1]
+        # Q2 covers 1.2, 1.3
+        assert sm['cells'][cid_q2]['MA.6.AR.1.2']['percentage'] == 90
+        assert sm['cells'][cid_q2]['MA.6.AR.1.3']['percentage'] == 50
+        assert 'MA.6.AR.1.1' not in sm['cells'][cid_q2]
+        # students_assessed = 2 for every cell (both students completed both)
+        for cid in [cid_q1, cid_q2]:
+            for code in sm['cells'][cid]:
+                assert sm['cells'][cid][code]['students_assessed'] == 2
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_malformed_standards_mastery_does_not_500(self, mock_sb_fn, client, teacher_headers):
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        # One submission has list-shape mastery — would 500 without _sanitize_standards_mastery.
+        good = {'MA.6.AR.1.1': {'points_earned': 8, 'points_possible': 10, 'question_count': 2}}
+        subs = [
+            {'id': 's-good', 'student_id': 'stu-1', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z', 'percentage': 80,
+             'results': {'standards_mastery': good, 'score': 8, 'total_points': 10},
+             'status': 'graded'},
+            {'id': 's-bad', 'student_id': 'stu-2', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-11T10:00:00Z', 'percentage': 60,
+             'results': {'standards_mastery': ['malformed'], 'score': 6, 'total_points': 10},
+             'status': 'graded'},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'},
+                               {'class_id': 'cls-1', 'student_id': 'stu-2'}],
+            'students': [{'id': 'stu-1'}, {'id': 'stu-2'}],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}', headers=teacher_headers)
+        # Endpoint 200s — sanitize replaced the list with {} so the rest of the pipeline works.
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Distribution for Q1 still includes both students (sanitize doesn't drop submissions)
+        a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
+        assert a_q1['n'] == 2
+        # standards_matrix only has the standard from sub-good
+        assert body['standards_matrix']['standards'] == ['MA.6.AR.1.1']
+        # The malformed submission contributed nothing to mastery, so students_assessed = 1
+        assert body['standards_matrix']['cells'][cid_q1]['MA.6.AR.1.1']['students_assessed'] == 1
