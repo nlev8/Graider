@@ -4,7 +4,7 @@
 
 **Goal:** Teachers click a red mastery cell or column header in the Progress Rank grid → AI generates 8 grade-level practice questions for that standard → preview-then-publish drawer → the assessment lands in `published_content` targeted to the student(s) who need it.
 
-**Architecture:** New `POST /api/teacher/remediate` route (in `student_portal_routes.py`) wraps the existing `_post_process_assignment` pipeline with remediation defaults (5 MC + 3 SA, grade-level inferred). One new column `published_content.target_student_ids JSONB NULL` enables per-student visibility. New shared helper `_content_visible_to_student` applied across 7 student-facing endpoints. `publish_to_class` is hardened with class-ownership + targeting validation (closes a pre-existing gap). Frontend: new `RemediationDrawer.jsx` + 2 trigger surfaces in `ProgressRankGrid.jsx` (cell click + column-header hover-reveal).
+**Architecture:** New `POST /api/teacher/class/<class_id>/remediate` route (in `student_portal_routes.py`) calls the LLM adapter to generate, then runs `_post_process_assignment` with remediation defaults (5 MC + 3 SA, grade-level inferred). URL convention matches Phase 2/2b/3a/3b. One new column `published_content.target_student_ids JSONB NULL` enables per-student visibility. New shared helper `_content_visible_to_student` applied across 7 student-facing endpoints. `publish_to_class` is hardened with class-ownership + targeting validation (closes a pre-existing gap). Frontend: new `RemediationDrawer.jsx` + 2 trigger surfaces in `ProgressRankGrid.jsx` (cell click + column-header hover-reveal).
 
 **Tech Stack:** Flask + flask-limiter + Supabase (PostgREST) + React + Vite. Reuses Phase 1+ standards mastery rollup, Phase 2 `_select_submissions_by_mode` / `_aggregate_mastery_for_student`, Phase 2b `_sanitize_standards_mastery`, Phase 3a `_coalesce`, Phase 3b filter-aware `_make_chain` test mock, Phase 5d `error_response` (RFC 7807), Phase 5a structured logging. Accommodation helper `build_accommodation_prompt(student_id, teacher_id)` from `backend/accommodations.py:475` (returns "" on missing — already FERPA-safe; portal grading wraps in try/except, we mirror).
 
@@ -207,7 +207,7 @@ class TestRemediateValidation:
     """Auth + 6-step validation order."""
 
     def test_unauthenticated_returns_401(self, client_no_auth):
-        resp = client_no_auth.post('/api/teacher/remediate', json={
+        resp = client_no_auth.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         })
@@ -219,7 +219,7 @@ class TestRemediateValidation:
             'classes': [{'id': 'cls-1', 'teacher_id': 'OTHER', 'name': 'X',
                          'grade_level': '6', 'subject': 'Math'}],
         })
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
@@ -228,7 +228,7 @@ class TestRemediateValidation:
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_bogus_target_mode_returns_400(self, mock_sb_fn, client, teacher_headers):
         mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'bogus',
         }, headers=teacher_headers)
@@ -239,7 +239,7 @@ class TestRemediateValidation:
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_missing_target_student_id_for_single_returns_400(self, mock_sb_fn, client, teacher_headers):
         mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student',
         }, headers=teacher_headers)
@@ -248,7 +248,7 @@ class TestRemediateValidation:
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_malformed_target_student_uuid_returns_400(self, mock_sb_fn, client, teacher_headers):
         mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': 'not-a-uuid',
         }, headers=teacher_headers)
@@ -261,7 +261,7 @@ class TestRemediateValidation:
             'class_students': [],  # student NOT enrolled
             'students': [{'id': STU_1}],
         })
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
@@ -274,7 +274,7 @@ class TestRemediateValidation:
             'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
             'students': [{'id': STU_1}],
         })
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': '',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
@@ -289,7 +289,7 @@ class TestRemediateValidation:
             'students': [{'id': STU_1}],
             'student_submissions': [],
         })
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
@@ -309,7 +309,7 @@ class TestRemediateValidation:
             'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
                                    'content_type': 'assessment'}],
         })
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'red_tier_in_class',
         }, headers=teacher_headers)
@@ -326,7 +326,7 @@ class TestRemediateValidation:
             'class_students': [{'class_id': 'cls-other', 'student_id': other_stu}],
             'students': [{'id': other_stu}],
         })
-        resp = client.post('/api/teacher/remediate', json={
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
             'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': other_stu,
         }, headers=teacher_headers)
@@ -622,7 +622,8 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
             )
         target_student_ids = [target_student_id]
 
-    # 6) Red-tier resolution (class-wide).
+    # 6) Red-tier resolution (class-wide). Uses the same aggregation path that
+    # Phase 2 Progress Rank uses, so the red-tier set matches the grid exactly.
     if target_mode == 'red_tier_in_class':
         # Resolve roster (skip orphans).
         enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
@@ -632,33 +633,39 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
             stu_rows = db.table('students').select('id').in_('id', enrolled_ids).execute()
             existing = {s['id'] for s in (stu_rows.data or []) if s.get('id')}
             valid_ids = [sid for sid in enrolled_ids if sid in existing]
-        # Gather latest submission per (student) covering this standard.
+        # Pull all class submissions covering this standard (any content row).
         red_tier = []
         if valid_ids:
             class_subs = db.table('student_submissions').select(
                 'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
-            ).in_('student_id', valid_ids).neq('status', 'draft').order(
-                'submitted_at', desc=True
-            ).execute()
-            # Group by student_id, pick latest with the standard.
-            latest_for_std = {}
+            ).in_('student_id', valid_ids).neq('status', 'draft').execute()
+            # Build content title map for _aggregate_mastery_for_student.
+            content_id_set = list({s.get('content_id') for s in (class_subs.data or [])
+                                    if s.get('content_id')})
+            content_titles = {}
+            if content_id_set:
+                rows = db.table('published_content').select('id, title').in_(
+                    'id', content_id_set
+                ).execute()
+                content_titles = {r['id']: r.get('title', '') for r in (rows.data or [])}
+            # Group submissions by student → content_id → [submissions].
+            from collections import defaultdict
+            per_student = defaultdict(lambda: defaultdict(list))
             for s in (class_subs.data or []):
                 sid = s.get('student_id')
-                mastery = (s.get('results') or {}).get('standards_mastery') or {}
-                if not isinstance(mastery, dict):
+                cid = s.get('content_id')
+                if sid and cid:
+                    per_student[sid][cid].append(s)
+            # For each student: select latest per content, aggregate mastery, read standard's percentage.
+            for sid, by_cid in per_student.items():
+                selected = _select_submissions_by_mode(by_cid, 'latest')
+                mastery = _aggregate_mastery_for_student(selected, content_titles, 'latest')
+                std_entry = mastery.get(standard_code) if isinstance(mastery, dict) else None
+                if not std_entry:
                     continue
-                std_data = mastery.get(standard_code)
-                if not isinstance(std_data, dict):
+                pct = std_entry.get('percentage')
+                if pct is None:
                     continue
-                if sid in latest_for_std:
-                    continue  # already have latest (sorted desc above)
-                latest_for_std[sid] = std_data
-            for sid, std_data in latest_for_std.items():
-                possible = std_data.get('points_possible') or 0
-                earned = std_data.get('points_earned') or 0
-                if possible <= 0:
-                    continue
-                pct = (earned / possible) * 100
                 if pct < 70:
                     red_tier.append(sid)
         if not red_tier:
@@ -669,14 +676,17 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
             return error_response("No red-tier students on this standard", 400)
         target_student_ids = red_tier
 
-    # 7) Build remediation prompt and generate.
-    grade = cls_row.get('grade_level') or 'middle school'
-    subject = cls_row.get('subject') or 'general'
+    # 7) Build remediation prompt.
+    grade = cls_row.get('grade_level') or '7'
+    subject = cls_row.get('subject') or 'General'
     base_prompt = (
-        f"Generate 8 grade-{grade} {subject} practice questions targeting standard "
-        f"{standard_code}. Mix: 5 multiple-choice questions (4 choices each, exactly 1 correct) "
-        f"and 3 short-answer questions. Difficulty: grade-level review. "
-        f"Each question MUST include a 'standard' field equal to '{standard_code}'."
+        f"Generate exactly 8 grade-{grade} {subject} practice questions aligned to "
+        f"standard {standard_code}. Mix: 5 multiple-choice questions (4 choices each, "
+        f"exactly 1 correct, marked with an 'answer' field whose value is the choice "
+        f"letter or text) and 3 short-answer questions (each with an 'answer' field "
+        f"containing the model answer). Difficulty: grade-level review. Each question "
+        f"MUST include a 'standard' field equal to '{standard_code}'. Return valid JSON "
+        f"of shape: {{\"questions\": [...]}}"
     )
 
     accommodation_segment = ""
@@ -692,22 +702,38 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
             accommodation_segment = ""
     final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
 
-    # 8) Call post-processor.
-    config = {
-        'subject': subject,
-        'grade': grade,
-        'standards': [standard_code],
-        'globalAINotes': '',
-        'contentOnly': True,
-    }
+    # 8) Generate via the LLM adapter (matches planner_routes pattern at line 1878).
     try:
-        result, usage = _post_process_assignment(final_prompt, config, assignment_type='assessment')
+        from backend.services.llm_adapter import get_llm_adapter
+        from backend.services.llm_types import LLMRequest, Message, TextPart, ResponseFormat
+        from backend.routes.planner_routes import _get_openai_context, _extract_usage, _merge_usage
+        from backend.services.assignment_post_processing import _post_process_assignment
+
+        adapter = get_llm_adapter()
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert teacher. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=final_prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            metadata={"feature_label": "remediation"},
+        ))
+        raw_text = completion.content_parts[0].text if completion.content_parts else "{}"
+        import json as _json
+        assignment = _json.loads(raw_text)
+        _ctx_uid, _ctx_client = _get_openai_context()
+        assignment, extra_usage = _post_process_assignment(
+            assignment, 8, target_total_points=80,
+            subject=subject, grade=grade,
+            valid_standard_codes=[standard_code],
+            user_id=_ctx_uid, client=_ctx_client,
+        )
+        usage = _merge_usage(_extract_usage(completion, "gpt-4o"), extra_usage)
     except Exception:
         _logger.exception("remediation.generation_failed teacher=%s class=%s standard=%s",
                           g.teacher_id, class_id, standard_code)
         return error_response("Generation failed", 500)
 
-    questions = (result or {}).get('questions') or []
+    questions = (assignment or {}).get('questions') or []
     # 422 floor: fewer than 3 valid questions after post-processing.
     if len(questions) < 3:
         return error_response("Generation produced too few valid questions", 422)
@@ -734,13 +760,13 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
     }), 200
 ```
 
-ALSO at the top of the file, ensure `_post_process_assignment` is imported:
+**Imports note:** the inline imports inside the route are intentional (avoids a heavy module-level pull when the route is rarely hit). The signatures the route relies on:
+- `get_llm_adapter()` returns the LLM adapter (Phase 5b infra).
+- `LLMRequest(model, system_prompt, messages=[Message(role, content=[TextPart(text=...)])], response_format=ResponseFormat(type="json_object"), metadata={...})` per `backend/services/llm_types.py`.
+- `_post_process_assignment(assignment_dict, target_question_count, target_total_points=N, subject=..., grade=..., valid_standard_codes=[...], user_id=..., client=...)` returns `(assignment, extra_usage)`.
+- `_get_openai_context()`, `_extract_usage(completion, model)`, `_merge_usage(a, b)` — all exist in `backend/routes/planner_routes.py` (re-import locally rather than re-export).
 
-```python
-from backend.services.assignment_post_processing import _post_process_assignment
-```
-
-If `assignment_type` parameter isn't accepted by the actual `_post_process_assignment` signature, drop it (read the function before this step). The implementer adapts the call site to whatever the helper actually accepts.
+If any of these signatures have shifted, the implementer reads the source file once at task start and adapts the call site accordingly. No silent guessing.
 
 - [ ] **Step 3.4: Run all generation tests + validation**
 
@@ -1254,88 +1280,100 @@ def publish_to_class():
     """Publish an assessment or assignment to a class.
 
     Phase 4 hardening: verifies class ownership; supports target_student_ids
-    for per-student visibility (None / omitted = class-wide).
+    for per-student visibility (None / omitted = class-wide). All explicit 4xx
+    errors use error_response() per Phase 5d (RFC 7807).
     """
     teacher_id = g.teacher_id
 
-    try:
-        db = _get_teacher_supabase()
-        data = request.json or {}
-        class_id = data.get('class_id')
-        content = data.get('content')
-        content_type = data.get('content_type', 'assessment')
-        title = data.get('title', 'Untitled')
-        settings = data.get('settings', {})
-        due_date = data.get('due_date')
-        target_student_ids = data.get('target_student_ids')
+    db = _get_teacher_supabase()
+    data = request.json or {}
+    class_id = data.get('class_id')
+    content = data.get('content')
+    content_type = data.get('content_type', 'assessment')
+    title = data.get('title', 'Untitled')
+    settings = data.get('settings', {})
+    due_date = data.get('due_date')
+    target_student_ids = data.get('target_student_ids')
 
-        if not content:
-            return jsonify({"error": "No content provided"}), 400
-        ALLOWED_CONTENT_TYPES = ('assessment', 'assignment', 'study_guide', 'flashcards', 'slide_deck')
-        if content_type not in ALLOWED_CONTENT_TYPES:
-            return jsonify({"error": "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES)}), 400
+    if not content:
+        return error_response("No content provided", 400)
+    ALLOWED_CONTENT_TYPES = ('assessment', 'assignment', 'study_guide', 'flashcards', 'slide_deck')
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        return error_response(
+            "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES), 400
+        )
 
-        # Phase 4: class ownership check (closes pre-existing gap).
-        cls = db.table('classes').select('id, teacher_id').eq('id', class_id).execute()
-        if not cls.data or cls.data[0].get('teacher_id') != teacher_id:
-            return jsonify({"error": "Not authorized for this class"}), 403
+    # Phase 4: class ownership check (closes pre-existing gap).
+    cls = db.table('classes').select('id, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != teacher_id:
+        return error_response("Not authorized for this class", 403)
 
-        # Phase 4: target_student_ids validation.
-        if target_student_ids is not None:
-            if not isinstance(target_student_ids, list):
-                return jsonify({"error": "target_student_ids must be a list or null"}), 400
-            if len(target_student_ids) == 0:
-                return jsonify({"error": "target_student_ids must be non-empty (use null for class-wide)"}), 400
-            # UUID-validate each + check enrollment.
-            import uuid as _uuid
-            for sid in target_student_ids:
-                try:
-                    _uuid.UUID(str(sid))
-                except (ValueError, TypeError):
-                    return jsonify({"error": "Invalid target_student_id UUID"}), 400
-            enr = db.table('class_students').select('student_id').eq(
-                'class_id', class_id
-            ).in_('student_id', target_student_ids).execute()
-            enrolled = {r['student_id'] for r in (enr.data or [])}
-            if any(sid not in enrolled for sid in target_student_ids):
-                return jsonify({"error": "One or more target_student_ids are not enrolled in this class"}), 400
+    # Phase 4: target_student_ids validation.
+    if target_student_ids is not None:
+        if not isinstance(target_student_ids, list):
+            return error_response("target_student_ids must be a list or null", 400)
+        if len(target_student_ids) == 0:
+            return error_response(
+                "target_student_ids must be non-empty (use null for class-wide)", 400
+            )
+        import uuid as _uuid
+        for sid in target_student_ids:
+            try:
+                _uuid.UUID(str(sid))
+            except (ValueError, TypeError):
+                return error_response("Invalid target_student_id UUID", 400)
+        # Enrollment check.
+        enr = db.table('class_students').select('student_id').eq(
+            'class_id', class_id
+        ).in_('student_id', target_student_ids).execute()
+        enrolled = {r['student_id'] for r in (enr.data or [])}
+        if any(sid not in enrolled for sid in target_student_ids):
+            return error_response(
+                "One or more target_student_ids are not enrolled in this class", 400
+            )
+        # Students existence check (orphan-resilience).
+        stu_rows = db.table('students').select('id').in_(
+            'id', target_student_ids
+        ).execute()
+        existing_students = {r['id'] for r in (stu_rows.data or [])}
+        if any(sid not in existing_students for sid in target_student_ids):
+            return error_response(
+                "One or more target_student_ids do not match a student record", 400
+            )
 
-        join_code = _generate_class_code()
+    join_code = _generate_class_code()
 
-        if content_type == 'assessment':
-            cat = settings.get('assessment_category', 'formative')
-            if cat not in ('formative', 'summative'):
-                settings['assessment_category'] = 'formative'
-            else:
-                settings['assessment_category'] = cat
+    if content_type == 'assessment':
+        cat = settings.get('assessment_category', 'formative')
+        if cat not in ('formative', 'summative'):
+            settings['assessment_category'] = 'formative'
+        else:
+            settings['assessment_category'] = cat
 
-        insert_payload = {
-            'teacher_id': teacher_id,
-            'class_id': class_id,
-            'content_type': content_type,
-            'title': title,
-            'join_code': join_code,
-            'content': content,
-            'settings': settings,
-            'is_active': True,
-            'due_date': due_date,
-            'target_student_ids': target_student_ids,  # None = class-wide
-        }
-        result = db.table('published_content').insert(insert_payload).execute()
+    insert_payload = {
+        'teacher_id': teacher_id,
+        'class_id': class_id,
+        'content_type': content_type,
+        'title': title,
+        'join_code': join_code,
+        'content': content,
+        'settings': settings,
+        'is_active': True,
+        'due_date': due_date,
+        'target_student_ids': target_student_ids,  # None = class-wide
+    }
+    result = db.table('published_content').insert(insert_payload).execute()
 
-        if not result.data:
-            return jsonify({"error": "Failed to publish"}), 500
+    if not result.data:
+        return error_response("Failed to publish", 500)
 
-        host = request.host_url.rstrip('/')
-        return jsonify({
-            "success": True,
-            "content_id": result.data[0]['id'],
-            "join_code": join_code,
-            "join_link": f"{host}/student?code={join_code}",
-        })
-    except Exception as e:
-        _logger.exception("Request failed: %s", request.path)
-        return jsonify({"error": "An internal error occurred"}), 500
+    host = request.host_url.rstrip('/')
+    return jsonify({
+        "success": True,
+        "content_id": result.data[0]['id'],
+        "join_code": join_code,
+        "join_link": f"{host}/student?code={join_code}",
+    })
 ```
 
 - [ ] **Step 7.4: Run tests**
@@ -1345,12 +1383,14 @@ pytest tests/test_remediation.py::TestPublishToClassHardening -v
 ```
 Expected: 5 PASS.
 
-- [ ] **Step 7.5: Sibling regression check (existing publish-to-class tests)**
+- [ ] **Step 7.5: Sibling regression check**
+
+Verified before this step: zero existing backend tests post to `/api/publish-to-class`, so the hardening's backend-test impact is nil. The frontend has 1 production caller (`App.jsx:4667`) which uses positional args and won't be affected. Run the broader suite as a smoke:
 
 ```bash
-pytest tests/test_student_account_coverage.py -v 2>&1 | tail -20
+pytest tests/test_student_account_coverage.py tests/test_student_resources.py -v 2>&1 | tail -20
 ```
-Expected: all existing publish-related tests still pass. If any fail because they didn't supply a `class_id`-owning teacher (ownership now required), the test fixture needs `'classes': [{'id': '...', 'teacher_id': 'test-teacher-001'}]` added — fix in place.
+Expected: all pass. (No tests directly hit publish_to_class, so this is just confirming nothing else regressed.)
 
 - [ ] **Step 7.6: Run the full file**
 
@@ -1792,8 +1832,40 @@ git commit -m "feat(remediate): list-filter target_student_ids on dashboard + re
 
 **Files:**
 - Modify: `backend/routes/student_account_routes.py`
+- Modify: `tests/test_student_content_visibility.py` (extend mock sequences from 3 → 4)
 
-- [ ] **Step 11.1: Add the enrollment recheck**
+- [ ] **Step 11.1: Update Task 9's test mock sequences first (TDD: prove the test will exercise the new behavior)**
+
+The existing 5 tests in `tests/test_student_content_visibility.py` mock 3 `.execute()` calls (session lookup, helper enrollment check, content fetch). After Task 11 lands, `_validate_student_session` itself does an enrollment recheck — adding a 4th call between the session lookup and the helper enrollment check.
+
+In each of the 5 tests, change:
+```python
+chain.execute.side_effect = [
+    MagicMock(data=_session_chain(STU_VIEWER, 'cls-1')),
+    MagicMock(data=[{'student_id': STU_VIEWER}]),  # enrolled
+    MagicMock(data=_content_chain_targeted_to(STU_OTHER)),
+]
+```
+to:
+```python
+chain.execute.side_effect = [
+    MagicMock(data=_session_chain(STU_VIEWER, 'cls-1')),
+    MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Task 11)
+    MagicMock(data=[{'student_id': STU_VIEWER}]),  # helper enrollment check
+    MagicMock(data=_content_chain_targeted_to(STU_OTHER)),
+]
+```
+
+Apply this change to all 5 tests in the file.
+
+- [ ] **Step 11.2: Run tests — expect FAILs (route does only 3 .execute() calls today; 4th mock is unused)**
+
+```bash
+pytest tests/test_student_content_visibility.py -v
+```
+Expected: 5 FAIL. The route currently does 3 calls; the test's 4th mock is unused, but the test's assertion still holds (404 returned). Wait — actually the test expected 404 still passes here since the helper still denies. Confirm: if all 5 still PASS even with 4-mock sequences, that's fine (the unused mock is a no-op). Whichever outcome — the test must continue to pass after Task 11.3.
+
+- [ ] **Step 11.3: Add the enrollment recheck to `_validate_student_session`**
 
 In `backend/routes/student_account_routes.py`, find `_validate_student_session()` (line ~102). After fetching the session and confirming it's not expired, ALSO confirm the student is still enrolled. Replace the function body's tail with:
 
@@ -1840,17 +1912,19 @@ def _validate_student_session():
     return (student_id, class_id)
 ```
 
-- [ ] **Step 11.2: Run sibling regression**
+- [ ] **Step 11.4: Run all visibility + sibling tests**
 
 ```bash
 pytest tests/test_student_account_coverage.py tests/test_student_resources.py tests/test_student_content_visibility.py tests/test_remediation.py -v 2>&1 | tail -10
 ```
-Expected: all pass. If existing tests fail because they didn't supply `class_students` data in their fixture, add `'class_students': [{'class_id': '...', 'student_id': '...'}]` to the relevant fixtures.
+Expected: all pass. The 5 visibility tests now consume their 4th mock (session enrollment recheck) before reaching the helper enrollment check.
 
-- [ ] **Step 11.3: Commit**
+If any existing tests outside the 5 fail because they don't mock the new `class_students` lookup that `_validate_student_session` now performs, add a `class_students` mock entry to their fixtures matching the test's `student_id` + `class_id`.
+
+- [ ] **Step 11.5: Commit**
 
 ```bash
-git add backend/routes/student_account_routes.py
+git add backend/routes/student_account_routes.py tests/test_student_content_visibility.py
 git commit -m "feat(remediate): _validate_student_session re-checks enrollment"
 ```
 
@@ -1863,9 +1937,35 @@ git commit -m "feat(remediate): _validate_student_session re-checks enrollment"
 **Files:**
 - Modify: `frontend/src/services/api.js`
 
-- [ ] **Step 12.1: Add `postRemediate` and extend `publishToClass`**
+- [ ] **Step 12.1: Add `postRemediate` and extend `publishToClass` with a 7th positional param**
 
-Edit `frontend/src/services/api.js`. Find `publishToClass` (search by name). After it, add `postRemediate`. Then update `publishToClass` to forward `target_student_ids` if provided.
+Verified before this step: `publishToClass` at `frontend/src/services/api.js:779` is positional — `publishToClass(classId, content, contentType, title, settings, dueDate)`. Single production caller at `frontend/src/App.jsx:4667` passes 6 positional args. One test mock at `frontend/src/__tests__/smoke.test.jsx:75` (`publishToClass: noopAsync`).
+
+Adding a 7th optional positional `targetStudentIds` keeps existing callers working (they pass 6 args → 7th is `undefined` → JSON.stringify drops the field → backend treats as null = class-wide).
+
+Edit `frontend/src/services/api.js`. Find the existing `publishToClass` and replace it with:
+
+```javascript
+export async function publishToClass(classId, content, contentType, title, settings, dueDate, targetStudentIds) {
+  var body = {
+    class_id: classId,
+    content,
+    content_type: contentType,
+    title,
+    settings,
+    due_date: dueDate,
+  };
+  if (targetStudentIds != null) {
+    body.target_student_ids = targetStudentIds;
+  }
+  return fetchApi('/api/publish-to-class', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+```
+
+Then add `postRemediate` immediately after `publishToClass`:
 
 ```javascript
 export async function postRemediate(classId, payload) {
@@ -1876,8 +1976,6 @@ export async function postRemediate(classId, payload) {
   );
 }
 ```
-
-For `publishToClass`, locate its body (it sends a POST with a JSON body). Update it so that if the caller passes `target_student_ids` in the payload object, the field is forwarded. If `publishToClass` already takes a generic payload object that's spread into the body, no change is needed — confirm in the file.
 
 - [ ] **Step 12.2: Build verification**
 
@@ -1993,6 +2091,8 @@ export default function RemediationDrawer({
   }
 
   // Pre-publish validation. Returns null on success, error string on failure.
+  // Verifies: ≥1 question, every question has non-empty text, MC has ≥2
+  // non-empty choices AND correct_answer references one of those choices.
   function validateBeforePublish() {
     if (questions.length < 1) return "At least one question required";
     for (var i = 0; i < questions.length; i++) {
@@ -2001,27 +2101,47 @@ export default function RemediationDrawer({
       var t = (q.type || q.question_type || "").toLowerCase();
       if (t === "mcq" || t === "multiple_choice" || t === "mc") {
         var choices = q.choices || q.options || [];
-        var nonEmpty = choices.filter(function(c) { return c && (c.text || c).toString().trim(); });
-        if (nonEmpty.length < 2) return "Question " + (i + 1) + " needs at least 2 choices";
+        var nonEmptyChoices = [];
+        for (var ci = 0; ci < choices.length; ci++) {
+          var label = typeof choices[ci] === "string" ? choices[ci] : (choices[ci] && choices[ci].text);
+          if (label && String(label).trim()) {
+            nonEmptyChoices.push({ index: ci, label: String(label).trim() });
+          }
+        }
+        if (nonEmptyChoices.length < 2) return "Question " + (i + 1) + " needs at least 2 choices";
         var correct = q.correct_answer != null ? q.correct_answer : q.answer;
         if (correct == null || correct === "") return "Question " + (i + 1) + " has no correct answer";
+        // correct_answer may be a numeric index OR the choice text. Verify it
+        // matches a non-empty choice either way.
+        var matchesIndex = nonEmptyChoices.some(function(c) { return c.index === correct; });
+        var matchesText = nonEmptyChoices.some(function(c) { return c.label === String(correct).trim(); });
+        if (!matchesIndex && !matchesText) {
+          return "Question " + (i + 1) + " correct answer doesn't match any choice";
+        }
       }
     }
     return null;
   }
 
+  // Validation error is shown inline in the preview state (not the error state).
+  // Separate state slot so the drawer doesn't drop into the full-screen "error"
+  // path (which is reserved for network/server errors).
+  var [validationError, setValidationError] = useState(null);
+
   function publish() {
-    var validationError = validateBeforePublish();
-    if (validationError) { setError(validationError); return; }
+    var ve = validateBeforePublish();
+    if (ve) { setValidationError(ve); return; }
+    setValidationError(null);
     setState("publishing");
-    var publishPayload = {
-      class_id: classId,
-      content: { questions: questions },
-      content_type: "assessment",
-      title: "Remediation: " + standardCode,
-      target_student_ids: data.target_student_ids,
-    };
-    api.publishToClass(publishPayload)
+    api.publishToClass(
+      classId,
+      { questions: questions },
+      "assessment",
+      "Remediation: " + standardCode,
+      {},  // settings — leave default
+      null,  // dueDate — none
+      data.target_student_ids,
+    )
       .then(function(res) {
         if (cancelRef.current.cancelled) return;
         if (!res || res.error) {
@@ -2097,6 +2217,15 @@ export default function RemediationDrawer({
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {validationError && (
+                <div style={{
+                  padding: "10px 14px", borderRadius: "6px",
+                  background: "rgba(239,68,68,0.15)", color: "var(--danger)",
+                  fontSize: "0.85rem", border: "1px solid var(--danger)",
+                }}>
+                  {validationError}
+                </div>
+              )}
               {questions.map(function(q, idx) {
                 return (
                   <QuestionCard key={idx} index={idx} question={q} disabled={disabled}

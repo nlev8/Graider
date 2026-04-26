@@ -76,14 +76,15 @@ No GIN index in MVP (deferred until EXPLAIN justifies it; see Phase 4.2 backlog 
 
 ## Backend endpoint contract
 
-### `POST /api/teacher/remediate`
+### `POST /api/teacher/class/<class_id>/remediate`
 
 **Decorators:** `@require_teacher`, `@handle_route_errors`, `@limiter.limit("10 per minute")` (explicit — does NOT inherit the planner blueprint's limit).
+
+**URL convention** matches Phase 2/2b/3a/3b: `class_id` lives in the path, not the body, so the analytics surface stays consistent (`/api/teacher/class/<class_id>/progress-rank`, `…/gradebook`, `…/compare`, etc.).
 
 **Request body:**
 ```json
 {
-  "class_id": "uuid",
   "standard_code": "MA.6.AR.1.2",
   "target_mode": "single_student" | "red_tier_in_class",
   "target_student_id": "uuid"
