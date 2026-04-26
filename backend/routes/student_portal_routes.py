@@ -1864,13 +1864,82 @@ def get_class_assessment_comparison(class_id):
         # One or more content_ids isn't in this class OR isn't an assessment — cross-class/type injection guard.
         return error_response("Not authorized", 403)
 
-    # Skeleton: empty data. Happy-path lands in Tasks 2-5.
+    # 6) Resolve valid roster (skip orphans matching Phase 3a pattern)
+    enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
+    enrolled_ids = [row['student_id'] for row in (enrollments.data or []) if row.get('student_id')]
+
+    valid_student_ids = []
+    if enrolled_ids:
+        students_rows = db.table('students').select('id').in_('id', enrolled_ids).execute()
+        existing = {s['id'] for s in (students_rows.data or []) if s.get('id')}
+        valid_student_ids = [sid for sid in enrolled_ids if sid in existing]
+        if len(existing) < len(enrolled_ids):
+            _logger.debug(
+                "Orphan enrollments in class %s: %d students missing from students table",
+                class_id, len(enrolled_ids) - len(existing),
+            )
+
+    class_roster_size = len(valid_student_ids)
+
+    # 7) Fetch non-draft submissions for these students × these contents (paginated)
+    submissions = []
+    if valid_student_ids:
+        page_size = 1000
+        start = 0
+        while True:
+            page = db.table('student_submissions').select(
+                'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+            ).in_('student_id', valid_student_ids).in_('content_id', content_ids).neq(
+                'status', 'draft'
+            ).range(start, start + page_size - 1).execute()
+            rows = page.data or []
+            submissions.extend(rows)
+            if len(rows) < page_size:
+                break
+            start += page_size
+
+    # 8) Sanitize-in-place
+    for s in submissions:
+        _sanitize_standards_mastery(s)
+
+    # 9) Build per-(content) skeleton response. Distribution + standards-matrix come in Tasks 3-5.
+    assessments_out = []
+    for cid in content_ids:
+        match = next((c for c in found if c.get('id') == cid), None)
+        # Spec: max_points may live on the row OR in content/settings JSON. Use
+        # _coalesce so the first non-None wins (treating legitimate 0 as a valid total).
+        if match:
+            content_json = match.get('content') if isinstance(match.get('content'), dict) else None
+            settings_json = match.get('settings') if isinstance(match.get('settings'), dict) else None
+            max_points = _coalesce(
+                match.get('max_points'),
+                content_json.get('max_points') if content_json else None,
+                settings_json.get('max_points') if settings_json else None,
+                default=0,
+            )
+        else:
+            max_points = 0
+        assessments_out.append({
+            "content_id": cid,
+            "title": match.get('title', '') if match else '',
+            "max_points": max_points,
+            "n": 0,
+            "submission_rate": 0.0,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "q1": 0,
+            "q3": 0,
+            "percentages": [],
+        })
+
     return jsonify({
         "class_id": class_id,
         "class_name": class_name,
         "attempt_mode": attempt_mode,
-        "class_roster_size": 0,
-        "assessments": [],
+        "class_roster_size": class_roster_size,
+        "assessments": assessments_out,
         "standards_matrix": {"standards": [], "cells": {}},
     })
 

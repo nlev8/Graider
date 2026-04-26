@@ -185,3 +185,92 @@ class TestAssessmentComparisonValidation:
         })
         resp = client.get('/api/teacher/class/cls-1/compare?content_ids=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222', headers=teacher_headers)
         assert resp.status_code == 403
+
+
+class TestAssessmentComparisonRoster:
+    """Valid-roster definition + orphan handling."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_class_roster_size_skips_orphan_enrollments(self, mock_sb_fn, client, teacher_headers):
+        # class_students has 2 ids; students table has only 1 (orphan = stu-orphan).
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'},
+                               {'class_id': 'cls-1', 'student_id': 'stu-orphan'}],
+            'students': [{'id': 'stu-1'}],  # stu-orphan missing
+            'published_content': [
+                {'id': '11111111-1111-1111-1111-111111111111', 'title': 'Q1',
+                 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': '22222222-2222-2222-2222-222222222222', 'title': 'Q2',
+                 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/compare?content_ids=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Orphan dropped — roster size = 1
+        assert body['class_roster_size'] == 1
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_empty_class_returns_zero_roster(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [],
+            'students': [],
+            'published_content': [
+                {'id': '11111111-1111-1111-1111-111111111111', 'title': 'Q1',
+                 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': '22222222-2222-2222-2222-222222222222', 'title': 'Q2',
+                 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/compare?content_ids=11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['class_roster_size'] == 0
+        # Both assessments should still appear with n=0
+        assert len(body['assessments']) == 2
+        assert all(a['n'] == 0 for a in body['assessments'])
+        assert all(a['submission_rate'] == 0.0 for a in body['assessments'])
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_former_student_with_submission_excluded(self, mock_sb_fn, client, teacher_headers):
+        """A submission from a student_id NOT in the current valid roster (former student
+        whose enrollment was removed but whose submission row still exists) must not
+        affect distribution stats — class roster scoping is the source of truth.
+        Tests that the route's `for sid in valid_student_ids` iteration drops orphan submissions."""
+        cid_q1 = '11111111-1111-1111-1111-111111111111'
+        cid_q2 = '22222222-2222-2222-2222-222222222222'
+        # Roster: stu-1 only. ex-stu submitted Q1 but is no longer enrolled.
+        subs = [
+            {'id': 'sub-current', 'student_id': 'stu-1', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': 90,
+             'results': {'standards_mastery': {}, 'score': 9, 'total_points': 10},
+             'status': 'graded'},
+            {'id': 'sub-former', 'student_id': 'ex-stu', 'content_id': cid_q1,
+             'attempt_number': 1, 'submitted_at': '2026-04-10T10:00:00Z',
+             'percentage': 30,  # Would drag the mean down if included.
+             'results': {'standards_mastery': {}, 'score': 3, 'total_points': 10},
+             'status': 'graded'},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1'}],
+            'published_content': [
+                {'id': cid_q1, 'title': 'Q1', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+                {'id': cid_q2, 'title': 'Q2', 'class_id': 'cls-1', 'content_type': 'assessment', 'max_points': 10},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get(f'/api/teacher/class/cls-1/compare?content_ids={cid_q1},{cid_q2}', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        a_q1 = next(a for a in body['assessments'] if a['content_id'] == cid_q1)
+        # Only stu-1's 90 must count; ex-stu's 30 must NOT affect distribution.
+        assert a_q1['n'] == 1
+        assert a_q1['mean'] == 90
+        assert 30 not in a_q1['percentages']
