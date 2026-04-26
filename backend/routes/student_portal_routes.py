@@ -1585,14 +1585,118 @@ def get_class_gradebook(class_id):
         return error_response("Not authorized", 403)
     class_name = cls.data[0].get('name')
 
-    # Skeleton: empty arrays. Happy-path data fetch lands in Task 3.
+    # 2) Fetch class roster: enrollments + students. Skip orphans silently.
+    enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
+    student_ids = [row['student_id'] for row in (enrollments.data or []) if row.get('student_id')]
+
+    student_records = []
+    if student_ids:
+        students_rows = db.table('students').select(
+            'id, first_name, last_name'
+        ).in_('id', student_ids).execute()
+        seen = {s['id']: s for s in (students_rows.data or []) if s.get('id')}
+        for sid in student_ids:
+            sdata = seen.get(sid)
+            if sdata is None:
+                _logger.debug("Orphan enrollment in class %s: student_id=%s missing from students table", class_id, sid)
+                continue
+            student_records.append({
+                'student_id': sid,
+                'student_name': ((sdata.get('first_name') or '') + ' ' + (sdata.get('last_name') or '')).strip(),
+            })
+        student_records.sort(key=lambda s: s['student_name'].lower())
+
+    if not student_records:
+        return jsonify({
+            "class_id": class_id, "class_name": class_name, "attempt_mode": attempt_mode,
+            "students": [], "assessments": [], "grades": {},
+        })
+
+    # 3) Fetch all class assessments/assignments. Sort ASC by publish_date.
+    content_rows = db.table('published_content').select(
+        'id, title, content_type, publish_date, due_date'
+    ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
+
+    assessments = sorted(
+        (content_rows.data or []),
+        key=lambda c: (c.get('publish_date') or '', c.get('id') or ''),
+    )
+    content_titles = {c['id']: c.get('title', '') for c in assessments}
+
+    if not assessments:
+        return jsonify({
+            "class_id": class_id, "class_name": class_name, "attempt_mode": attempt_mode,
+            "students": [{'student_id': s['student_id'], 'student_name': s['student_name']} for s in student_records],
+            "assessments": [], "grades": {},
+        })
+
+    # 4) Fetch non-draft submissions for these students × these contents
+    student_id_set = [s['student_id'] for s in student_records]
+    content_id_set = [c['id'] for c in assessments]
+    subs_rows = db.table('student_submissions').select(
+        'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+    ).in_('student_id', student_id_set).in_('content_id', content_id_set).neq(
+        'status', 'draft'
+    ).execute()
+    submissions = subs_rows.data or []
+
+    # 5) Sanitize results.standards_mastery in place (defensive)
+    for s in submissions:
+        _sanitize_standards_mastery(s)
+
+    # 6) Group by (student_id, content_id) and build the canonical-grade map
+    from collections import defaultdict
+    subs_by_student_content = defaultdict(lambda: defaultdict(list))
+    for s in submissions:
+        sid = s.get('student_id')
+        cid = s.get('content_id')
+        if sid and cid:
+            subs_by_student_content[sid][cid].append(s)
+
+    grades = {}
+    for sid, by_content in subs_by_student_content.items():
+        per_student = {}
+        for cid, subs in by_content.items():
+            if not subs:
+                continue
+            total_attempts = len(subs)
+            selected = _select_submissions_by_mode({cid: subs}, attempt_mode).get(cid, [])
+            if attempt_mode == 'average':
+                # mean percentage across attempts; drilldown anchor = latest.
+                # Use _coalesce (NOT `or`) so a legitimate 0 doesn't fall through.
+                pcts = [_coalesce(s.get('percentage'), default=0) for s in subs]
+                mean_pct = round(sum(pcts) / len(pcts), 1) if pcts else 0
+                latest = max(subs, key=lambda s: (s.get('attempt_number') or 0, _parse_ts(s.get('submitted_at'))))
+                per_student[cid] = {
+                    'submission_id': latest.get('id'),
+                    'percentage': mean_pct,
+                    'attempt_number': latest.get('attempt_number'),
+                    'submitted_at': latest.get('submitted_at'),
+                    'total_attempts': total_attempts,
+                }
+            else:
+                if not selected:
+                    continue
+                chosen = selected[0]
+                per_student[cid] = {
+                    'submission_id': chosen.get('id'),
+                    'percentage': chosen.get('percentage'),
+                    'attempt_number': chosen.get('attempt_number'),
+                    'submitted_at': chosen.get('submitted_at'),
+                    'total_attempts': total_attempts,
+                }
+        if per_student:
+            grades[sid] = per_student
+
     return jsonify({
-        "class_id": class_id,
-        "class_name": class_name,
-        "attempt_mode": attempt_mode,
-        "students": [],
-        "assessments": [],
-        "grades": {},
+        "class_id": class_id, "class_name": class_name, "attempt_mode": attempt_mode,
+        "students": [{'student_id': s['student_id'], 'student_name': s['student_name']} for s in student_records],
+        "assessments": [
+            {'content_id': c['id'], 'title': c.get('title', ''), 'content_type': c.get('content_type'),
+             'publish_date': c.get('publish_date'), 'due_date': c.get('due_date')}
+            for c in assessments
+        ],
+        "grades": grades,
     })
 
 

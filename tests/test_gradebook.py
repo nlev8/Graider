@@ -136,3 +136,218 @@ class TestGradebookAuthz:
         assert body.get('type') == 'https://graider.live/errors/forbidden'
         assert body.get('status') == 403
         assert 'error' in body
+
+
+class TestGradebookHappyPath:
+    """Happy-path data assembly: students × assessments × grades."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_returns_full_grid(self, mock_sb_fn, client, teacher_headers):
+        # 2 students × 2 assessments. stu-1 submitted both; stu-2 only the first.
+        subs = [
+            {"id": "sub-1-A", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-10T10:00:00Z",
+             "percentage": 80, "results": {"standards_mastery": {}, "score": 8, "total_points": 10},
+             "status": "graded"},
+            {"id": "sub-1-B", "student_id": "stu-1", "content_id": "ct-2",
+             "attempt_number": 1, "submitted_at": "2026-04-15T10:00:00Z",
+             "percentage": 70, "results": {"standards_mastery": {}, "score": 14, "total_points": 20},
+             "status": "graded"},
+            {"id": "sub-2-A", "student_id": "stu-2", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-11T10:00:00Z",
+             "percentage": 60, "results": {"standards_mastery": {}, "score": 6, "total_points": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'Period 3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'},
+                                {'class_id': 'cls-1', 'student_id': 'stu-2'}],
+            'students': [
+                {'id': 'stu-1', 'first_name': 'Alice', 'last_name': 'Anderson'},
+                {'id': 'stu-2', 'first_name': 'Bob', 'last_name': 'Brown'},
+            ],
+            'published_content': [
+                {'id': 'ct-1', 'class_id': 'cls-1', 'title': 'Quiz 1', 'content_type': 'assessment',
+                 'publish_date': '2026-04-01T00:00:00Z', 'due_date': None},
+                {'id': 'ct-2', 'class_id': 'cls-1', 'title': 'Quiz 2', 'content_type': 'assessment',
+                 'publish_date': '2026-04-08T00:00:00Z', 'due_date': None},
+            ],
+            'student_submissions': subs,
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Students sorted alphabetically
+        assert [s['student_id'] for s in body['students']] == ['stu-1', 'stu-2']
+        # Assessments sorted by publish_date ASC
+        assert [a['content_id'] for a in body['assessments']] == ['ct-1', 'ct-2']
+        # Grades populated for the 3 (student, content) pairs
+        assert body['grades']['stu-1']['ct-1']['percentage'] == 80
+        assert body['grades']['stu-1']['ct-2']['percentage'] == 70
+        assert body['grades']['stu-2']['ct-1']['percentage'] == 60
+        # stu-2 has no submission for ct-2 → absent from map
+        assert 'ct-2' not in body['grades'].get('stu-2', {})
+        # total_attempts = 1 for each (each was a single attempt)
+        assert body['grades']['stu-1']['ct-1']['total_attempts'] == 1
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_empty_class_returns_empty_arrays(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [],
+            'students': [],
+            'published_content': [],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['students'] == []
+        assert body['assessments'] == []
+        assert body['grades'] == {}
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_class_with_no_submissions_returns_empty_grades(self, mock_sb_fn, client, teacher_headers):
+        """Class has students AND assessments, but no submissions yet.
+        Distinct from the empty-class case: students/assessments arrays are
+        populated; only the grades map is empty."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'class_id': 'cls-1', 'title': 'Q1',
+                                    'content_type': 'assessment',
+                                    'publish_date': '2026-04-01T00:00:00Z'}],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert len(body['students']) == 1
+        assert len(body['assessments']) == 1
+        assert body['grades'] == {}
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_class_with_no_assessments_returns_empty_assessments(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert len(body['students']) == 1
+        assert body['assessments'] == []
+        assert body['grades'] == {}
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_assessments_sorted_by_publish_date_asc(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [
+                # Inserted out-of-order on purpose
+                {'id': 'ct-late', 'class_id': 'cls-1', 'title': 'Z-Late', 'content_type': 'assessment',
+                 'publish_date': '2026-04-20T00:00:00Z'},
+                {'id': 'ct-early', 'class_id': 'cls-1', 'title': 'A-Early', 'content_type': 'assessment',
+                 'publish_date': '2026-04-01T00:00:00Z'},
+                {'id': 'ct-mid', 'class_id': 'cls-1', 'title': 'M-Mid', 'content_type': 'assessment',
+                 'publish_date': '2026-04-10T00:00:00Z'},
+            ],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Sorted ASC by publish_date
+        assert [a['content_id'] for a in body['assessments']] == ['ct-early', 'ct-mid', 'ct-late']
+
+
+class TestGradebookAttemptModes:
+    """attempt_mode: latest / best / average / invalid fallback."""
+
+    def _setup_three_attempts(self, mock_sb_fn):
+        """One student × one assessment, 3 attempts: 50%, 90%, 70%."""
+        subs = [
+            {"id": "sub-1", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 1, "submitted_at": "2026-04-11T10:00:00Z", "percentage": 50,
+             "results": {"standards_mastery": {}, "score": 5, "total_points": 10},
+             "status": "graded"},
+            {"id": "sub-2", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 2, "submitted_at": "2026-04-12T10:00:00Z", "percentage": 90,
+             "results": {"standards_mastery": {}, "score": 9, "total_points": 10},
+             "status": "graded"},
+            {"id": "sub-3", "student_id": "stu-1", "content_id": "ct-1",
+             "attempt_number": 3, "submitted_at": "2026-04-13T10:00:00Z", "percentage": 70,
+             "results": {"standards_mastery": {}, "score": 7, "total_points": 10},
+             "status": "graded"},
+        ]
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{'id': 'ct-1', 'class_id': 'cls-1', 'title': 'Q',
+                                    'content_type': 'assessment',
+                                    'publish_date': '2026-04-10T00:00:00Z'}],
+            'student_submissions': subs,
+        })
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_attempt_mode_latest_picks_most_recent_per_pair(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/gradebook?attempt_mode=latest',
+            headers=teacher_headers,
+        )
+        body = resp.get_json()
+        cell = body['grades']['stu-1']['ct-1']
+        assert cell['submission_id'] == 'sub-3'
+        assert cell['percentage'] == 70
+        assert cell['attempt_number'] == 3
+        assert cell['total_attempts'] == 3
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_attempt_mode_best_picks_highest_per_pair(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/gradebook?attempt_mode=best',
+            headers=teacher_headers,
+        )
+        body = resp.get_json()
+        cell = body['grades']['stu-1']['ct-1']
+        assert cell['submission_id'] == 'sub-2'  # 90% is best
+        assert cell['percentage'] == 90
+        assert cell['attempt_number'] == 2
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_attempt_mode_average_aggregates(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/gradebook?attempt_mode=average',
+            headers=teacher_headers,
+        )
+        body = resp.get_json()
+        cell = body['grades']['stu-1']['ct-1']
+        # Average of 50, 90, 70 = 70.0
+        assert cell['percentage'] == 70.0
+        # submission_id anchor = LATEST (sub-3) so drilldown opens most recent
+        assert cell['submission_id'] == 'sub-3'
+        assert cell['attempt_number'] == 3
+        assert cell['total_attempts'] == 3
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_invalid_attempt_mode_falls_back_to_latest(self, mock_sb_fn, client, teacher_headers):
+        self._setup_three_attempts(mock_sb_fn)
+        resp = client.get(
+            '/api/teacher/class/cls-1/gradebook?attempt_mode=garbage',
+            headers=teacher_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['attempt_mode'] == 'latest'
+        cell = body['grades']['stu-1']['ct-1']
+        assert cell['submission_id'] == 'sub-3'
