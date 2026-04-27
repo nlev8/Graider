@@ -797,21 +797,23 @@ class TestPublishToClassHardening:
     @patch('backend.routes.student_account_routes._get_teacher_supabase')
     def test_publish_with_null_target_creates_class_wide_row(self, mock_sb_fn, client, teacher_headers):
         # NULL target_student_ids -> existing class-wide behavior preserved.
-        captured_insert = {}
-        chain = MagicMock()
-        chain.select.return_value = chain
-        chain.eq.return_value = chain
-        chain.execute.side_effect = [
-            MagicMock(data=[{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}]),
-            MagicMock(data=[{'id': 'new-content-id'}]),
-        ]
-        def _insert(payload):
-            captured_insert['payload'] = payload
-            chain.execute.side_effect = [MagicMock(data=[{'id': 'new-content-id'}])]
+        # Uses _multi_table_sb (filter-aware) + insert spy on published_content
+        # so the test is decoupled from the route's exact .execute() ordering.
+        captured = {}
+        table_data = {
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'published_content': [{'id': 'new-content-id'}],
+        }
+        def _table(name):
+            chain = _make_chain(table_data.get(name, []))
+            if name == 'published_content':
+                def _spy_insert(payload):
+                    captured['payload'] = payload
+                    return chain
+                chain.insert.side_effect = _spy_insert
             return chain
-        chain.insert.side_effect = _insert
         sb = MagicMock()
-        sb.table.return_value = chain
+        sb.table.side_effect = _table
         mock_sb_fn.return_value = sb
         resp = client.post('/api/publish-to-class', json={
             'class_id': 'cls-1', 'content': {'questions': [{'text': 'Q1'}]},
@@ -819,28 +821,29 @@ class TestPublishToClassHardening:
         }, headers=teacher_headers)
         assert resp.status_code == 200
         # Insert payload should NOT contain target_student_ids OR have it as None.
-        payload = captured_insert.get('payload', {})
+        payload = captured.get('payload', {})
         assert payload.get('target_student_ids') in (None, [])
 
     @patch('backend.routes.student_account_routes._get_teacher_supabase')
     def test_publish_with_valid_targets_inserts_with_targeting(self, mock_sb_fn, client, teacher_headers):
-        captured_insert = {}
-        chain = MagicMock()
-        chain.select.return_value = chain
-        chain.eq.return_value = chain
-        chain.in_.return_value = chain
-        chain.execute.side_effect = [
-            MagicMock(data=[{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}]),  # class lookup
-            MagicMock(data=[{'student_id': STU_1}]),  # class_students lookup for targets
-            MagicMock(data=[{'id': STU_1}]),  # students existence lookup
-            MagicMock(data=[{'id': 'new-content-id'}]),  # insert
-        ]
-        def _insert(payload):
-            captured_insert['payload'] = payload
+        # Same decoupled pattern: filter-aware mock for table reads + insert spy.
+        captured = {}
+        table_data = {
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'published_content': [{'id': 'new-content-id'}],
+        }
+        def _table(name):
+            chain = _make_chain(table_data.get(name, []))
+            if name == 'published_content':
+                def _spy_insert(payload):
+                    captured['payload'] = payload
+                    return chain
+                chain.insert.side_effect = _spy_insert
             return chain
-        chain.insert.side_effect = _insert
         sb = MagicMock()
-        sb.table.return_value = chain
+        sb.table.side_effect = _table
         mock_sb_fn.return_value = sb
         resp = client.post('/api/publish-to-class', json={
             'class_id': 'cls-1', 'content': {'questions': [{'text': 'Q1'}]},
@@ -848,4 +851,4 @@ class TestPublishToClassHardening:
             'target_student_ids': [STU_1],
         }, headers=teacher_headers)
         assert resp.status_code == 200
-        assert captured_insert.get('payload', {}).get('target_student_ids') == [STU_1]
+        assert captured.get('payload', {}).get('target_student_ids') == [STU_1]

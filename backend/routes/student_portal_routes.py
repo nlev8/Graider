@@ -2222,8 +2222,13 @@ def post_remediate(class_id):
             )
         target_student_ids = [target_student_id]
 
-    # 6) Red-tier resolution (class-wide). Uses the same aggregation path that
-    # Phase 2 Progress Rank uses, so the red-tier set matches the grid exactly.
+    # 6) Red-tier resolution (class-wide). Uses the full Phase 2
+    # _select_submissions_by_mode + _aggregate_mastery_for_student aggregation
+    # pipeline so the red-tier set EXACTLY matches what teachers see in the
+    # Progress Rank grid. A direct read of `results.standards_mastery[std]`
+    # per latest submission would be cheaper, but could classify differently
+    # when a student has multiple content rows touching the same standard --
+    # the aggregation pipeline merges per-content mastery before thresholding.
     if target_mode == 'red_tier_in_class':
         # Resolve roster (skip orphans).
         enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
@@ -2310,19 +2315,24 @@ def post_remediate(class_id):
     # helpers (incl. _extract_usage/_merge_usage) live in assignment_post_processing
     # and are merely re-imported by planner_routes. Importing direct from the source
     # avoids an unnecessary circular-import surface.
-    try:
-        from backend.api_keys import get_api_key as _gak
-        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
-        from backend.routes.planner_routes import _get_openai_context
-        from backend.services.assignment_post_processing import (
-            _post_process_assignment, _extract_usage, _merge_usage,
-        )
-        import json as _json
+    from backend.api_keys import get_api_key as _gak
+    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+    from backend.routes.planner_routes import _get_openai_context
+    from backend.services.assignment_post_processing import (
+        _post_process_assignment, _extract_usage, _merge_usage,
+    )
+    import json as _json
 
-        api_key = _gak('openai', g.teacher_id)
-        if not api_key or 'your-key-here' in api_key:
-            return error_response("Missing OpenAI API key", 500)
-        adapter = OpenAIAdapter(api_key=api_key)
+    api_key = _gak('openai', g.teacher_id)
+    if not api_key or 'your-key-here' in api_key:
+        return error_response("Missing OpenAI API key", 500)
+    adapter = OpenAIAdapter(api_key=api_key)
+    _ctx_uid, _ctx_client = _get_openai_context()
+
+    # Narrow try/except: only the LLM call + JSON parse + post-process.
+    # Anything outside (imports, api_key, adapter ctor, ctx fetch) should
+    # surface its real cause to the caller, not a generic "Generation failed".
+    try:
         completion = adapter.chat(LLMRequest(
             model="gpt-4o",
             system_prompt="You are an expert teacher. Return valid JSON only.",
@@ -2341,7 +2351,6 @@ def post_remediate(class_id):
                 'sections': [{'name': 'Practice', 'questions': assignment.get('questions') or []}],
             }
 
-        _ctx_uid, _ctx_client = _get_openai_context()
         assignment, extra_usage = _post_process_assignment(
             assignment, 8, target_total_points=80,
             subject=subject, grade=grade,
@@ -2375,7 +2384,7 @@ def post_remediate(class_id):
         (usage or {}).get('total_tokens', 0),
     )
 
-    from datetime import datetime, timezone
+    # `datetime`/`timezone` are imported at module level (line 12).
     return jsonify({
         "questions": questions,
         "target_mode": target_mode,
