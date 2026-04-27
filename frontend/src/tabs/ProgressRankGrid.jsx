@@ -202,10 +202,24 @@ export default function ProgressRankGrid({ classId }) {
                       var m = student.mastery[code];
                       var color = masteryColor(m ? m.percentage : null);
                       var clickable = !!m;
+                      function activate() {
+                        if (clickable) setSelectedCell({ student: student, standard: code, mastery: m });
+                      }
                       return (
                         <td
                           key={code}
-                          onClick={function() { if (clickable) setSelectedCell({ student: student, standard: code, mastery: m }); }}
+                          onClick={activate}
+                          onKeyDown={function(e) {
+                            if (clickable && (e.key === "Enter" || e.key === " ")) {
+                              e.preventDefault();
+                              activate();
+                            }
+                          }}
+                          role={clickable ? "button" : undefined}
+                          tabIndex={clickable ? 0 : undefined}
+                          aria-label={clickable
+                            ? "View " + student.student_name + " " + code + " mastery (" + (m ? m.percentage : "no data") + "%)"
+                            : undefined}
                           style={{
                             padding: "10px 8px",
                             textAlign: "center",

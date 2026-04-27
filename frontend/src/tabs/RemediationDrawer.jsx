@@ -23,13 +23,17 @@ export default function RemediationDrawer({
   var successTimerRef = useRef(null);
 
   // Reset on open / close.
+  // Uses per-call localRef sentinels (matching AssessmentComparison.jsx precedent)
+  // so a stale in-flight .then() can't sneak through after deps change or the
+  // drawer closes — captured `localRef` is always the one its own fetch owns.
   useEffect(function() {
     if (!open) {
-      cancelRef.current.cancelled = true;
+      if (cancelRef.current) cancelRef.current.cancelled = true;
       if (successTimerRef.current) { clearTimeout(successTimerRef.current); successTimerRef.current = null; }
       return;
     }
-    cancelRef.current = { cancelled: false };
+    var localRef = { cancelled: false };
+    cancelRef.current = localRef;
     setState("generating");
     setError(null);
     setData(null);
@@ -39,7 +43,7 @@ export default function RemediationDrawer({
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
     api.postRemediate(classId, payload)
       .then(function(res) {
-        if (cancelRef.current.cancelled) return;
+        if (localRef.cancelled) return;
         if (!res || res.error) {
           setError((res && (res.detail || res.error)) || "Generation failed");
           setState("error");
@@ -50,30 +54,51 @@ export default function RemediationDrawer({
         setState("preview");
       })
       .catch(function(e) {
-        if (cancelRef.current.cancelled) return;
+        if (localRef.cancelled) return;
         setError((e && e.message) || "Network error");
         setState("error");
       });
-    return function() { cancelRef.current.cancelled = true; };
+    // Always tear down the timer here — if the parent unmounts mid-success-flash
+    // the 2s onClose timer must not leak.
+    return function() {
+      localRef.cancelled = true;
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    };
   }, [open, classId, standardCode, targetMode, targetStudentId]);
 
-  // Esc to close.
+  // Esc to close. If the regenerate-confirm dialog is open, Esc dismisses
+  // just the dialog instead of the whole drawer.
   useEffect(function() {
     if (!open) return;
-    function handler(e) { if (e.key === "Escape") onClose(); }
+    function handler(e) {
+      if (e.key === "Escape") {
+        if (confirmRegenOpen) {
+          setConfirmRegenOpen(false);
+        } else {
+          onClose();
+        }
+      }
+    }
     document.addEventListener("keydown", handler);
     return function() { document.removeEventListener("keydown", handler); };
-  }, [open, onClose]);
+  }, [open, onClose, confirmRegenOpen]);
 
   function regenerateAll() {
     setConfirmRegenOpen(false);
     setValidationError(null);  // clear any stale validation message before regen
+    // Cancel prior in-flight fetch so its late response can't overwrite this one.
+    if (cancelRef.current) cancelRef.current.cancelled = true;
+    var localRef = { cancelled: false };
+    cancelRef.current = localRef;
     setState("regenerating");
     var payload = { standard_code: standardCode, target_mode: targetMode };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
     api.postRemediate(classId, payload)
       .then(function(res) {
-        if (cancelRef.current.cancelled) return;
+        if (localRef.cancelled) return;
         if (!res || res.error) {
           setError((res && (res.detail || res.error)) || "Regeneration failed");
           setState("error");
@@ -84,7 +109,7 @@ export default function RemediationDrawer({
         setState("preview");
       })
       .catch(function(e) {
-        if (cancelRef.current.cancelled) return;
+        if (localRef.cancelled) return;
         setError((e && e.message) || "Network error");
         setState("error");
       });
@@ -145,9 +170,19 @@ export default function RemediationDrawer({
   }
 
   function publish() {
+    // Refuse to publish if targeting data is missing — falling back to a
+    // class-wide publish would be semantically wrong (esp. for single_student
+    // remediations, which would silently broadcast to the whole class).
+    if (!data || !data.target_student_ids || !data.target_student_ids.length) {
+      setValidationError("Targeting data missing — please regenerate");
+      return;
+    }
     var ve = validateBeforePublish();
     if (ve) { setValidationError(ve); return; }
     setValidationError(null);
+    if (cancelRef.current) cancelRef.current.cancelled = true;
+    var localRef = { cancelled: false };
+    cancelRef.current = localRef;
     setState("publishing");
     api.publishToClass(
       classId,
@@ -159,7 +194,7 @@ export default function RemediationDrawer({
       data.target_student_ids,
     )
       .then(function(res) {
-        if (cancelRef.current.cancelled) return;
+        if (localRef.cancelled) return;
         if (!res || res.error) {
           setError((res && (res.detail || res.error)) || "Publish failed");
           setState("error");
@@ -168,11 +203,11 @@ export default function RemediationDrawer({
         setState("success");
         if (onPublished) onPublished();
         successTimerRef.current = setTimeout(function() {
-          if (!cancelRef.current.cancelled) onClose();
+          if (!localRef.cancelled) onClose();
         }, 2000);
       })
       .catch(function(e) {
-        if (cancelRef.current.cancelled) return;
+        if (localRef.cancelled) return;
         setError((e && e.message) || "Network error");
         setState("error");
       });
