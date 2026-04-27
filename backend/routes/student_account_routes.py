@@ -138,28 +138,32 @@ def _validate_student_session():
                       student_id, class_id)
         return None
 
+    # Defense-in-depth: student_id is interpolated into PostgREST .or_() f-strings
+    # downstream (dashboard, resources). Validate it's a UUID before returning so
+    # a non-UUID value (e.g. test DB drift, migration mishap) can't reach the
+    # PostgREST clause builder. Microsecond cost.
+    try:
+        uuid.UUID(str(student_id))
+    except (ValueError, TypeError):
+        _logger.warning("session.invalid_student_id_uuid student=%r class=%s", student_id, class_id)
+        return None
+
     return (student_id, class_id)
 
 
 def _content_visible_to_student(db, content_id, student_id, class_id):
     """Phase 4: shared visibility check for student-facing endpoints.
 
-    A student sees a published_content row iff:
-    1. They're currently enrolled in published_content.class_id (re-checked, not session-cached).
-    2. The row is is_active = true.
-    3. target_student_ids IS NULL OR target_student_ids contains the student_id.
+    PRECONDITION: The caller MUST have already verified that `student_id` is
+    enrolled in `class_id` (typically via _validate_student_session, which now
+    re-checks enrollment on every request). This helper does NOT re-check
+    enrollment — that would double the DB round-trip.
 
-    Returns True iff all three hold; False otherwise.
+    Returns True iff:
+    1. The published_content row exists with id=content_id and class_id=class_id, AND
+    2. The row is is_active = true, AND
+    3. target_student_ids IS NULL OR target_student_ids contains the student_id.
     """
-    # Enrollment fact (re-check, NOT session-cached).
-    enr = db.table('class_students').select('student_id').eq(
-        'class_id', class_id
-    ).eq('student_id', student_id).execute()
-    if not enr.data:
-        _logger.debug("student.access.denied reason=not_enrolled student=%s class=%s",
-                      student_id, class_id)
-        return False
-    # Content row.
     row = db.table('published_content').select(
         'id, class_id, is_active, target_student_ids'
     ).eq('id', content_id).eq('class_id', class_id).execute()

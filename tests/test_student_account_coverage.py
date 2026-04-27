@@ -106,7 +106,7 @@ class TestCheckStudentSession:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_valid_session_returns_student_info(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         student_row = [{'first_name': 'Jane', 'last_name': 'Doe',
                         'student_id_number': 'S100', 'email': 'jane@test.com'}]
         class_row = [{'name': 'Period 1', 'subject': 'Math'}]
@@ -119,7 +119,7 @@ class TestCheckStudentSession:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'classes':
@@ -144,7 +144,7 @@ class TestCheckStudentSession:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_expired_session_returns_401(self, mock_get_sb, client):
         expired = (datetime.now(tz=timezone.utc) - timedelta(hours=1)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expired}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expired}]
 
         mock_sb = MagicMock()
         mock_sb.table.return_value = _make_chain(session_row)
@@ -163,7 +163,7 @@ class TestStudentDashboard:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_dashboard_returns_assigned_content(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         content_row = [{
             'id': 'pc-1', 'title': 'Quiz 1', 'content_type': 'assessment',
             'settings': {}, 'due_date': None, 'created_at': '2026-01-01T00:00:00',
@@ -176,7 +176,7 @@ class TestStudentDashboard:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -238,7 +238,7 @@ class TestSubmitStudentWork:
         }
 
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         student_row = [{'first_name': 'John', 'last_name': 'Smith',
                         'student_id_number': 'S200', 'period': 'P1',
                         'email': '', 'teacher_id': 'test-teacher-001'}]
@@ -258,7 +258,7 @@ class TestSubmitStudentWork:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -295,7 +295,7 @@ class TestSubmitStudentWork:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_submit_nonexistent_content_returns_404(self, mock_get_sb, app):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         student_row = [{'first_name': 'A', 'last_name': 'B',
                         'student_id_number': 'S1', 'period': '', 'email': '',
                         'teacher_id': 't1'}]
@@ -306,7 +306,7 @@ class TestSubmitStudentWork:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -335,7 +335,7 @@ class TestSubmitStudentWork:
             'score': 0, 'total_points': 10, 'percentage': 0, 'questions': [],
         }
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         student_row = [{'first_name': 'A', 'last_name': 'B',
                         'student_id_number': 'S1', 'period': '', 'email': '',
                         'teacher_id': 't1'}]
@@ -352,7 +352,7 @@ class TestSubmitStudentWork:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -384,7 +384,7 @@ class TestSubmitStudentWork:
             'score': 5, 'total_points': 10, 'percentage': 50, 'questions': [],
         }
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         student_row = [{'first_name': 'X', 'last_name': 'Y',
                         'student_id_number': 'S1', 'period': '', 'email': '',
                         'teacher_id': 't1'}]
@@ -402,7 +402,7 @@ class TestSubmitStudentWork:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -434,7 +434,7 @@ class TestSaveSubmissionDraft:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_new_draft_creates_row(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
                         'target_student_ids': None, 'settings': {}}]
         student_row = [{'first_name': 'A', 'last_name': 'B',
@@ -448,7 +448,7 @@ class TestSaveSubmissionDraft:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -473,7 +473,7 @@ class TestSaveSubmissionDraft:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_existing_draft_updates_row(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
                         'target_student_ids': None, 'settings': {}}]
         existing_draft = [{
@@ -487,7 +487,7 @@ class TestSaveSubmissionDraft:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -514,7 +514,7 @@ class TestSaveSubmissionDraft:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_draft_with_timer_returns_remaining(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
                         'target_student_ids': None,
                         'settings': {'time_limit_minutes': 30}}]
@@ -530,7 +530,7 @@ class TestSaveSubmissionDraft:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -560,7 +560,7 @@ class TestGetStudentContent:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_content_strips_answer_keys(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         content_item = [{
             'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
             'target_student_ids': None,
@@ -581,7 +581,7 @@ class TestGetStudentContent:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_item)
             return _make_chain([])
@@ -600,7 +600,7 @@ class TestGetStudentContent:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_content_not_found_returns_404(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
 
         mock_sb = MagicMock()
 
@@ -608,7 +608,7 @@ class TestGetStudentContent:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain([])  # not found
             return _make_chain([])
@@ -629,7 +629,7 @@ class TestStudentLogin:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_valid_login_returns_token(self, mock_get_sb, client):
         class_row = [{'id': 'cls-1', 'teacher_id': 't1', 'name': 'P1', 'subject': 'Math'}]
-        student_row = [{'id': 'stu-1', 'first_name': 'Jo', 'last_name': 'Mo',
+        student_row = [{'id': '11111111-1111-1111-1111-111111111111', 'first_name': 'Jo', 'last_name': 'Mo',
                         'student_id_number': 'S1', 'email': 'jo@test.com', 'period': 'P1'}]
         enrollment_row = [{'id': 'enr-1'}]
 
@@ -746,7 +746,7 @@ class TestStudentResources:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_list_resources_filters_to_resource_types(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         # Mix of content types — only resource types should show
         content_row = [
             {'id': 'r1', 'title': 'Study Guide',
@@ -763,7 +763,7 @@ class TestStudentResources:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             return _make_chain([])
@@ -789,7 +789,7 @@ class TestStudentResources:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_resource_content_not_found_returns_404(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
 
         mock_sb = MagicMock()
 
@@ -797,7 +797,7 @@ class TestStudentResources:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain([])
             return _make_chain([])
@@ -818,7 +818,7 @@ class TestGetSubmissionDraft:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_get_draft_returns_saved_answers(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
                         'target_student_ids': None,
                         'settings': {'time_limit_minutes': 45}}]
@@ -837,7 +837,7 @@ class TestGetSubmissionDraft:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -858,7 +858,7 @@ class TestGetSubmissionDraft:
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_get_draft_no_draft_returns_none(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
         content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
                         'target_student_ids': None, 'settings': {}}]
 
@@ -868,7 +868,7 @@ class TestGetSubmissionDraft:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -891,7 +891,7 @@ class TestGetSubmissionDraft:
     def test_get_draft_wrong_class_returns_404(self, mock_get_sb, client):
         """Content that doesn't belong to student's class returns 404."""
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
 
         mock_sb = MagicMock()
 
@@ -899,7 +899,7 @@ class TestGetSubmissionDraft:
             if name == 'student_sessions':
                 return _make_chain(session_row)
             if name == 'class_students':
-                return _make_chain([{'student_id': 'stu-1'}])
+                return _make_chain([{'student_id': '11111111-1111-1111-1111-111111111111'}])
             if name == 'published_content':
                 return _make_chain([])  # content not in this class
             return _make_chain([])
@@ -951,7 +951,7 @@ class TestErrorHandling:
     def test_dashboard_db_error_returns_json(self, mock_get_sb, client):
         """Dashboard DB failure returns clean JSON, not traceback."""
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
-        session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
+        session_row = [{'student_id': '11111111-1111-1111-1111-111111111111', 'class_id': 'cls-1', 'expires_at': expires}]
 
         mock_sb = MagicMock()
         call_n = {'n': 0}

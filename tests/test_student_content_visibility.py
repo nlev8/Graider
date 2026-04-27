@@ -2,13 +2,16 @@
 viewer is not in target_student_ids.
 
 Each of: get_student_content, student_resource_content, submit_student_work,
-save_submission_draft, get_submission_draft must return 404 (not the row's
-content) when target_student_ids is set and the viewer is NOT in it.
+save_submission_draft, get_submission_draft must return 404 when
+target_student_ids is set and the viewer is NOT in it.
 
-NOTE: Task 11 adds a session-enrollment-recheck call inside _validate_student_session,
-which adds a 4th .execute() in the route's call sequence. Step 11.1 will retroactively
-update the mock chains in this file to a 4-element sequence. At this Task 9 point in
-the plan, the route makes 3 .execute() calls — the 3-element mock sequences below match.
+Mock sequence per test (3 .execute() calls):
+  1. session lookup (in _validate_student_session)
+  2. session enrollment recheck (in _validate_student_session, Bundle 2)
+  3. content fetch (in _content_visible_to_student)
+
+After Bundle 2's redundant-lookup cleanup, the helper no longer re-queries
+class_students — it trusts the session validator's enrollment recheck.
 """
 import os
 import sys
@@ -58,11 +61,10 @@ def test_get_student_content_404_for_non_targeted(mock_sb, client, student_heade
     chain = MagicMock()
     chain.select.return_value = chain
     chain.eq.return_value = chain
-    # Sequence: session lookup → enrollment recheck → content fetch.
+    # Sequence: session lookup → session enrollment recheck → content fetch.
     chain.execute.side_effect = [
         MagicMock(data=_session_chain(STU_VIEWER, 'cls-1')),
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Task 11)
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # helper enrollment check
+        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Bundle 2)
         MagicMock(data=_content_chain_targeted_to(STU_OTHER)),
     ]
     sb = MagicMock(); sb.table.return_value = chain
@@ -78,8 +80,7 @@ def test_student_resource_content_404_for_non_targeted(mock_sb, client, student_
     chain.eq.return_value = chain
     chain.execute.side_effect = [
         MagicMock(data=_session_chain(STU_VIEWER, 'cls-1')),
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Task 11)
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # helper enrollment check
+        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Bundle 2)
         MagicMock(data=_content_chain_targeted_to(STU_OTHER)),
     ]
     sb = MagicMock(); sb.table.return_value = chain
@@ -96,8 +97,7 @@ def test_submit_student_work_404_for_non_targeted(mock_sb, client, student_heade
     chain.insert.return_value = chain
     chain.execute.side_effect = [
         MagicMock(data=_session_chain(STU_VIEWER, 'cls-1')),
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Task 11)
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # helper enrollment check
+        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Bundle 2)
         MagicMock(data=_content_chain_targeted_to(STU_OTHER)),
     ]
     sb = MagicMock(); sb.table.return_value = chain
@@ -113,8 +113,7 @@ def test_save_submission_draft_404_for_non_targeted(mock_sb, client, student_hea
     chain.eq.return_value = chain
     chain.execute.side_effect = [
         MagicMock(data=_session_chain(STU_VIEWER, 'cls-1')),
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Task 11)
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # helper enrollment check
+        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Bundle 2)
         MagicMock(data=_content_chain_targeted_to(STU_OTHER)),
     ]
     sb = MagicMock(); sb.table.return_value = chain
@@ -130,8 +129,7 @@ def test_get_submission_draft_404_for_non_targeted(mock_sb, client, student_head
     chain.eq.return_value = chain
     chain.execute.side_effect = [
         MagicMock(data=_session_chain(STU_VIEWER, 'cls-1')),
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Task 11)
-        MagicMock(data=[{'student_id': STU_VIEWER}]),  # helper enrollment check
+        MagicMock(data=[{'student_id': STU_VIEWER}]),  # session enrollment recheck (Bundle 2)
         MagicMock(data=_content_chain_targeted_to(STU_OTHER)),
     ]
     sb = MagicMock(); sb.table.return_value = chain
