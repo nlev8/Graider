@@ -776,15 +776,30 @@ export async function listClassStudents(classId) {
   return fetchApi('/api/classes/' + classId + '/students')
 }
 
-export async function publishToClass(classId, content, contentType, title, settings, dueDate) {
+export async function publishToClass(classId, content, contentType, title, settings, dueDate, targetStudentIds) {
+  var body = {
+    class_id: classId,
+    content,
+    content_type: contentType,
+    title,
+    settings,
+    due_date: dueDate,
+  };
+  if (targetStudentIds != null) {
+    body.target_student_ids = targetStudentIds;
+  }
   return fetchApi('/api/publish-to-class', {
     method: 'POST',
-    body: JSON.stringify({
-      class_id: classId,
-      content, content_type: contentType,
-      title, settings, due_date: dueDate,
-    }),
+    body: JSON.stringify(body),
   })
+}
+
+export async function postRemediate(classId, payload) {
+  // payload: {standard_code, target_mode, target_student_id?}
+  return fetchApi(
+    '/api/teacher/class/' + encodeURIComponent(classId) + '/remediate',
+    { method: 'POST', body: JSON.stringify(payload) }
+  );
 }
 
 export async function getPortalSubmissions() {
