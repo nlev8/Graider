@@ -871,11 +871,15 @@ class TestPublishToClassHardening:
         }, headers=teacher_headers)
         assert resp.status_code == 400
 
+    @patch('backend.routes.student_account_routes._generate_class_code')
     @patch('backend.routes.student_account_routes._get_teacher_supabase')
-    def test_publish_with_null_target_creates_class_wide_row(self, mock_sb_fn, client, teacher_headers):
+    def test_publish_with_null_target_creates_class_wide_row(self, mock_sb_fn, mock_gen_code, client, teacher_headers):
         # NULL target_student_ids -> existing class-wide behavior preserved.
         # Uses _multi_table_sb (filter-aware) + insert spy on published_content
         # so the test is decoupled from the route's exact .execute() ordering.
+        # Patch _generate_class_code: it calls _get_supabase() (NOT _get_teacher_supabase)
+        # which would hit a real Supabase client in CI without env credentials.
+        mock_gen_code.return_value = 'TEST01'
         captured = {}
         table_data = {
             'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
@@ -901,9 +905,12 @@ class TestPublishToClassHardening:
         payload = captured.get('payload', {})
         assert payload.get('target_student_ids') in (None, [])
 
+    @patch('backend.routes.student_account_routes._generate_class_code')
     @patch('backend.routes.student_account_routes._get_teacher_supabase')
-    def test_publish_with_valid_targets_inserts_with_targeting(self, mock_sb_fn, client, teacher_headers):
+    def test_publish_with_valid_targets_inserts_with_targeting(self, mock_sb_fn, mock_gen_code, client, teacher_headers):
         # Same decoupled pattern: filter-aware mock for table reads + insert spy.
+        # Patch _generate_class_code (see prior test for rationale).
+        mock_gen_code.return_value = 'TEST02'
         captured = {}
         table_data = {
             'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
