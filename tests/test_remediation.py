@@ -715,3 +715,37 @@ class TestRemediateAccommodations:
         # No accommodations_applied audit event when segment is empty.
         infos = [r for r in caplog.records if r.levelno == logging.INFO]
         assert not any('accommodations_applied' in r.getMessage() for r in infos)
+
+
+# ============ Visibility helper unit tests ============
+
+class TestContentVisibilityHelper:
+    """Unit tests for _content_visible_to_student."""
+
+    def test_class_wide_row_visible_to_enrolled_student(self):
+        from backend.routes.student_account_routes import _content_visible_to_student
+        db = _multi_table_sb({
+            'published_content': [{'id': 'ct-1', 'class_id': 'cls-1', 'is_active': True,
+                                   'target_student_ids': None}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+        })
+        assert _content_visible_to_student(db, 'ct-1', STU_1, 'cls-1') is True
+
+    def test_targeted_row_visible_to_listed_student(self):
+        from backend.routes.student_account_routes import _content_visible_to_student
+        db = _multi_table_sb({
+            'published_content': [{'id': 'ct-1', 'class_id': 'cls-1', 'is_active': True,
+                                   'target_student_ids': [STU_1]}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+        })
+        assert _content_visible_to_student(db, 'ct-1', STU_1, 'cls-1') is True
+
+    def test_targeted_row_invisible_to_non_listed_student(self):
+        from backend.routes.student_account_routes import _content_visible_to_student
+        db = _multi_table_sb({
+            'published_content': [{'id': 'ct-1', 'class_id': 'cls-1', 'is_active': True,
+                                   'target_student_ids': [STU_2]}],  # only STU_2 targeted
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1},
+                               {'class_id': 'cls-1', 'student_id': STU_2}],
+        })
+        assert _content_visible_to_student(db, 'ct-1', STU_1, 'cls-1') is False

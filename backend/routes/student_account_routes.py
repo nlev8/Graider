@@ -125,6 +125,43 @@ def _validate_student_session():
     return (session['student_id'], session['class_id'])
 
 
+def _content_visible_to_student(db, content_id, student_id, class_id):
+    """Phase 4: shared visibility check for student-facing endpoints.
+
+    A student sees a published_content row iff:
+    1. They're currently enrolled in published_content.class_id (re-checked, not session-cached).
+    2. The row is is_active = true.
+    3. target_student_ids IS NULL OR target_student_ids contains the student_id.
+
+    Returns True iff all three hold; False otherwise.
+    """
+    # Enrollment fact (re-check, NOT session-cached).
+    enr = db.table('class_students').select('student_id').eq(
+        'class_id', class_id
+    ).eq('student_id', student_id).execute()
+    if not enr.data:
+        _logger.debug("student.access.denied reason=not_enrolled student=%s class=%s",
+                      student_id, class_id)
+        return False
+    # Content row.
+    row = db.table('published_content').select(
+        'id, class_id, is_active, target_student_ids'
+    ).eq('id', content_id).eq('class_id', class_id).execute()
+    if not row.data:
+        return False
+    item = row.data[0]
+    if not item.get('is_active'):
+        return False
+    targets = item.get('target_student_ids')
+    if targets is None:
+        return True
+    if isinstance(targets, list) and student_id in targets:
+        return True
+    _logger.debug("student.access.denied reason=not_targeted student=%s content=%s",
+                  student_id, content_id)
+    return False
+
+
 # ============ Teacher Endpoints (require teacher JWT) ============
 
 @student_account_bp.route('/api/classes', methods=['POST'])
