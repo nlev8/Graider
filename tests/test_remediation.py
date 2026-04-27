@@ -590,3 +590,128 @@ class TestRemediateRedTierResolution:
         body = resp.get_json()
         assert STU_1 not in body['target_student_ids']
         assert STU_2 in body['target_student_ids']
+
+
+# ============ Accommodations integration tests ============
+# Uses _set_up_llm_mocks + _llm_request_prompt_text from Task 1 scaffolding.
+
+class TestRemediateAccommodations:
+    """Single-student path injects accommodation segment into the LLM prompt
+    (NOT into _post_process_assignment, which receives the parsed assignment dict).
+    Uses try/except fall-through on accommodation helper failure.
+    """
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.accommodations.build_accommodation_prompt')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_helper_success_appends_segment(self, mock_sb_fn, mock_pp, mock_helper,
+                                             mock_adapter_cls, mock_get_api_key,
+                                             client, teacher_headers):
+        mock_helper.return_value = "ACCOMMODATION INSTRUCTIONS: simplify vocabulary"
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        # Helper called with the student id + teacher id.
+        mock_helper.assert_called_with(STU_1, 'test-teacher-001')
+        # The accommodation segment shows up in the LLMRequest sent to the adapter.
+        prompt_text = _llm_request_prompt_text(mock_adapter)
+        assert 'ACCOMMODATION INSTRUCTIONS: simplify vocabulary' in prompt_text
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.accommodations.build_accommodation_prompt')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_helper_raises_falls_back_to_grade_level(self, mock_sb_fn, mock_pp, mock_helper,
+                                                       mock_adapter_cls, mock_get_api_key,
+                                                       client, teacher_headers, caplog):
+        import logging
+        caplog.set_level(logging.WARNING, logger='backend.routes.student_portal_routes')
+        mock_helper.side_effect = RuntimeError("corrupt profile")
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        # Route still returns 200 -- helper failure falls back to grade level.
+        assert resp.status_code == 200
+        # No accommodation segment in the LLM prompt.
+        prompt_text = _llm_request_prompt_text(mock_adapter)
+        assert 'ACCOMMODATION' not in prompt_text
+        # Warning logged.
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any('accommodations_helper_failed' in r.getMessage() for r in warnings)
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.accommodations.build_accommodation_prompt')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_empty_segment_skips_audit_log(self, mock_sb_fn, mock_pp, mock_helper,
+                                            mock_adapter_cls, mock_get_api_key,
+                                            client, teacher_headers, caplog):
+        import logging
+        caplog.set_level(logging.INFO, logger='backend.routes.student_portal_routes')
+        mock_helper.return_value = ""  # No accommodations on file -> empty string.
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        # No accommodations_applied audit event when segment is empty.
+        infos = [r for r in caplog.records if r.levelno == logging.INFO]
+        assert not any('accommodations_applied' in r.getMessage() for r in infos)
