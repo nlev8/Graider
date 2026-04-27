@@ -477,3 +477,116 @@ class TestRemediateGeneration:
         assert 'generated_at' in body
         # ISO 8601 UTC.
         assert 'T' in body['generated_at'] and body['generated_at'].endswith('Z')
+
+
+# ============ Red-tier resolution tests ============
+
+class TestRemediateRedTierResolution:
+    """Edge cases for the red_tier_in_class resolver."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_excludes_students_with_no_submissions(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        # 3 enrolled students; only stu-1 has a submission (red).
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        STU_3 = '33333333-dddd-dddd-dddd-333333333333'
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [
+                {'class_id': 'cls-1', 'student_id': STU_1},
+                {'class_id': 'cls-1', 'student_id': STU_2},
+                {'class_id': 'cls-1', 'student_id': STU_3},
+            ],
+            'students': [{'id': STU_1}, {'id': STU_2}, {'id': STU_3}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+        }, headers=teacher_headers)
+        body = resp.get_json()
+        assert body['target_student_ids'] == [STU_1]
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_uses_latest_submission_per_student(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        # stu-1 has 2 submissions: older one was red (40%), latest is green (90%).
+        # The latest must win -- student NOT counted as red.
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        old_red = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        new_green = {'MA.6.AR.1.2': {'points_earned': 9, 'points_possible': 10, 'question_count': 2}}
+        red_other = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1},
+                               {'class_id': 'cls-1', 'student_id': STU_2}],
+            'students': [{'id': STU_1}, {'id': STU_2}],
+            'student_submissions': [
+                _sub('s-1-old', STU_1, CID_Q1, 40, old_red, attempt=1, submitted_at='2026-04-01T10:00:00Z'),
+                _sub('s-1-new', STU_1, CID_Q1, 90, new_green, attempt=2, submitted_at='2026-04-15T10:00:00Z'),
+                _sub('s-2', STU_2, CID_Q1, 40, red_other),
+            ],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+        }, headers=teacher_headers)
+        body = resp.get_json()
+        assert STU_1 not in body['target_student_ids']  # latest is green
+        assert STU_2 in body['target_student_ids']
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_excludes_students_at_exactly_70_percent(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        # 70% is the lower bound of yellow -- NOT red. Student excluded.
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        yellow = {'MA.6.AR.1.2': {'points_earned': 7, 'points_possible': 10, 'question_count': 2}}
+        red = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1},
+                               {'class_id': 'cls-1', 'student_id': STU_2}],
+            'students': [{'id': STU_1}, {'id': STU_2}],
+            'student_submissions': [
+                _sub('s-1', STU_1, CID_Q1, 70, yellow),
+                _sub('s-2', STU_2, CID_Q1, 40, red),
+            ],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+        }, headers=teacher_headers)
+        body = resp.get_json()
+        assert STU_1 not in body['target_student_ids']
+        assert STU_2 in body['target_student_ids']
