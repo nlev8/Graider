@@ -102,6 +102,10 @@ def _check_rate_limit(student_id_number):
 def _validate_student_session():
     """Validate student session token from X-Student-Token header.
     Returns (student_id, class_id) tuple or None if invalid.
+
+    Phase 4: re-checks class_students enrollment so a student who has been
+    removed from the class loses access immediately rather than at session
+    expiry.
     """
     token = request.headers.get('X-Student-Token', '')
     if not token:
@@ -122,7 +126,19 @@ def _validate_student_session():
         db.table('student_sessions').delete().eq('session_token', token_hash).execute()
         return None
 
-    return (session['student_id'], session['class_id'])
+    student_id = session['student_id']
+    class_id = session['class_id']
+
+    # Phase 4: re-check enrollment. A removed student loses access immediately.
+    enr = db.table('class_students').select('student_id').eq(
+        'class_id', class_id
+    ).eq('student_id', student_id).execute()
+    if not enr.data:
+        _logger.debug("session.access.denied reason=not_enrolled student=%s class=%s",
+                      student_id, class_id)
+        return None
+
+    return (student_id, class_id)
 
 
 def _content_visible_to_student(db, content_id, student_id, class_id):

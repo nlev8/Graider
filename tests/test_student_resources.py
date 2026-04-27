@@ -193,8 +193,10 @@ def test_student_resources_filters_target_student_ids(mock_sb):
         return chain
 
     chain.or_ = MagicMock(side_effect=_or_clause)
+    # 3 calls: session lookup, session enrollment recheck (Task 11), resources query.
     chain.execute.side_effect = [
         MagicMock(data=[{'student_id': STU_ME, 'class_id': 'cls-1', 'expires_at': expires}]),
+        MagicMock(data=[{'student_id': STU_ME}]),  # session enrollment recheck
         MagicMock(data=[]),  # resources query result
     ]
     sb = MagicMock()

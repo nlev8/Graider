@@ -118,6 +118,8 @@ class TestCheckStudentSession:
             call_count['n'] += 1
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'classes':
@@ -173,6 +175,8 @@ class TestStudentDashboard:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -301,6 +305,8 @@ class TestSubmitStudentWork:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -601,6 +607,8 @@ class TestGetStudentContent:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain([])  # not found
             return _make_chain([])
@@ -754,6 +762,8 @@ class TestStudentResources:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             return _make_chain([])
@@ -786,6 +796,8 @@ class TestStudentResources:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain([])
             return _make_chain([])
@@ -886,6 +898,8 @@ class TestGetSubmissionDraft:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain([])  # content not in this class
             return _make_chain([])
@@ -980,9 +994,11 @@ def test_student_dashboard_filters_target_student_ids(mock_sb, client):
         return chain
 
     chain.or_ = MagicMock(side_effect=_or_clause)
-    # 3 calls: session lookup, published_content list, student_submissions list.
+    # 4 calls: session lookup, session enrollment recheck (Task 11),
+    # published_content list, student_submissions list.
     chain.execute.side_effect = [
         MagicMock(data=[{'student_id': STU_ME, 'class_id': 'cls-1', 'expires_at': expires}]),
+        MagicMock(data=[{'student_id': STU_ME}]),  # session enrollment recheck
         MagicMock(data=[
             {'id': 'ct-classwide', 'title': 'Class Quiz', 'content_type': 'assessment',
              'target_student_ids': None, 'settings': {}},
