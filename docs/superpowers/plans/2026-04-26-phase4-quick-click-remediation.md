@@ -449,9 +449,11 @@ class TestRemediateGeneration:
     def test_single_student_happy_path(self, mock_sb_fn, mock_pp, client, teacher_headers):
         # 8 questions returned by the (mocked) post-processor.
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq' if i < 6 else 'short_answer',
-                          'standard': 'MA.6.AR.1.2'} for i in range(1, 9)],
             'title': 'Remediation: MA.6.AR.1.2',
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq' if i < 6 else 'short_answer',
+                 'standard': 'MA.6.AR.1.2'} for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1500, 'prompt_tokens': 800, 'completion_tokens': 700})
         # Student has historical evidence on this standard at 40%.
         mastery = self._ms(earned=4, possible=10)
@@ -481,9 +483,11 @@ class TestRemediateGeneration:
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_red_tier_happy_path(self, mock_sb_fn, mock_pp, client, teacher_headers):
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq' if i < 6 else 'short_answer',
-                          'standard': 'MA.6.AR.1.2'} for i in range(1, 9)],
             'title': 'Remediation: MA.6.AR.1.2',
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq' if i < 6 else 'short_answer',
+                 'standard': 'MA.6.AR.1.2'} for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1500})
         # Two students: stu-1 red (40%), stu-2 green (90%).
         mastery_red = self._ms(earned=4, possible=10)
@@ -515,8 +519,10 @@ class TestRemediateGeneration:
     def test_too_few_valid_questions_returns_422(self, mock_sb_fn, mock_pp, client, teacher_headers):
         # Post-processor returns only 2 valid questions — below the floor of 3.
         mock_pp.return_value = ({
-            'questions': [{'id': 1, 'text': 'Q1', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'},
-                          {'id': 2, 'text': 'Q2', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}],
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': 1, 'text': 'Q1', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'},
+                {'id': 2, 'text': 'Q2', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'},
+            ]}],
         }, {'total_tokens': 800})
         mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         mock_sb_fn.return_value = _multi_table_sb({
@@ -541,8 +547,10 @@ class TestRemediateGeneration:
         cls_no_meta = [{'id': 'cls-1', 'teacher_id': 'test-teacher-001', 'name': 'C',
                         'grade_level': None, 'subject': None}]
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                          for i in range(1, 9)],
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1000})
         mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         mock_sb_fn.return_value = _multi_table_sb({
@@ -564,8 +572,10 @@ class TestRemediateGeneration:
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_response_contains_generated_at_timestamp(self, mock_sb_fn, mock_pp, client, teacher_headers):
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                          for i in range(1, 9)],
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1000})
         mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         mock_sb_fn.return_value = _multi_table_sb({
@@ -785,13 +795,17 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
     }), 200
 ```
 
-**Imports note:** the inline imports inside the route are intentional (avoids a heavy module-level pull when the route is rarely hit). The signatures the route relies on:
-- `get_llm_adapter()` returns the LLM adapter (Phase 5b infra).
-- `LLMRequest(model, system_prompt, messages=[Message(role, content=[TextPart(text=...)])], response_format=ResponseFormat(type="json_object"), metadata={...})` per `backend/services/llm_types.py`.
-- `_post_process_assignment(assignment_dict, target_question_count, target_total_points=N, subject=..., grade=..., valid_standard_codes=[...], user_id=..., client=...)` returns `(assignment, extra_usage)`.
-- `_get_openai_context()`, `_extract_usage(completion, model)`, `_merge_usage(a, b)` — all exist in `backend/routes/planner_routes.py` (re-import locally rather than re-export).
+**Imports note (verified against current main):**
+- `from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart` — `llm_adapter` is the package; types and adapter classes are re-exported from `__init__.py`. There is NO `get_llm_adapter()` function.
+- `OpenAIAdapter(api_key=str)` — single-arg ctor; no timeout/model kwargs at construction time.
+- `LLMRequest(model, messages, system_prompt=None, tools=None, response_format=None, max_tokens=None, temperature=None, timeout=DEFAULT_TIMEOUT, metadata=...)` — model + messages required; rest optional.
+- `_post_process_assignment(assignment, target_question_count=None, target_total_points=None, subject=None, grade=None, valid_standard_codes=None, *, user_id=None, client=None)` — assignment dict positional, target_question_count positional. Iterates `assignment['sections'][*]['questions']`.
+- `_get_openai_context()` returns 2-tuple `(user_id, None)` — `user_id` from `g.user_id`. The 2nd slot is kept for back-compat; pass it through unchanged.
+- `_extract_usage(completion, model_name)` and `_merge_usage(a, b)` live in `backend/services/assignment_post_processing.py` (NOT planner_routes — planner only re-imports them).
+- `get_api_key(provider, teacher_id)` lives in `backend/api_keys.py:48`.
+- `build_accommodation_prompt(student_id, teacher_id='local-dev')` from `backend/accommodations.py:475` returns "" when no profile or no presets.
 
-If any of these signatures have shifted, the implementer reads the source file once at task start and adapts the call site accordingly. No silent guessing.
+If any signature has shifted by the time of implementation, read the source file once at task start and adapt the call site. No silent guessing.
 
 - [ ] **Step 3.4: Run all generation tests + validation**
 
@@ -829,8 +843,10 @@ class TestRemediateRedTierResolution:
     def test_excludes_students_with_no_submissions(self, mock_sb_fn, mock_pp, client, teacher_headers):
         # 3 enrolled students; only stu-1 has a submission (red).
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                          for i in range(1, 9)],
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1000})
         mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         STU_3 = 'stu-3333-3333-3333-3333-333333333333'
@@ -859,8 +875,10 @@ class TestRemediateRedTierResolution:
         # stu-1 has 2 submissions: older one was red (40%), latest is green (90%).
         # The latest must win — student NOT counted as red.
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                          for i in range(1, 9)],
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1000})
         old_red = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         new_green = {'MA.6.AR.1.2': {'points_earned': 9, 'points_possible': 10, 'question_count': 2}}
@@ -891,8 +909,10 @@ class TestRemediateRedTierResolution:
     def test_excludes_students_at_exactly_70_percent(self, mock_sb_fn, mock_pp, client, teacher_headers):
         # 70% is the lower bound of yellow — NOT red. Student excluded.
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                          for i in range(1, 9)],
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1000})
         yellow = {'MA.6.AR.1.2': {'points_earned': 7, 'points_possible': 10, 'question_count': 2}}
         red = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
@@ -945,23 +965,51 @@ Append to `tests/test_remediation.py`:
 ```python
 # ============ Accommodations integration tests ============
 
-class TestRemediateAccommodations:
-    """Single-student path injects accommodation segment with try/except fall-through."""
+# Helper to wire the LLM mocks. The route imports OpenAIAdapter + get_api_key
+# inline; we patch them at their source modules so the inline import inside
+# post_remediate picks up the mock.
+def _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key):
+    """Returns the mock_adapter instance for inspection."""
+    mock_get_api_key.return_value = "sk-test-fake"
+    mock_adapter = MagicMock()
+    mock_completion = MagicMock()
+    text_part = MagicMock()
+    text_part.text = '{"title":"P","sections":[{"name":"P","questions":[]}]}'
+    mock_completion.content_parts = [text_part]
+    mock_adapter.chat.return_value = mock_completion
+    mock_adapter_cls.return_value = mock_adapter
+    return mock_adapter
 
+
+def _llm_request_prompt_text(mock_adapter):
+    """Extract the user prompt text from the LLMRequest passed to .chat()."""
+    assert mock_adapter.chat.call_count == 1
+    llm_req = mock_adapter.chat.call_args[0][0]
+    return llm_req.messages[0].content[0].text
+
+
+class TestRemediateAccommodations:
+    """Single-student path injects accommodation segment into the LLM prompt
+    (NOT into _post_process_assignment, which receives the parsed assignment dict).
+    Uses try/except fall-through on accommodation helper failure.
+    """
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
     @patch('backend.routes.student_portal_routes._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_helper_success_appends_segment(self, mock_sb_fn, mock_pp, mock_helper,
+                                             mock_adapter_cls, mock_get_api_key,
                                              client, teacher_headers):
         mock_helper.return_value = "ACCOMMODATION INSTRUCTIONS: simplify vocabulary"
-        captured_prompt = {}
-        def _capture(prompt, config, **kwargs):
-            captured_prompt['p'] = prompt
-            return ({
-                'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                              for i in range(1, 9)],
-            }, {'total_tokens': 1000})
-        mock_pp.side_effect = _capture
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
         mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         mock_sb_fn.return_value = _multi_table_sb({
             'classes': CLS_OWNED,
@@ -977,27 +1025,30 @@ class TestRemediateAccommodations:
             'target_student_id': STU_1,
         }, headers=teacher_headers)
         assert resp.status_code == 200
-        # Helper was called with the student's id and teacher id.
+        # Helper called with the student id + teacher id.
         mock_helper.assert_called_with(STU_1, 'test-teacher-001')
-        # The segment was appended.
-        assert 'ACCOMMODATION INSTRUCTIONS: simplify vocabulary' in captured_prompt['p']
+        # The accommodation segment shows up in the LLMRequest sent to the adapter.
+        prompt_text = _llm_request_prompt_text(mock_adapter)
+        assert 'ACCOMMODATION INSTRUCTIONS: simplify vocabulary' in prompt_text
 
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
     @patch('backend.routes.student_portal_routes._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_helper_raises_falls_back_to_grade_level(self, mock_sb_fn, mock_pp, mock_helper,
+                                                       mock_adapter_cls, mock_get_api_key,
                                                        client, teacher_headers, caplog):
         import logging
         caplog.set_level(logging.WARNING, logger='backend.routes.student_portal_routes')
         mock_helper.side_effect = RuntimeError("corrupt profile")
-        captured_prompt = {}
-        def _capture(prompt, config, **kwargs):
-            captured_prompt['p'] = prompt
-            return ({
-                'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                              for i in range(1, 9)],
-            }, {'total_tokens': 1000})
-        mock_pp.side_effect = _capture
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
         mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         mock_sb_fn.return_value = _multi_table_sb({
             'classes': CLS_OWNED,
@@ -1014,23 +1065,30 @@ class TestRemediateAccommodations:
         }, headers=teacher_headers)
         # Route still returns 200 — helper failure falls back to grade level.
         assert resp.status_code == 200
-        # No accommodation segment appended.
-        assert 'ACCOMMODATION' not in captured_prompt['p']
+        # No accommodation segment in the LLM prompt.
+        prompt_text = _llm_request_prompt_text(mock_adapter)
+        assert 'ACCOMMODATION' not in prompt_text
         # Warning logged.
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert any('accommodations_helper_failed' in r.getMessage() for r in warnings)
 
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
     @patch('backend.routes.student_portal_routes._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_empty_segment_skips_audit_log(self, mock_sb_fn, mock_pp, mock_helper,
+                                            mock_adapter_cls, mock_get_api_key,
                                             client, teacher_headers, caplog):
         import logging
         caplog.set_level(logging.INFO, logger='backend.routes.student_portal_routes')
         mock_helper.return_value = ""  # No accommodations on file → empty string.
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         mock_pp.return_value = ({
-            'questions': [{'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
-                          for i in range(1, 9)],
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
         }, {'total_tokens': 1000})
         mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
         mock_sb_fn.return_value = _multi_table_sb({
@@ -1539,6 +1597,13 @@ git commit -m "feat(remediate): migration for target_student_ids JSONB column"
 
 Create `tests/test_student_content_visibility.py`:
 
+> **Note for the implementer:** these tests use a 3-execute mock sequence
+> `[session, helper_enrollment, content]` because at this point in the plan
+> `_validate_student_session` does NOT yet do an enrollment recheck. Task 11
+> adds that recheck, which inserts a 4th `.execute()` call before the helper's
+> enrollment lookup. **Step 11.1 explicitly updates these tests to a 4-element
+> mock sequence.** Do not anticipate that change here.
+
 ```python
 """Phase 4: deny-tests for single-row student-facing endpoints when the
 viewer is not in target_student_ids.
@@ -1546,6 +1611,11 @@ viewer is not in target_student_ids.
 Each of: get_student_content, student_resource_content, submit_student_work,
 save_submission_draft, get_submission_draft must return 404 (not the row's
 content) when target_student_ids is set and the viewer is NOT in it.
+
+NOTE: Task 11 adds a session-enrollment-recheck call inside _validate_student_session,
+which adds a 4th .execute() in the route's call sequence. Step 11.1 will retroactively
+update the mock chains in this file to a 4-element sequence. At this Task 9 point in
+the plan, the route makes 3 .execute() calls — the 3-element mock sequences below match.
 """
 import os
 import sys
@@ -2061,6 +2131,7 @@ export default function RemediationDrawer({
     setError(null);
     setData(null);
     setQuestions([]);
+    setValidationError(null);  // clear on every fresh open (defensive even though parent unmounts on close)
     var payload = { standard_code: standardCode, target_mode: targetMode };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
     api.postRemediate(classId, payload)
