@@ -1029,8 +1029,6 @@ class TestRemediateAccommodations:
     @patch('backend.api_keys.get_api_key')
     @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
-    @patch('backend.api_keys.get_api_key')
-    @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_helper_success_appends_segment(self, mock_sb_fn, mock_pp, mock_helper,
@@ -1068,8 +1066,6 @@ class TestRemediateAccommodations:
     @patch('backend.api_keys.get_api_key')
     @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
-    @patch('backend.api_keys.get_api_key')
-    @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_helper_raises_falls_back_to_grade_level(self, mock_sb_fn, mock_pp, mock_helper,
@@ -1111,8 +1107,6 @@ class TestRemediateAccommodations:
     @patch('backend.api_keys.get_api_key')
     @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
-    @patch('backend.api_keys.get_api_key')
-    @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_empty_segment_skips_audit_log(self, mock_sb_fn, mock_pp, mock_helper,
