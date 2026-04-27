@@ -461,7 +461,7 @@ python graider_app.py
 - `GET /api/student/session` — Validate student session
 - `GET /api/student/dashboard` — Get student's assigned work
 - `GET /api/student/content/<id>` — Get assessment/assignment content
-- `POST /api/student/submit/<id>` — Submit answers
+- `POST /api/student/class-submit/<content_id>` — Submit answers (class-based, authenticated via `X-Student-Token`)
 
 ### Classes
 - `POST /api/classes` — Create a class
@@ -643,7 +643,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **Graider** (11218 symbols, 29846 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Graider** (11622 symbols, 29308 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

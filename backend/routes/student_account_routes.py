@@ -863,7 +863,7 @@ def get_student_content(content_id):
         return jsonify({"error": "An internal error occurred"}), 500
 
 
-@student_account_bp.route('/api/student/submit/<content_id>', methods=['POST'])
+@student_account_bp.route('/api/student/class-submit/<content_id>', methods=['POST'])
 @handle_route_errors
 @critical_path
 def submit_student_work(content_id):

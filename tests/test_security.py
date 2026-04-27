@@ -34,6 +34,12 @@ class TestPublicPrefixes:
         from backend.auth import is_public_route
         assert is_public_route('/api/student/submit/ABC123') is True
 
+    def test_student_class_submit_is_public(self):
+        # Phase 4.2: class-based authenticated submission uses X-Student-Token
+        # (not JWT), so it bypasses JWT auth via PUBLIC_PREFIXES.
+        from backend.auth import is_public_route
+        assert is_public_route('/api/student/class-submit/abc-uuid-content-id') is True
+
     def test_student_login_is_public(self):
         from backend.auth import is_public_route
         assert is_public_route('/api/student/login') is True

@@ -202,19 +202,22 @@ class TestStudentDashboard:
 # ============ STUDENT SUBMISSION ============
 
 class TestSubmitStudentWork:
-    """POST /api/student/submit/<content_id>
+    """POST /api/student/class-submit/<content_id>
 
-    NOTE: The URL `/api/student/submit/<X>` is shared with student_portal_bp's
-    join-code route, which is registered first and wins Flask's URL matching.
-    So we call submit_student_work() directly via test_request_context rather
-    than through the HTTP client, to actually exercise this handler.
+    Phase 4.2 (2026-04-27): URL was previously /api/student/submit/<X>,
+    which shadowed student_portal_bp's join-code handler. Migrated to
+    /api/student/class-submit/<content_id> to disambiguate.
+
+    The direct-invoke pattern via test_request_context is kept for parity
+    with existing tests; client.post(...) would also work now that routing
+    is distinct.
     """
 
     def _call_submit(self, app, content_id, headers, body):
         """Invoke submit_student_work directly within a request context."""
         from backend.routes.student_account_routes import submit_student_work
         with app.test_request_context(
-            f'/api/student/submit/{content_id}',
+            f'/api/student/class-submit/{content_id}',
             method='POST',
             headers=headers,
             json=body,
