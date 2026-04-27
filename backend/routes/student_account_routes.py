@@ -745,9 +745,12 @@ def student_dashboard():
     try:
         db = _get_supabase()
 
+        # Phase 4: list-filter — only show class-wide rows OR rows targeting this student.
+        # student_id is a UUID from session lookup (validated by Supabase), so safe to interpolate.
+        targeting_filter = f'target_student_ids.is.null,target_student_ids.cs.{json.dumps([student_id])}'
         content = db.table('published_content').select('*').eq(
             'class_id', class_id
-        ).eq('is_active', True).order('created_at', desc=True).execute()
+        ).eq('is_active', True).or_(targeting_filter).order('created_at', desc=True).execute()
 
         submissions = db.table('student_submissions').select(
             'content_id, status, score, percentage, letter_grade, submitted_at'
@@ -1258,12 +1261,15 @@ def student_resources():
     try:
         db = _get_supabase()
 
+        # Phase 4: list-filter — only show class-wide rows OR rows targeting this student.
+        # student_id is a UUID from session lookup (validated by Supabase), so safe to interpolate.
+        targeting_filter = f'target_student_ids.is.null,target_student_ids.cs.{json.dumps([student_id])}'
         # Get published content for this class
         content_result = db.table('published_content').select(
             'id, title, content_type, created_at, settings'
-        ).eq('class_id', class_id).eq('is_active', True).order(
-            'created_at', desc=True
-        ).execute()
+        ).eq('class_id', class_id).eq('is_active', True).or_(
+            targeting_filter
+        ).order('created_at', desc=True).execute()
 
         resources = []
         for item in (content_result.data or []):

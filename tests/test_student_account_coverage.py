@@ -49,6 +49,7 @@ def _make_chain(execute_data=None, count=None):
     chain.ilike.return_value = chain
     chain.order.return_value = chain
     chain.limit.return_value = chain
+    chain.or_.return_value = chain
     result = MagicMock(data=execute_data if execute_data is not None else [])
     if count is not None:
         result.count = count
@@ -957,3 +958,44 @@ class TestErrorHandling:
         data = resp.get_json()
         assert data is not None
         assert 'error' in data
+
+
+# ============ TARGETING LIST-FILTER (Phase 4) ============
+
+
+@patch('backend.routes.student_account_routes._get_supabase')
+def test_student_dashboard_filters_target_student_ids(mock_sb, client):
+    """Phase 4: dashboard list excludes published_content rows targeting other students."""
+    expires = (datetime.now(tz=timezone.utc) + timedelta(hours=1)).isoformat().replace('+00:00', 'Z')
+    STU_ME = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    STU_OTHER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+    chain = MagicMock()
+    chain.select.return_value = chain
+    chain.eq.return_value = chain
+    chain.order.return_value = chain
+    or_filter = {}
+
+    def _or_clause(clause):
+        or_filter['clause'] = clause
+        return chain
+
+    chain.or_ = MagicMock(side_effect=_or_clause)
+    # 3 calls: session lookup, published_content list, student_submissions list.
+    chain.execute.side_effect = [
+        MagicMock(data=[{'student_id': STU_ME, 'class_id': 'cls-1', 'expires_at': expires}]),
+        MagicMock(data=[
+            {'id': 'ct-classwide', 'title': 'Class Quiz', 'content_type': 'assessment',
+             'target_student_ids': None, 'settings': {}},
+            {'id': 'ct-mine', 'title': 'For Me', 'content_type': 'assessment',
+             'target_student_ids': [STU_ME], 'settings': {}},
+        ]),  # NOTE: mock filter applies; we trust the .or_() syntax was used
+        MagicMock(data=[]),
+    ]
+    sb = MagicMock()
+    sb.table.return_value = chain
+    mock_sb.return_value = sb
+    resp = client.get('/api/student/dashboard', headers={'X-Student-Token': 'tok'})
+    assert resp.status_code == 200
+    # The route must have applied an .or_() filter for target_student_ids.
+    assert 'target_student_ids' in or_filter.get('clause', '')
+    assert 'is.null' in or_filter['clause']
