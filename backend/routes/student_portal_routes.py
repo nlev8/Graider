@@ -2199,12 +2199,44 @@ def post_remediate(class_id):
 
     target_student_ids = []
 
+    # Resolve current-class assessment/assignment content (matches Phase 2
+    # Progress Rank scoping at lines 1393-1416). Both the single-student
+    # historical evidence check AND the red-tier resolver MUST scope
+    # submission queries to these content_ids so a student's submissions
+    # in OTHER classes (covering the same standard) do not leak into THIS
+    # class's remediation decisions. Spec promises parity with Progress Rank.
+    class_content_rows = db.table('published_content').select(
+        'id, title'
+    ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
+    class_content_ids = [c['id'] for c in (class_content_rows.data or [])]
+    class_content_titles = {c['id']: c.get('title', '') for c in (class_content_rows.data or [])}
+    if not class_content_ids:
+        # Edge case: no class content yet -> no historical evidence possible, no red tier.
+        if target_mode == 'single_student':
+            _logger.warning(
+                "remediation.no_historical_evidence teacher=%s class=%s student=%s standard=%s reason=no_class_content",
+                g.teacher_id, class_id, target_student_id, standard_code,
+            )
+            return error_response(
+                "No prior assessment data on this standard for student",
+                400,
+            )
+        else:  # red_tier_in_class
+            _logger.warning(
+                "remediation.no_red_tier_students teacher=%s class=%s standard=%s reason=no_class_content",
+                g.teacher_id, class_id, standard_code,
+            )
+            return error_response("No red-tier students on this standard", 400)
+
     # 5) Single-student historical evidence check.
     if target_mode == 'single_student':
         # Fetch student's submissions whose results contain this standard.
+        # Scoped to current-class content so out-of-class evidence does not count.
         subs = db.table('student_submissions').select(
             'id, percentage, results, status, submitted_at'
-        ).eq('student_id', target_student_id).neq('status', 'draft').execute()
+        ).eq('student_id', target_student_id).in_(
+            'content_id', class_content_ids
+        ).neq('status', 'draft').execute()
         has_evidence = False
         for s in (subs.data or []):
             mastery = (s.get('results') or {}).get('standards_mastery') or {}
@@ -2238,21 +2270,16 @@ def post_remediate(class_id):
             stu_rows = db.table('students').select('id').in_('id', enrolled_ids).execute()
             existing = {s['id'] for s in (stu_rows.data or []) if s.get('id')}
             valid_ids = [sid for sid in enrolled_ids if sid in existing]
-        # Pull all class submissions covering this standard (any content row).
+        # Pull class submissions scoped to current-class content (matches
+        # Progress Rank semantic). Out-of-class submissions on the same
+        # standard must NOT influence red-tier classification for this class.
         red_tier = []
         if valid_ids:
             class_subs = db.table('student_submissions').select(
                 'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
-            ).in_('student_id', valid_ids).neq('status', 'draft').execute()
-            # Build content title map for _aggregate_mastery_for_student.
-            content_id_set = list({s.get('content_id') for s in (class_subs.data or [])
-                                    if s.get('content_id')})
-            content_titles = {}
-            if content_id_set:
-                rows = db.table('published_content').select('id, title').in_(
-                    'id', content_id_set
-                ).execute()
-                content_titles = {r['id']: r.get('title', '') for r in (rows.data or [])}
+            ).in_('student_id', valid_ids).in_(
+                'content_id', class_content_ids
+            ).neq('status', 'draft').execute()
             # Group submissions by student -> content_id -> [submissions].
             from collections import defaultdict
             per_student = defaultdict(lambda: defaultdict(list))
@@ -2262,9 +2289,10 @@ def post_remediate(class_id):
                 if sid and cid:
                     per_student[sid][cid].append(s)
             # For each student: select latest per content, aggregate mastery, read standard's percentage.
+            # Reuse class_content_titles built above -- avoids a redundant published_content fetch.
             for sid, by_cid in per_student.items():
                 selected = _select_submissions_by_mode(by_cid, 'latest')
-                mastery = _aggregate_mastery_for_student(selected, content_titles, 'latest')
+                mastery = _aggregate_mastery_for_student(selected, class_content_titles, 'latest')
                 std_entry = mastery.get(standard_code) if isinstance(mastery, dict) else None
                 if not std_entry:
                     continue

@@ -478,6 +478,83 @@ class TestRemediateGeneration:
         # ISO 8601 UTC.
         assert 'T' in body['generated_at'] and body['generated_at'].endswith('Z')
 
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_excludes_out_of_class_submissions_for_evidence(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        """Regression for cross-class submission leakage: a student with red mastery
+        on this standard from ANOTHER class must NOT be considered red-tier in the
+        current class. Spec promises parity with Progress Rank grid which scopes
+        by class_id first."""
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        # Student has red mastery on MA.6.AR.1.2 in cls-OTHER (out of scope).
+        # Has no submissions in cls-1 (current class).
+        out_of_class_mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [
+                # Submission is for cls-OTHER's content, not cls-1's.
+                _sub('s-other', STU_1, 'content-OTHER-class', 40, out_of_class_mastery),
+            ],
+            'published_content': [
+                # cls-1 has its own content but the student hasn't submitted to it.
+                {'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1', 'content_type': 'assessment'},
+                # NOTE: 'content-OTHER-class' is NOT in cls-1's published_content.
+            ],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+        }, headers=teacher_headers)
+        # Should return 400 -- no in-class evidence means no red-tier students in this class.
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert 'red-tier' in body.get('detail', '').lower() or 'no' in body.get('detail', '').lower()
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_single_student_excludes_out_of_class_evidence(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        """Single-student historical-evidence check must scope to current class.
+        Out-of-class evidence on the same standard must NOT count as historical
+        evidence for THIS class's remediation."""
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        out_of_class_mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [
+                _sub('s-other', STU_1, 'content-OTHER-class', 40, out_of_class_mastery),
+            ],
+            'published_content': [
+                {'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1', 'content_type': 'assessment'},
+            ],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        # Should return 400 -- no in-class evidence on this standard.
+        assert resp.status_code == 400
+
 
 # ============ Red-tier resolution tests ============
 
