@@ -89,18 +89,9 @@ def test_student_resource_content_404_for_non_targeted(mock_sb, client, student_
     assert resp.status_code == 404
 
 
-@pytest.mark.skip(
-    reason="Pre-existing routing conflict: /api/student/submit/<X> is shadowed in "
-    "backend/routes/__init__.py — student_portal_bp (line 55) registers BEFORE "
-    "student_account_bp (line 61), so submit_assessment (join-code path) wins "
-    "for all /api/student/submit/* requests. Bundle 2's visibility helper on "
-    "submit_student_work is currently dead code. Properly fixing this needs "
-    "EITHER blueprint reorder OR distinct URL prefixes — out of scope for "
-    "Phase 4. Tracked as Phase 4.2 follow-up: secure the auth submit path "
-    "after resolving the route conflict."
-)
 @patch('backend.routes.student_account_routes._get_supabase')
 def test_submit_student_work_404_for_non_targeted(mock_sb, client, student_headers):
+    """Phase 4.2 routing fix made this reachable. URL is now /api/student/class-submit/<X>."""
     chain = MagicMock()
     chain.select.return_value = chain
     chain.eq.return_value = chain
@@ -112,8 +103,26 @@ def test_submit_student_work_404_for_non_targeted(mock_sb, client, student_heade
     ]
     sb = MagicMock(); sb.table.return_value = chain
     mock_sb.return_value = sb
-    resp = client.post('/api/student/submit/ct-1', json={'answers': {}}, headers=student_headers)
+    resp = client.post('/api/student/class-submit/ct-1', json={'answers': {}}, headers=student_headers)
     assert resp.status_code == 404
+
+
+def test_class_submit_url_reaches_auth_handler(client):
+    """Phase 4.2 routing fix: POST /api/student/class-submit/<content_id>
+    must reach submit_student_work (auth path), NOT submit_assessment
+    (join-code path). Without X-Student-Token, _validate_student_session
+    returns None and the handler returns:
+        jsonify({"error": "Not logged in"}), 401
+    The join-code path's failure mode would be:
+        jsonify({"error": "Assessment not found"}), 404
+    Asserting on the body distinguishes which handler ran.
+    """
+    resp = client.post('/api/student/class-submit/abc-12345-uuid', json={'answers': {}})
+    assert resp.status_code == 401, \
+        f"Expected 401 (auth-path), got {resp.status_code}: {resp.get_data(as_text=True)}"
+    body = resp.get_json() or {}
+    assert body.get('error') == 'Not logged in', \
+        f"Expected 'Not logged in' (auth-path body), got {body!r}"
 
 
 @patch('backend.routes.student_account_routes._get_supabase')

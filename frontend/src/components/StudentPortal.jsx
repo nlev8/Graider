@@ -213,7 +213,9 @@ export default function StudentPortal({
           finalTimes[activeQuestionKey] = (finalTimes[activeQuestionKey] || 0) + finalElapsed;
         }
         // Class-based submission (Clever/authenticated student)
-        var response = await fetch("/api/student/submit/" + contentId, {
+        // Phase 4.2: URL is /api/student/class-submit/ (was /api/student/submit/,
+        // shadowed by join-code handler). See spec 2026-04-27-phase4.2-submit-routing-fix-design.md
+        var response = await fetch("/api/student/class-submit/" + contentId, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

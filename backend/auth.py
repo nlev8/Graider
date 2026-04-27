@@ -66,8 +66,9 @@ def resolve_clever_user_id(clever_id):
 # SECURITY: Be explicit — only list endpoints that truly need to be public.
 # Student dashboard/content endpoints use X-Student-Token (not JWT) for their own auth.
 PUBLIC_PREFIXES = [
-    '/api/student/join/',      # Anonymous join-code portal (GET assessment by code)
-    '/api/student/submit/',    # Anonymous submission (join-code path, POST)
+    '/api/student/join/',         # Anonymous join-code portal (GET assessment by code)
+    '/api/student/submit/',       # Anonymous submission (join-code path, POST)
+    '/api/student/class-submit/', # Class-based authenticated submission (X-Student-Token, not JWT)
     '/api/clever/',            # Clever OAuth flow (callback must be unauthenticated)
     '/api/classlink/',         # ClassLink OAuth flow (callback must be unauthenticated)
     '/api/lti/',               # LTI OIDC login, launch callback, JWKS (platform-initiated)
