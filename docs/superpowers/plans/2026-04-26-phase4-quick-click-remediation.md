@@ -706,11 +706,17 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
     final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
 
     # 8) Generate via OpenAIAdapter (matches planner_routes pattern at line 420-427, 1878).
+    # Verified imports — _get_openai_context lives in planner_routes; the post-processing
+    # helpers (incl. _extract_usage/_merge_usage) live in assignment_post_processing
+    # and are merely re-imported by planner_routes. Importing direct from the source
+    # avoids an unnecessary circular-import surface.
     try:
         from backend.api_keys import get_api_key as _gak
         from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
-        from backend.routes.planner_routes import _get_openai_context, _extract_usage, _merge_usage
-        from backend.services.assignment_post_processing import _post_process_assignment
+        from backend.routes.planner_routes import _get_openai_context
+        from backend.services.assignment_post_processing import (
+            _post_process_assignment, _extract_usage, _merge_usage,
+        )
         import json as _json
 
         api_key = _gak('openai', g.teacher_id)
