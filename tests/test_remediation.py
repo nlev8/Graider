@@ -749,3 +749,103 @@ class TestContentVisibilityHelper:
                                {'class_id': 'cls-1', 'student_id': STU_2}],
         })
         assert _content_visible_to_student(db, 'ct-1', STU_1, 'cls-1') is False
+
+
+# ============ Publish-to-class hardening tests ============
+
+class TestPublishToClassHardening:
+    """Phase 4 closes a pre-existing gap: publish_to_class did not verify
+    class ownership before insert. Targeting validation lands at the same time."""
+
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_publish_without_ownership_returns_403(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'teacher_id': 'OTHER'}],
+        })
+        resp = client.post('/api/publish-to-class', json={
+            'class_id': 'cls-1', 'content': {'questions': [{'text': 'Q1'}]},
+            'content_type': 'assessment', 'title': 'Test',
+        }, headers=teacher_headers)
+        assert resp.status_code == 403
+
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_publish_with_non_enrolled_target_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/publish-to-class', json={
+            'class_id': 'cls-1', 'content': {'questions': [{'text': 'Q1'}]},
+            'content_type': 'assessment', 'title': 'Test',
+            'target_student_ids': [STU_1, STU_2],  # STU_2 not enrolled
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_publish_with_empty_target_array_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+        })
+        resp = client.post('/api/publish-to-class', json={
+            'class_id': 'cls-1', 'content': {'questions': [{'text': 'Q1'}]},
+            'content_type': 'assessment', 'title': 'Test',
+            'target_student_ids': [],  # invalid
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_publish_with_null_target_creates_class_wide_row(self, mock_sb_fn, client, teacher_headers):
+        # NULL target_student_ids -> existing class-wide behavior preserved.
+        captured_insert = {}
+        chain = MagicMock()
+        chain.select.return_value = chain
+        chain.eq.return_value = chain
+        chain.execute.side_effect = [
+            MagicMock(data=[{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}]),
+            MagicMock(data=[{'id': 'new-content-id'}]),
+        ]
+        def _insert(payload):
+            captured_insert['payload'] = payload
+            chain.execute.side_effect = [MagicMock(data=[{'id': 'new-content-id'}])]
+            return chain
+        chain.insert.side_effect = _insert
+        sb = MagicMock()
+        sb.table.return_value = chain
+        mock_sb_fn.return_value = sb
+        resp = client.post('/api/publish-to-class', json={
+            'class_id': 'cls-1', 'content': {'questions': [{'text': 'Q1'}]},
+            'content_type': 'assessment', 'title': 'Test',
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        # Insert payload should NOT contain target_student_ids OR have it as None.
+        payload = captured_insert.get('payload', {})
+        assert payload.get('target_student_ids') in (None, [])
+
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_publish_with_valid_targets_inserts_with_targeting(self, mock_sb_fn, client, teacher_headers):
+        captured_insert = {}
+        chain = MagicMock()
+        chain.select.return_value = chain
+        chain.eq.return_value = chain
+        chain.in_.return_value = chain
+        chain.execute.side_effect = [
+            MagicMock(data=[{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}]),  # class lookup
+            MagicMock(data=[{'student_id': STU_1}]),  # class_students lookup for targets
+            MagicMock(data=[{'id': STU_1}]),  # students existence lookup
+            MagicMock(data=[{'id': 'new-content-id'}]),  # insert
+        ]
+        def _insert(payload):
+            captured_insert['payload'] = payload
+            return chain
+        chain.insert.side_effect = _insert
+        sb = MagicMock()
+        sb.table.return_value = chain
+        mock_sb_fn.return_value = sb
+        resp = client.post('/api/publish-to-class', json={
+            'class_id': 'cls-1', 'content': {'questions': [{'text': 'Q1'}]},
+            'content_type': 'assessment', 'title': 'Remediation',
+            'target_student_ids': [STU_1],
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        assert captured_insert.get('payload', {}).get('target_student_ids') == [STU_1]

@@ -54,7 +54,7 @@ def _get_teacher_id():
 
 
 from backend.utils.auth_decorators import require_teacher
-from backend.utils.errors import handle_route_errors
+from backend.utils.errors import error_response, handle_route_errors
 
 
 def _generate_class_code():
@@ -377,60 +377,104 @@ def list_class_students(class_id):
 @require_teacher
 @handle_route_errors
 def publish_to_class():
-    """Publish an assessment or assignment to a class."""
+    """Publish an assessment or assignment to a class.
+
+    Phase 4 hardening: verifies class ownership; supports target_student_ids
+    for per-student visibility (None / omitted = class-wide). All explicit 4xx
+    errors use error_response() per Phase 5d (RFC 7807).
+    """
     teacher_id = g.teacher_id
 
-    try:
-        db = _get_teacher_supabase()
-        data = request.json
-        class_id = data.get('class_id')
-        content = data.get('content')
-        content_type = data.get('content_type', 'assessment')
-        title = data.get('title', 'Untitled')
-        settings = data.get('settings', {})
-        due_date = data.get('due_date')
+    db = _get_teacher_supabase()
+    data = request.json or {}
+    class_id = data.get('class_id')
+    content = data.get('content')
+    content_type = data.get('content_type', 'assessment')
+    title = data.get('title', 'Untitled')
+    settings = data.get('settings', {})
+    due_date = data.get('due_date')
+    target_student_ids = data.get('target_student_ids')
 
-        if not content:
-            return jsonify({"error": "No content provided"}), 400
-        ALLOWED_CONTENT_TYPES = ('assessment', 'assignment', 'study_guide', 'flashcards', 'slide_deck')
-        if content_type not in ALLOWED_CONTENT_TYPES:
-            return jsonify({"error": "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES)}), 400
+    if not content:
+        return error_response("No content provided", 400)
+    ALLOWED_CONTENT_TYPES = ('assessment', 'assignment', 'study_guide', 'flashcards', 'slide_deck')
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        return error_response(
+            "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES), 400
+        )
 
-        join_code = _generate_class_code()
+    # Phase 4: class ownership check (closes pre-existing gap).
+    cls = db.table('classes').select('id, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != teacher_id:
+        return error_response("Not authorized for this class", 403)
 
-        # Validate assessment_category for assessments
-        if content_type == 'assessment':
-            cat = settings.get('assessment_category', 'formative')
-            if cat not in ('formative', 'summative'):
-                settings['assessment_category'] = 'formative'
-            else:
-                settings['assessment_category'] = cat
+    # Phase 4: target_student_ids validation.
+    if target_student_ids is not None:
+        if not isinstance(target_student_ids, list):
+            return error_response("target_student_ids must be a list or null", 400)
+        if len(target_student_ids) == 0:
+            return error_response(
+                "target_student_ids must be non-empty (use null for class-wide)", 400
+            )
+        import uuid as _uuid
+        for sid in target_student_ids:
+            try:
+                _uuid.UUID(str(sid))
+            except (ValueError, TypeError):
+                return error_response("Invalid target_student_id UUID", 400)
+        # Enrollment check.
+        enr = db.table('class_students').select('student_id').eq(
+            'class_id', class_id
+        ).in_('student_id', target_student_ids).execute()
+        enrolled = {r['student_id'] for r in (enr.data or [])}
+        if any(sid not in enrolled for sid in target_student_ids):
+            return error_response(
+                "One or more target_student_ids are not enrolled in this class", 400
+            )
+        # Students existence check (orphan-resilience).
+        stu_rows = db.table('students').select('id').in_(
+            'id', target_student_ids
+        ).execute()
+        existing_students = {r['id'] for r in (stu_rows.data or [])}
+        if any(sid not in existing_students for sid in target_student_ids):
+            return error_response(
+                "One or more target_student_ids do not match a student record", 400
+            )
 
-        result = db.table('published_content').insert({
-            'teacher_id': teacher_id,
-            'class_id': class_id,
-            'content_type': content_type,
-            'title': title,
-            'join_code': join_code,
-            'content': content,
-            'settings': settings,
-            'is_active': True,
-            'due_date': due_date,
-        }).execute()
+    join_code = _generate_class_code()
 
-        if not result.data:
-            return jsonify({"error": "Failed to publish"}), 500
+    # Validate assessment_category for assessments
+    if content_type == 'assessment':
+        cat = settings.get('assessment_category', 'formative')
+        if cat not in ('formative', 'summative'):
+            settings['assessment_category'] = 'formative'
+        else:
+            settings['assessment_category'] = cat
 
-        host = request.host_url.rstrip('/')
-        return jsonify({
-            "success": True,
-            "content_id": result.data[0]['id'],
-            "join_code": join_code,
-            "join_link": f"{host}/student?code={join_code}",
-        })
-    except Exception as e:
-        _logger.exception("Request failed: %s", request.path)
-        return jsonify({"error": "An internal error occurred"}), 500
+    insert_payload = {
+        'teacher_id': teacher_id,
+        'class_id': class_id,
+        'content_type': content_type,
+        'title': title,
+        'join_code': join_code,
+        'content': content,
+        'settings': settings,
+        'is_active': True,
+        'due_date': due_date,
+        'target_student_ids': target_student_ids,  # None = class-wide
+    }
+    result = db.table('published_content').insert(insert_payload).execute()
+
+    if not result.data:
+        return error_response("Failed to publish", 500)
+
+    host = request.host_url.rstrip('/')
+    return jsonify({
+        "success": True,
+        "content_id": result.data[0]['id'],
+        "join_code": join_code,
+        "join_link": f"{host}/student?code={join_code}",
+    })
 
 
 @student_account_bp.route('/api/portal-submissions', methods=['GET'])
