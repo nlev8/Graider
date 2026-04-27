@@ -171,6 +171,36 @@ def _sub(sub_id, student_id, content_id, percentage, mastery_dict, status='grade
         'results': {'standards_mastery': mastery_dict, 'score': percentage / 10, 'total_points': 10},
         'status': status,
     }
+
+
+# ============ LLM mock helpers ============
+# Used by every test that exercises the route's generation block (which calls
+# OpenAIAdapter.chat → _post_process_assignment). The route imports
+# OpenAIAdapter and get_api_key inline at request time; tests patch them at
+# their source modules so the inline imports inside post_remediate pick up
+# the mock. Setting `mock_completion.usage = None` is REQUIRED — the route
+# calls the REAL `_extract_usage(completion, "gpt-4o")` which formats
+# `completion.usage.cost` with `f"${cost:.4f}"`. A bare MagicMock raises
+# TypeError on the format string. None makes _extract_usage return defaults.
+def _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key):
+    """Returns the mock_adapter instance for inspection."""
+    mock_get_api_key.return_value = "sk-test-fake"
+    mock_adapter = MagicMock()
+    mock_completion = MagicMock()
+    mock_completion.usage = None
+    text_part = MagicMock()
+    text_part.text = '{"title":"P","sections":[{"name":"P","questions":[]}]}'
+    mock_completion.content_parts = [text_part]
+    mock_adapter.chat.return_value = mock_completion
+    mock_adapter_cls.return_value = mock_adapter
+    return mock_adapter
+
+
+def _llm_request_prompt_text(mock_adapter):
+    """Extract the user prompt text from the LLMRequest passed to .chat()."""
+    assert mock_adapter.chat.call_count == 1
+    llm_req = mock_adapter.chat.call_args[0][0]
+    return llm_req.messages[0].content[0].text
 ```
 
 - [ ] **Step 1.2: Verify the file imports cleanly (pytest collect)**
@@ -444,9 +474,12 @@ class TestRemediateGeneration:
     def _ms(self, std='MA.6.AR.1.2', earned=4, possible=10):
         return {std: {'points_earned': earned, 'points_possible': possible, 'question_count': 2}}
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_single_student_happy_path(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_single_student_happy_path(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         # 8 questions returned by the (mocked) post-processor.
         mock_pp.return_value = ({
             'title': 'Remediation: MA.6.AR.1.2',
@@ -479,9 +512,12 @@ class TestRemediateGeneration:
         # Post-processor was called once with prompt content.
         assert mock_pp.called
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_red_tier_happy_path(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_red_tier_happy_path(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         mock_pp.return_value = ({
             'title': 'Remediation: MA.6.AR.1.2',
             'sections': [{'name': 'Practice', 'questions': [
@@ -514,9 +550,12 @@ class TestRemediateGeneration:
         assert STU_1 in body['target_student_ids']
         assert STU_2 not in body['target_student_ids']
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_too_few_valid_questions_returns_422(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_too_few_valid_questions_returns_422(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         # Post-processor returns only 2 valid questions — below the floor of 3.
         mock_pp.return_value = ({
             'sections': [{'name': 'Practice', 'questions': [
@@ -540,9 +579,12 @@ class TestRemediateGeneration:
         }, headers=teacher_headers)
         assert resp.status_code == 422
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_missing_grade_metadata_falls_back(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_missing_grade_metadata_falls_back(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         # Class has no grade_level / subject — route should still generate.
         cls_no_meta = [{'id': 'cls-1', 'teacher_id': 'test-teacher-001', 'name': 'C',
                         'grade_level': None, 'subject': None}]
@@ -568,9 +610,12 @@ class TestRemediateGeneration:
         }, headers=teacher_headers)
         assert resp.status_code == 200
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_response_contains_generated_at_timestamp(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_response_contains_generated_at_timestamp(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         mock_pp.return_value = ({
             'sections': [{'name': 'Practice', 'questions': [
                 {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
@@ -838,9 +883,12 @@ Append to `tests/test_remediation.py`:
 class TestRemediateRedTierResolution:
     """Edge cases for the red_tier_in_class resolver."""
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_excludes_students_with_no_submissions(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_excludes_students_with_no_submissions(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         # 3 enrolled students; only stu-1 has a submission (red).
         mock_pp.return_value = ({
             'sections': [{'name': 'Practice', 'questions': [
@@ -869,9 +917,12 @@ class TestRemediateRedTierResolution:
         body = resp.get_json()
         assert body['target_student_ids'] == [STU_1]
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_uses_latest_submission_per_student(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_uses_latest_submission_per_student(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         # stu-1 has 2 submissions: older one was red (40%), latest is green (90%).
         # The latest must win — student NOT counted as red.
         mock_pp.return_value = ({
@@ -904,9 +955,12 @@ class TestRemediateRedTierResolution:
         assert STU_1 not in body['target_student_ids']  # latest is green
         assert STU_2 in body['target_student_ids']
 
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
-    def test_excludes_students_at_exactly_70_percent(self, mock_sb_fn, mock_pp, client, teacher_headers):
+    def test_excludes_students_at_exactly_70_percent(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
         # 70% is the lower bound of yellow — NOT red. Student excluded.
         mock_pp.return_value = ({
             'sections': [{'name': 'Practice', 'questions': [
@@ -964,29 +1018,7 @@ Append to `tests/test_remediation.py`:
 
 ```python
 # ============ Accommodations integration tests ============
-
-# Helper to wire the LLM mocks. The route imports OpenAIAdapter + get_api_key
-# inline; we patch them at their source modules so the inline import inside
-# post_remediate picks up the mock.
-def _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key):
-    """Returns the mock_adapter instance for inspection."""
-    mock_get_api_key.return_value = "sk-test-fake"
-    mock_adapter = MagicMock()
-    mock_completion = MagicMock()
-    text_part = MagicMock()
-    text_part.text = '{"title":"P","sections":[{"name":"P","questions":[]}]}'
-    mock_completion.content_parts = [text_part]
-    mock_adapter.chat.return_value = mock_completion
-    mock_adapter_cls.return_value = mock_adapter
-    return mock_adapter
-
-
-def _llm_request_prompt_text(mock_adapter):
-    """Extract the user prompt text from the LLMRequest passed to .chat()."""
-    assert mock_adapter.chat.call_count == 1
-    llm_req = mock_adapter.chat.call_args[0][0]
-    return llm_req.messages[0].content[0].text
-
+# Uses _set_up_llm_mocks + _llm_request_prompt_text from Task 1 scaffolding.
 
 class TestRemediateAccommodations:
     """Single-student path injects accommodation segment into the LLM prompt
@@ -997,7 +1029,9 @@ class TestRemediateAccommodations:
     @patch('backend.api_keys.get_api_key')
     @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_helper_success_appends_segment(self, mock_sb_fn, mock_pp, mock_helper,
                                              mock_adapter_cls, mock_get_api_key,
@@ -1034,7 +1068,9 @@ class TestRemediateAccommodations:
     @patch('backend.api_keys.get_api_key')
     @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_helper_raises_falls_back_to_grade_level(self, mock_sb_fn, mock_pp, mock_helper,
                                                        mock_adapter_cls, mock_get_api_key,
@@ -1075,7 +1111,9 @@ class TestRemediateAccommodations:
     @patch('backend.api_keys.get_api_key')
     @patch('backend.services.llm_adapter.OpenAIAdapter')
     @patch('backend.accommodations.build_accommodation_prompt')
-    @patch('backend.routes.student_portal_routes._post_process_assignment')
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_empty_segment_skips_audit_log(self, mock_sb_fn, mock_pp, mock_helper,
                                             mock_adapter_cls, mock_get_api_key,
