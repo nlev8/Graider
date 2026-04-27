@@ -2146,3 +2146,63 @@ def set_content_tags(content_id):
         _logger.exception("Set content tags error")
         return jsonify({"error": "An internal error occurred"}), 500
 
+
+@student_portal_bp.route('/api/teacher/class/<class_id>/remediate', methods=['POST'])
+@require_teacher
+@handle_route_errors
+@limiter.limit("10 per minute")
+def post_remediate(class_id):
+    """Phase 4 Quick-Click Remediation: generate 8 grade-level practice
+    questions targeted to a single student or class red-tier on one standard.
+
+    Spec: docs/superpowers/specs/2026-04-26-phase4-quick-click-remediation-design.md
+    """
+    import uuid as _uuid
+
+    db = _get_teacher_supabase()
+    body = request.get_json(silent=True) or {}
+    standard_code = (body.get('standard_code') or '').strip()
+    target_mode = body.get('target_mode')
+    target_student_id = body.get('target_student_id')
+
+    # 1) Class ownership check
+    cls = db.table('classes').select('id, name, teacher_id, grade_level, subject').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+    cls_row = cls.data[0]
+
+    # 2) target_mode validation
+    if target_mode not in ('single_student', 'red_tier_in_class'):
+        return error_response("target_mode must be 'single_student' or 'red_tier_in_class'", 400)
+
+    # 3) Single-student: target_student_id required + UUID + enrollment
+    if target_mode == 'single_student':
+        if not target_student_id:
+            return error_response("target_student_id is required for single_student mode", 400)
+        try:
+            _uuid.UUID(str(target_student_id))
+        except (ValueError, TypeError):
+            return error_response("target_student_id must be a valid UUID", 400)
+        # Enrollment check: must be in class_students AND must exist in students.
+        enr = db.table('class_students').select('student_id').eq(
+            'class_id', class_id
+        ).eq('student_id', target_student_id).execute()
+        if not enr.data:
+            return error_response("Student is not enrolled in this class", 403)
+        stu = db.table('students').select('id').eq('id', target_student_id).execute()
+        if not stu.data:
+            return error_response("Student record not found", 403)
+
+    # 4) standard_code non-empty
+    if not standard_code:
+        return error_response("standard_code is required", 400)
+
+    # Steps 5 + 6 land in Tasks 3 and 4 respectively. For now, return placeholder 200
+    # so the validation tests pass. Generation lands later.
+    return jsonify({
+        "questions": [],
+        "target_mode": target_mode,
+        "target_student_ids": [target_student_id] if target_mode == 'single_student' else [],
+        "standard_code": standard_code,
+        "generated_at": "1970-01-01T00:00:00Z",
+    }), 200

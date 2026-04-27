@@ -113,8 +113,14 @@ CLS_OWNED = [{'id': 'cls-1', 'name': 'Period 3', 'teacher_id': 'test-teacher-001
               'grade_level': '6', 'subject': 'Math'}]
 
 CID_Q1 = '11111111-1111-1111-1111-111111111111'
-STU_1 = 'stu-1111-1111-1111-1111-111111111111'
-STU_2 = 'stu-2222-2222-2222-2222-222222222222'
+# NOTE: The plan-source listed STU_1/STU_2 values like 'stu-1111-...' which
+# are NOT valid UUIDs (uuid.UUID() rejects them). The route's step-3 UUID
+# validation would short-circuit every test that passes STU_1 as a target,
+# returning 400 instead of the intended 403 (or other downstream codes).
+# Using all-digit UUIDs preserves the spirit (distinguishable, debug-readable)
+# while satisfying uuid.UUID(). Verified before applying to fixtures.
+STU_1 = '11111111-aaaa-aaaa-aaaa-111111111111'
+STU_2 = '22222222-bbbb-bbbb-bbbb-222222222222'
 
 
 def _sub(sub_id, student_id, content_id, percentage, mastery_dict, status='graded',
@@ -156,3 +162,135 @@ def _llm_request_prompt_text(mock_adapter):
     assert mock_adapter.chat.call_count == 1
     llm_req = mock_adapter.chat.call_args[0][0]
     return llm_req.messages[0].content[0].text
+
+
+# ============ Validation tests ============
+
+class TestRemediateValidation:
+    """Auth + 6-step validation order."""
+
+    def test_unauthenticated_returns_401(self, client_no_auth):
+        resp = client_no_auth.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        })
+        assert resp.status_code == 401
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_other_teacher_class_returns_403(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'teacher_id': 'OTHER', 'name': 'X',
+                         'grade_level': '6', 'subject': 'Math'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 403
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_bogus_target_mode_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'bogus',
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert 'target_mode' in body.get('detail', body.get('error', ''))
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_missing_target_student_id_for_single_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_malformed_target_student_uuid_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': 'not-a-uuid',
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_target_student_not_in_class_returns_403(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [],  # student NOT enrolled
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 403
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_empty_standard_code_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': '',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_single_student_no_historical_evidence_returns_400(self, mock_sb_fn, client, teacher_headers):
+        # Student exists in class but has no submissions covering this standard.
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert 'historical' in body.get('detail', '').lower() or 'prior' in body.get('detail', '').lower()
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_red_tier_no_red_students_returns_400(self, mock_sb_fn, client, teacher_headers):
+        # Student exists, has a submission, but mastery is >=70 (not red).
+        green_mastery = {'MA.6.AR.1.2': {'points_earned': 9, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 90, green_mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert 'red-tier' in body.get('detail', '').lower() or 'no' in body.get('detail', '').lower()
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_cross_class_injection_returns_403(self, mock_sb_fn, client, teacher_headers):
+        # Student is in a DIFFERENT class.
+        other_stu = '99999999-cccc-cccc-cccc-999999999999'
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-other', 'student_id': other_stu}],
+            'students': [{'id': other_stu}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': other_stu,
+        }, headers=teacher_headers)
+        assert resp.status_code == 403
