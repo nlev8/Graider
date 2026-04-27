@@ -54,7 +54,7 @@ def _get_teacher_id():
 
 
 from backend.utils.auth_decorators import require_teacher
-from backend.utils.errors import handle_route_errors
+from backend.utils.errors import error_response, handle_route_errors
 
 
 def _generate_class_code():
@@ -102,6 +102,10 @@ def _check_rate_limit(student_id_number):
 def _validate_student_session():
     """Validate student session token from X-Student-Token header.
     Returns (student_id, class_id) tuple or None if invalid.
+
+    Phase 4: re-checks class_students enrollment so a student who has been
+    removed from the class loses access immediately rather than at session
+    expiry.
     """
     token = request.headers.get('X-Student-Token', '')
     if not token:
@@ -122,7 +126,60 @@ def _validate_student_session():
         db.table('student_sessions').delete().eq('session_token', token_hash).execute()
         return None
 
-    return (session['student_id'], session['class_id'])
+    student_id = session['student_id']
+    class_id = session['class_id']
+
+    # Phase 4: re-check enrollment. A removed student loses access immediately.
+    enr = db.table('class_students').select('student_id').eq(
+        'class_id', class_id
+    ).eq('student_id', student_id).execute()
+    if not enr.data:
+        _logger.debug("session.access.denied reason=not_enrolled student=%s class=%s",
+                      student_id, class_id)
+        return None
+
+    # Defense-in-depth: student_id is interpolated into PostgREST .or_() f-strings
+    # downstream (dashboard, resources). Validate it's a UUID before returning so
+    # a non-UUID value (e.g. test DB drift, migration mishap) can't reach the
+    # PostgREST clause builder. Microsecond cost.
+    try:
+        uuid.UUID(str(student_id))
+    except (ValueError, TypeError):
+        _logger.warning("session.invalid_student_id_uuid student=%r class=%s", student_id, class_id)
+        return None
+
+    return (student_id, class_id)
+
+
+def _content_visible_to_student(db, content_id, student_id, class_id):
+    """Phase 4: shared visibility check for student-facing endpoints.
+
+    PRECONDITION: The caller MUST have already verified that `student_id` is
+    enrolled in `class_id` (typically via _validate_student_session, which now
+    re-checks enrollment on every request). This helper does NOT re-check
+    enrollment — that would double the DB round-trip.
+
+    Returns True iff:
+    1. The published_content row exists with id=content_id and class_id=class_id, AND
+    2. The row is is_active = true, AND
+    3. target_student_ids IS NULL OR target_student_ids contains the student_id.
+    """
+    row = db.table('published_content').select(
+        'id, class_id, is_active, target_student_ids'
+    ).eq('id', content_id).eq('class_id', class_id).execute()
+    if not row.data:
+        return False
+    item = row.data[0]
+    if not item.get('is_active'):
+        return False
+    targets = item.get('target_student_ids')
+    if targets is None:
+        return True
+    if isinstance(targets, list) and student_id in targets:
+        return True
+    _logger.debug("student.access.denied reason=not_targeted student=%s content=%s",
+                  student_id, content_id)
+    return False
 
 
 # ============ Teacher Endpoints (require teacher JWT) ============
@@ -340,60 +397,104 @@ def list_class_students(class_id):
 @require_teacher
 @handle_route_errors
 def publish_to_class():
-    """Publish an assessment or assignment to a class."""
+    """Publish an assessment or assignment to a class.
+
+    Phase 4 hardening: verifies class ownership; supports target_student_ids
+    for per-student visibility (None / omitted = class-wide). All explicit 4xx
+    errors use error_response() per Phase 5d (RFC 7807).
+    """
     teacher_id = g.teacher_id
 
-    try:
-        db = _get_teacher_supabase()
-        data = request.json
-        class_id = data.get('class_id')
-        content = data.get('content')
-        content_type = data.get('content_type', 'assessment')
-        title = data.get('title', 'Untitled')
-        settings = data.get('settings', {})
-        due_date = data.get('due_date')
+    db = _get_teacher_supabase()
+    data = request.json or {}
+    class_id = data.get('class_id')
+    content = data.get('content')
+    content_type = data.get('content_type', 'assessment')
+    title = data.get('title', 'Untitled')
+    settings = data.get('settings', {})
+    due_date = data.get('due_date')
+    target_student_ids = data.get('target_student_ids')
 
-        if not content:
-            return jsonify({"error": "No content provided"}), 400
-        ALLOWED_CONTENT_TYPES = ('assessment', 'assignment', 'study_guide', 'flashcards', 'slide_deck')
-        if content_type not in ALLOWED_CONTENT_TYPES:
-            return jsonify({"error": "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES)}), 400
+    if not content:
+        return error_response("No content provided", 400)
+    ALLOWED_CONTENT_TYPES = ('assessment', 'assignment', 'study_guide', 'flashcards', 'slide_deck')
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        return error_response(
+            "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES), 400
+        )
 
-        join_code = _generate_class_code()
+    # Phase 4: class ownership check (closes pre-existing gap).
+    cls = db.table('classes').select('id, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != teacher_id:
+        return error_response("Not authorized for this class", 403)
 
-        # Validate assessment_category for assessments
-        if content_type == 'assessment':
-            cat = settings.get('assessment_category', 'formative')
-            if cat not in ('formative', 'summative'):
-                settings['assessment_category'] = 'formative'
-            else:
-                settings['assessment_category'] = cat
+    # Phase 4: target_student_ids validation.
+    if target_student_ids is not None:
+        if not isinstance(target_student_ids, list):
+            return error_response("target_student_ids must be a list or null", 400)
+        if len(target_student_ids) == 0:
+            return error_response(
+                "target_student_ids must be non-empty (use null for class-wide)", 400
+            )
+        import uuid as _uuid
+        for sid in target_student_ids:
+            try:
+                _uuid.UUID(str(sid))
+            except (ValueError, TypeError):
+                return error_response("Invalid target_student_id UUID", 400)
+        # Enrollment check.
+        enr = db.table('class_students').select('student_id').eq(
+            'class_id', class_id
+        ).in_('student_id', target_student_ids).execute()
+        enrolled = {r['student_id'] for r in (enr.data or [])}
+        if any(sid not in enrolled for sid in target_student_ids):
+            return error_response(
+                "One or more target_student_ids are not enrolled in this class", 400
+            )
+        # Students existence check (orphan-resilience).
+        stu_rows = db.table('students').select('id').in_(
+            'id', target_student_ids
+        ).execute()
+        existing_students = {r['id'] for r in (stu_rows.data or [])}
+        if any(sid not in existing_students for sid in target_student_ids):
+            return error_response(
+                "One or more target_student_ids do not match a student record", 400
+            )
 
-        result = db.table('published_content').insert({
-            'teacher_id': teacher_id,
-            'class_id': class_id,
-            'content_type': content_type,
-            'title': title,
-            'join_code': join_code,
-            'content': content,
-            'settings': settings,
-            'is_active': True,
-            'due_date': due_date,
-        }).execute()
+    join_code = _generate_class_code()
 
-        if not result.data:
-            return jsonify({"error": "Failed to publish"}), 500
+    # Validate assessment_category for assessments
+    if content_type == 'assessment':
+        cat = settings.get('assessment_category', 'formative')
+        if cat not in ('formative', 'summative'):
+            settings['assessment_category'] = 'formative'
+        else:
+            settings['assessment_category'] = cat
 
-        host = request.host_url.rstrip('/')
-        return jsonify({
-            "success": True,
-            "content_id": result.data[0]['id'],
-            "join_code": join_code,
-            "join_link": f"{host}/student?code={join_code}",
-        })
-    except Exception as e:
-        _logger.exception("Request failed: %s", request.path)
-        return jsonify({"error": "An internal error occurred"}), 500
+    insert_payload = {
+        'teacher_id': teacher_id,
+        'class_id': class_id,
+        'content_type': content_type,
+        'title': title,
+        'join_code': join_code,
+        'content': content,
+        'settings': settings,
+        'is_active': True,
+        'due_date': due_date,
+        'target_student_ids': target_student_ids,  # None = class-wide
+    }
+    result = db.table('published_content').insert(insert_payload).execute()
+
+    if not result.data:
+        return error_response("Failed to publish", 500)
+
+    host = request.host_url.rstrip('/')
+    return jsonify({
+        "success": True,
+        "content_id": result.data[0]['id'],
+        "join_code": join_code,
+        "join_link": f"{host}/student?code={join_code}",
+    })
 
 
 @student_account_bp.route('/api/portal-submissions', methods=['GET'])
@@ -664,9 +765,12 @@ def student_dashboard():
     try:
         db = _get_supabase()
 
+        # Phase 4: list-filter — only show class-wide rows OR rows targeting this student.
+        # student_id is a UUID from session lookup (validated by Supabase), so safe to interpolate.
+        targeting_filter = f'target_student_ids.is.null,target_student_ids.cs.{json.dumps([student_id])}'
         content = db.table('published_content').select('*').eq(
             'class_id', class_id
-        ).eq('is_active', True).order('created_at', desc=True).execute()
+        ).eq('is_active', True).or_(targeting_filter).order('created_at', desc=True).execute()
 
         submissions = db.table('student_submissions').select(
             'content_id, status, score, percentage, letter_grade, submitted_at'
@@ -712,6 +816,10 @@ def get_student_content(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
 
         result = db.table('published_content').select('*').eq(
             'id', content_id
@@ -768,6 +876,11 @@ def submit_student_work(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
+
         data = request.json
         answers = data.get('answers', {})
         question_times = data.get('question_times') or {}
@@ -1168,12 +1281,15 @@ def student_resources():
     try:
         db = _get_supabase()
 
+        # Phase 4: list-filter — only show class-wide rows OR rows targeting this student.
+        # student_id is a UUID from session lookup (validated by Supabase), so safe to interpolate.
+        targeting_filter = f'target_student_ids.is.null,target_student_ids.cs.{json.dumps([student_id])}'
         # Get published content for this class
         content_result = db.table('published_content').select(
             'id, title, content_type, created_at, settings'
-        ).eq('class_id', class_id).eq('is_active', True).order(
-            'created_at', desc=True
-        ).execute()
+        ).eq('class_id', class_id).eq('is_active', True).or_(
+            targeting_filter
+        ).order('created_at', desc=True).execute()
 
         resources = []
         for item in (content_result.data or []):
@@ -1208,6 +1324,10 @@ def student_resource_content(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Resource not found"}), 404
 
         # Get the resource — must belong to student's class
         content_result = db.table('published_content').select(
@@ -1249,6 +1369,11 @@ def save_submission_draft(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
+
         data = request.json or {}
         draft_answers = data.get('answers') or {}
         question_times = data.get('question_times') or {}
@@ -1339,6 +1464,10 @@ def get_submission_draft(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
 
         # Verify content belongs to class
         content = db.table('published_content').select('id, settings').eq(

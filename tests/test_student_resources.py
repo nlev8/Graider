@@ -22,8 +22,13 @@ def _make_app():
     return app
 
 
-def _mock_supabase(content_data):
-    """Mock Supabase that returns published content."""
+def _mock_supabase(content_data, enrolled=True):
+    """Mock Supabase that returns published content.
+
+    Phase 4: also returns a non-empty class_students lookup by default so the
+    visibility helper passes the enrollment check. Pass enrolled=False to
+    simulate a removed student.
+    """
     mock_sb = MagicMock()
 
     def table_router(name):
@@ -31,11 +36,13 @@ def _mock_supabase(content_data):
         result = MagicMock()
         if name == 'published_content':
             result.data = content_data
+        elif name == 'class_students':
+            result.data = [{'student_id': 'student-1'}] if enrolled else []
         else:
             result.data = []
         for method in ('select', 'eq', 'neq', 'ilike', 'like', 'order',
                        'limit', 'offset', 'gt', 'gte', 'lt', 'lte', 'in_',
-                       'insert', 'update', 'delete'):
+                       'insert', 'update', 'delete', 'or_'):
             getattr(mock_table, method).return_value = mock_table
         mock_table.execute.return_value = result
         return mock_table
@@ -163,3 +170,42 @@ class TestStudentResourceContent:
                 resp = client.get('/api/student/resource/nonexistent',
                                   headers={"X-Student-Token": "valid-token"})
         assert resp.status_code == 404
+
+
+# ============ TARGETING LIST-FILTER (Phase 4) ============
+
+
+@patch('backend.routes.student_account_routes._get_supabase')
+def test_student_resources_filters_target_student_ids(mock_sb):
+    """Phase 4: resource list excludes published_content targeting other students."""
+    from datetime import datetime, timezone, timedelta
+    expires = (datetime.now(tz=timezone.utc) + timedelta(hours=1)).isoformat().replace('+00:00', 'Z')
+    STU_ME = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    or_filter = {}
+    chain = MagicMock()
+    chain.select.return_value = chain
+    chain.eq.return_value = chain
+    chain.in_.return_value = chain
+    chain.order.return_value = chain
+
+    def _or_clause(clause):
+        or_filter['clause'] = clause
+        return chain
+
+    chain.or_ = MagicMock(side_effect=_or_clause)
+    # 3 calls: session lookup, session enrollment recheck (Task 11), resources query.
+    chain.execute.side_effect = [
+        MagicMock(data=[{'student_id': STU_ME, 'class_id': 'cls-1', 'expires_at': expires}]),
+        MagicMock(data=[{'student_id': STU_ME}]),  # session enrollment recheck
+        MagicMock(data=[]),  # resources query result
+    ]
+    sb = MagicMock()
+    sb.table.return_value = chain
+    mock_sb.return_value = sb
+
+    app = _make_app()
+    with app.test_client() as client:
+        resp = client.get('/api/student/resources', headers={'X-Student-Token': 'tok'})
+    assert resp.status_code == 200
+    assert 'target_student_ids' in or_filter.get('clause', '')
+    assert 'is.null' in or_filter['clause']

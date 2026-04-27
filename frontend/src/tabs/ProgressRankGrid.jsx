@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Icon from "../components/Icon";
 import * as api from "../services/api";
 import StudentReportCard from "./StudentReportCard";
+import RemediationDrawer from "./RemediationDrawer";
 
 function masteryColor(pct) {
   if (pct == null) return { bg: "var(--glass-bg)", text: "var(--text-muted)", label: "—" };
@@ -18,6 +19,9 @@ export default function ProgressRankGrid({ classId }) {
   var [strugglingOnly, setStrugglingOnly] = useState(false);
   var [selectedCell, setSelectedCell] = useState(null);
   var [selectedStudent, setSelectedStudent] = useState(null);
+  var [remediationTrigger, setRemediationTrigger] = useState(null);
+  // shape: {standardCode, targetMode, targetStudentId?, targetStudentName?}
+  var [refreshKey, setRefreshKey] = useState(0);
 
   function openReportCard(student) {
     setSelectedCell(null);          // close any open cell popover (z-index 9999)
@@ -55,7 +59,7 @@ export default function ProgressRankGrid({ classId }) {
         if (!cancelled) setLoading(false);
       });
     return function() { cancelled = true; };
-  }, [classId, attemptMode]);
+  }, [classId, attemptMode, refreshKey]);
 
   if (loading) {
     return (
@@ -137,13 +141,51 @@ export default function ProgressRankGrid({ classId }) {
                 <th style={{ position: "sticky", left: 0, background: "var(--card-bg)", zIndex: 2, padding: "10px 14px", textAlign: "left", fontSize: "0.8rem", fontWeight: 700, borderBottom: "1px solid var(--glass-border)", minWidth: "180px" }}>
                   Student
                 </th>
-                {standards.map(function(code) {
-                  return (
-                    <th key={code} style={{ padding: "10px 8px", fontSize: "0.7rem", fontFamily: "monospace", fontWeight: 700, borderBottom: "1px solid var(--glass-border)", borderLeft: "1px solid var(--glass-border)", minWidth: "90px", textAlign: "center" }}>
-                      {code}
-                    </th>
-                  );
-                })}
+                {/* Compute red counts per column once. */}
+                {(function() {
+                  var redCounts = {};
+                  standards.forEach(function(code) {
+                    redCounts[code] = displayStudents.filter(function(stu) {
+                      var m = stu.mastery[code];
+                      return m && typeof m.percentage === "number" && m.percentage < 70;
+                    }).length;
+                  });
+                  return standards.map(function(code) {
+                    var redCount = redCounts[code];
+                    return (
+                      <th key={code}
+                          style={{ padding: "10px 8px", fontSize: "0.7rem", fontFamily: "monospace",
+                                   fontWeight: 700, borderBottom: "1px solid var(--glass-border)",
+                                   borderLeft: "1px solid var(--glass-border)", minWidth: "90px",
+                                   textAlign: "center", position: "relative" }}
+                          className="phase4-header-cell">
+                        {code}
+                        {redCount > 0 && (
+                          <button
+                            onClick={function() {
+                              setRemediationTrigger({
+                                standardCode: code,
+                                targetMode: "red_tier_in_class",
+                              });
+                            }}
+                            className="phase4-header-remediate"
+                            tabIndex={0}
+                            aria-label={"Remediate " + redCount + " red-tier students on " + code}
+                            style={{
+                              position: "absolute", top: "2px", right: "2px",
+                              background: "rgba(239,68,68,0.15)", color: "var(--danger)",
+                              border: "none", borderRadius: "4px", fontSize: "0.65rem",
+                              padding: "2px 6px", cursor: "pointer", opacity: 0,
+                              transition: "opacity 0.15s",
+                            }}
+                          >
+                            Remediate ({redCount})
+                          </button>
+                        )}
+                      </th>
+                    );
+                  });
+                })()}
               </tr>
             </thead>
             <tbody>
@@ -160,10 +202,24 @@ export default function ProgressRankGrid({ classId }) {
                       var m = student.mastery[code];
                       var color = masteryColor(m ? m.percentage : null);
                       var clickable = !!m;
+                      function activate() {
+                        if (clickable) setSelectedCell({ student: student, standard: code, mastery: m });
+                      }
                       return (
                         <td
                           key={code}
-                          onClick={function() { if (clickable) setSelectedCell({ student: student, standard: code, mastery: m }); }}
+                          onClick={activate}
+                          onKeyDown={function(e) {
+                            if (clickable && (e.key === "Enter" || e.key === " ")) {
+                              e.preventDefault();
+                              activate();
+                            }
+                          }}
+                          role={clickable ? "button" : undefined}
+                          tabIndex={clickable ? 0 : undefined}
+                          aria-label={clickable
+                            ? "View " + student.student_name + " " + code + " mastery (" + (m ? m.percentage : "no data") + "%)"
+                            : undefined}
                           style={{
                             padding: "10px 8px",
                             textAlign: "center",
@@ -232,6 +288,25 @@ export default function ProgressRankGrid({ classId }) {
                 );
               })}
             </div>
+            {selectedCell.mastery && selectedCell.mastery.percentage < 85 && (
+              <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--glass-border)" }}>
+                <button
+                  onClick={function() {
+                    setRemediationTrigger({
+                      standardCode: selectedCell.standard,
+                      targetMode: "single_student",
+                      targetStudentId: selectedCell.student.student_id,
+                      targetStudentName: selectedCell.student.student_name,
+                    });
+                    setSelectedCell(null);
+                  }}
+                  className="btn btn-primary"
+                  style={{ width: "100%", padding: "8px", fontSize: "0.85rem" }}
+                >
+                  Generate remediation
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -245,6 +320,28 @@ export default function ProgressRankGrid({ classId }) {
           onClose={function() { setSelectedStudent(null); }}
         />
       )}
+
+      {/* Remediation drawer (Phase 4) */}
+      {remediationTrigger && (
+        <RemediationDrawer
+          open={!!remediationTrigger}
+          onClose={function() { setRemediationTrigger(null); }}
+          classId={classId}
+          standardCode={remediationTrigger.standardCode}
+          targetMode={remediationTrigger.targetMode}
+          targetStudentId={remediationTrigger.targetStudentId}
+          targetStudentName={remediationTrigger.targetStudentName}
+          onPublished={function() { setRefreshKey(function(k) { return k + 1; }); }}
+        />
+      )}
+
+      <style>{
+        ".phase4-header-cell:hover .phase4-header-remediate," +
+        " .phase4-header-cell:focus-within .phase4-header-remediate" +
+        " { opacity: 1 !important; }" +
+        " .phase4-header-remediate:focus" +
+        " { opacity: 1 !important; outline: 2px solid var(--accent-primary); }"
+      }</style>
     </div>
   );
 }
