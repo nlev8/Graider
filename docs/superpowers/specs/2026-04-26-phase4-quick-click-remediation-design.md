@@ -15,7 +15,7 @@ From the Phase 2 Progress Rank grid, a teacher clicks a red mastery cell or a co
 - **Q3 → B.** Preview-then-publish drawer (Planner-style). NOT auto-publish — teacher gates content before students see it.
 - **Q4 → A.** Fixed defaults: 8 questions, 5 multiple choice + 3 short answer, grade level inferred from `classes` metadata. No pre-generation config dialog.
 - **Q5 → B.** Single-student honors accommodations (via existing helper, with try/except fall-through to grade level on failure). Class-wide stays grade-level only.
-- **Architecture → Approach 2.** Dedicated `POST /api/teacher/remediate` route wrapping the existing `_post_process_assignment` pipeline. NOT extending the planner blueprint.
+- **Architecture → Approach 2.** Dedicated `POST /api/teacher/class/<class_id>/remediate` route that calls the LLM adapter to generate, then runs `_post_process_assignment` on the generated assignment dict. NOT extending the planner blueprint.
 
 ## Non-goals (Phase 4.2 backlog — see `project_phase4.2_backlog.md`)
 
@@ -36,7 +36,7 @@ From the Phase 2 Progress Rank grid, a teacher clicks a red mastery cell or a co
 
 ### Backend — one new route + one shared helper + one route hardening
 
-**New route:** `POST /api/teacher/remediate` in `backend/routes/student_portal_routes.py` (analytics surface, alongside Phase 2/2b/3a/3b endpoints). Wraps existing `_post_process_assignment` from `backend/services/assignment_post_processing.py`.
+**New route:** `POST /api/teacher/class/<class_id>/remediate` in `backend/routes/student_portal_routes.py` (analytics surface, alongside Phase 2/2b/3a/3b endpoints). Calls `OpenAIAdapter.chat(...)` to generate an assignment dict, then runs `_post_process_assignment` from `backend/services/assignment_post_processing.py` on it.
 
 **New shared helper:** `_content_visible_to_student(db, content_id, student_id, class_id) -> bool` — module-level helper added to `backend/routes/student_account_routes.py`. Centralizes the targeting check so all seven student-facing read AND write paths apply it consistently.
 
@@ -67,7 +67,7 @@ No GIN index in MVP (deferred until EXPLAIN justifies it; see Phase 4.2 backlog 
 ### Lifecycle
 
 1. Teacher clicks → frontend opens drawer with `{class_id, standard_code, target_mode, target_student_id?}`.
-2. Drawer POSTs to `/api/teacher/remediate`. Backend validates, generates, returns generated questions + the resolved `target_student_ids` list (NOT yet published).
+2. Drawer POSTs to `/api/teacher/class/<class_id>/remediate`. Backend validates, generates, returns generated questions + the resolved `target_student_ids` list (NOT yet published).
 3. Drawer renders editable cards in `preview` state. Teacher can edit text, edit MC choices, regenerate the full batch, or publish.
 4. On Publish: drawer runs **frontend pre-publish validation**, then POSTs to `/api/publish-to-class` with the EXACT `target_student_ids` list returned at generate time. Publish endpoint validates ownership + targeting, inserts row.
 5. Drawer shows success toast, closes after 2s. Parent `ProgressRankGrid` re-fetches mastery so cell colors update once students submit.
@@ -297,7 +297,7 @@ These checks are pure-frontend. The publish endpoint also validates `content_typ
 
 ### Wire contract — generate vs publish
 
-`/api/teacher/remediate` returns `target_student_ids: [...]` resolved at generate time. The drawer holds this list in local state and sends it VERBATIM to `/api/publish-to-class`. **Publish does NOT recompute red-tier.** Rationale: between generate and publish, mastery could change (e.g., a student submits a fresh attempt and crosses 70%); preserving the generate-time list keeps teacher intent stable.
+`/api/teacher/class/<class_id>/remediate` returns `target_student_ids: [...]` resolved at generate time. The drawer holds this list in local state and sends it VERBATIM to `/api/publish-to-class`. **Publish does NOT recompute red-tier.** Rationale: between generate and publish, mastery could change (e.g., a student submits a fresh attempt and crosses 70%); preserving the generate-time list keeps teacher intent stable.
 
 ---
 

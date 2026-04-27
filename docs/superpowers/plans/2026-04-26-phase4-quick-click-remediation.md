@@ -208,7 +208,7 @@ class TestRemediateValidation:
 
     def test_unauthenticated_returns_401(self, client_no_auth):
         resp = client_no_auth.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         })
         assert resp.status_code == 401
@@ -220,7 +220,7 @@ class TestRemediateValidation:
                          'grade_level': '6', 'subject': 'Math'}],
         })
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
         assert resp.status_code == 403
@@ -229,7 +229,7 @@ class TestRemediateValidation:
     def test_bogus_target_mode_returns_400(self, mock_sb_fn, client, teacher_headers):
         mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'bogus',
         }, headers=teacher_headers)
         assert resp.status_code == 400
@@ -240,7 +240,7 @@ class TestRemediateValidation:
     def test_missing_target_student_id_for_single_returns_400(self, mock_sb_fn, client, teacher_headers):
         mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student',
         }, headers=teacher_headers)
         assert resp.status_code == 400
@@ -249,7 +249,7 @@ class TestRemediateValidation:
     def test_malformed_target_student_uuid_returns_400(self, mock_sb_fn, client, teacher_headers):
         mock_sb_fn.return_value = _multi_table_sb({'classes': CLS_OWNED})
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': 'not-a-uuid',
         }, headers=teacher_headers)
         assert resp.status_code == 400
@@ -262,7 +262,7 @@ class TestRemediateValidation:
             'students': [{'id': STU_1}],
         })
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
         assert resp.status_code == 403
@@ -275,7 +275,7 @@ class TestRemediateValidation:
             'students': [{'id': STU_1}],
         })
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': '',
+            'standard_code': '',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
         assert resp.status_code == 400
@@ -290,7 +290,7 @@ class TestRemediateValidation:
             'student_submissions': [],
         })
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': STU_1,
         }, headers=teacher_headers)
         assert resp.status_code == 400
@@ -310,7 +310,7 @@ class TestRemediateValidation:
                                    'content_type': 'assessment'}],
         })
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'red_tier_in_class',
         }, headers=teacher_headers)
         assert resp.status_code == 400
@@ -327,7 +327,7 @@ class TestRemediateValidation:
             'students': [{'id': other_stu}],
         })
         resp = client.post('/api/teacher/class/cls-1/remediate', json={
-            'class_id': 'cls-1', 'standard_code': 'MA.6.AR.1.2',
+            'standard_code': 'MA.6.AR.1.2',
             'target_mode': 'single_student', 'target_student_id': other_stu,
         }, headers=teacher_headers)
         assert resp.status_code == 403
@@ -676,17 +676,20 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
             return error_response("No red-tier students on this standard", 400)
         target_student_ids = red_tier
 
-    # 7) Build remediation prompt.
+    # 7) Build remediation prompt. Output shape MUST be sections-shaped because
+    # `_post_process_assignment` walks `assignment['sections'][*]['questions']`.
     grade = cls_row.get('grade_level') or '7'
     subject = cls_row.get('subject') or 'General'
     base_prompt = (
         f"Generate exactly 8 grade-{grade} {subject} practice questions aligned to "
         f"standard {standard_code}. Mix: 5 multiple-choice questions (4 choices each, "
-        f"exactly 1 correct, marked with an 'answer' field whose value is the choice "
-        f"letter or text) and 3 short-answer questions (each with an 'answer' field "
-        f"containing the model answer). Difficulty: grade-level review. Each question "
-        f"MUST include a 'standard' field equal to '{standard_code}'. Return valid JSON "
-        f"of shape: {{\"questions\": [...]}}"
+        f"exactly 1 correct, marked with an 'answer' field whose value is either the "
+        f"choice letter (A/B/C/D) or the choice text) and 3 short-answer questions "
+        f"(each with an 'answer' field containing the model answer). "
+        f"Difficulty: grade-level review. Each question MUST include a 'standard' "
+        f"field equal to '{standard_code}'. Return valid JSON of this exact shape: "
+        f"{{\"title\": \"Practice — {standard_code}\", \"sections\": "
+        f"[{{\"name\": \"Practice\", \"questions\": [...]}}]}}"
     )
 
     accommodation_segment = ""
@@ -702,14 +705,18 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
             accommodation_segment = ""
     final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
 
-    # 8) Generate via the LLM adapter (matches planner_routes pattern at line 1878).
+    # 8) Generate via OpenAIAdapter (matches planner_routes pattern at line 420-427, 1878).
     try:
-        from backend.services.llm_adapter import get_llm_adapter
-        from backend.services.llm_types import LLMRequest, Message, TextPart, ResponseFormat
+        from backend.api_keys import get_api_key as _gak
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         from backend.routes.planner_routes import _get_openai_context, _extract_usage, _merge_usage
         from backend.services.assignment_post_processing import _post_process_assignment
+        import json as _json
 
-        adapter = get_llm_adapter()
+        api_key = _gak('openai', g.teacher_id)
+        if not api_key or 'your-key-here' in api_key:
+            return error_response("Missing OpenAI API key", 500)
+        adapter = OpenAIAdapter(api_key=api_key)
         completion = adapter.chat(LLMRequest(
             model="gpt-4o",
             system_prompt="You are an expert teacher. Return valid JSON only.",
@@ -718,8 +725,16 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
             metadata={"feature_label": "remediation"},
         ))
         raw_text = completion.content_parts[0].text if completion.content_parts else "{}"
-        import json as _json
         assignment = _json.loads(raw_text)
+
+        # Defensive: if the AI returned `{questions: [...]}` instead of sections shape,
+        # wrap it so `_post_process_assignment`'s section iteration runs over the questions.
+        if isinstance(assignment, dict) and 'sections' not in assignment and 'questions' in assignment:
+            assignment = {
+                'title': assignment.get('title', f"Practice — {standard_code}"),
+                'sections': [{'name': 'Practice', 'questions': assignment.get('questions') or []}],
+            }
+
         _ctx_uid, _ctx_client = _get_openai_context()
         assignment, extra_usage = _post_process_assignment(
             assignment, 8, target_total_points=80,
@@ -733,7 +748,11 @@ In `backend/routes/student_portal_routes.py`, replace the `# Steps 5 + 6 land in
                           g.teacher_id, class_id, standard_code)
         return error_response("Generation failed", 500)
 
-    questions = (assignment or {}).get('questions') or []
+    # Flatten sections back to a single questions list for the drawer/wire.
+    questions = []
+    for section in (assignment or {}).get('sections', []):
+        for q in section.get('questions', []):
+            questions.append(q)
     # 422 floor: fewer than 3 valid questions after post-processing.
     if len(questions) < 3:
         return error_response("Generation produced too few valid questions", 422)
@@ -2068,6 +2087,7 @@ export default function RemediationDrawer({
 
   function regenerateAll() {
     setConfirmRegenOpen(false);
+    setValidationError(null);  // clear any stale validation message before regen
     setState("regenerating");
     var payload = { standard_code: standardCode, target_mode: targetMode };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
@@ -2093,6 +2113,9 @@ export default function RemediationDrawer({
   // Pre-publish validation. Returns null on success, error string on failure.
   // Verifies: ≥1 question, every question has non-empty text, MC has ≥2
   // non-empty choices AND correct_answer references one of those choices.
+  // The remediation prompt allows the AI to mark the correct answer as
+  // a letter ("A"/"B"/"C"/"D"), the choice text, OR a numeric index — the
+  // validator accepts all three forms.
   function validateBeforePublish() {
     if (questions.length < 1) return "At least one question required";
     for (var i = 0; i < questions.length; i++) {
@@ -2111,11 +2134,29 @@ export default function RemediationDrawer({
         if (nonEmptyChoices.length < 2) return "Question " + (i + 1) + " needs at least 2 choices";
         var correct = q.correct_answer != null ? q.correct_answer : q.answer;
         if (correct == null || correct === "") return "Question " + (i + 1) + " has no correct answer";
-        // correct_answer may be a numeric index OR the choice text. Verify it
-        // matches a non-empty choice either way.
-        var matchesIndex = nonEmptyChoices.some(function(c) { return c.index === correct; });
-        var matchesText = nonEmptyChoices.some(function(c) { return c.label === String(correct).trim(); });
-        if (!matchesIndex && !matchesText) {
+        var matched = false;
+        // (a) numeric index match
+        if (typeof correct === "number") {
+          matched = nonEmptyChoices.some(function(c) { return c.index === correct; });
+        }
+        if (!matched) {
+          var s = String(correct).trim();
+          // (b) string numeric index ("0".."N")
+          if (/^[0-9]+$/.test(s)) {
+            var idx = parseInt(s, 10);
+            matched = nonEmptyChoices.some(function(c) { return c.index === idx; });
+          }
+          // (c) letter A-Z (case-insensitive) — A=0, B=1, etc.
+          if (!matched && /^[A-Za-z]$/.test(s)) {
+            var letterIdx = s.toUpperCase().charCodeAt(0) - 65;
+            matched = nonEmptyChoices.some(function(c) { return c.index === letterIdx; });
+          }
+          // (d) exact choice text match
+          if (!matched) {
+            matched = nonEmptyChoices.some(function(c) { return c.label === s; });
+          }
+        }
+        if (!matched) {
           return "Question " + (i + 1) + " correct answer doesn't match any choice";
         }
       }
