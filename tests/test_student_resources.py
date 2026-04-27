@@ -22,8 +22,13 @@ def _make_app():
     return app
 
 
-def _mock_supabase(content_data):
-    """Mock Supabase that returns published content."""
+def _mock_supabase(content_data, enrolled=True):
+    """Mock Supabase that returns published content.
+
+    Phase 4: also returns a non-empty class_students lookup by default so the
+    visibility helper passes the enrollment check. Pass enrolled=False to
+    simulate a removed student.
+    """
     mock_sb = MagicMock()
 
     def table_router(name):
@@ -31,6 +36,8 @@ def _mock_supabase(content_data):
         result = MagicMock()
         if name == 'published_content':
             result.data = content_data
+        elif name == 'class_students':
+            result.data = [{'student_id': 'student-1'}] if enrolled else []
         else:
             result.data = []
         for method in ('select', 'eq', 'neq', 'ilike', 'like', 'order',

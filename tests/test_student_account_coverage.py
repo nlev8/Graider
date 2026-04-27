@@ -238,6 +238,8 @@ class TestSubmitStudentWork:
                         'student_id_number': 'S200', 'period': 'P1',
                         'email': '', 'teacher_id': 'test-teacher-001'}]
         content_row = [{
+            'id': 'pc-001', 'class_id': 'cls-1', 'is_active': True,
+            'target_student_ids': None,
             'content': {'sections': [{'questions': []}]},
             'title': 'Quiz 1', 'teacher_id': 'test-teacher-001',
             'settings': {'show_score_immediately': True},
@@ -250,6 +252,8 @@ class TestSubmitStudentWork:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -329,6 +333,8 @@ class TestSubmitStudentWork:
                         'student_id_number': 'S1', 'period': '', 'email': '',
                         'teacher_id': 't1'}]
         content_row = [{
+            'id': 'pc-001', 'class_id': 'cls-1', 'is_active': True,
+            'target_student_ids': None,
             'content': {'sections': []}, 'title': 'Q1',
             'teacher_id': 't1', 'settings': {}, 'due_date': None,
         }]
@@ -338,6 +344,8 @@ class TestSubmitStudentWork:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -373,7 +381,9 @@ class TestSubmitStudentWork:
         student_row = [{'first_name': 'X', 'last_name': 'Y',
                         'student_id_number': 'S1', 'period': '', 'email': '',
                         'teacher_id': 't1'}]
-        content_row = [{'content': {'sections': []}, 'title': 'Q',
+        content_row = [{'id': 'pc-001', 'class_id': 'cls-1', 'is_active': True,
+                        'target_student_ids': None,
+                        'content': {'sections': []}, 'title': 'Q',
                         'teacher_id': 't1', 'settings': {'show_score_immediately': True},
                         'due_date': None}]
 
@@ -384,6 +394,8 @@ class TestSubmitStudentWork:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'students':
                 return _make_chain(student_row)
             if name == 'student_submissions':
@@ -416,7 +428,8 @@ class TestSaveSubmissionDraft:
     def test_new_draft_creates_row(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
-        content_row = [{'id': 'pc-1', 'settings': {}}]
+        content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
+                        'target_student_ids': None, 'settings': {}}]
         student_row = [{'first_name': 'A', 'last_name': 'B',
                         'student_id_number': 'S1', 'period': 'P1'}]
 
@@ -427,6 +440,8 @@ class TestSaveSubmissionDraft:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -452,7 +467,8 @@ class TestSaveSubmissionDraft:
     def test_existing_draft_updates_row(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
-        content_row = [{'id': 'pc-1', 'settings': {}}]
+        content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
+                        'target_student_ids': None, 'settings': {}}]
         existing_draft = [{
             'id': 'sub-draft-001', 'status': 'draft',
             'time_started_at': (datetime.now(tz=timezone.utc) - timedelta(minutes=5)).isoformat(),
@@ -463,6 +479,8 @@ class TestSaveSubmissionDraft:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -490,7 +508,9 @@ class TestSaveSubmissionDraft:
     def test_draft_with_timer_returns_remaining(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
-        content_row = [{'id': 'pc-1', 'settings': {'time_limit_minutes': 30}}]
+        content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
+                        'target_student_ids': None,
+                        'settings': {'time_limit_minutes': 30}}]
         started = (datetime.now(tz=timezone.utc) - timedelta(minutes=10)).isoformat()
         existing_draft = [{
             'id': 'sub-draft-002', 'status': 'draft',
@@ -502,6 +522,8 @@ class TestSaveSubmissionDraft:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -533,7 +555,9 @@ class TestGetStudentContent:
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
         content_item = [{
-            'id': 'pc-1', 'title': 'Quiz', 'content_type': 'assessment',
+            'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
+            'target_student_ids': None,
+            'title': 'Quiz', 'content_type': 'assessment',
             'settings': {}, 'due_date': None,
             'content': {
                 'sections': [{'questions': [{
@@ -549,6 +573,8 @@ class TestGetStudentContent:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_item)
             return _make_chain([])
@@ -780,7 +806,9 @@ class TestGetSubmissionDraft:
     def test_get_draft_returns_saved_answers(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
-        content_row = [{'id': 'pc-1', 'settings': {'time_limit_minutes': 45}}]
+        content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
+                        'target_student_ids': None,
+                        'settings': {'time_limit_minutes': 45}}]
         started = (datetime.now(tz=timezone.utc) - timedelta(minutes=15)).isoformat()
         draft_row = [{
             'id': 'sub-d1', 'status': 'draft',
@@ -795,6 +823,8 @@ class TestGetSubmissionDraft:
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':
@@ -816,13 +846,16 @@ class TestGetSubmissionDraft:
     def test_get_draft_no_draft_returns_none(self, mock_get_sb, client):
         expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
         session_row = [{'student_id': 'stu-1', 'class_id': 'cls-1', 'expires_at': expires}]
-        content_row = [{'id': 'pc-1', 'settings': {}}]
+        content_row = [{'id': 'pc-1', 'class_id': 'cls-1', 'is_active': True,
+                        'target_student_ids': None, 'settings': {}}]
 
         mock_sb = MagicMock()
 
         def table_side(name):
             if name == 'student_sessions':
                 return _make_chain(session_row)
+            if name == 'class_students':
+                return _make_chain([{'student_id': 'stu-1'}])
             if name == 'published_content':
                 return _make_chain(content_row)
             if name == 'student_submissions':

@@ -794,6 +794,10 @@ def get_student_content(content_id):
     try:
         db = _get_supabase()
 
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
+
         result = db.table('published_content').select('*').eq(
             'id', content_id
         ).eq('class_id', class_id).eq('is_active', True).execute()
@@ -849,6 +853,11 @@ def submit_student_work(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
+
         data = request.json
         answers = data.get('answers', {})
         question_times = data.get('question_times') or {}
@@ -1290,6 +1299,10 @@ def student_resource_content(content_id):
     try:
         db = _get_supabase()
 
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Resource not found"}), 404
+
         # Get the resource — must belong to student's class
         content_result = db.table('published_content').select(
             'id, title, content_type, content, settings'
@@ -1330,6 +1343,11 @@ def save_submission_draft(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
+
         data = request.json or {}
         draft_answers = data.get('answers') or {}
         question_times = data.get('question_times') or {}
@@ -1420,6 +1438,10 @@ def get_submission_draft(content_id):
 
     try:
         db = _get_supabase()
+
+        # Phase 4: targeting visibility check (must run before any content read).
+        if not _content_visible_to_student(db, content_id, student_id, class_id):
+            return jsonify({"error": "Content not found"}), 404
 
         # Verify content belongs to class
         content = db.table('published_content').select('id, settings').eq(
