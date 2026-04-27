@@ -21,6 +21,7 @@ export default function ProgressRankGrid({ classId }) {
   var [selectedStudent, setSelectedStudent] = useState(null);
   var [remediationTrigger, setRemediationTrigger] = useState(null);
   // shape: {standardCode, targetMode, targetStudentId?, targetStudentName?}
+  var [refreshKey, setRefreshKey] = useState(0);
 
   function openReportCard(student) {
     setSelectedCell(null);          // close any open cell popover (z-index 9999)
@@ -58,7 +59,7 @@ export default function ProgressRankGrid({ classId }) {
         if (!cancelled) setLoading(false);
       });
     return function() { cancelled = true; };
-  }, [classId, attemptMode]);
+  }, [classId, attemptMode, refreshKey]);
 
   if (loading) {
     return (
@@ -316,6 +317,7 @@ export default function ProgressRankGrid({ classId }) {
           targetMode={remediationTrigger.targetMode}
           targetStudentId={remediationTrigger.targetStudentId}
           targetStudentName={remediationTrigger.targetStudentName}
+          onPublished={function() { setRefreshKey(function(k) { return k + 1; }); }}
         />
       )}
 
