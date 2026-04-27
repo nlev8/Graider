@@ -18,7 +18,13 @@ def app():
     os.environ['FLASK_ENV'] = 'development'
     os.environ['DEV_USER_ID'] = 'test-teacher-001'
     from backend.app import app as flask_app
+    from backend.extensions import limiter
     flask_app.config['TESTING'] = True
+    flask_app.config['RATELIMIT_ENABLED'] = False
+    # The global limiter is already initialized at module-import time, so
+    # toggling config alone is too late. Mutate the runtime flag directly --
+    # flask_limiter checks self.enabled at request time (see _extension.py:872).
+    limiter.enabled = False
     return flask_app
 
 
@@ -41,6 +47,7 @@ def client_no_auth():
     isolated = Flask(__name__)
     isolated.config['TESTING'] = True
     isolated.config['SECRET_KEY'] = 'test'
+    isolated.config['RATELIMIT_ENABLED'] = False
     isolated.register_blueprint(student_portal_bp)
     return isolated.test_client()
 
@@ -294,3 +301,179 @@ class TestRemediateValidation:
             'target_mode': 'single_student', 'target_student_id': other_stu,
         }, headers=teacher_headers)
         assert resp.status_code == 403
+
+
+# ============ Generation tests ============
+
+class TestRemediateGeneration:
+    """Single-student happy path; class-wide happy path; AI fallback paths."""
+
+    def _ms(self, std='MA.6.AR.1.2', earned=4, possible=10):
+        return {std: {'points_earned': earned, 'points_possible': possible, 'question_count': 2}}
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_single_student_happy_path(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        # 8 questions returned by the (mocked) post-processor.
+        mock_pp.return_value = ({
+            'title': 'Remediation: MA.6.AR.1.2',
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq' if i < 6 else 'short_answer',
+                 'standard': 'MA.6.AR.1.2'} for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500, 'prompt_tokens': 800, 'completion_tokens': 700})
+        # Student has historical evidence on this standard at 40%.
+        mastery = self._ms(earned=4, possible=10)
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1, 'student_name': 'Test Student'}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert len(body['questions']) == 8
+        assert body['target_mode'] == 'single_student'
+        assert body['target_student_ids'] == [STU_1]
+        assert body['standard_code'] == 'MA.6.AR.1.2'
+        # Post-processor was called once with prompt content.
+        assert mock_pp.called
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_red_tier_happy_path(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'Remediation: MA.6.AR.1.2',
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq' if i < 6 else 'short_answer',
+                 'standard': 'MA.6.AR.1.2'} for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        # Two students: stu-1 red (40%), stu-2 green (90%).
+        mastery_red = self._ms(earned=4, possible=10)
+        mastery_green = self._ms(earned=9, possible=10)
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1},
+                               {'class_id': 'cls-1', 'student_id': STU_2}],
+            'students': [{'id': STU_1}, {'id': STU_2}],
+            'student_submissions': [
+                _sub('s-1', STU_1, CID_Q1, 40, mastery_red),
+                _sub('s-2', STU_2, CID_Q1, 90, mastery_green),
+            ],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['target_mode'] == 'red_tier_in_class'
+        assert STU_1 in body['target_student_ids']
+        assert STU_2 not in body['target_student_ids']
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_too_few_valid_questions_returns_422(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        # Post-processor returns only 2 valid questions -- below the floor of 3.
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': 1, 'text': 'Q1', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'},
+                {'id': 2, 'text': 'Q2', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'},
+            ]}],
+        }, {'total_tokens': 800})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 422
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_missing_grade_metadata_falls_back(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        # Class has no grade_level / subject -- route should still generate.
+        cls_no_meta = [{'id': 'cls-1', 'teacher_id': 'test-teacher-001', 'name': 'C',
+                        'grade_level': None, 'subject': None}]
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': cls_no_meta,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_response_contains_generated_at_timestamp(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'sections': [{'name': 'Practice', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1000})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student',
+            'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        body = resp.get_json()
+        assert 'generated_at' in body
+        # ISO 8601 UTC.
+        assert 'T' in body['generated_at'] and body['generated_at'].endswith('Z')

@@ -2197,12 +2197,189 @@ def post_remediate(class_id):
     if not standard_code:
         return error_response("standard_code is required", 400)
 
-    # Steps 5 + 6 land in Tasks 3 and 4 respectively. For now, return placeholder 200
-    # so the validation tests pass. Generation lands later.
+    target_student_ids = []
+
+    # 5) Single-student historical evidence check.
+    if target_mode == 'single_student':
+        # Fetch student's submissions whose results contain this standard.
+        subs = db.table('student_submissions').select(
+            'id, percentage, results, status, submitted_at'
+        ).eq('student_id', target_student_id).neq('status', 'draft').execute()
+        has_evidence = False
+        for s in (subs.data or []):
+            mastery = (s.get('results') or {}).get('standards_mastery') or {}
+            if isinstance(mastery, dict) and standard_code in mastery:
+                has_evidence = True
+                break
+        if not has_evidence:
+            _logger.warning(
+                "remediation.no_historical_evidence teacher=%s class=%s student=%s standard=%s",
+                g.teacher_id, class_id, target_student_id, standard_code,
+            )
+            return error_response(
+                "No prior assessment data on this standard for student",
+                400,
+            )
+        target_student_ids = [target_student_id]
+
+    # 6) Red-tier resolution (class-wide). Uses the same aggregation path that
+    # Phase 2 Progress Rank uses, so the red-tier set matches the grid exactly.
+    if target_mode == 'red_tier_in_class':
+        # Resolve roster (skip orphans).
+        enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
+        enrolled_ids = [r['student_id'] for r in (enrollments.data or []) if r.get('student_id')]
+        valid_ids = []
+        if enrolled_ids:
+            stu_rows = db.table('students').select('id').in_('id', enrolled_ids).execute()
+            existing = {s['id'] for s in (stu_rows.data or []) if s.get('id')}
+            valid_ids = [sid for sid in enrolled_ids if sid in existing]
+        # Pull all class submissions covering this standard (any content row).
+        red_tier = []
+        if valid_ids:
+            class_subs = db.table('student_submissions').select(
+                'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+            ).in_('student_id', valid_ids).neq('status', 'draft').execute()
+            # Build content title map for _aggregate_mastery_for_student.
+            content_id_set = list({s.get('content_id') for s in (class_subs.data or [])
+                                    if s.get('content_id')})
+            content_titles = {}
+            if content_id_set:
+                rows = db.table('published_content').select('id, title').in_(
+                    'id', content_id_set
+                ).execute()
+                content_titles = {r['id']: r.get('title', '') for r in (rows.data or [])}
+            # Group submissions by student -> content_id -> [submissions].
+            from collections import defaultdict
+            per_student = defaultdict(lambda: defaultdict(list))
+            for s in (class_subs.data or []):
+                sid = s.get('student_id')
+                cid = s.get('content_id')
+                if sid and cid:
+                    per_student[sid][cid].append(s)
+            # For each student: select latest per content, aggregate mastery, read standard's percentage.
+            for sid, by_cid in per_student.items():
+                selected = _select_submissions_by_mode(by_cid, 'latest')
+                mastery = _aggregate_mastery_for_student(selected, content_titles, 'latest')
+                std_entry = mastery.get(standard_code) if isinstance(mastery, dict) else None
+                if not std_entry:
+                    continue
+                pct = std_entry.get('percentage')
+                if pct is None:
+                    continue
+                if pct < 70:
+                    red_tier.append(sid)
+        if not red_tier:
+            _logger.warning(
+                "remediation.no_red_tier_students teacher=%s class=%s standard=%s",
+                g.teacher_id, class_id, standard_code,
+            )
+            return error_response("No red-tier students on this standard", 400)
+        target_student_ids = red_tier
+
+    # 7) Build remediation prompt. Output shape MUST be sections-shaped because
+    # `_post_process_assignment` walks `assignment['sections'][*]['questions']`.
+    grade = cls_row.get('grade_level') or '7'
+    subject = cls_row.get('subject') or 'General'
+    base_prompt = (
+        f"Generate exactly 8 grade-{grade} {subject} practice questions aligned to "
+        f"standard {standard_code}. Mix: 5 multiple-choice questions (4 choices each, "
+        f"exactly 1 correct, marked with an 'answer' field whose value is either the "
+        f"choice letter (A/B/C/D) or the choice text) and 3 short-answer questions "
+        f"(each with an 'answer' field containing the model answer). "
+        f"Difficulty: grade-level review. Each question MUST include a 'standard' "
+        f"field equal to '{standard_code}'. Return valid JSON of this exact shape: "
+        f"{{\"title\": \"Practice - {standard_code}\", \"sections\": "
+        f"[{{\"name\": \"Practice\", \"questions\": [...]}}]}}"
+    )
+
+    accommodation_segment = ""
+    if target_mode == 'single_student':
+        try:
+            from backend.accommodations import build_accommodation_prompt
+            accommodation_segment = build_accommodation_prompt(target_student_id, g.teacher_id) or ""
+        except Exception:
+            _logger.warning(
+                "remediation.accommodations_helper_failed teacher=%s student=%s",
+                g.teacher_id, target_student_id,
+            )
+            accommodation_segment = ""
+    final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
+
+    # 8) Generate via OpenAIAdapter (matches planner_routes pattern).
+    # Verified imports -- _get_openai_context lives in planner_routes; the post-processing
+    # helpers (incl. _extract_usage/_merge_usage) live in assignment_post_processing
+    # and are merely re-imported by planner_routes. Importing direct from the source
+    # avoids an unnecessary circular-import surface.
+    try:
+        from backend.api_keys import get_api_key as _gak
+        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+        from backend.routes.planner_routes import _get_openai_context
+        from backend.services.assignment_post_processing import (
+            _post_process_assignment, _extract_usage, _merge_usage,
+        )
+        import json as _json
+
+        api_key = _gak('openai', g.teacher_id)
+        if not api_key or 'your-key-here' in api_key:
+            return error_response("Missing OpenAI API key", 500)
+        adapter = OpenAIAdapter(api_key=api_key)
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert teacher. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=final_prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            metadata={"feature_label": "remediation"},
+        ))
+        raw_text = completion.content_parts[0].text if completion.content_parts else "{}"
+        assignment = _json.loads(raw_text)
+
+        # Defensive: if the AI returned `{questions: [...]}` instead of sections shape,
+        # wrap it so `_post_process_assignment`'s section iteration runs over the questions.
+        if isinstance(assignment, dict) and 'sections' not in assignment and 'questions' in assignment:
+            assignment = {
+                'title': assignment.get('title', f"Practice - {standard_code}"),
+                'sections': [{'name': 'Practice', 'questions': assignment.get('questions') or []}],
+            }
+
+        _ctx_uid, _ctx_client = _get_openai_context()
+        assignment, extra_usage = _post_process_assignment(
+            assignment, 8, target_total_points=80,
+            subject=subject, grade=grade,
+            valid_standard_codes=[standard_code],
+            user_id=_ctx_uid, client=_ctx_client,
+        )
+        usage = _merge_usage(_extract_usage(completion, "gpt-4o"), extra_usage)
+    except Exception:
+        _logger.exception("remediation.generation_failed teacher=%s class=%s standard=%s",
+                          g.teacher_id, class_id, standard_code)
+        return error_response("Generation failed", 500)
+
+    # Flatten sections back to a single questions list for the drawer/wire.
+    questions = []
+    for section in (assignment or {}).get('sections', []):
+        for q in section.get('questions', []):
+            questions.append(q)
+    # 422 floor: fewer than 3 valid questions after post-processing.
+    if len(questions) < 3:
+        return error_response("Generation produced too few valid questions", 422)
+
+    # 9) Audit log.
+    if accommodation_segment:
+        _logger.info(
+            "remediation.accommodations_applied teacher=%s class=%s student=%s",
+            g.teacher_id, class_id, target_student_id,
+        )
+    _logger.info(
+        "remediation.generated teacher=%s class=%s mode=%s standard=%s targets=%d cost_tokens=%s",
+        g.teacher_id, class_id, target_mode, standard_code, len(target_student_ids),
+        (usage or {}).get('total_tokens', 0),
+    )
+
+    from datetime import datetime, timezone
     return jsonify({
-        "questions": [],
+        "questions": questions,
         "target_mode": target_mode,
-        "target_student_ids": [target_student_id] if target_mode == 'single_student' else [],
+        "target_student_ids": target_student_ids,
         "standard_code": standard_code,
-        "generated_at": "1970-01-01T00:00:00Z",
+        "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
     }), 200
