@@ -26,6 +26,7 @@ import Icon from "../components/Icon";
 import * as api from "../services/api";
 import ProgressRankGrid from "./ProgressRankGrid";
 import Gradebook from "./Gradebook";
+import RemediationEffectiveness from "./RemediationEffectiveness";
 import AssessmentComparison from "./AssessmentComparison";
 
 /**
@@ -2386,7 +2387,8 @@ export default React.memo(function AnalyticsTab({
   // Phase 2: Progress Rank grid class selector
   var [selectedClassForGrid, setSelectedClassForGrid] = useState('all');
   // Phase 3a: sub-tab switcher inside class-scoped view
-  var [classView, setClassView] = useState('progressRank'); // 'progressRank' | 'gradebook' | 'compare'
+  // Phase 4.2 #6: added 'effectiveness' option for the Remediation Effectiveness dashboard.
+  var [classView, setClassView] = useState('progressRank'); // 'progressRank' | 'gradebook' | 'compare' | 'effectiveness'
 
 
   // --- Effects ---
@@ -2560,8 +2562,10 @@ export default React.memo(function AnalyticsTab({
 
                   {selectedClassForGrid !== 'all' ? (
                   <div>
-                    {/* Sub-tab switcher (Phase 3a) */}
-                    <div style={{ display: "flex", gap: "4px", marginBottom: "12px" }}>
+                    {/* Sub-tab switcher (Phase 3a; Phase 4.2 #6 added 'effectiveness').
+                        overflow-x: auto + flex-wrap: nowrap keeps all 4 buttons on one line
+                        on narrow viewports per Codex round 1 brainstorm feedback. */}
+                    <div style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "4px", marginBottom: "12px" }}>
                       <button
                         onClick={function() { setClassView('progressRank'); }}
                         style={{
@@ -2571,6 +2575,7 @@ export default React.memo(function AnalyticsTab({
                           background: classView === 'progressRank' ? "rgba(99,102,241,0.15)" : "var(--glass-bg)",
                           color: classView === 'progressRank' ? "var(--accent-primary)" : "var(--text-secondary)",
                           fontSize: "0.9rem", fontWeight: 600, cursor: "pointer",
+                          whiteSpace: "nowrap", flexShrink: 0,
                         }}>
                         Progress Rank
                       </button>
@@ -2583,6 +2588,7 @@ export default React.memo(function AnalyticsTab({
                           background: classView === 'gradebook' ? "rgba(99,102,241,0.15)" : "var(--glass-bg)",
                           color: classView === 'gradebook' ? "var(--accent-primary)" : "var(--text-secondary)",
                           fontSize: "0.9rem", fontWeight: 600, cursor: "pointer",
+                          whiteSpace: "nowrap", flexShrink: 0,
                         }}>
                         Gradebook
                       </button>
@@ -2595,17 +2601,34 @@ export default React.memo(function AnalyticsTab({
                           background: classView === 'compare' ? "rgba(99,102,241,0.15)" : "var(--glass-bg)",
                           color: classView === 'compare' ? "var(--accent-primary)" : "var(--text-secondary)",
                           fontSize: "0.9rem", fontWeight: 600, cursor: "pointer",
+                          whiteSpace: "nowrap", flexShrink: 0,
                         }}>
                         Compare
                       </button>
+                      <button
+                        onClick={function() { setClassView('effectiveness'); }}
+                        style={{
+                          padding: "8px 16px",
+                          borderRadius: "8px",
+                          border: "1px solid " + (classView === 'effectiveness' ? "var(--accent-primary)" : "var(--glass-border)"),
+                          background: classView === 'effectiveness' ? "rgba(99,102,241,0.15)" : "var(--glass-bg)",
+                          color: classView === 'effectiveness' ? "var(--accent-primary)" : "var(--text-secondary)",
+                          fontSize: "0.9rem", fontWeight: 600, cursor: "pointer",
+                          whiteSpace: "nowrap", flexShrink: 0,
+                        }}>
+                        Effectiveness
+                      </button>
                     </div>
-                    {/* Conditional render — inactive sub-tab is unmounted so drawers can't collide */}
+                    {/* Conditional render — inactive sub-tab is unmounted so drawers can't collide.
+                        Phase 4.2 #6: added 'effectiveness' as the 4th branch. */}
                     {classView === 'progressRank' ? (
                       <ProgressRankGrid classId={selectedClassForGrid} />
                     ) : classView === 'gradebook' ? (
                       <Gradebook classId={selectedClassForGrid} />
-                    ) : (
+                    ) : classView === 'compare' ? (
                       <AssessmentComparison classId={selectedClassForGrid} />
+                    ) : (
+                      <RemediationEffectiveness classId={selectedClassForGrid} />
                     )}
                   </div>
                   ) : analyticsLoading ? (
