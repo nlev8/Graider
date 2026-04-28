@@ -2628,7 +2628,7 @@ export default React.memo(function AnalyticsTab({
                     ) : classView === 'compare' ? (
                       <AssessmentComparison classId={selectedClassForGrid} />
                     ) : (
-                      <RemediationEffectiveness classId={selectedClassForGrid} />
+                      <RemediationEffectiveness classId={selectedClassForGrid} addToast={addToast} />
                     )}
                   </div>
                   ) : analyticsLoading ? (

@@ -2454,7 +2454,7 @@ def get_class_remediation_effectiveness(class_id):
     # same reason. So: fetch with .eq('class_id', X), then Python-filter for
     # `target_student_ids is not None` below.
     content_rows = db.table('published_content').select(
-        'id, title, content_type, created_at, target_student_ids, settings, content'
+        'id, title, content_type, created_at, is_active, target_student_ids, settings, content'
     ).eq('class_id', class_id).execute()
     all_class_content = content_rows.data or []
 
@@ -2671,6 +2671,7 @@ def get_class_remediation_effectiveness(class_id):
             'standard_code': std_code,
             'created_at': rem_created,
             'target_count': len([t for t in target_ids if t]),
+            'is_active': bool(rem.get('is_active')) if rem.get('is_active') is not None else True,
             'rows': rows,
         })
 
@@ -2683,4 +2684,72 @@ def get_class_remediation_effectiveness(class_id):
         "class_id": class_id,
         "class_name": class_name,
         "remediations": out_remediations,
+    })
+
+
+@student_portal_bp.route(
+    '/api/teacher/class/<class_id>/remediation/<rem_id>/recall',
+    methods=['POST'],
+)
+@require_teacher
+@handle_route_errors
+def recall_remediation(class_id, rem_id):
+    """Phase 4.2 #5: soft-recall a remediation by flipping is_active=false.
+
+    Hides the remediation from students who haven't engaged (the existing
+    visibility helper `_content_visible_to_student` gates on is_active).
+    Submissions already made are preserved. Reversible at the DB level
+    (just flip is_active=true again) — no UI for un-recall in this slice.
+
+    No schema migration; reuses the existing is_active column.
+    Idempotent: already-recalled returns 200 with `already_recalled: true`.
+    """
+    db = _get_teacher_supabase()
+
+    # 1) Class ownership check (first, to avoid existence-leak: a teacher
+    # who doesn't own the class shouldn't learn whether rem_id exists).
+    cls = db.table('classes').select('id, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+
+    # 2) Remediation lookup, class-scoped.
+    rem_rows = db.table('published_content').select(
+        'id, is_active, target_student_ids'
+    ).eq('id', rem_id).eq('class_id', class_id).execute()
+    if not rem_rows.data:
+        return error_response("Remediation not found", 404)
+    rem = rem_rows.data[0]
+
+    # 3) Defense-in-depth: refuse non-remediation content. Endpoint name
+    # says "remediation"; identical 404 message intentionally — don't leak
+    # whether the ID exists as non-remediation content.
+    if rem.get('target_student_ids') is None:
+        return error_response("Remediation not found", 404)
+
+    # 4) Idempotent: already recalled.
+    if not rem.get('is_active'):
+        _logger.info(
+            "remediation.recalled rem_id=%s class=%s teacher=%s already_recalled=True",
+            rem_id, class_id, g.teacher_id,
+        )
+        return jsonify({
+            "recalled": True,
+            "already_recalled": True,
+            "rem_id": rem_id,
+        })
+
+    # 5) Action: flip is_active=false. Belt-and-suspenders class-scoping
+    # in WHERE clause beyond step 2's verification.
+    db.table('published_content').update({'is_active': False}).eq(
+        'id', rem_id
+    ).eq('class_id', class_id).execute()
+
+    _logger.info(
+        "remediation.recalled rem_id=%s class=%s teacher=%s already_recalled=False",
+        rem_id, class_id, g.teacher_id,
+    )
+    return jsonify({
+        "recalled": True,
+        "already_recalled": False,
+        "rem_id": rem_id,
     })

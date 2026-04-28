@@ -538,3 +538,44 @@ class TestEffectivenessIsolation:
         )
         assert row['after'] is None
         assert row['delta'] is None
+
+
+# ============ is_active surfacing (Phase 4.2 #5 dashboard extension) ============
+
+class TestEffectivenessIsActive:
+    """Phase 4.2 #5: dashboard response surfaces is_active so the frontend
+    can render the 'Recalled' badge on inactive remediation cards."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_active_remediation_returns_is_active_true(self, mock_sb_fn, client, teacher_headers):
+        """Default state: is_active=True is surfaced in the response.
+        Existing rems built via _rem() omit the key — verify the route
+        defaults to True when the column is absent/None."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'published_content': [_rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z')],
+            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        body = resp.get_json()
+        assert body['remediations'][0]['is_active'] is True
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_recalled_remediation_returns_is_active_false(self, mock_sb_fn, client, teacher_headers):
+        """A remediation with is_active=False (recalled) surfaces is_active=False
+        in the dashboard response so the frontend renders the Recalled badge."""
+        recalled_row = _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z')
+        recalled_row['is_active'] = False
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'published_content': [recalled_row],
+            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        body = resp.get_json()
+        assert body['remediations'][0]['is_active'] is False, (
+            "Dashboard must surface is_active=False for recalled remediations "
+            "so the frontend can render the Recalled badge"
+        )
