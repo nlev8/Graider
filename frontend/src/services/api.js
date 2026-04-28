@@ -1696,6 +1696,16 @@ export async function getClassAssessmentComparison(classId, contentIds, attemptM
   );
 }
 
+// Phase 4.2 #6: per-(student × remediation) before/after mastery dashboard.
+// Returns { class_id, class_name, remediations: [{ remediation_id, title,
+// standard_code, created_at, target_count, rows: [...] }] }.
+export async function getClassRemediationEffectiveness(classId) {
+  return fetchApi(
+    '/api/teacher/class/' + encodeURIComponent(classId) +
+    '/remediation-effectiveness'
+  );
+}
+
 export async function getSubmissionDetail(submissionId) {
   return fetchApi('/api/teacher/submission/' + encodeURIComponent(submissionId) + '/detail');
 }

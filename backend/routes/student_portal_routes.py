@@ -2420,3 +2420,267 @@ def post_remediate(class_id):
         "standard_code": standard_code,
         "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
     }), 200
+
+
+@student_portal_bp.route('/api/teacher/class/<class_id>/remediation-effectiveness', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def get_class_remediation_effectiveness(class_id):
+    """Phase 4.2 #6 — Remediation Effectiveness dashboard (read-only).
+
+    Per-(student × remediation) row showing before/after mastery on the
+    targeted standard, completion, and attempt count. Lets teachers answer
+    "did my recent remediations work?" without leaving the analytics tab.
+
+    Spec: docs/superpowers/specs/2026-04-27-phase4.2-effectiveness-dashboard-design.md
+
+    Convention: a published_content row is treated as a remediation if
+    target_student_ids IS NOT NULL. Today only /api/teacher/class/<id>/remediate
+    populates this field; if another feature ever publishes to a class subset,
+    add an `is_remediation` flag and update the filter here.
+    """
+    db = _get_teacher_supabase()
+
+    # 1) Class ownership check.
+    cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
+        return error_response("Not authorized", 403)
+    class_name = cls.data[0].get('name')
+
+    # 2) Fetch all published_content rows for this class.
+    # NOTE: we cannot use PostgREST's null syntax (`.is_("target_student_ids",
+    # "null")` / `.not_(...)`) because the existing test mock doesn't support
+    # those operators. Phase 4 codebase already uses Python-side filters for the
+    # same reason. So: fetch with .eq('class_id', X), then Python-filter for
+    # `target_student_ids is not None` below.
+    content_rows = db.table('published_content').select(
+        'id, title, content_type, created_at, target_student_ids, settings, content'
+    ).eq('class_id', class_id).execute()
+    all_class_content = content_rows.data or []
+
+    # `class_content_ids` covers the FULL class published_content set (NOT just
+    # remediations) — used in step 5 to scope submissions. Without this scope,
+    # a student's submissions in OTHER classes touching the same standard would
+    # leak into THIS class's dashboard. Same lesson as Phase 4's cross-class
+    # submission leakage bug (see test_excludes_out_of_class_submissions_for_evidence).
+    class_content_ids = [c['id'] for c in all_class_content if c.get('id')]
+
+    # Python-side filter: keep only rows that are remediations (target_student_ids
+    # IS NOT NULL — distinct from `if c.get(...)` which would also exclude `[]`.
+    # publish_to_class rejects empty arrays at write time so this is defensive,
+    # but the spec contract is "non-null" not "truthy", so we match exactly).
+    remediations = [c for c in all_class_content if c.get('target_student_ids') is not None]
+
+    if not remediations:
+        return jsonify({
+            "class_id": class_id,
+            "class_name": class_name,
+            "remediations": [],
+        })
+
+    # 3) Resolve targeted standard for each remediation, with fallback ladder.
+    # Defensive: settings.target_standard must be a non-empty string. Falls back
+    # to content.questions[0].standard if missing (Phase 4 invariant: every
+    # remediation question has the targeted code in its `standard` field).
+    # Skip + warn if neither yields a non-empty string.
+    def _extract_target_standard(rem):
+        settings = rem.get('settings') if isinstance(rem.get('settings'), dict) else {}
+        val = settings.get('target_standard') if settings else None
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+        # Fallback: content.questions[0].standard.
+        content = rem.get('content') if isinstance(rem.get('content'), dict) else {}
+        # Phase 4 produces sections-shaped content; flatten to find first question.
+        first_q = None
+        sections = content.get('sections') if isinstance(content.get('sections'), list) else []
+        for sec in sections:
+            qs = sec.get('questions') if isinstance(sec.get('questions'), list) else []
+            if qs:
+                first_q = qs[0]
+                break
+        if first_q is None:
+            qs = content.get('questions') if isinstance(content.get('questions'), list) else []
+            if qs:
+                first_q = qs[0]
+        if isinstance(first_q, dict):
+            std = first_q.get('standard')
+            if isinstance(std, str) and std.strip():
+                return std.strip()
+        return None
+
+    rems_with_std = []
+    for rem in remediations:
+        std = _extract_target_standard(rem)
+        if not std:
+            _logger.warning(
+                "remediation.unknown_standard remediation_id=%s class=%s teacher=%s",
+                rem.get('id'), class_id, g.teacher_id,
+            )
+            continue
+        rems_with_std.append((rem, std))
+
+    if not rems_with_std:
+        return jsonify({
+            "class_id": class_id,
+            "class_name": class_name,
+            "remediations": [],
+        })
+
+    # 4) Build the union set of student IDs across all remediations and fetch
+    # student names. Skips students that don't exist (orphan resilience).
+    all_target_student_ids = set()
+    for rem, _std in rems_with_std:
+        for sid in (rem.get('target_student_ids') or []):
+            if sid:
+                all_target_student_ids.add(sid)
+
+    student_name_by_id = {}
+    if all_target_student_ids:
+        stu_rows = db.table('students').select('id, name').in_(
+            'id', list(all_target_student_ids)
+        ).execute()
+        student_name_by_id = {
+            s['id']: (s.get('name') or '') for s in (stu_rows.data or []) if s.get('id')
+        }
+
+    # 5) Fetch student_submissions for these students — SCOPED to current-class
+    # content. The .in_('content_id', class_content_ids) filter is critical:
+    # without it, out-of-class submissions covering the same standard would
+    # leak into the dashboard rows. (Phase 4 ate this bug; the regression test
+    # is test_out_of_class_submissions_dont_leak.)
+    submissions = []
+    if all_target_student_ids and class_content_ids:
+        sub_rows = db.table('student_submissions').select(
+            'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+        ).in_('student_id', list(all_target_student_ids)).in_(
+            'content_id', class_content_ids
+        ).neq('status', 'draft').order('submitted_at', desc=True).execute()
+        submissions = sub_rows.data or []
+
+    # Sanitize standards_mastery in-place to drop malformed entries (matches
+    # Phase 2/2b/3a/3b precedent).
+    for s in submissions:
+        _sanitize_standards_mastery(s)
+
+    # 6) Build indexes ONCE.
+    # `subs_by_student_with_standard[student_id][standard_code]` =
+    #   ordered list of submissions where that student touched that standard,
+    #   newest first.
+    # NOTE: a submission with N standards in its results.standards_mastery is
+    # intentionally appended to N different bucket lists (one per standard
+    # key). Each bucket means "submissions touching THIS standard." This is
+    # correct, not duplication.
+    from collections import defaultdict
+    subs_by_student_with_standard = defaultdict(lambda: defaultdict(list))
+    attempts_by_student_content = defaultdict(int)
+    for s in submissions:
+        sid = s.get('student_id')
+        cid = s.get('content_id')
+        if not sid or not cid:
+            continue
+        attempts_by_student_content[(sid, cid)] += 1
+        mastery = (s.get('results') or {}).get('standards_mastery') or {}
+        if not isinstance(mastery, dict):
+            continue
+        for std_code in mastery.keys():
+            subs_by_student_with_standard[sid][std_code].append(s)
+
+    # Pre-sort each bucket by submitted_at DESC so "first item" = newest.
+    # The query already used .order(submitted_at, desc=True), but the mock is
+    # a no-op for .order(). Re-sort defensively in Python so behavior is the
+    # same in tests and production.
+    for sid_buckets in subs_by_student_with_standard.values():
+        for std_code, bucket in sid_buckets.items():
+            bucket.sort(key=lambda s: _parse_ts(s.get('submitted_at')), reverse=True)
+
+    # Helper: read mastery percentage for a standard from a single submission.
+    def _percentage_for_standard(sub, std_code):
+        mastery = (sub.get('results') or {}).get('standards_mastery') or {}
+        if not isinstance(mastery, dict):
+            return None
+        entry = mastery.get(std_code)
+        if not isinstance(entry, dict):
+            return None
+        # Prefer pre-computed percentage; otherwise derive from points.
+        pct = entry.get('percentage')
+        if isinstance(pct, (int, float)):
+            return float(pct)
+        try:
+            earned = float(entry.get('points_earned') or 0)
+            possible = float(entry.get('points_possible') or 0)
+        except (ValueError, TypeError):
+            return None
+        if possible <= 0:
+            return None
+        return round((earned / possible) * 100, 1)
+
+    # 7) For each (remediation, student_id) pair, compute before/after/delta.
+    out_remediations = []
+    for rem, std_code in rems_with_std:
+        rem_id = rem.get('id')
+        rem_created = rem.get('created_at')
+        rem_created_dt = _parse_ts(rem_created)
+        target_ids = rem.get('target_student_ids') or []
+
+        rows = []
+        for sid in target_ids:
+            if not sid:
+                continue
+            student_name = student_name_by_id.get(sid, '')
+            std_buckets = subs_by_student_with_standard.get(sid, {})
+            bucket = std_buckets.get(std_code, [])
+
+            # Before: first item where submitted_at < remediation.created_at.
+            # Bucket is sorted newest-first; iterate to find latest pre-event sub.
+            before = None
+            for sub in bucket:
+                sub_dt = _parse_ts(sub.get('submitted_at'))
+                if sub_dt < rem_created_dt:
+                    before = _percentage_for_standard(sub, std_code)
+                    break
+
+            # After: newest item in bucket (regardless of which content
+            # produced it). Q5 → A: this is current mastery, not bounded by
+            # any subsequent remediation. For repeat (student × standard)
+            # cases, an older card's `after` reflects the latest mastery
+            # state — possibly moved further by a later remediation.
+            after = None
+            if bucket:
+                after = _percentage_for_standard(bucket[0], std_code)
+
+            delta = None
+            if before is not None and after is not None:
+                delta = round(after - before, 1)
+
+            attempt_count = int(attempts_by_student_content.get((sid, rem_id), 0))
+            completed = attempt_count > 0
+
+            rows.append({
+                'student_id': sid,
+                'student_name': student_name,
+                'before': before,
+                'after': after,
+                'delta': delta,
+                'completed': completed,
+                'attempt_count': attempt_count,
+            })
+
+        out_remediations.append({
+            'remediation_id': rem_id,
+            'title': rem.get('title') or '',
+            'standard_code': std_code,
+            'created_at': rem_created,
+            'target_count': len([t for t in target_ids if t]),
+            'rows': rows,
+        })
+
+    # Sort remediations newest-first for stable UI ordering.
+    out_remediations.sort(
+        key=lambda r: _parse_ts(r.get('created_at')), reverse=True,
+    )
+
+    return jsonify({
+        "class_id": class_id,
+        "class_name": class_name,
+        "remediations": out_remediations,
+    })

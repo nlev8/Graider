@@ -189,7 +189,10 @@ export default function RemediationDrawer({
       { questions: questions },
       "assessment",
       "Remediation: " + standardCode,
-      {},  // settings — leave default
+      // Phase 4.2 #6: persist target_standard so the Effectiveness dashboard
+      // can attribute mastery delta to this remediation event without parsing
+      // the title or inferring from content.questions[0].standard.
+      { target_standard: standardCode },
       null,  // dueDate — none
       data.target_student_ids,
     )
