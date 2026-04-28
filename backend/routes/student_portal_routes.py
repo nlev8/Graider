@@ -2465,8 +2465,11 @@ def get_class_remediation_effectiveness(class_id):
     # submission leakage bug (see test_excludes_out_of_class_submissions_for_evidence).
     class_content_ids = [c['id'] for c in all_class_content if c.get('id')]
 
-    # Python-side filter: keep only rows that are remediations (target_student_ids non-null).
-    remediations = [c for c in all_class_content if c.get('target_student_ids')]
+    # Python-side filter: keep only rows that are remediations (target_student_ids
+    # IS NOT NULL — distinct from `if c.get(...)` which would also exclude `[]`.
+    # publish_to_class rejects empty arrays at write time so this is defensive,
+    # but the spec contract is "non-null" not "truthy", so we match exactly).
+    remediations = [c for c in all_class_content if c.get('target_student_ids') is not None]
 
     if not remediations:
         return jsonify({
