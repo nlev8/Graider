@@ -1698,11 +1698,22 @@ export async function getClassAssessmentComparison(classId, contentIds, attemptM
 
 // Phase 4.2 #6: per-(student × remediation) before/after mastery dashboard.
 // Returns { class_id, class_name, remediations: [{ remediation_id, title,
-// standard_code, created_at, target_count, rows: [...] }] }.
+// standard_code, created_at, target_count, is_active, rows: [...] }] }.
 export async function getClassRemediationEffectiveness(classId) {
   return fetchApi(
     '/api/teacher/class/' + encodeURIComponent(classId) +
     '/remediation-effectiveness'
+  );
+}
+
+// Phase 4.2 #5: soft-recall a remediation (flips published_content.is_active=false).
+// Idempotent: returns { recalled: true, already_recalled: true, rem_id } if
+// the remediation was already inactive (no second write).
+export async function recallRemediation(classId, remId) {
+  return fetchApi(
+    '/api/teacher/class/' + encodeURIComponent(classId) +
+    '/remediation/' + encodeURIComponent(remId) + '/recall',
+    { method: 'POST' }
   );
 }
 

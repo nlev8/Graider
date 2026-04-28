@@ -35,7 +35,7 @@ function formatDate(iso) {
   }
 }
 
-export default function RemediationEffectiveness({ classId }) {
+export default function RemediationEffectiveness({ classId, addToast }) {
   var [data, setData] = useState(null);
   var [loading, setLoading] = useState(true);
   var [error, setError] = useState(null);
@@ -44,6 +44,11 @@ export default function RemediationEffectiveness({ classId }) {
   var [drawerStudentId, setDrawerStudentId] = useState(null);
   var [drawerStudentName, setDrawerStudentName] = useState("");
   var [drawerStandardCode, setDrawerStandardCode] = useState("");
+  // Recall confirm modal state (Phase 4.2 #5). Holds the rem object whose
+  // recall is awaiting confirmation; null when no modal is open.
+  var [recallTarget, setRecallTarget] = useState(null);
+  var [recallInFlight, setRecallInFlight] = useState(false);
+  var [recallError, setRecallError] = useState(null);
   // Bumping `reloadKey` forces the fetch effect to re-run after the drawer
   // publishes a new remediation (matches ProgressRankGrid Phase 4.2 fix).
   var [reloadKey, setReloadKey] = useState(0);
@@ -85,6 +90,47 @@ export default function RemediationEffectiveness({ classId }) {
   function onDrawerPublished() {
     // Refresh dashboard so the newly published remediation appears.
     setReloadKey(function(k) { return k + 1; });
+  }
+
+  // Phase 4.2 #5: Recall flow. Modal-confirmed; on success, toast + reload.
+  function openRecallModal(rem) {
+    setRecallTarget(rem);
+    setRecallError(null);
+  }
+  function closeRecallModal() {
+    if (recallInFlight) return;
+    setRecallTarget(null);
+    setRecallError(null);
+  }
+  function confirmRecall() {
+    if (!recallTarget) return;
+    setRecallInFlight(true);
+    setRecallError(null);
+    var rem = recallTarget;
+    var submittedCount = (rem.rows || []).filter(function(r) { return r.completed; }).length;
+    api.recallRemediation(classId, rem.remediation_id)
+      .then(function(res) {
+        if (!res || res.error || !res.recalled) {
+          setRecallError((res && (res.detail || res.error)) || "Recall failed");
+          return;
+        }
+        // Build toast text. Drop "N students had already submitted" if 0.
+        var toastMsg = "Recalled.";
+        if (submittedCount > 0) {
+          toastMsg = "Recalled. " + submittedCount + " student"
+            + (submittedCount === 1 ? "" : "s")
+            + " had already submitted " + String.fromCharCode(8212)
+            + " their work is preserved.";
+        }
+        if (typeof addToast === "function") addToast(toastMsg);
+        setRecallTarget(null);
+        // Re-fetch dashboard to pick up canonical state (is_active=false).
+        setReloadKey(function(k) { return k + 1; });
+      })
+      .catch(function(e) {
+        setRecallError((e && e.message) || "Recall failed");
+      })
+      .finally(function() { setRecallInFlight(false); });
   }
 
   if (loading) {
@@ -136,6 +182,25 @@ export default function RemediationEffectiveness({ classId }) {
                   <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
                     Published {formatDate(rem.created_at)} {String.fromCharCode(8226)} {rem.target_count} student{rem.target_count === 1 ? "" : "s"}
                   </span>
+                  {/* Phase 4.2 #5: Recall button (or Recalled badge if already inactive). */}
+                  <div style={{ marginLeft: "auto" }}>
+                    {rem.is_active === false ? (
+                      <span style={{
+                        fontSize: "0.78rem", padding: "3px 10px", borderRadius: "6px",
+                        background: "rgba(239,68,68,0.12)", color: "var(--danger)", fontWeight: 700,
+                      }}>Recalled</span>
+                    ) : (
+                      <button
+                        onClick={function() { openRecallModal(rem); }}
+                        className="btn"
+                        style={{
+                          padding: "5px 12px", fontSize: "0.8rem", fontWeight: 600,
+                          background: "transparent", color: "var(--danger)",
+                          border: "1px solid var(--danger)",
+                        }}
+                      >Recall</button>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ overflowX: "auto" }}>
@@ -203,6 +268,67 @@ export default function RemediationEffectiveness({ classId }) {
         targetStudentName={drawerStudentName}
         onPublished={onDrawerPublished}
       />
+
+      {/* Phase 4.2 #5: Recall confirm modal. Inline; ~30 LOC. */}
+      {recallTarget && (
+        <div
+          onClick={closeRecallModal}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9600,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            onClick={function(e) { e.stopPropagation(); }}
+            className="glass-card"
+            style={{ maxWidth: "440px", width: "100%", padding: "24px" }}
+          >
+            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, marginTop: 0, marginBottom: "12px" }}>
+              Recall this remediation?
+            </h3>
+            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
+              {(function() {
+                var n = (recallTarget.rows || []).filter(function(r) { return r.completed; }).length;
+                if (n > 0) {
+                  return (
+                    <>
+                      <strong>{n} student{n === 1 ? "" : "s"} already submitted</strong>
+                      {" " + String.fromCharCode(8212) + " their work is preserved. They'll just no longer see it in their dashboard."}
+                    </>
+                  );
+                }
+                return "Students will no longer see it in their dashboard.";
+              })()}
+            </p>
+            {recallError && (
+              <div style={{
+                padding: "10px 12px", borderRadius: "6px", marginTop: "12px",
+                background: "rgba(239,68,68,0.12)", color: "var(--danger)", fontSize: "0.85rem",
+              }}>{recallError}</div>
+            )}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "20px" }}>
+              <button
+                onClick={closeRecallModal}
+                disabled={recallInFlight}
+                className="btn"
+                style={{ padding: "8px 16px", fontSize: "0.85rem", opacity: recallInFlight ? 0.5 : 1 }}
+              >Cancel</button>
+              <button
+                onClick={confirmRecall}
+                disabled={recallInFlight}
+                className="btn"
+                style={{
+                  padding: "8px 16px", fontSize: "0.85rem", fontWeight: 600,
+                  background: "var(--danger)", color: "white", border: "none",
+                  opacity: recallInFlight ? 0.6 : 1,
+                }}
+              >{recallInFlight ? "Recalling..." : "Recall"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
