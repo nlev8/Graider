@@ -371,6 +371,48 @@ def _sanitize_standards_mastery(sub):
     sub['results'] = results
 
 
+def _validate_and_clean_lesson(raw, *, teacher_id=None, class_id=None, standard_code=None):
+    """Phase 4.2 #1: validate the AI-generated `lesson` dict and return a
+    clean copy with EXACTLY the three known fields, or None if invalid.
+
+    Drops unknown keys (no unbounded data leak into JSONB). Logs the
+    specific failure reason. The caller treats None as "ship questions
+    only, no lesson" — lesson is a nice-to-have, not load-bearing.
+
+    Per-field constraints: non-empty string, ≤1500 chars after strip().
+    """
+    if not isinstance(raw, dict):
+        _logger.warning(
+            "remediation.lesson_invalid_dropped reason=not_dict teacher=%s class=%s standard=%s actual_type=%s",
+            teacher_id, class_id, standard_code, type(raw).__name__,
+        )
+        return None
+    cleaned = {}
+    for field in ('intro', 'worked_example', 'key_takeaway'):
+        val = raw.get(field)
+        if not isinstance(val, str):
+            _logger.warning(
+                "remediation.lesson_invalid_dropped reason=missing_or_nonstring_%s teacher=%s class=%s standard=%s",
+                field, teacher_id, class_id, standard_code,
+            )
+            return None
+        stripped = val.strip()
+        if not stripped:
+            _logger.warning(
+                "remediation.lesson_invalid_dropped reason=empty_%s teacher=%s class=%s standard=%s",
+                field, teacher_id, class_id, standard_code,
+            )
+            return None
+        if len(stripped) > 1500:
+            _logger.warning(
+                "remediation.lesson_oversize_dropped reason=%s_%dchars teacher=%s class=%s standard=%s",
+                field, len(stripped), teacher_id, class_id, standard_code,
+            )
+            return None
+        cleaned[field] = stripped
+    return cleaned
+
+
 # ============ Teacher Endpoints ============
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
@@ -2311,18 +2353,34 @@ def post_remediate(class_id):
 
     # 7) Build remediation prompt. Output shape MUST be sections-shaped because
     # `_post_process_assignment` walks `assignment['sections'][*]['questions']`.
+    # Phase 4.2 #1: also requests a `lesson` field with three sub-fields
+    # (intro, worked_example, key_takeaway). KaTeX delimiters MUST be \(...\)
+    # and \[...\] — `frontend/src/utils/renderLatex.js` does NOT support $...$.
     grade = cls_row.get('grade_level') or '7'
     subject = cls_row.get('subject') or 'General'
     base_prompt = (
         f"Generate exactly 8 grade-{grade} {subject} practice questions aligned to "
-        f"standard {standard_code}. Mix: 5 multiple-choice questions (4 choices each, "
+        f"standard {standard_code}, AND a short lesson explaining the standard.\n\n"
+        f"QUESTIONS: Mix of 5 multiple-choice questions (4 choices each, "
         f"exactly 1 correct, marked with an 'answer' field whose value is either the "
         f"choice letter (A/B/C/D) or the choice text) and 3 short-answer questions "
         f"(each with an 'answer' field containing the model answer). "
         f"Difficulty: grade-level review. Each question MUST include a 'standard' "
-        f"field equal to '{standard_code}'. Return valid JSON of this exact shape: "
-        f"{{\"title\": \"Practice - {standard_code}\", \"sections\": "
-        f"[{{\"name\": \"Practice\", \"questions\": [...]}}]}}"
+        f"field equal to '{standard_code}'.\n\n"
+        f"LESSON: A 300-400 word total mini-lesson with three string fields: "
+        f"`intro` (~80-120 words explaining what standard {standard_code} is and "
+        f"why it matters), `worked_example` (~150-200 words: a single fully worked "
+        f"problem with problem statement, step-by-step reasoning, and final answer), "
+        f"and `key_takeaway` (1-2 sentence summary of the rule or principle). "
+        f"The worked example MUST demonstrate the same concept the practice "
+        f"questions test. For any math, use \\(...\\) for inline equations and "
+        f"\\[...\\] for display equations (NOT dollar signs — the renderer does "
+        f"not support them).\n\n"
+        f"Return valid JSON of this exact shape: "
+        f"{{\"title\": \"Practice - {standard_code}\", "
+        f"\"lesson\": {{\"intro\": \"...\", \"worked_example\": \"...\", "
+        f"\"key_takeaway\": \"...\"}}, "
+        f"\"sections\": [{{\"name\": \"Practice\", \"questions\": [...]}}]}}"
     )
 
     accommodation_segment = ""
@@ -2336,6 +2394,13 @@ def post_remediate(class_id):
                 g.teacher_id, target_student_id,
             )
             accommodation_segment = ""
+    if accommodation_segment:
+        # Phase 4.2 #1: extend accommodation directive to apply to lesson text too.
+        # Best-effort; AI compliance is not contracted (mixed-language output is acceptable).
+        accommodation_segment = (
+            accommodation_segment
+            + "\n\nApply these accommodations to the lesson text as well as the questions."
+        )
     final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
 
     # 8) Generate via OpenAIAdapter (matches planner_routes pattern).
@@ -2373,11 +2438,21 @@ def post_remediate(class_id):
 
         # Defensive: if the AI returned `{questions: [...]}` instead of sections shape,
         # wrap it so `_post_process_assignment`'s section iteration runs over the questions.
+        # Phase 4.2 #1: must preserve `lesson` through the wrapper — without this,
+        # AI responses with the {questions, lesson} shape would silently drop lesson.
         if isinstance(assignment, dict) and 'sections' not in assignment and 'questions' in assignment:
             assignment = {
                 'title': assignment.get('title', f"Practice - {standard_code}"),
+                'lesson': assignment.get('lesson'),
                 'sections': [{'name': 'Practice', 'questions': assignment.get('questions') or []}],
             }
+
+        # Capture lesson BEFORE _post_process_assignment runs. The processor
+        # iterates `sections` only (assignment_post_processing.py:2113ish);
+        # it doesn't touch top-level `lesson`. But capturing here makes the
+        # validation order explicit and protects against future processor
+        # changes.
+        raw_lesson = assignment.get('lesson') if isinstance(assignment, dict) else None
 
         assignment, extra_usage = _post_process_assignment(
             assignment, 8, target_total_points=80,
@@ -2400,6 +2475,12 @@ def post_remediate(class_id):
     if len(questions) < 3:
         return error_response("Generation produced too few valid questions", 422)
 
+    # Phase 4.2 #1: validate the lesson and build a clean dict (or None).
+    # Always-present `lesson` key in response (None if validation failed).
+    clean_lesson = _validate_and_clean_lesson(
+        raw_lesson, teacher_id=g.teacher_id, class_id=class_id, standard_code=standard_code,
+    )
+
     # 9) Audit log.
     if accommodation_segment:
         _logger.info(
@@ -2413,8 +2494,11 @@ def post_remediate(class_id):
     )
 
     # `datetime`/`timezone` are imported at module level (line 12).
+    # Phase 4.2 #1: response ALWAYS includes `lesson` key. None if validation
+    # failed; clean dict {intro, worked_example, key_takeaway} if valid.
     return jsonify({
         "questions": questions,
+        "lesson": clean_lesson,
         "target_mode": target_mode,
         "target_student_ids": target_student_ids,
         "standard_code": standard_code,

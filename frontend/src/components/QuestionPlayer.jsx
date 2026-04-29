@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import MatchingCards from "./MatchingCards";
 import QuestionFeedback from "./QuestionFeedback";
 import Icon from "./Icon";
+import LessonBlock from "./LessonBlock";
 
 /**
  * QuestionPlayer — One-at-a-time question engine.
@@ -36,6 +37,7 @@ export default function QuestionPlayer({
   assessment,
   studentAccommodation,
   lightMode,
+  lesson,
 }) {
   // Flatten sections into ordered question array
   var flatQuestions = useMemo(function() {
@@ -354,6 +356,9 @@ export default function QuestionPlayer({
 
       {/* ── Question Area ── */}
       <div style={questionContainerStyle}>
+        {/* Phase 4.2 #1: lesson at the top of question 1 only.
+            Optional read; students who already know can scroll past. */}
+        {currentIndex === 0 && lesson && <LessonBlock lesson={lesson} />}
         {/* Section header */}
         {showSectionHeader && (
           <div style={{ textAlign: "center", marginBottom: "20px", width: "100%" }}>
