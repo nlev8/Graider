@@ -1238,10 +1238,15 @@ class TestPublishToClassRoundTripsLesson:
     request body. Tests that posting `{content: {questions, lesson}}` results
     in both keys reaching `published_content.content`."""
 
+    @patch('backend.routes.student_account_routes._generate_class_code')
     @patch('backend.routes.student_account_routes._get_teacher_supabase')
     def test_publish_to_class_round_trips_lesson_in_content(
-        self, mock_sb_fn, client, teacher_headers,
+        self, mock_sb_fn, mock_gen_code, client, teacher_headers,
     ):
+        # _generate_class_code calls _get_supabase (NOT _get_teacher_supabase)
+        # which would hit a real Supabase client in CI without env credentials.
+        # Pattern matches existing TestPublishToClassHardening tests.
+        mock_gen_code.return_value = 'TEST02'
         captured = {}
         table_data = {
             'classes': CLS_OWNED,
