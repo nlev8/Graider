@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as api from "../services/api";
+import LessonBlock from "../components/LessonBlock";
 
 /**
  * Phase 4 — Remediation Drawer.
+ * Phase 4.2 #1: also previews + round-trips a lesson dict to publish payload.
  *
  * State machine: idle → generating → preview → (regenerating | publishing) → success | error
  */
@@ -184,9 +186,14 @@ export default function RemediationDrawer({
     var localRef = { cancelled: false };
     cancelRef.current = localRef;
     setState("publishing");
+    // Phase 4.2 #1: round-trip the validated lesson dict (or null) through to
+    // publish_to_class so it lands in published_content.content JSONB. Without
+    // this, the lesson would silently disappear before storage.
+    var contentPayload = { questions: questions };
+    if (data && data.lesson) contentPayload.lesson = data.lesson;
     api.publishToClass(
       classId,
-      { questions: questions },
+      contentPayload,
       "assessment",
       "Remediation: " + standardCode,
       // Phase 4.2 #6: persist target_standard so the Effectiveness dashboard
@@ -271,6 +278,8 @@ export default function RemediationDrawer({
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {/* Phase 4.2 #1: lesson preview above questions. */}
+              {data && data.lesson && <LessonBlock lesson={data.lesson} />}
               {validationError && (
                 <div style={{
                   padding: "10px 14px", borderRadius: "6px",

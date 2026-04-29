@@ -936,3 +936,349 @@ class TestPublishToClassHardening:
         }, headers=teacher_headers)
         assert resp.status_code == 200
         assert captured.get('payload', {}).get('target_student_ids') == [STU_1]
+
+
+# ============ Phase 4.2 #1 Lesson-text tests ============
+# Spec: docs/superpowers/specs/2026-04-29-phase4.2-lesson-text-design.md
+
+VALID_LESSON = {
+    'intro': 'This standard asks students to combine like terms to simplify expressions. '
+             'Like terms have the same variable raised to the same power.',
+    'worked_example': 'Problem: Simplify 3x + 5 + 2x - 1.\n'
+                      'Step 1: Identify like terms. 3x and 2x are like terms; 5 and -1 are like terms.\n'
+                      'Step 2: Combine: (3x + 2x) + (5 - 1) = 5x + 4.\n'
+                      'Answer: 5x + 4.',
+    'key_takeaway': 'Combine variable terms with the same letter and exponent; combine constants separately.',
+}
+
+
+def _set_up_llm_mocks_with_ai_text(mock_adapter_cls, mock_get_api_key, ai_response_dict):
+    """Variant of _set_up_llm_mocks that lets the test inject the AI's
+    JSON response shape directly. Used for lesson tests where we need to
+    control whether/what the AI returns in the `lesson` field."""
+    mock_get_api_key.return_value = "sk-test-fake"
+    mock_adapter = MagicMock()
+    mock_completion = MagicMock()
+    mock_completion.usage = None
+    text_part = MagicMock()
+    text_part.text = json.dumps(ai_response_dict)
+    mock_completion.content_parts = [text_part]
+    mock_adapter.chat.return_value = mock_completion
+    mock_adapter_cls.return_value = mock_adapter
+    return mock_adapter
+
+
+def _lesson_test_supabase():
+    """Returns a supabase mock with the boilerplate fixtures every lesson
+    test needs: owned class, enrolled student with historical evidence."""
+    mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+    return _multi_table_sb({
+        'classes': CLS_OWNED,
+        'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+        'students': [{'id': STU_1}],
+        'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+        'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                               'content_type': 'assessment'}],
+    })
+
+
+def _post_processed_assignment():
+    """The shape `_post_process_assignment` returns when mocked. 8 valid
+    questions in sections shape — matches existing happy-path tests."""
+    return ({
+        'title': 'Practice - MA.6.AR.1.2',
+        'sections': [{'name': 'Practice', 'questions': [
+            {'id': i, 'text': f'Q{i}', 'type': 'mcq' if i < 6 else 'short_answer',
+             'standard': 'MA.6.AR.1.2'} for i in range(1, 9)
+        ]}],
+    }, {'total_tokens': 1500})
+
+
+class TestLessonGenerationHappyPath:
+    """Valid lesson dict round-trips through to the response."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_valid_lesson_round_trips_to_response(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        _set_up_llm_mocks_with_ai_text(
+            mock_adapter_cls, mock_get_api_key,
+            {'title': 'Practice - MA.6.AR.1.2', 'lesson': VALID_LESSON,
+             'sections': [{'name': 'Practice', 'questions': []}]},
+        )
+        mock_pp.return_value = _post_processed_assignment()
+        mock_sb_fn.return_value = _lesson_test_supabase()
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['lesson'] is not None
+        assert body['lesson']['intro'] == VALID_LESSON['intro']
+        assert body['lesson']['worked_example'] == VALID_LESSON['worked_example']
+        assert body['lesson']['key_takeaway'] == VALID_LESSON['key_takeaway']
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_response_always_includes_lesson_key_even_when_invalid(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        """Spec contract: response.lesson is always present (None if dropped, dict if valid).
+        Frontend null-check is consistent."""
+        # AI returns NO lesson key.
+        _set_up_llm_mocks_with_ai_text(
+            mock_adapter_cls, mock_get_api_key,
+            {'title': 'P', 'sections': [{'name': 'P', 'questions': []}]},
+        )
+        mock_pp.return_value = _post_processed_assignment()
+        mock_sb_fn.return_value = _lesson_test_supabase()
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert 'lesson' in body, "response must always include lesson key"
+        assert body['lesson'] is None
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_lesson_capture_independent_of_post_process(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        """`_post_process_assignment` doesn't touch top-level lesson — even if
+        the post-processor (mocked here) returns sections without a lesson key,
+        the lesson captured BEFORE the call still surfaces in the response."""
+        _set_up_llm_mocks_with_ai_text(
+            mock_adapter_cls, mock_get_api_key,
+            {'title': 'P', 'lesson': VALID_LESSON,
+             'sections': [{'name': 'P', 'questions': []}]},
+        )
+        # Mocked post-process returns no lesson key — captures the case where
+        # the processor strips it. Route should still surface lesson via the
+        # raw_lesson capture before the call.
+        mock_pp.return_value = _post_processed_assignment()
+        mock_sb_fn.return_value = _lesson_test_supabase()
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        body = resp.get_json()
+        assert body['lesson'] is not None
+
+
+class TestLessonValidationDrop:
+    """Each drop reason yields response.lesson is None."""
+
+    def _drive(self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+               client, teacher_headers, lesson_value):
+        _set_up_llm_mocks_with_ai_text(
+            mock_adapter_cls, mock_get_api_key,
+            {'title': 'P', 'lesson': lesson_value,
+             'sections': [{'name': 'P', 'questions': []}]},
+        )
+        mock_pp.return_value = _post_processed_assignment()
+        mock_sb_fn.return_value = _lesson_test_supabase()
+        return client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_lesson_as_string_dropped(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        resp = self._drive(mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+                            client, teacher_headers, "this is not a dict")
+        assert resp.get_json()['lesson'] is None
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_lesson_as_list_dropped(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        resp = self._drive(mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+                            client, teacher_headers, ["intro", "worked", "takeaway"])
+        assert resp.get_json()['lesson'] is None
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_lesson_missing_intro_dropped(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        partial = {'worked_example': 'WE', 'key_takeaway': 'KT'}
+        resp = self._drive(mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+                            client, teacher_headers, partial)
+        assert resp.get_json()['lesson'] is None
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_lesson_empty_per_field_dropped(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        empty_we = {'intro': 'I', 'worked_example': '   ', 'key_takeaway': 'KT'}
+        resp = self._drive(mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+                            client, teacher_headers, empty_we)
+        assert resp.get_json()['lesson'] is None
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_lesson_non_string_per_field_dropped(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        non_string = {'intro': 'I', 'worked_example': 'WE', 'key_takeaway': 42}
+        resp = self._drive(mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+                            client, teacher_headers, non_string)
+        assert resp.get_json()['lesson'] is None
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_lesson_per_field_oversize_dropped(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        oversize = {'intro': 'I' * 1501, 'worked_example': 'WE', 'key_takeaway': 'KT'}
+        resp = self._drive(mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+                            client, teacher_headers, oversize)
+        assert resp.get_json()['lesson'] is None
+
+
+class TestLessonExtraFieldsStripped:
+    """Validator must construct a clean dict with exactly the three known fields.
+    Extra keys (`summary`, `tags`) must NOT be passed through (no unbounded
+    JSONB leak)."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_extra_fields_stripped(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        bloated = dict(VALID_LESSON)
+        bloated['summary'] = 'should not pass through'
+        bloated['tags'] = ['math', 'algebra']
+        bloated['arbitrary_dict'] = {'key': 'unbounded data attack vector'}
+        _set_up_llm_mocks_with_ai_text(
+            mock_adapter_cls, mock_get_api_key,
+            {'title': 'P', 'lesson': bloated,
+             'sections': [{'name': 'P', 'questions': []}]},
+        )
+        mock_pp.return_value = _post_processed_assignment()
+        mock_sb_fn.return_value = _lesson_test_supabase()
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        body = resp.get_json()
+        assert body['lesson'] is not None
+        # CRITICAL: response.lesson must contain ONLY the three canonical fields.
+        assert set(body['lesson'].keys()) == {'intro', 'worked_example', 'key_takeaway'}, (
+            f"Extra fields leaked through validator: {set(body['lesson'].keys())}"
+        )
+
+
+class TestFallbackWrapperPreservesLesson:
+    """If AI returns {questions, lesson} (NOT sections-shape), the route's
+    fallback wrapper at line ~2400 must preserve `lesson` through to validation.
+    Without the fix, the wrapper would silently drop lesson before the
+    raw_lesson capture."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_fallback_wrapper_preserves_lesson(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        # AI returns non-sections shape: {questions, lesson} at top level.
+        _set_up_llm_mocks_with_ai_text(
+            mock_adapter_cls, mock_get_api_key,
+            {'title': 'P', 'lesson': VALID_LESSON,
+             'questions': [{'id': i, 'standard': 'MA.6.AR.1.2'} for i in range(1, 9)]},
+        )
+        mock_pp.return_value = _post_processed_assignment()
+        mock_sb_fn.return_value = _lesson_test_supabase()
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Without the fallback-wrapper preserving lesson, this would be None.
+        assert body['lesson'] is not None, (
+            "Fallback wrapper at line ~2400 dropped lesson — it must copy lesson into "
+            "the wrapped assignment dict so raw_lesson capture sees it"
+        )
+        assert body['lesson']['intro'] == VALID_LESSON['intro']
+
+
+class TestPublishToClassRoundTripsLesson:
+    """`/api/publish-to-class` must write `content` JSONB verbatim from the
+    request body. Tests that posting `{content: {questions, lesson}}` results
+    in both keys reaching `published_content.content`."""
+
+    @patch('backend.routes.student_account_routes._generate_class_code')
+    @patch('backend.routes.student_account_routes._get_teacher_supabase')
+    def test_publish_to_class_round_trips_lesson_in_content(
+        self, mock_sb_fn, mock_gen_code, client, teacher_headers,
+    ):
+        # _generate_class_code calls _get_supabase (NOT _get_teacher_supabase)
+        # which would hit a real Supabase client in CI without env credentials.
+        # Pattern matches existing TestPublishToClassHardening tests.
+        mock_gen_code.return_value = 'TEST02'
+        captured = {}
+        table_data = {
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'published_content': [{'id': 'new-content-id'}],
+        }
+        def _table(name):
+            chain = _make_chain(table_data.get(name, []))
+            if name == 'published_content':
+                def _spy_insert(payload):
+                    captured['payload'] = payload
+                    return chain
+                chain.insert.side_effect = _spy_insert
+            return chain
+        sb = MagicMock()
+        sb.table.side_effect = _table
+        mock_sb_fn.return_value = sb
+        resp = client.post('/api/publish-to-class', json={
+            'class_id': 'cls-1',
+            'content': {
+                'questions': [{'text': 'Q1', 'standard': 'MA.6.AR.1.2'}],
+                'lesson': VALID_LESSON,
+            },
+            'content_type': 'assessment', 'title': 'Remediation',
+            'target_student_ids': [STU_1],
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        # Verify lesson reached the JSONB column verbatim.
+        stored_content = captured.get('payload', {}).get('content', {})
+        assert 'lesson' in stored_content, (
+            "publish_to_class must write content verbatim — lesson missing from JSONB row"
+        )
+        assert stored_content['lesson'] == VALID_LESSON
+        assert stored_content.get('questions') == [{'text': 'Q1', 'standard': 'MA.6.AR.1.2'}]

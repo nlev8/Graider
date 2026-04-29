@@ -542,7 +542,14 @@ export default function StudentPortal({
           </div>
         )}
         <QuestionPlayer
-          sections={assessment?.sections}
+          sections={
+            assessment?.sections
+              ? assessment.sections
+              : (assessment?.questions
+                  ? [{ name: "Practice", questions: assessment.questions }]
+                  : [])
+          }
+          lesson={assessment?.lesson || (assessment?.content && assessment.content.lesson) || null}
           contentType={assessment?.settings?.content_type || "assessment"}
           settings={assessment?.settings || {}}
           accommodations={deliveryAccommodations}
