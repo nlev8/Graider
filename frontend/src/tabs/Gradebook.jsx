@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import * as api from "../services/api";
 import SubmissionDetail from "./SubmissionDetail";
+import RemediationBadges from "../components/RemediationBadges";
 
 function masteryColor(pct) {
   if (pct == null) return { bg: "var(--glass-bg)", text: "var(--text-muted)", label: String.fromCharCode(8212) };
@@ -114,7 +115,10 @@ export default function Gradebook({ classId }) {
                 {assessments.map(function(a) {
                   return (
                     <th key={a.content_id} style={{ position: "sticky", top: 0, background: "var(--card-bg)", padding: "10px 8px", fontSize: "0.7rem", fontWeight: 700, borderBottom: "1px solid var(--glass-border)", borderLeft: "1px solid var(--glass-border)", minWidth: "100px", textAlign: "center", zIndex: 2 }}>
-                      {a.title}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                        <span>{a.title}</span>
+                        <RemediationBadges item={a} />
+                      </div>
                     </th>
                   );
                 })}

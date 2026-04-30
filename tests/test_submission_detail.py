@@ -256,3 +256,39 @@ class TestSubmissionDetailHappyPath:
         assert body['total_attempts'] == 1
         assert len(body['sibling_attempts']) == 1
         assert body['sibling_attempts'][0]['submission_id'] == 'sub-only'
+
+
+# ============ Phase 4.2 #7 — Remediation badge fields ============
+# Spec: docs/superpowers/specs/2026-04-29-phase4.2-gradebook-remediation-badge-design.md
+
+class TestSubmissionDetailRemediationFields:
+    """Drawer header reads target_student_ids + is_active to render the same
+    pills the gradebook column header shows. Top-level fields, not nested."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_response_surfaces_target_and_active_for_remediation(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """For a remediation submission, response includes top-level
+        target_student_ids and is_active so the drawer renders the badges."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-rem-1', 'student_id': 'stu-1', 'content_id': 'rem-1',
+                 'attempt_number': 1, 'percentage': 75, 'submitted_at': '2026-04-16T10:00:00Z',
+                 'results': {'standards_mastery': {}, 'questions': []},
+                 'status': 'graded', 'score': 6, 'total_points': 8},
+            ],
+            'published_content': [{
+                'id': 'rem-1', 'title': 'Remediation: MA.6.AR.1.2', 'class_id': 'cls-1',
+                'is_active': True, 'target_student_ids': ['stu-1'],
+            }],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-rem-1/detail', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['target_student_ids'] == ['stu-1']
+        assert body['is_active'] is True
+        # Sanity: regular content_title still surfaces alongside the new fields.
+        assert body['content_title'] == 'Remediation: MA.6.AR.1.2'
