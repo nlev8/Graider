@@ -24,6 +24,10 @@ export default function RemediationDrawer({
   var [variants, setVariants] = useState([]);
   var [activeVariantIndex, setActiveVariantIndex] = useState(0);
   var [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
+  // Phase 4.2 #3: pre-generation config state. Default 8 + same matches
+  // current behavior; teacher tweaks before clicking Generate.
+  var [configCount, setConfigCount] = useState(8);
+  var [configDifficulty, setConfigDifficulty] = useState("same");
   // Validation error is shown inline in the preview state (not the error state).
   // Separate state slot so the drawer doesn't drop into the full-screen "error"
   // path (which is reserved for network/server errors).
@@ -52,16 +56,41 @@ export default function RemediationDrawer({
       setState("idle");
       return;
     }
-    var localRef = { cancelled: false };
-    cancelRef.current = localRef;
-    setState("generating");
+    // Phase 4.2 #3: drawer opens to "config" state, NOT auto-generating.
+    // Teacher picks count + difficulty + clicks Generate (handleGenerate).
+    setState("config");
     setError(null);
     setData(null);
     setQuestions([]);
     setVariants([]);
     setActiveVariantIndex(0);
-    setValidationError(null);  // clear on every fresh open (defensive even though parent unmounts on close)
-    var payload = { standard_code: standardCode, target_mode: targetMode };
+    setValidationError(null);
+    setConfigCount(8);  // Reset config to defaults on every open (not sticky).
+    setConfigDifficulty("same");
+    return function() {
+      if (cancelRef.current) cancelRef.current.cancelled = true;
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    };
+  }, [open, classId, standardCode, targetMode, targetStudentId]);
+
+  // Phase 4.2 #3: extracted from the open-effect. Called when teacher
+  // clicks Generate in the config state.
+  function handleGenerate() {
+    if (cancelRef.current) cancelRef.current.cancelled = true;
+    var localRef = { cancelled: false };
+    cancelRef.current = localRef;
+    setState("generating");
+    setError(null);
+    setValidationError(null);
+    var payload = {
+      standard_code: standardCode,
+      target_mode: targetMode,
+      count: configCount,
+      difficulty: configDifficulty,
+    };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
     api.postRemediate(classId, payload)
       .then(function(res) {
@@ -72,8 +101,6 @@ export default function RemediationDrawer({
           return;
         }
         setData(res);
-        // Phase 4.2 #2: branch on response.mode. Personalized = N variants
-        // each with their own questions/lesson; shared = single questions.
         if (res.mode === "personalized" && Array.isArray(res.variants) && res.variants.length > 0) {
           setVariants(res.variants);
           setActiveVariantIndex(0);
@@ -89,16 +116,7 @@ export default function RemediationDrawer({
         setError((e && e.message) || "Network error");
         setState("error");
       });
-    // Always tear down the timer here — if the parent unmounts mid-success-flash
-    // the 2s onClose timer must not leak.
-    return function() {
-      localRef.cancelled = true;
-      if (successTimerRef.current) {
-        clearTimeout(successTimerRef.current);
-        successTimerRef.current = null;
-      }
-    };
-  }, [open, classId, standardCode, targetMode, targetStudentId]);
+  }
 
   // Esc to close. If the regenerate-confirm dialog is open, Esc dismisses
   // just the dialog instead of the whole drawer.
@@ -125,7 +143,13 @@ export default function RemediationDrawer({
     var localRef = { cancelled: false };
     cancelRef.current = localRef;
     setState("regenerating");
-    var payload = { standard_code: standardCode, target_mode: targetMode };
+    // Phase 4.2 #3: regenerate keeps current config (no config re-prompt).
+    var payload = {
+      standard_code: standardCode,
+      target_mode: targetMode,
+      count: configCount,
+      difficulty: configDifficulty,
+    };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
     api.postRemediate(classId, payload)
       .then(function(res) {
@@ -370,9 +394,72 @@ export default function RemediationDrawer({
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-          {state === "generating" || state === "regenerating" ? (
+          {state === "config" ? (
+            /* Phase 4.2 #3: pre-generation config dialog. Slider for count
+               (3-15) + three-button difficulty toggle. */
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "480px" }}>
+              <div>
+                <h4 style={{ margin: "0 0 4px", fontSize: "0.95rem", fontWeight: 700 }}>Configure remediation</h4>
+                <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                  Set length and difficulty before generating.
+                </p>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px" }}>
+                  Question count: <span style={{ color: "var(--accent-primary)" }}>{configCount}</span>
+                </label>
+                <input
+                  type="range"
+                  min={3}
+                  max={15}
+                  step={1}
+                  value={configCount}
+                  onChange={function(e) { setConfigCount(parseInt(e.target.value, 10)); }}
+                  disabled={disabled}
+                  style={{ width: "100%" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                  <span>3</span>
+                  <span>15</span>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px" }}>
+                  Difficulty
+                </label>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {["easier", "same", "harder"].map(function(diff) {
+                    var active = diff === configDifficulty;
+                    return (
+                      <button key={diff}
+                              onClick={function() { setConfigDifficulty(diff); }}
+                              disabled={disabled}
+                              style={{
+                                flex: 1, padding: "8px 12px", fontSize: "0.85rem",
+                                borderRadius: "6px", fontWeight: active ? 700 : 500,
+                                border: active ? "1px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                                background: active ? "rgba(99,102,241,0.15)" : "transparent",
+                                color: active ? "var(--accent-primary)" : "var(--text-primary)",
+                                cursor: disabled ? "not-allowed" : "pointer",
+                                textTransform: "capitalize",
+                              }}>
+                        {diff}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ margin: "6px 0 0", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                  {configDifficulty === "easier"
+                    ? "Simpler vocabulary, more scaffolding."
+                    : configDifficulty === "harder"
+                    ? "More challenging vocabulary, higher cognitive demand."
+                    : "Grade-level review."}
+                </p>
+              </div>
+            </div>
+          ) : state === "generating" || state === "regenerating" ? (
             <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
-              {state === "regenerating" ? "Regenerating..." : "Generating 8 practice questions..."}
+              {state === "regenerating" ? "Regenerating..." : ("Generating " + configCount + " practice questions...")}
             </div>
           ) : state === "error" ? (
             <div style={{ padding: "20px", color: "var(--danger)", textAlign: "center" }}>
@@ -447,11 +534,27 @@ export default function RemediationDrawer({
           )}
         </div>
 
-        {/* Footer */}
-        {(state === "preview" || state === "publishing") && (
+        {/* Footer — config state */}
+        {state === "config" && (
           <div style={{ padding: "12px 20px", borderTop: "1px solid var(--glass-border)",
                         display: "flex", gap: "8px", justifyContent: "flex-end" }}>
             <button onClick={onClose} disabled={disabled} className="btn btn-secondary">Cancel</button>
+            <button onClick={handleGenerate} disabled={disabled} className="btn btn-primary">
+              Generate
+            </button>
+          </div>
+        )}
+
+        {/* Footer — preview / publishing state */}
+        {(state === "preview" || state === "publishing") && (
+          <div style={{ padding: "12px 20px", borderTop: "1px solid var(--glass-border)",
+                        display: "flex", gap: "8px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <button onClick={onClose} disabled={disabled} className="btn btn-secondary">Cancel</button>
+            {/* Phase 4.2 #3: Adjust settings returns to config state with
+                preview state preserved (in case teacher cancels back). */}
+            <button onClick={function() { setState("config"); }} disabled={disabled} className="btn btn-secondary">
+              Adjust settings
+            </button>
             <button onClick={function() { setConfirmRegenOpen(true); }} disabled={disabled} className="btn btn-secondary">
               Regenerate all
             </button>

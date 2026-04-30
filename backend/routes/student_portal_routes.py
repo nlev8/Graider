@@ -423,6 +423,14 @@ REMEDIATION_PER_STUDENT_WEEKLY_CAP = 3
 # Spec: docs/superpowers/specs/2026-04-30-phase4.2-perstudent-gen-design.md
 REMEDIATION_PERSONALIZED_MAX = 10
 
+# Phase 4.2 #3: pre-generation config dialog params.
+# Spec: docs/superpowers/specs/2026-04-30-phase4.2-pregen-config-design.md
+REMEDIATION_COUNT_MIN = 3
+REMEDIATION_COUNT_MAX = 15
+REMEDIATION_COUNT_DEFAULT = 8
+DIFFICULTY_OPTIONS = ('easier', 'same', 'harder')
+REMEDIATION_DIFFICULTY_DEFAULT = 'same'
+
 
 def _check_remediation_cap(db, teacher_id, target_student_ids):
     """Phase 4.2 #8: returns a list of capped student IDs (those who would
@@ -469,20 +477,74 @@ def _check_remediation_cap(db, teacher_id, target_student_ids):
     return [sid for sid, c in counts.items() if c >= REMEDIATION_PER_STUDENT_WEEKLY_CAP]
 
 
-def _build_remediation_prompt(*, grade, subject, standard_code):
-    """Build the base prompt used by both shared and personalized remediation.
-    Extracted to support per-thread invocation without re-running the full
-    f-string interpolation per worker.
+def _difficulty_directive(difficulty, grade):
+    """Phase 4.2 #3: map (difficulty, grade) → prompt directive.
+
+    Clamps grade arithmetic to K-12 (Codex MINOR — no grade-13 references).
+    For non-numeric grade strings, uses generic phrasing.
     """
+    grade_num = None
+    try:
+        grade_num = int(str(grade).strip())
+    except (ValueError, TypeError, AttributeError):
+        pass
+
+    if difficulty == 'easier':
+        if grade_num is not None:
+            target = max(1, grade_num - 1)
+            return (
+                f"Use simpler vocabulary and more scaffolding. "
+                f"Aim for grade-{target} difficulty."
+            )
+        return (
+            "Use simpler vocabulary and more scaffolding. "
+            "Aim for content below the current grade level."
+        )
+    if difficulty == 'harder':
+        if grade_num is not None:
+            target = min(12, grade_num + 1)
+            return (
+                f"Use more challenging vocabulary and higher cognitive demand. "
+                f"Include some grade-{target} concepts."
+            )
+        return (
+            "Use more challenging vocabulary and higher cognitive demand. "
+            "Include some content above the current grade level."
+        )
+    # 'same' (default)
+    return "Difficulty: grade-level review."
+
+
+def _build_remediation_prompt(*, grade, subject, standard_code, count=None, difficulty=None):
+    """Build the base prompt used by both shared and personalized remediation.
+
+    Phase 4.2 #1 added the lesson section.
+    Phase 4.2 #3 parameterized count + difficulty (Codex MAJOR — earlier
+    duplicate inline shared-mode prompt is now removed; this function is
+    the single source of truth for the prompt).
+
+    `count` defaults to REMEDIATION_COUNT_DEFAULT and is used for:
+      - "Generate exactly N..." in the prompt
+      - MC/SA mix split: mc=round(N*0.6), sa=N-mc
+    `difficulty` defaults to REMEDIATION_DIFFICULTY_DEFAULT and threads
+    through `_difficulty_directive`.
+    """
+    if count is None:
+        count = REMEDIATION_COUNT_DEFAULT
+    if difficulty is None:
+        difficulty = REMEDIATION_DIFFICULTY_DEFAULT
+    mc = round(count * 0.6)
+    sa = count - mc
+    diff_directive = _difficulty_directive(difficulty, grade)
     return (
-        f"Generate exactly 8 grade-{grade} {subject} practice questions aligned to "
+        f"Generate exactly {count} grade-{grade} {subject} practice questions aligned to "
         f"standard {standard_code}, AND a short lesson explaining the standard.\n\n"
-        f"QUESTIONS: Mix of 5 multiple-choice questions (4 choices each, "
+        f"QUESTIONS: Mix of {mc} multiple-choice questions (4 choices each, "
         f"exactly 1 correct, marked with an 'answer' field whose value is either the "
-        f"choice letter (A/B/C/D) or the choice text) and 3 short-answer questions "
+        f"choice letter (A/B/C/D) or the choice text) and {sa} short-answer questions "
         f"(each with an 'answer' field containing the model answer). "
-        f"Difficulty: grade-level review. Each question MUST include a 'standard' "
-        f"field equal to '{standard_code}'.\n\n"
+        f"Each question MUST include a 'standard' field equal to '{standard_code}'. "
+        f"{diff_directive}\n\n"
         f"LESSON: A 300-400 word total mini-lesson with three string fields: "
         f"`intro` (~80-120 words explaining what standard {standard_code} is and "
         f"why it matters), `worked_example` (~150-200 words: a single fully worked "
@@ -502,7 +564,8 @@ def _build_remediation_prompt(*, grade, subject, standard_code):
 
 def _gen_variant_for_student(*, sid, segment, students_by_id, api_key,
                              base_prompt, subject, grade, standard_code,
-                             ctx_uid, ctx_client, teacher_id, class_id):
+                             ctx_uid, ctx_client, teacher_id, class_id,
+                             count=None):
     """Phase 4.2 #2 worker: builds prompt, calls AI once, post-processes,
     returns {student_id, student_name, questions, lesson, usage} or raises.
 
@@ -546,8 +609,10 @@ def _gen_variant_for_student(*, sid, segment, students_by_id, api_key,
         }
     raw_lesson = assignment.get('lesson') if isinstance(assignment, dict) else None
 
+    # Phase 4.2 #3: count is parameterized (default preserves prior behavior).
+    effective_count = count if count is not None else REMEDIATION_COUNT_DEFAULT
     assignment, _extra_usage = _post_process_assignment(
-        assignment, 8, target_total_points=80,
+        assignment, effective_count, target_total_points=effective_count * 10,
         subject=subject, grade=grade,
         valid_standard_codes=[standard_code],
         user_id=ctx_uid, client=ctx_client,
@@ -2424,6 +2489,37 @@ def post_remediate(class_id):
     if not standard_code:
         return error_response("standard_code is required", 400)
 
+    # 4.5) Phase 4.2 #3: validate optional count + difficulty config.
+    # Strict 400 on invalid explicit values; defaults only when missing.
+    # Reject booleans explicitly — bool is an int subclass in Python, so
+    # `count=true` would otherwise pass an `isinstance(int)` check.
+    raw_count = body.get('count')
+    if raw_count is None:
+        count = REMEDIATION_COUNT_DEFAULT
+    else:
+        if isinstance(raw_count, bool) or not isinstance(raw_count, int):
+            return error_response(
+                f"count must be an integer between {REMEDIATION_COUNT_MIN} and {REMEDIATION_COUNT_MAX}",
+                400,
+            )
+        if raw_count < REMEDIATION_COUNT_MIN or raw_count > REMEDIATION_COUNT_MAX:
+            return error_response(
+                f"count must be between {REMEDIATION_COUNT_MIN} and {REMEDIATION_COUNT_MAX}",
+                400,
+            )
+        count = raw_count
+
+    raw_difficulty = body.get('difficulty')
+    if raw_difficulty is None:
+        difficulty = REMEDIATION_DIFFICULTY_DEFAULT
+    elif raw_difficulty in DIFFICULTY_OPTIONS:
+        difficulty = raw_difficulty
+    else:
+        return error_response(
+            "difficulty must be one of: " + ", ".join(DIFFICULTY_OPTIONS),
+            400,
+        )
+
     target_student_ids = []
 
     # Resolve current-class assessment/assignment content (matches Phase 2
@@ -2612,6 +2708,7 @@ def post_remediate(class_id):
         subject = cls_row.get('subject') or 'General'
         base_prompt = _build_remediation_prompt(
             grade=grade, subject=subject, standard_code=standard_code,
+            count=count, difficulty=difficulty,
         )
 
         # Capture per-request context BEFORE submitting to the worker pool.
@@ -2648,6 +2745,7 @@ def post_remediate(class_id):
                     ctx_client=_ctx_client,
                     teacher_id=captured_teacher_id,
                     class_id=captured_class_id,
+                    count=count,
                 ): sid
                 for sid in target_student_ids
             }
@@ -2692,42 +2790,23 @@ def post_remediate(class_id):
 
         return jsonify({
             "mode": "personalized",
+            "count": count,
+            "difficulty": difficulty,
             "variants": variants,
             "target_mode": target_mode,
             "standard_code": standard_code,
             "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         }), 200
 
-    # 7) Build remediation prompt. Output shape MUST be sections-shaped because
-    # `_post_process_assignment` walks `assignment['sections'][*]['questions']`.
-    # Phase 4.2 #1: also requests a `lesson` field with three sub-fields
-    # (intro, worked_example, key_takeaway). KaTeX delimiters MUST be \(...\)
-    # and \[...\] — `frontend/src/utils/renderLatex.js` does NOT support $...$.
+    # 7) Build remediation prompt via the shared helper (Codex MAJOR — was
+    # previously duplicated inline; now both shared and personalized paths
+    # use the same _build_remediation_prompt single source of truth).
+    # Phase 4.2 #3: count + difficulty parameterize the helper output.
     grade = cls_row.get('grade_level') or '7'
     subject = cls_row.get('subject') or 'General'
-    base_prompt = (
-        f"Generate exactly 8 grade-{grade} {subject} practice questions aligned to "
-        f"standard {standard_code}, AND a short lesson explaining the standard.\n\n"
-        f"QUESTIONS: Mix of 5 multiple-choice questions (4 choices each, "
-        f"exactly 1 correct, marked with an 'answer' field whose value is either the "
-        f"choice letter (A/B/C/D) or the choice text) and 3 short-answer questions "
-        f"(each with an 'answer' field containing the model answer). "
-        f"Difficulty: grade-level review. Each question MUST include a 'standard' "
-        f"field equal to '{standard_code}'.\n\n"
-        f"LESSON: A 300-400 word total mini-lesson with three string fields: "
-        f"`intro` (~80-120 words explaining what standard {standard_code} is and "
-        f"why it matters), `worked_example` (~150-200 words: a single fully worked "
-        f"problem with problem statement, step-by-step reasoning, and final answer), "
-        f"and `key_takeaway` (1-2 sentence summary of the rule or principle). "
-        f"The worked example MUST demonstrate the same concept the practice "
-        f"questions test. For any math, use \\(...\\) for inline equations and "
-        f"\\[...\\] for display equations (NOT dollar signs — the renderer does "
-        f"not support them).\n\n"
-        f"Return valid JSON of this exact shape: "
-        f"{{\"title\": \"Practice - {standard_code}\", "
-        f"\"lesson\": {{\"intro\": \"...\", \"worked_example\": \"...\", "
-        f"\"key_takeaway\": \"...\"}}, "
-        f"\"sections\": [{{\"name\": \"Practice\", \"questions\": [...]}}]}}"
+    base_prompt = _build_remediation_prompt(
+        grade=grade, subject=subject, standard_code=standard_code,
+        count=count, difficulty=difficulty,
     )
 
     accommodation_segment = ""
@@ -2802,7 +2881,7 @@ def post_remediate(class_id):
         raw_lesson = assignment.get('lesson') if isinstance(assignment, dict) else None
 
         assignment, extra_usage = _post_process_assignment(
-            assignment, 8, target_total_points=80,
+            assignment, count, target_total_points=count * 10,
             subject=subject, grade=grade,
             valid_standard_codes=[standard_code],
             user_id=_ctx_uid, client=_ctx_client,
@@ -2847,6 +2926,8 @@ def post_remediate(class_id):
     # shapes. Frontend reads it to decide single-preview vs tab-per-variant.
     return jsonify({
         "mode": "shared",
+        "count": count,
+        "difficulty": difficulty,
         "questions": questions,
         "lesson": clean_lesson,
         "target_mode": target_mode,
