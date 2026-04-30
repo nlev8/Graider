@@ -1718,6 +1718,23 @@ export async function getClassRemediationEffectiveness(classId) {
   );
 }
 
+// Phase 4.2 #2: atomic batch publish for personalized remediations. Each
+// item targets a single student; backend writes all rows in a single
+// PostgREST request (atomic). Body shape:
+//   { class_id, content_type, items: [{content, target_student_ids, title, settings}, ...] }
+// Returns { success, content_ids: [...] }. On any cap/dup/ownership/network
+// failure, NO rows are written (atomicity guaranteed by single-INSERT).
+export async function publishToClassBatch(classId, items, contentType) {
+  return fetchApi('/api/publish-to-class-batch', {
+    method: 'POST',
+    body: JSON.stringify({
+      class_id: classId,
+      content_type: contentType || 'assessment',
+      items: items,
+    }),
+  });
+}
+
 // Phase 4.2 #5: soft-recall a remediation (flips published_content.is_active=false).
 // Idempotent: returns { recalled: true, already_recalled: true, rem_id } if
 // the remediation was already inactive (no second write).
