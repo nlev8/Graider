@@ -413,6 +413,56 @@ def _validate_and_clean_lesson(raw, *, teacher_id=None, class_id=None, standard_
     return cleaned
 
 
+# Phase 4.2 #8: per-student weekly cap on remediations.
+# Spec: docs/superpowers/specs/2026-04-30-phase4.2-weekly-cap-design.md
+REMEDIATION_PER_STUDENT_WEEKLY_CAP = 3
+
+
+def _check_remediation_cap(db, teacher_id, target_student_ids):
+    """Phase 4.2 #8: returns a list of capped student IDs (those who would
+    exceed the per-(teacher, student) weekly cap if a new remediation
+    targeting them were published now). Empty list = clear to publish.
+
+    Counting basis: every published_content row with target_student_ids
+    containing the student, created_at >= now() - 7 days, regardless of
+    is_active. Recall does NOT refund the slot — recall is an audit/
+    visibility action, not a quota refund (otherwise publish/recall/
+    republish would bypass the cap).
+
+    Cross-class scope: per-teacher across all classes (the harm is student
+    saturation, not class saturation).
+
+    Mock-friendly: avoids PostgREST JSONB containment operator. Fetches
+    by teacher_id + cutoff date, then Python-filters by membership.
+    """
+    from datetime import datetime, timedelta, timezone
+    if not target_student_ids:
+        return []
+    cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=7)).isoformat()
+
+    rows = db.table('published_content').select(
+        'id, target_student_ids, created_at'
+    ).eq('teacher_id', teacher_id).gte('created_at', cutoff).execute()
+
+    counts = {sid: 0 for sid in target_student_ids if sid}
+    for row in (rows.data or []):
+        targets = row.get('target_student_ids')
+        if not isinstance(targets, list):
+            # Defensive: malformed/non-list non-None values are skipped + logged.
+            # None is the normal class-wide case; don't log that.
+            if targets is not None:
+                _logger.warning(
+                    "remediation.cap.malformed_target_student_ids row=%s type=%s",
+                    row.get('id'), type(targets).__name__,
+                )
+            continue
+        for sid in counts:
+            if sid in targets:
+                counts[sid] = counts[sid] + 1
+
+    return [sid for sid, c in counts.items() if c >= REMEDIATION_PER_STUDENT_WEEKLY_CAP]
+
+
 # ============ Teacher Endpoints ============
 
 @student_portal_bp.route('/api/publish-assessment', methods=['POST'])
@@ -2362,6 +2412,28 @@ def post_remediate(class_id):
             )
             return error_response("No red-tier students on this standard", 400)
         target_student_ids = red_tier
+
+    # 6.5) Phase 4.2 #8: per-student weekly cap. Block before LLM call to
+    # save AI cost on doomed publishes. /publish-to-class enforces the cap
+    # again as defense against direct-API bypass.
+    capped = _check_remediation_cap(db, g.teacher_id, target_student_ids)
+    if capped:
+        _logger.warning(
+            "remediation.cap.exceeded teacher=%s class=%s standard=%s mode=%s capped=%s",
+            g.teacher_id, class_id, standard_code, target_mode, capped,
+        )
+        return jsonify({
+            "error": "Weekly remediation cap reached",
+            "detail": (
+                "Each student can receive at most "
+                + str(REMEDIATION_PER_STUDENT_WEEKLY_CAP)
+                + " remediations per rolling 7-day window. Wait up to "
+                + "7 days for an older remediation to age out."
+            ),
+            "capped_student_ids": capped,
+            "cap": REMEDIATION_PER_STUDENT_WEEKLY_CAP,
+            "window_days": 7,
+        }), 422
 
     # 7) Build remediation prompt. Output shape MUST be sections-shaped because
     # `_post_process_assignment` walks `assignment['sections'][*]['questions']`.

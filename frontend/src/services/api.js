@@ -100,7 +100,19 @@ async function fetchApi(endpoint, options = {}) {
     }
 
     if (!response.ok) {
-      throw new Error('API error: ' + response.status)
+      // Phase 4.2 #8: extract the JSON body (if any) and surface its
+      // `detail` or `error` message to the caller. Without this, callers
+      // see the unhelpful "API error: 422" string and lose useful context
+      // like the cap-exceeded explanation. Falls back to the legacy format
+      // if the body is missing or unparseable.
+      var errBody = null
+      try { errBody = await response.json() } catch (_) { errBody = null }
+      var errPayload = errBody || {}
+      var msg = errPayload.detail || errPayload.error || ('API error: ' + response.status)
+      var apiError = new Error(msg)
+      apiError.status = response.status
+      apiError.body = errPayload
+      throw apiError
     }
 
     return await response.json()

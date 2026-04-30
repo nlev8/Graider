@@ -461,6 +461,32 @@ def publish_to_class():
                 "One or more target_student_ids do not match a student record", 400
             )
 
+        # Phase 4.2 #8: per-student weekly cap. Defense at the actual write
+        # path against direct-API bypass of /remediate's pre-flight check.
+        # Spec: docs/superpowers/specs/2026-04-30-phase4.2-weekly-cap-design.md
+        from backend.routes.student_portal_routes import (
+            _check_remediation_cap,
+            REMEDIATION_PER_STUDENT_WEEKLY_CAP,
+        )
+        capped = _check_remediation_cap(db, teacher_id, target_student_ids)
+        if capped:
+            _logger.warning(
+                "publish_to_class.cap.exceeded teacher=%s class=%s capped=%s",
+                teacher_id, class_id, capped,
+            )
+            return jsonify({
+                "error": "Weekly remediation cap reached",
+                "detail": (
+                    "Each student can receive at most "
+                    + str(REMEDIATION_PER_STUDENT_WEEKLY_CAP)
+                    + " remediations per rolling 7-day window. Wait up to "
+                    + "7 days for an older remediation to age out."
+                ),
+                "capped_student_ids": capped,
+                "cap": REMEDIATION_PER_STUDENT_WEEKLY_CAP,
+                "window_days": 7,
+            }), 422
+
     join_code = _generate_class_code()
 
     # Validate assessment_category for assessments
