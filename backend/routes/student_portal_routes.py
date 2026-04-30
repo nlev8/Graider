@@ -417,6 +417,12 @@ def _validate_and_clean_lesson(raw, *, teacher_id=None, class_id=None, standard_
 # Spec: docs/superpowers/specs/2026-04-30-phase4.2-weekly-cap-design.md
 REMEDIATION_PER_STUDENT_WEEKLY_CAP = 3
 
+# Phase 4.2 #2: max students for personalized-mode class-wide generation.
+# If red-tier resolves to MORE than this with at least one having
+# accommodations, /remediate returns 422.
+# Spec: docs/superpowers/specs/2026-04-30-phase4.2-perstudent-gen-design.md
+REMEDIATION_PERSONALIZED_MAX = 10
+
 
 def _check_remediation_cap(db, teacher_id, target_student_ids):
     """Phase 4.2 #8: returns a list of capped student IDs (those who would
@@ -461,6 +467,119 @@ def _check_remediation_cap(db, teacher_id, target_student_ids):
                 counts[sid] = counts[sid] + 1
 
     return [sid for sid, c in counts.items() if c >= REMEDIATION_PER_STUDENT_WEEKLY_CAP]
+
+
+def _build_remediation_prompt(*, grade, subject, standard_code):
+    """Build the base prompt used by both shared and personalized remediation.
+    Extracted to support per-thread invocation without re-running the full
+    f-string interpolation per worker.
+    """
+    return (
+        f"Generate exactly 8 grade-{grade} {subject} practice questions aligned to "
+        f"standard {standard_code}, AND a short lesson explaining the standard.\n\n"
+        f"QUESTIONS: Mix of 5 multiple-choice questions (4 choices each, "
+        f"exactly 1 correct, marked with an 'answer' field whose value is either the "
+        f"choice letter (A/B/C/D) or the choice text) and 3 short-answer questions "
+        f"(each with an 'answer' field containing the model answer). "
+        f"Difficulty: grade-level review. Each question MUST include a 'standard' "
+        f"field equal to '{standard_code}'.\n\n"
+        f"LESSON: A 300-400 word total mini-lesson with three string fields: "
+        f"`intro` (~80-120 words explaining what standard {standard_code} is and "
+        f"why it matters), `worked_example` (~150-200 words: a single fully worked "
+        f"problem with problem statement, step-by-step reasoning, and final answer), "
+        f"and `key_takeaway` (1-2 sentence summary of the rule or principle). "
+        f"The worked example MUST demonstrate the same concept the practice "
+        f"questions test. For any math, use \\(...\\) for inline equations and "
+        f"\\[...\\] for display equations (NOT dollar signs — the renderer does "
+        f"not support them).\n\n"
+        f"Return valid JSON of this exact shape: "
+        f"{{\"title\": \"Practice - {standard_code}\", "
+        f"\"lesson\": {{\"intro\": \"...\", \"worked_example\": \"...\", "
+        f"\"key_takeaway\": \"...\"}}, "
+        f"\"sections\": [{{\"name\": \"Practice\", \"questions\": [...]}}]}}"
+    )
+
+
+def _gen_variant_for_student(*, sid, segment, students_by_id, api_key,
+                             base_prompt, subject, grade, standard_code,
+                             ctx_uid, ctx_client, teacher_id, class_id):
+    """Phase 4.2 #2 worker: builds prompt, calls AI once, post-processes,
+    returns {student_id, student_name, questions, lesson, usage} or raises.
+
+    Runs in a worker thread. NEVER reads Flask `g`, `request`, or any
+    per-request DB handle — only the explicit kwargs above. Per-thread
+    OpenAIAdapter instance to avoid shared-client surprises.
+
+    Spec: docs/superpowers/specs/2026-04-30-phase4.2-perstudent-gen-design.md
+    """
+    import json as _json
+    from backend.services.llm_adapter import (
+        LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart,
+    )
+    from backend.services.assignment_post_processing import (
+        _post_process_assignment, _extract_usage,
+    )
+
+    adapter = OpenAIAdapter(api_key=api_key)
+    seg = (segment or "")
+    if seg:
+        # Phase 4.2 #1: extend accommodation directive to apply to lesson too.
+        seg = seg + "\n\nApply these accommodations to the lesson text as well as the questions."
+    prompt = base_prompt + ("\n\n" + seg if seg else "")
+
+    completion = adapter.chat(LLMRequest(
+        model="gpt-4o",
+        system_prompt="You are an expert teacher. Return valid JSON only.",
+        messages=[Message(role="user", content=[TextPart(text=prompt)])],
+        response_format=ResponseFormat(type="json_object"),
+        metadata={"feature_label": "remediation_personalized"},
+    ))
+    raw_text = completion.content_parts[0].text if completion.content_parts else "{}"
+    assignment = _json.loads(raw_text)
+
+    # Fallback wrapper (Phase 4.2 #1) — preserve lesson when AI returns flat shape.
+    if isinstance(assignment, dict) and 'sections' not in assignment and 'questions' in assignment:
+        assignment = {
+            'title': assignment.get('title', f"Practice - {standard_code}"),
+            'lesson': assignment.get('lesson'),
+            'sections': [{'name': 'Practice', 'questions': assignment.get('questions') or []}],
+        }
+    raw_lesson = assignment.get('lesson') if isinstance(assignment, dict) else None
+
+    assignment, _extra_usage = _post_process_assignment(
+        assignment, 8, target_total_points=80,
+        subject=subject, grade=grade,
+        valid_standard_codes=[standard_code],
+        user_id=ctx_uid, client=ctx_client,
+    )
+
+    # Flatten sections back to questions list.
+    flat_questions = []
+    for section in (assignment or {}).get('sections', []):
+        for q in section.get('questions', []):
+            flat_questions.append(q)
+    if len(flat_questions) < 3:
+        raise ValueError(
+            f"Generation produced too few valid questions for student {sid}"
+        )
+
+    clean_lesson = _validate_and_clean_lesson(
+        raw_lesson, teacher_id=teacher_id, class_id=class_id, standard_code=standard_code,
+    )
+
+    s_row = students_by_id.get(sid) or {}
+    student_name = (
+        ((s_row.get('first_name') or '') + ' ' + (s_row.get('last_name') or '')).strip()
+        or sid
+    )
+
+    return {
+        'student_id': sid,
+        'student_name': student_name,
+        'questions': flat_questions,
+        'lesson': clean_lesson,
+        'usage': _extract_usage(completion, "gpt-4o"),
+    }
 
 
 # ============ Teacher Endpoints ============
@@ -2435,6 +2554,146 @@ def post_remediate(class_id):
             "window_days": 7,
         }), 422
 
+    # 6.6) Phase 4.2 #2: auto-decide whether to personalize. Personalize iff
+    # at least one targeted student has a non-empty accommodation_segment.
+    # Single-student mode is gated out — its existing accommodation logic at
+    # the shared path (below) already covers it.
+    # Spec: docs/superpowers/specs/2026-04-30-phase4.2-perstudent-gen-design.md
+    should_personalize = False
+    per_student_segments = {}
+    if target_mode == 'red_tier_in_class' and len(target_student_ids) > 1:
+        from backend.accommodations import build_accommodation_prompt as _bap
+        for sid in target_student_ids:
+            try:
+                seg = _bap(sid, g.teacher_id) or ""
+            except Exception:
+                _logger.warning(
+                    "remediation.personalize.accommodation_load_failed teacher=%s student=%s",
+                    g.teacher_id, sid,
+                )
+                seg = ""
+            per_student_segments[sid] = seg
+            if seg:
+                should_personalize = True
+
+        if should_personalize and len(target_student_ids) > REMEDIATION_PERSONALIZED_MAX:
+            _logger.warning(
+                "remediation.personalize.too_many_students teacher=%s class=%s standard=%s n=%d",
+                g.teacher_id, class_id, standard_code, len(target_student_ids),
+            )
+            return jsonify({
+                "error": "Class has too many students for personalized mode",
+                "detail": (
+                    "Personalized remediation supports at most "
+                    + str(REMEDIATION_PERSONALIZED_MAX)
+                    + " students at a time. Use single-student mode for "
+                    + "individual students, or remove accommodations from "
+                    + "some students to fall back to shared mode."
+                ),
+                "target_count": len(target_student_ids),
+                "max": REMEDIATION_PERSONALIZED_MAX,
+            }), 422
+
+    # If personalized, run the parallel path and return early.
+    if should_personalize:
+        # Fetch student names for tab labels (deterministic ordering).
+        students_rows = db.table('students').select(
+            'id, first_name, last_name'
+        ).in_('id', target_student_ids).execute()
+        students_by_id = {
+            s['id']: s for s in (students_rows.data or []) if s.get('id')
+        }
+
+        grade = cls_row.get('grade_level') or '7'
+        subject = cls_row.get('subject') or 'General'
+        base_prompt = _build_remediation_prompt(
+            grade=grade, subject=subject, standard_code=standard_code,
+        )
+
+        # Capture per-request context BEFORE submitting to the worker pool.
+        # Workers must NEVER read Flask globals (Codex round 2 MAJOR).
+        from backend.api_keys import get_api_key as _gak
+        from backend.routes.planner_routes import _get_openai_context
+        from backend.services.assignment_post_processing import _merge_usage
+        api_key = _gak('openai', g.teacher_id)
+        if not api_key or 'your-key-here' in api_key:
+            return error_response("Missing OpenAI API key", 500)
+        _ctx_uid, _ctx_client = _get_openai_context()
+        captured_teacher_id = g.teacher_id
+        captured_class_id = class_id
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # Cap concurrency at 5 (Codex MAJOR) to reduce nondeterministic
+        # rate-limit failures under all-or-nothing semantics.
+        max_workers = min(len(target_student_ids), 5)
+        variants = []
+        errors = []
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(
+                    _gen_variant_for_student,
+                    sid=sid,
+                    segment=per_student_segments.get(sid, ""),
+                    students_by_id=students_by_id,
+                    api_key=api_key,
+                    base_prompt=base_prompt,
+                    subject=subject,
+                    grade=grade,
+                    standard_code=standard_code,
+                    ctx_uid=_ctx_uid,
+                    ctx_client=_ctx_client,
+                    teacher_id=captured_teacher_id,
+                    class_id=captured_class_id,
+                ): sid
+                for sid in target_student_ids
+            }
+            for fut in as_completed(futures):
+                sid = futures[fut]
+                try:
+                    variants.append(fut.result())
+                except Exception as e:
+                    errors.append({'student_id': sid, 'error': str(e)})
+
+        if errors:
+            _logger.exception(
+                "remediation.personalize.partial_failure teacher=%s class=%s standard=%s errors=%s",
+                g.teacher_id, class_id, standard_code, errors,
+            )
+            return jsonify({
+                "error": "One or more personalized variants failed to generate",
+                "detail": "Try again. Personalized mode requires all variants to succeed.",
+                "failed_student_ids": [e['student_id'] for e in errors],
+            }), 500
+
+        # Deterministic ordering by student_name (id fallback).
+        variants.sort(key=lambda v: (
+            (v.get('student_name') or '').lower(), v.get('student_id') or '',
+        ))
+
+        # Aggregate usage from workers and record once in parent thread
+        # (Codex round 2 MINOR — cost telemetry thread-safety).
+        from backend.services.assignment_post_processing import _record_planner_cost
+        total_usage = {}
+        for v in variants:
+            v_usage = v.pop('usage', None) or {}
+            total_usage = _merge_usage(total_usage, v_usage)
+        if total_usage:
+            _record_planner_cost(total_usage)
+
+        _logger.info(
+            "remediation.generated mode=personalized teacher=%s class=%s standard=%s n_variants=%d cost_tokens=%s",
+            g.teacher_id, class_id, standard_code, len(variants),
+            (total_usage or {}).get('total_tokens', 0),
+        )
+
+        return jsonify({
+            "mode": "personalized",
+            "variants": variants,
+            "target_mode": target_mode,
+            "standard_code": standard_code,
+            "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        }), 200
+
     # 7) Build remediation prompt. Output shape MUST be sections-shaped because
     # `_post_process_assignment` walks `assignment['sections'][*]['questions']`.
     # Phase 4.2 #1: also requests a `lesson` field with three sub-fields
@@ -2580,7 +2839,10 @@ def post_remediate(class_id):
     # `datetime`/`timezone` are imported at module level (line 12).
     # Phase 4.2 #1: response ALWAYS includes `lesson` key. None if validation
     # failed; clean dict {intro, worked_example, key_takeaway} if valid.
+    # Phase 4.2 #2: `mode` field distinguishes shared vs personalized response
+    # shapes. Frontend reads it to decide single-preview vs tab-per-variant.
     return jsonify({
+        "mode": "shared",
         "questions": questions,
         "lesson": clean_lesson,
         "target_mode": target_mode,

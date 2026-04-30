@@ -523,6 +523,163 @@ def publish_to_class():
     })
 
 
+@student_account_bp.route('/api/publish-to-class-batch', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def publish_to_class_batch():
+    """Phase 4.2 #2: atomic batch publish for personalized remediations.
+
+    Body shape:
+      {
+        "class_id": "...",
+        "content_type": "assessment",
+        "items": [
+          {"content": {...}, "target_student_ids": [sid1], "settings": {...}, "title": "..."},
+          {"content": {...}, "target_student_ids": [sid2], "settings": {...}, "title": "..."},
+          ...
+        ]
+      }
+
+    Validation order:
+      1. Class ownership.
+      2. NO duplicate target_student_ids across items (defense-in-depth so a
+         direct-API caller can't bypass the cap by splitting one student
+         across multiple items).
+      3. Per-item target_student_ids validation (UUID, enrollment, students
+         table existence) — same checks as publish_to_class.
+      4. Per-student weekly cap (Phase 4.2 #8) including PENDING +N from this
+         batch. existing_count + 1 (each student appears once due to dedup) >
+         cap → 422.
+      5. Atomic write via .insert(list).execute() — single PostgREST request
+         which PostgREST wraps in a single PostgreSQL transaction. NO
+         compensating-delete fallback.
+
+    Spec: docs/superpowers/specs/2026-04-30-phase4.2-perstudent-gen-design.md
+    """
+    import uuid as _uuid
+    teacher_id = g.teacher_id
+    db = _get_teacher_supabase()
+    data = request.json or {}
+
+    class_id = data.get('class_id')
+    content_type = data.get('content_type', 'assessment')
+    items = data.get('items')
+
+    if not isinstance(items, list) or not items:
+        return error_response("items must be a non-empty list", 400)
+    ALLOWED_CONTENT_TYPES = ('assessment', 'assignment')
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        return error_response(
+            "content_type must be one of: " + ", ".join(ALLOWED_CONTENT_TYPES), 400,
+        )
+
+    # 1) Class ownership
+    cls = db.table('classes').select('id, teacher_id').eq('id', class_id).execute()
+    if not cls.data or cls.data[0].get('teacher_id') != teacher_id:
+        return error_response("Not authorized for this class", 403)
+
+    # 2) Duplicate-rejection across items (Codex round 2 MAJOR).
+    seen_students = set()
+    for item in items:
+        item_targets = item.get('target_student_ids')
+        if not isinstance(item_targets, list) or len(item_targets) == 0:
+            return error_response(
+                "Each item must have a non-empty target_student_ids list", 400,
+            )
+        for sid in item_targets:
+            if sid in seen_students:
+                return error_response(
+                    "Duplicate target_student_id across batch items: " + str(sid), 400,
+                )
+            seen_students.add(sid)
+
+    all_targets = sorted(seen_students)
+
+    # 3) Per-item target validation: UUID, enrollment, students existence.
+    for sid in all_targets:
+        try:
+            _uuid.UUID(str(sid))
+        except (ValueError, TypeError):
+            return error_response("Invalid target_student_id UUID: " + str(sid), 400)
+
+    enr = db.table('class_students').select('student_id').eq(
+        'class_id', class_id,
+    ).in_('student_id', all_targets).execute()
+    enrolled = {r['student_id'] for r in (enr.data or [])}
+    not_enrolled = [sid for sid in all_targets if sid not in enrolled]
+    if not_enrolled:
+        return error_response(
+            "Student(s) not enrolled in class: " + ", ".join(not_enrolled), 400,
+        )
+
+    stu_rows = db.table('students').select('id').in_('id', all_targets).execute()
+    existing_students = {r['id'] for r in (stu_rows.data or [])}
+    not_existing = [sid for sid in all_targets if sid not in existing_students]
+    if not_existing:
+        return error_response(
+            "Student(s) not found: " + ", ".join(not_existing), 400,
+        )
+
+    # 4) Per-student weekly cap with pending-batch increment.
+    # Each student appears exactly once across the batch (dedup'd above), so
+    # existing_count >= cap means "this batch's +1 would exceed". Same logic
+    # as the cap helper at /remediate (which checks existing_count >= cap).
+    from backend.routes.student_portal_routes import (
+        _check_remediation_cap,
+        REMEDIATION_PER_STUDENT_WEEKLY_CAP,
+    )
+    capped = _check_remediation_cap(db, teacher_id, all_targets)
+    if capped:
+        _logger.warning(
+            "publish_to_class_batch.cap.exceeded teacher=%s class=%s capped=%s",
+            teacher_id, class_id, capped,
+        )
+        return jsonify({
+            "error": "Weekly remediation cap reached",
+            "detail": (
+                "Each student can receive at most "
+                + str(REMEDIATION_PER_STUDENT_WEEKLY_CAP)
+                + " remediations per rolling 7-day window. Wait up to "
+                + "7 days for an older remediation to age out."
+            ),
+            "capped_student_ids": capped,
+            "cap": REMEDIATION_PER_STUDENT_WEEKLY_CAP,
+            "window_days": 7,
+        }), 422
+
+    # 5) Atomic write: single .insert(list).execute() — PostgREST wraps in
+    # a single PostgreSQL transaction. NO compensating-delete fallback.
+    rows = []
+    for item in items:
+        item_settings = item.get('settings') or {}
+        if content_type == 'assessment':
+            cat = item_settings.get('assessment_category', 'formative')
+            item_settings['assessment_category'] = (
+                cat if cat in ('formative', 'summative') else 'formative'
+            )
+        rows.append({
+            'teacher_id': teacher_id,
+            'class_id': class_id,
+            'content_type': content_type,
+            'title': item.get('title') or 'Untitled',
+            'join_code': _generate_class_code(),
+            'content': item.get('content'),
+            'settings': item_settings,
+            'is_active': True,
+            'due_date': item.get('due_date'),
+            'target_student_ids': item.get('target_student_ids'),
+        })
+
+    result = db.table('published_content').insert(rows).execute()
+    if not result.data or len(result.data) != len(rows):
+        return error_response("Batch publish failed", 500)
+
+    return jsonify({
+        "success": True,
+        "content_ids": [r['id'] for r in result.data],
+    })
+
+
 @student_account_bp.route('/api/portal-submissions', methods=['GET'])
 @require_teacher
 @handle_route_errors

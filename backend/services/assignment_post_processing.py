@@ -14,8 +14,17 @@ import json
 import time
 import math
 import re
+import threading
 
 _logger = logging.getLogger(__name__)
+
+# Phase 4.2 #2: serialize concurrent _record_planner_cost calls. The
+# function is read-modify-write JSON (no kernel-level atomicity); under
+# personalized-mode parallel generation, multiple worker threads could
+# race on the same file. Lock is module-scoped — sufficient for single-
+# process server (Railway uses gunicorn with multiple workers, but each
+# worker has its own JSON file via cost-per-process semantics).
+_planner_cost_lock = threading.Lock()
 
 # Import MODEL_PRICING for token cost tracking
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -41,35 +50,41 @@ PLANNER_COSTS_FILE = os.path.join(os.path.expanduser("~/.graider_data"), "planne
 
 
 def _record_planner_cost(usage):
-    """Record planner API usage to persistent JSON file."""
+    """Record planner API usage to persistent JSON file.
+
+    Phase 4.2 #2: thread-safe via _planner_cost_lock — concurrent callers
+    from worker threads (personalized-mode parallel generation) would
+    otherwise race on read-modify-write of the JSON file.
+    """
     if not usage or usage.get("total_tokens", 0) == 0:
         return
     today = time.strftime("%Y-%m-%d")
     os.makedirs(os.path.dirname(PLANNER_COSTS_FILE), exist_ok=True)
-    try:
-        with open(PLANNER_COSTS_FILE, 'r') as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        data = {"total": {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}, "daily": {}}
+    with _planner_cost_lock:
+        try:
+            with open(PLANNER_COSTS_FILE, 'r') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {"total": {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}, "daily": {}}
 
-    # Update totals
-    data["total"]["input_tokens"] += usage.get("input_tokens", 0)
-    data["total"]["output_tokens"] += usage.get("output_tokens", 0)
-    data["total"]["total_cost"] += usage.get("cost", 0)
-    data["total"]["api_calls"] += 1
-    data["total"]["total_cost"] = round(data["total"]["total_cost"], 6)
+        # Update totals
+        data["total"]["input_tokens"] += usage.get("input_tokens", 0)
+        data["total"]["output_tokens"] += usage.get("output_tokens", 0)
+        data["total"]["total_cost"] += usage.get("cost", 0)
+        data["total"]["api_calls"] += 1
+        data["total"]["total_cost"] = round(data["total"]["total_cost"], 6)
 
-    # Update daily
-    if today not in data["daily"]:
-        data["daily"][today] = {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}
-    data["daily"][today]["input_tokens"] += usage.get("input_tokens", 0)
-    data["daily"][today]["output_tokens"] += usage.get("output_tokens", 0)
-    data["daily"][today]["total_cost"] += usage.get("cost", 0)
-    data["daily"][today]["api_calls"] += 1
-    data["daily"][today]["total_cost"] = round(data["daily"][today]["total_cost"], 6)
+        # Update daily
+        if today not in data["daily"]:
+            data["daily"][today] = {"input_tokens": 0, "output_tokens": 0, "total_cost": 0, "api_calls": 0}
+        data["daily"][today]["input_tokens"] += usage.get("input_tokens", 0)
+        data["daily"][today]["output_tokens"] += usage.get("output_tokens", 0)
+        data["daily"][today]["total_cost"] += usage.get("cost", 0)
+        data["daily"][today]["api_calls"] += 1
+        data["daily"][today]["total_cost"] = round(data["daily"][today]["total_cost"], 6)
 
-    with open(PLANNER_COSTS_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+        with open(PLANNER_COSTS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
 
 
 # Required fields per question_type — missing any → downgrade to short_answer

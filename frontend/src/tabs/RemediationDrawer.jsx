@@ -14,8 +14,15 @@ export default function RemediationDrawer({
 }) {
   var [state, setState] = useState("idle");
   var [error, setError] = useState(null);
-  var [data, setData] = useState(null);  // {questions, target_student_ids, ...}
+  var [data, setData] = useState(null);  // {mode, questions|variants, target_student_ids?, ...}
   var [questions, setQuestions] = useState([]);
+  // Phase 4.2 #2: personalized-mode state. `variants` is the per-student
+  // array from the backend; activeVariantIndex is which one's preview is
+  // currently visible. variants[i].questions is the EDITABLE questions for
+  // that variant — we mirror state per variant so QuestionCard edits don't
+  // collide across tabs.
+  var [variants, setVariants] = useState([]);
+  var [activeVariantIndex, setActiveVariantIndex] = useState(0);
   var [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
   // Validation error is shown inline in the preview state (not the error state).
   // Separate state slot so the drawer doesn't drop into the full-screen "error"
@@ -40,6 +47,8 @@ export default function RemediationDrawer({
     setError(null);
     setData(null);
     setQuestions([]);
+    setVariants([]);
+    setActiveVariantIndex(0);
     setValidationError(null);  // clear on every fresh open (defensive even though parent unmounts on close)
     var payload = { standard_code: standardCode, target_mode: targetMode };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
@@ -52,7 +61,16 @@ export default function RemediationDrawer({
           return;
         }
         setData(res);
-        setQuestions(res.questions || []);
+        // Phase 4.2 #2: branch on response.mode. Personalized = N variants
+        // each with their own questions/lesson; shared = single questions.
+        if (res.mode === "personalized" && Array.isArray(res.variants) && res.variants.length > 0) {
+          setVariants(res.variants);
+          setActiveVariantIndex(0);
+          setQuestions([]);
+        } else {
+          setVariants([]);
+          setQuestions(res.questions || []);
+        }
         setState("preview");
       })
       .catch(function(e) {
@@ -107,7 +125,15 @@ export default function RemediationDrawer({
           return;
         }
         setData(res);
-        setQuestions(res.questions || []);
+        // Phase 4.2 #2: same branching as initial fetch.
+        if (res.mode === "personalized" && Array.isArray(res.variants) && res.variants.length > 0) {
+          setVariants(res.variants);
+          setActiveVariantIndex(0);
+          setQuestions([]);
+        } else {
+          setVariants([]);
+          setQuestions(res.questions || []);
+        }
         setState("preview");
       })
       .catch(function(e) {
@@ -117,17 +143,45 @@ export default function RemediationDrawer({
       });
   }
 
+  // Phase 4.2 #2: derived state for personalized vs shared mode.
+  var isPersonalized = data && data.mode === "personalized" && variants.length > 0;
+  var activeVariant = isPersonalized ? variants[activeVariantIndex] : null;
+  var activeQuestions = isPersonalized
+    ? (activeVariant ? activeVariant.questions || [] : [])
+    : questions;
+
+  // Mutate the active set of questions (per-variant in personalized mode,
+  // shared in shared mode).
+  function setActiveQuestions(updater) {
+    if (isPersonalized) {
+      var next = variants.slice();
+      var current = next[activeVariantIndex];
+      if (current) {
+        var newQs = typeof updater === "function" ? updater(current.questions || []) : updater;
+        next[activeVariantIndex] = Object.assign({}, current, { questions: newQs });
+        setVariants(next);
+      }
+    } else {
+      var newQs2 = typeof updater === "function" ? updater(questions) : updater;
+      setQuestions(newQs2);
+    }
+  }
+
   // Pre-publish validation. Returns null on success, error string on failure.
   // Verifies: ≥1 question, every question has non-empty text, MC has ≥2
   // non-empty choices AND correct_answer references one of those choices.
   // The remediation prompt allows the AI to mark the correct answer as
   // a letter ("A"/"B"/"C"/"D"), the choice text, OR a numeric index — the
   // validator accepts all three forms.
-  function validateBeforePublish() {
-    if (questions.length < 1) return "At least one question required";
-    for (var i = 0; i < questions.length; i++) {
-      var q = questions[i];
-      if (!q.text || !q.text.trim()) return "Question " + (i + 1) + " has no text";
+  function validateQuestionList(questionList, prefix) {
+    if (!questionList || questionList.length < 1) {
+      return (prefix ? prefix + ": " : "") + "At least one question required";
+    }
+    for (var i = 0; i < questionList.length; i++) {
+      var q = questionList[i];
+      if (!q.text || !q.text.trim()) {
+        return (prefix ? prefix + ": " : "") + "Question " + (i + 1) + " has no text";
+      }
       var t = (q.type || q.question_type || "").toLowerCase();
       if (t === "mcq" || t === "multiple_choice" || t === "mc") {
         var choices = q.choices || q.options || [];
@@ -138,44 +192,64 @@ export default function RemediationDrawer({
             nonEmptyChoices.push({ index: ci, label: String(label).trim() });
           }
         }
-        if (nonEmptyChoices.length < 2) return "Question " + (i + 1) + " needs at least 2 choices";
+        if (nonEmptyChoices.length < 2) {
+          return (prefix ? prefix + ": " : "") + "Question " + (i + 1) + " needs at least 2 choices";
+        }
         var correct = q.correct_answer != null ? q.correct_answer : q.answer;
-        if (correct == null || correct === "") return "Question " + (i + 1) + " has no correct answer";
+        if (correct == null || correct === "") {
+          return (prefix ? prefix + ": " : "") + "Question " + (i + 1) + " has no correct answer";
+        }
         var matched = false;
-        // (a) numeric index match
         if (typeof correct === "number") {
           matched = nonEmptyChoices.some(function(c) { return c.index === correct; });
         }
         if (!matched) {
           var s = String(correct).trim();
-          // (b) string numeric index ("0".."N")
           if (/^[0-9]+$/.test(s)) {
             var idx = parseInt(s, 10);
             matched = nonEmptyChoices.some(function(c) { return c.index === idx; });
           }
-          // (c) letter A-Z (case-insensitive) — A=0, B=1, etc.
           if (!matched && /^[A-Za-z]$/.test(s)) {
             var letterIdx = s.toUpperCase().charCodeAt(0) - 65;
             matched = nonEmptyChoices.some(function(c) { return c.index === letterIdx; });
           }
-          // (d) exact choice text match
           if (!matched) {
             matched = nonEmptyChoices.some(function(c) { return c.label === s; });
           }
         }
         if (!matched) {
-          return "Question " + (i + 1) + " correct answer doesn't match any choice";
+          return (prefix ? prefix + ": " : "") + "Question " + (i + 1) + " correct answer doesn't match any choice";
         }
       }
     }
     return null;
   }
 
+  function validateBeforePublish() {
+    // Phase 4.2 #2: in personalized mode, validate EACH variant. The first
+    // failure switches the active tab to that variant and returns the error.
+    if (isPersonalized) {
+      for (var vi = 0; vi < variants.length; vi++) {
+        var ve = validateQuestionList(variants[vi].questions || [], variants[vi].student_name);
+        if (ve) {
+          setActiveVariantIndex(vi);
+          return ve;
+        }
+      }
+      return null;
+    }
+    return validateQuestionList(questions, null);
+  }
+
   function publish() {
-    // Refuse to publish if targeting data is missing — falling back to a
-    // class-wide publish would be semantically wrong (esp. for single_student
-    // remediations, which would silently broadcast to the whole class).
-    if (!data || !data.target_student_ids || !data.target_student_ids.length) {
+    // Phase 4.2 #2: targeting-data check has two flavors. Shared mode uses
+    // data.target_student_ids; personalized mode uses variants[].student_id.
+    if (isPersonalized) {
+      if (variants.length === 0) {
+        setValidationError("No variants generated — please regenerate");
+        return;
+      }
+    } else if (!data || !data.target_student_ids || !data.target_student_ids.length) {
       setValidationError("Targeting data missing — please regenerate");
       return;
     }
@@ -186,23 +260,41 @@ export default function RemediationDrawer({
     var localRef = { cancelled: false };
     cancelRef.current = localRef;
     setState("publishing");
-    // Phase 4.2 #1: round-trip the validated lesson dict (or null) through to
-    // publish_to_class so it lands in published_content.content JSONB. Without
-    // this, the lesson would silently disappear before storage.
-    var contentPayload = { questions: questions };
-    if (data && data.lesson) contentPayload.lesson = data.lesson;
-    api.publishToClass(
-      classId,
-      contentPayload,
-      "assessment",
-      "Remediation: " + standardCode,
-      // Phase 4.2 #6: persist target_standard so the Effectiveness dashboard
-      // can attribute mastery delta to this remediation event without parsing
-      // the title or inferring from content.questions[0].standard.
-      { target_standard: standardCode },
-      null,  // dueDate — none
-      data.target_student_ids,
-    )
+
+    var publishPromise;
+    if (isPersonalized) {
+      // Phase 4.2 #2: atomic batch publish — N rows written in a single
+      // PostgREST INSERT. The drawer issues ONE call, not N.
+      var items = variants.map(function(v) {
+        var contentPayload = { questions: v.questions || [] };
+        if (v.lesson) contentPayload.lesson = v.lesson;
+        return {
+          content: contentPayload,
+          target_student_ids: [v.student_id],
+          settings: { target_standard: standardCode },
+          title: "Remediation: " + standardCode,
+        };
+      });
+      publishPromise = api.publishToClassBatch(classId, items, "assessment");
+    } else {
+      // Phase 4.2 #1: round-trip the validated lesson dict (or null) through
+      // to publish_to_class so it lands in published_content.content JSONB.
+      var sharedContentPayload = { questions: questions };
+      if (data && data.lesson) sharedContentPayload.lesson = data.lesson;
+      publishPromise = api.publishToClass(
+        classId,
+        sharedContentPayload,
+        "assessment",
+        "Remediation: " + standardCode,
+        // Phase 4.2 #6: persist target_standard so the Effectiveness dashboard
+        // can attribute mastery delta without parsing title.
+        { target_standard: standardCode },
+        null,  // dueDate — none
+        data.target_student_ids,
+      );
+    }
+
+    publishPromise
       .then(function(res) {
         if (localRef.cancelled) return;
         if (!res || res.error) {
@@ -226,10 +318,16 @@ export default function RemediationDrawer({
   if (!open) return null;
 
   var disabled = state === "generating" || state === "regenerating" || state === "publishing";
-  var nTargets = data && data.target_student_ids ? data.target_student_ids.length : 0;
+  // Phase 4.2 #2: in personalized mode, nTargets comes from variants.length;
+  // in shared mode, from data.target_student_ids.
+  var nTargets = isPersonalized
+    ? variants.length
+    : (data && data.target_student_ids ? data.target_student_ids.length : 0);
   var subtitle = "";
   if (targetMode === "single_student") {
     subtitle = "for " + (targetStudentName || "student");
+  } else if (isPersonalized) {
+    subtitle = "for " + nTargets + " student" + (nTargets === 1 ? "" : "s") + " (personalized)";
   } else if (data && data.target_student_ids) {
     subtitle = "for " + nTargets + " red-tier student" + (nTargets === 1 ? "" : "s");
   }
@@ -278,8 +376,41 @@ export default function RemediationDrawer({
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {/* Phase 4.2 #1: lesson preview above questions. */}
-              {data && data.lesson && <LessonBlock lesson={data.lesson} />}
+              {/* Phase 4.2 #2: tab strip when personalized. One tab per
+                  variant; click to switch the preview pane. */}
+              {isPersonalized && (
+                <div style={{
+                  display: "flex", flexWrap: "wrap", gap: "6px",
+                  borderBottom: "1px solid var(--glass-border)", paddingBottom: "8px",
+                }}>
+                  {variants.map(function(v, vi) {
+                    var active = vi === activeVariantIndex;
+                    return (
+                      <button key={v.student_id || vi}
+                              onClick={function() { setActiveVariantIndex(vi); }}
+                              disabled={disabled}
+                              style={{
+                                padding: "6px 12px", fontSize: "0.8rem",
+                                borderRadius: "6px",
+                                border: active ? "1px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                                background: active ? "rgba(99,102,241,0.15)" : "transparent",
+                                color: active ? "var(--accent-primary)" : "var(--text-primary)",
+                                cursor: disabled ? "not-allowed" : "pointer",
+                                fontWeight: active ? 700 : 500,
+                              }}>
+                        {v.student_name || v.student_id}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Phase 4.2 #1: lesson preview above questions. In personalized
+                  mode, show the active variant's lesson; in shared mode, the
+                  shared one. */}
+              {isPersonalized
+                ? (activeVariant && activeVariant.lesson && <LessonBlock lesson={activeVariant.lesson} />)
+                : (data && data.lesson && <LessonBlock lesson={data.lesson} />)
+              }
               {validationError && (
                 <div style={{
                   padding: "10px 14px", borderRadius: "6px",
@@ -289,13 +420,15 @@ export default function RemediationDrawer({
                   {validationError}
                 </div>
               )}
-              {questions.map(function(q, idx) {
+              {activeQuestions.map(function(q, idx) {
                 return (
                   <QuestionCard key={idx} index={idx} question={q} disabled={disabled}
                                 onChange={function(updated) {
-                                  var copy = questions.slice();
-                                  copy[idx] = updated;
-                                  setQuestions(copy);
+                                  setActiveQuestions(function(prev) {
+                                    var copy = prev.slice();
+                                    copy[idx] = updated;
+                                    return copy;
+                                  });
                                 }} />
                 );
               })}
