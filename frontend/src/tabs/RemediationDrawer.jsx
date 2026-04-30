@@ -39,6 +39,17 @@ export default function RemediationDrawer({
     if (!open) {
       if (cancelRef.current) cancelRef.current.cancelled = true;
       if (successTimerRef.current) { clearTimeout(successTimerRef.current); successTimerRef.current = null; }
+      // Phase 4.2 #2 (Codex full-PR MINOR): clear preview state on close so
+      // a stale variant array can't bleed into the next open. One parent
+      // (ProgressRankGrid) conditionally unmounts the drawer, but
+      // RemediationEffectiveness keeps it mounted and just toggles `open`.
+      setData(null);
+      setQuestions([]);
+      setVariants([]);
+      setActiveVariantIndex(0);
+      setValidationError(null);
+      setError(null);
+      setState("idle");
       return;
     }
     var localRef = { cancelled: false };

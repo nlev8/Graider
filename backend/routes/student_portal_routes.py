@@ -517,7 +517,7 @@ def _gen_variant_for_student(*, sid, segment, students_by_id, api_key,
         LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart,
     )
     from backend.services.assignment_post_processing import (
-        _post_process_assignment, _extract_usage,
+        _post_process_assignment, _extract_usage, _merge_usage,
     )
 
     adapter = OpenAIAdapter(api_key=api_key)
@@ -573,12 +573,16 @@ def _gen_variant_for_student(*, sid, segment, students_by_id, api_key,
         or sid
     )
 
+    # Phase 4.2 #2 (Codex full-PR MINOR): merge main-call usage with
+    # post-processor usage so the parent's aggregation captures both.
+    # Shared mode does this merge in the route; we mirror it here for
+    # personalized variants.
     return {
         'student_id': sid,
         'student_name': student_name,
         'questions': flat_questions,
         'lesson': clean_lesson,
-        'usage': _extract_usage(completion, "gpt-4o"),
+        'usage': _merge_usage(_extract_usage(completion, "gpt-4o"), _extra_usage),
     }
 
 
