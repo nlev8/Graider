@@ -433,3 +433,90 @@ class TestGradebookEdgeCases:
         assert resp.status_code == 200
         body = resp.get_json()
         assert body['grades']['stu-1']['ct-1']['percentage'] == 60
+
+
+# ============ Phase 4.2 #7 — Remediation badge fields ============
+# Spec: docs/superpowers/specs/2026-04-29-phase4.2-gradebook-remediation-badge-design.md
+
+class TestGradebookRemediationFields:
+    """Response surfaces is_active and target_student_ids per assessment so
+    the frontend can render the remediation badge under each column header."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_regular_assessment_returns_null_target_and_active_true(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Class-wide assessment (non-remediation): target_student_ids is None,
+        is_active is True. Frontend predicate isRemediation() returns false."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'ct-1', 'class_id': 'cls-1', 'title': 'Quiz 1',
+                'content_type': 'assessment',
+                'publish_date': '2026-04-01T00:00:00Z',
+                'is_active': True,
+                'target_student_ids': None,
+            }],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        body = resp.get_json()
+        assert len(body['assessments']) == 1
+        a = body['assessments'][0]
+        assert a['is_active'] is True
+        assert a['target_student_ids'] is None
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_active_remediation_returns_target_array_and_active_true(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Active remediation: target_student_ids is a non-empty array,
+        is_active is True. Frontend renders a single 'Remediation' pill."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'rem-1', 'class_id': 'cls-1', 'title': 'Remediation: MA.6.AR.1.2',
+                'content_type': 'assessment',
+                'publish_date': '2026-04-15T00:00:00Z',
+                'is_active': True,
+                'target_student_ids': ['stu-1'],
+            }],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        body = resp.get_json()
+        a = body['assessments'][0]
+        assert a['target_student_ids'] == ['stu-1']
+        assert a['is_active'] is True
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_recalled_remediation_returns_active_false(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Recalled remediation: target_student_ids set, is_active=False.
+        Frontend renders BOTH 'Remediation' and 'Recalled' pills."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'rem-recalled', 'class_id': 'cls-1', 'title': 'Recalled rem',
+                'content_type': 'assessment',
+                'publish_date': '2026-04-15T00:00:00Z',
+                'is_active': False,
+                'target_student_ids': ['stu-1'],
+            }],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        body = resp.get_json()
+        a = body['assessments'][0]
+        assert a['target_student_ids'] == ['stu-1']
+        assert a['is_active'] is False, (
+            "Recalled remediation must surface is_active=False so the "
+            "Recalled pill renders alongside the Remediation pill"
+        )

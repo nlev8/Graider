@@ -1656,13 +1656,16 @@ def get_class_gradebook(class_id):
 
     # 3) Fetch all class assessments/assignments. Sort ASC by publish_date.
     content_rows = db.table('published_content').select(
-        'id, title, content_type, publish_date, due_date'
+        'id, title, content_type, publish_date, due_date, is_active, target_student_ids'
     ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
 
     assessments = sorted(
         (content_rows.data or []),
         key=lambda c: (c.get('publish_date') or '', c.get('id') or ''),
     )
+    # Phase 4.2 #7: capture is_active and target_student_ids for the
+    # remediation-badge UI. The grouping logic below keys off c['id'] only,
+    # so adding these passthrough fields doesn't affect any join/aggregation.
     content_titles = {c['id']: c.get('title', '') for c in assessments}
 
     if not assessments:
@@ -1745,7 +1748,10 @@ def get_class_gradebook(class_id):
         "students": [{'student_id': s['student_id'], 'student_name': s['student_name']} for s in student_records],
         "assessments": [
             {'content_id': c['id'], 'title': c.get('title', ''), 'content_type': c.get('content_type'),
-             'publish_date': c.get('publish_date'), 'due_date': c.get('due_date')}
+             'publish_date': c.get('publish_date'), 'due_date': c.get('due_date'),
+             # Phase 4.2 #7: surface remediation flags for the badge UI.
+             'is_active': c.get('is_active'),
+             'target_student_ids': c.get('target_student_ids')}
             for c in assessments
         ],
         "grades": grades,
@@ -1770,10 +1776,12 @@ def get_student_submission_detail(submission_id):
         return error_response("Submission not found", 404)
     sub = sub_row.data[0]
 
-    # 2) Look up the content
+    # 2) Look up the content. Phase 4.2 #7: also fetch is_active and
+    # target_student_ids so the drawer header can render the remediation
+    # badges that match the gradebook column header.
     content_id = sub.get('content_id')
     content_row = db.table('published_content').select(
-        'id, title, class_id'
+        'id, title, class_id, is_active, target_student_ids'
     ).eq('id', content_id).execute()
     if not content_row.data:
         return error_response("Submission's content no longer exists", 404)
@@ -1837,6 +1845,10 @@ def get_student_submission_detail(submission_id):
         "student_name": student_name,
         "content_id": content_id,
         "content_title": content.get('title', ''),
+        # Phase 4.2 #7: surface remediation flags so SubmissionDetail drawer
+        # header can render the badges (matches Gradebook column header).
+        "is_active": content.get('is_active'),
+        "target_student_ids": content.get('target_student_ids'),
         "attempt_number": sub.get('attempt_number'),
         "total_attempts": len(siblings),
         "submitted_at": sub.get('submitted_at'),

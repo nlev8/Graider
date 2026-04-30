@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import * as api from "../services/api";
+import RemediationBadges from "../components/RemediationBadges";
 
 function gradeColor(pct) {
   if (pct == null) return { bg: "var(--glass-bg)", text: "var(--text-muted)", label: String.fromCharCode(8212) };
@@ -74,9 +75,12 @@ export default function SubmissionDetail({ submissionId, onClose }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
           <div>
             <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>{data ? data.student_name : 'Submission'}</h3>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
               {data ? data.content_title : ''}
             </p>
+            {/* Phase 4.2 #7: remediation badges describe the content (not the
+                student), so they live below the content_title line. */}
+            {data && <RemediationBadges item={data} />}
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: "1.4rem" }}>
             {String.fromCharCode(10005)}
