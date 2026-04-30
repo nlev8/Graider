@@ -1282,3 +1282,220 @@ class TestPublishToClassRoundTripsLesson:
         )
         assert stored_content['lesson'] == VALID_LESSON
         assert stored_content.get('questions') == [{'text': 'Q1', 'standard': 'MA.6.AR.1.2'}]
+
+
+# ============ Phase 4.2 #3: pre-generation config (count + difficulty) ============
+# Spec: docs/superpowers/specs/2026-04-30-phase4.2-pregen-config-design.md
+
+class TestRemediationConfigValidation:
+    """Strict 400 on invalid count/difficulty values; defaults only when missing."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_count_too_low_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'count': 2,  # below REMEDIATION_COUNT_MIN=3
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+        assert 'between 3 and 15' in (resp.get_json().get('detail') or '')
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_count_too_high_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'count': 16,  # above REMEDIATION_COUNT_MAX=15
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_count_boolean_returns_400(self, mock_sb_fn, client, teacher_headers):
+        """Codex MAJOR: Python bool is int subclass. count=True must be rejected
+        explicitly, otherwise it would slip past `isinstance(int)` and become count=1."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'count': True,
+        }, headers=teacher_headers)
+        assert resp.status_code == 400, "count=True must be rejected (bool is int subclass)"
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_difficulty_invalid_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'difficulty': 'hard',  # typo — must be one of: easier, same, harder
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+        assert 'easier' in (resp.get_json().get('detail') or '')
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_count_and_difficulty_default_when_missing(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        """Body missing count + difficulty → defaults (8, same). Backwards-compat."""
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'Practice', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            # No count or difficulty — should default
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body.get('count') == 8
+        assert body.get('difficulty') == 'same'
+
+
+class TestRemediationConfigPromptIntegration:
+    """Verify count + difficulty actually thread into the AI prompt."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_count_5_lands_in_prompt(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        # Match the requested count (5) so the 422 floor doesn't trip
+        mock_pp.return_value = ({
+            'title': 'Practice', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 6)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'count': 5,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        # Prompt: "Generate exactly 5..." with mix 3 MC + 2 SA (60/40)
+        prompt = _llm_request_prompt_text(mock_adapter)
+        assert 'Generate exactly 5 grade-' in prompt
+        assert '3 multiple-choice questions' in prompt
+        assert '2 short-answer questions' in prompt
+        body = resp.get_json()
+        assert body.get('count') == 5
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_difficulty_harder_lands_in_prompt(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'Practice', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001',
+                         'grade_level': '7', 'subject': 'Math'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'difficulty': 'harder',
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        prompt = _llm_request_prompt_text(mock_adapter)
+        assert 'more challenging vocabulary' in prompt
+        assert 'grade-8' in prompt, "grade=7 + harder → grade-8 (clamped to K-12)"
+        body = resp.get_json()
+        assert body.get('difficulty') == 'harder'
+
+
+class TestRemediationConfigGradeClamping:
+    """Codex MINOR: grade arithmetic clamps to K-12 (no grade-13 references)."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_grade_12_with_harder_clamps_to_12(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'P', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001',
+                         'grade_level': '12', 'subject': 'Math'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'difficulty': 'harder',
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        prompt = _llm_request_prompt_text(mock_adapter)
+        assert 'grade-13' not in prompt, "grade-13 must never appear (K-12 clamp)"
+        assert 'grade-12' in prompt
