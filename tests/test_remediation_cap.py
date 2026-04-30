@@ -303,6 +303,15 @@ class TestRemediateRouteCap:
         assert body.get('capped_student_ids') == [STU_1]
         assert body.get('cap') == 3
         assert body.get('window_days') == 7
+        # Codex MAJOR finding: detail must NOT say "recall to free a slot"
+        # because recalled rows count toward the cap. Misleading instruction
+        # would contradict the actual counting behavior.
+        detail = (body.get('detail') or '').lower()
+        assert 'recall' not in detail, (
+            "Detail must not suggest recalling to free a slot — recalled "
+            "rows count toward the cap (recall is audit, not slot refund)"
+        )
+        assert 'age out' in detail or '7 days' in detail
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_recalled_rows_count_toward_cap_at_remediate(

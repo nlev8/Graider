@@ -2427,8 +2427,8 @@ def post_remediate(class_id):
             "detail": (
                 "Each student can receive at most "
                 + str(REMEDIATION_PER_STUDENT_WEEKLY_CAP)
-                + " remediations per rolling 7-day window. Recall an "
-                + "existing remediation to free a slot, or wait up to 7 days."
+                + " remediations per rolling 7-day window. Wait up to "
+                + "7 days for an older remediation to age out."
             ),
             "capped_student_ids": capped,
             "cap": REMEDIATION_PER_STUDENT_WEEKLY_CAP,
