@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import * as api from "../services/api";
+import RemediationDrawer from "./RemediationDrawer";
 
 function gradeColor(pct) {
   if (pct == null) return { bg: "var(--glass-bg)", text: "var(--text-muted)", label: String.fromCharCode(8212) };
@@ -91,6 +92,11 @@ export default function AssessmentComparison({ classId }) {
   var [loading, setLoading] = useState(false);
   var [error, setError] = useState(null);
   var [searchQuery, setSearchQuery] = useState('');
+  // Phase 4.2 #10: heatmap remediate trigger state. Mirrors the
+  // ProgressRankGrid pattern. reloadKey bumps the comparison fetch so a
+  // successful publish reflects in the heatmap on the next pass.
+  var [remediationTrigger, setRemediationTrigger] = useState(null);
+  var [reloadKey, setReloadKey] = useState(0);
 
   // Bootstrap: fetch the list of class assessments via the gradebook endpoint.
   useEffect(function() {
@@ -151,7 +157,7 @@ export default function AssessmentComparison({ classId }) {
       })
       .finally(function() { if (!cancelled) setLoading(false); });
     return function() { cancelled = true; };
-  }, [classId, selectedContentIds, attemptMode]);
+  }, [classId, selectedContentIds, attemptMode, reloadKey]);
 
   function toggleSelection(contentId) {
     if (selectedContentIds.indexOf(contentId) >= 0) {
@@ -334,9 +340,32 @@ export default function AssessmentComparison({ classId }) {
                         {orderedSelected.map(function(a) {
                           var cell = (data.standards_matrix.cells[a.content_id] || {})[code];
                           var color = gradeColor(cell ? cell.percentage : null);
+                          // Phase 4.2 #10: red cells (class mean < 70) become
+                          // RemediationDrawer triggers in red_tier_in_class mode
+                          // for that standard. UX copy in the tooltip clarifies
+                          // that the remediation is class-wide-standard, NOT
+                          // specific to this cell's content (Codex MAJOR — red
+                          // tier resolves across all class content, not this cell).
+                          var isRed = cell && typeof cell.percentage === "number" && cell.percentage < 70;
+                          var cellTitle = isRed
+                            ? "Class mean " + cell.percentage + "% on " + code + " (" + cell.students_assessed + " students). Click to generate a class-wide remediation for this standard."
+                            : (cell ? code + " on " + a.title + ": " + cell.percentage + "% (" + cell.students_assessed + " students)" : "Not covered");
                           return (
-                            <td key={a.content_id} title={cell ? code + " on " + a.title + ": " + cell.percentage + "% (" + cell.students_assessed + " students)" : "Not covered"}
-                                style={{ padding: "8px", textAlign: "center", borderBottom: "1px solid var(--glass-border)", borderLeft: "1px solid var(--glass-border)", background: color.bg, color: color.text, fontSize: "0.75rem", fontWeight: 600 }}>
+                            <td key={a.content_id}
+                                className={isRed ? "phase4-heatmap-red-clickable" : undefined}
+                                title={cellTitle}
+                                onClick={isRed ? function() {
+                                  setRemediationTrigger({ standardCode: code });
+                                } : undefined}
+                                onKeyDown={isRed ? function(e) {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    setRemediationTrigger({ standardCode: code });
+                                  }
+                                } : undefined}
+                                role={isRed ? "button" : undefined}
+                                tabIndex={isRed ? 0 : undefined}
+                                style={{ padding: "8px", textAlign: "center", borderBottom: "1px solid var(--glass-border)", borderLeft: "1px solid var(--glass-border)", background: color.bg, color: color.text, fontSize: "0.75rem", fontWeight: 600, cursor: isRed ? "pointer" : "default" }}>
                               {color.label}
                             </td>
                           );
@@ -352,6 +381,30 @@ export default function AssessmentComparison({ classId }) {
           );
         })()
       ) : null}
+
+      {/* Phase 4.2 #10: hover/focus outline for red heatmap cells. Inline
+          style would not trigger on :hover; one CSS block keeps the
+          discoverability cue without restructuring the cell rendering. */}
+      <style>{
+        ".phase4-heatmap-red-clickable:hover {" +
+        " outline: 2px solid var(--accent-primary); outline-offset: -2px; }" +
+        ".phase4-heatmap-red-clickable:focus {" +
+        " outline: 2px solid var(--accent-primary); outline-offset: -2px; }"
+      }</style>
+
+      {/* Phase 4.2 #10: RemediationDrawer mount, mirroring ProgressRankGrid. */}
+      {remediationTrigger && (
+        <RemediationDrawer
+          open={!!remediationTrigger}
+          onClose={function() { setRemediationTrigger(null); }}
+          classId={classId}
+          standardCode={remediationTrigger.standardCode}
+          targetMode="red_tier_in_class"
+          targetStudentId={null}
+          targetStudentName=""
+          onPublished={function() { setReloadKey(function(k) { return k + 1; }); }}
+        />
+      )}
     </div>
   );
 }
