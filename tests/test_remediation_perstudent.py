@@ -428,6 +428,69 @@ class TestVariantGeneration:
     @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.accommodations.build_accommodation_prompt')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_personalized_mode_honors_count_and_difficulty(
+        self, mock_sb_fn, mock_bap, mock_pp, mock_adapter_cls, mock_get_api_key,
+        client, teacher_headers,
+    ):
+        """Phase 4.2 #3 (Codex full-PR MINOR): personalized mode threads
+        count + difficulty into the AI prompt for each variant + echoes
+        them in the response."""
+        mock_bap.side_effect = lambda sid, tid: (
+            "STUDENT ACCOMMODATIONS\n- Extra time" if sid == STU_2 else ""
+        )
+
+        # Capture prompts seen by each adapter instance so we can verify
+        # count + difficulty landed.
+        captured_prompts = []
+        def make_adapter(*args, **kwargs):
+            adapter = MagicMock()
+            def chat_side(req):
+                captured_prompts.append(req.messages[0].content[0].text)
+                completion = MagicMock()
+                completion.usage = None
+                text_part = MagicMock()
+                text_part.text = json.dumps(_make_ai_response())
+                completion.content_parts = [text_part]
+                return completion
+            adapter.chat.side_effect = chat_side
+            return adapter
+        mock_adapter_cls.side_effect = make_adapter
+        mock_get_api_key.return_value = "sk-test-fake"
+
+        # post-process returns 5 questions to match count=5
+        mock_pp.return_value = ({
+            'title': 'P', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 6)
+            ]}],
+        }, {'total_tokens': 1500})
+        mock_sb_fn.return_value = _build_red_tier_supabase([STU_1, STU_2, STU_3])
+
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+            'count': 5,
+            'difficulty': 'harder',
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['mode'] == 'personalized'
+        assert body['count'] == 5
+        assert body['difficulty'] == 'harder'
+        assert len(body['variants']) == 3
+        # Every variant's prompt should contain count=5 and "more challenging" directive.
+        assert len(captured_prompts) == 3
+        for prompt in captured_prompts:
+            assert 'Generate exactly 5 grade-' in prompt
+            assert '3 multiple-choice' in prompt
+            assert '2 short-answer' in prompt
+            assert 'more challenging vocabulary' in prompt
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.accommodations.build_accommodation_prompt')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_uniform_n_no_accommodation_student_still_gets_variant(
         self, mock_sb_fn, mock_bap, mock_pp, mock_adapter_cls, mock_get_api_key,
         client, teacher_headers,

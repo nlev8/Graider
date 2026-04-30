@@ -538,7 +538,22 @@ export default function RemediationDrawer({
         {state === "config" && (
           <div style={{ padding: "12px 20px", borderTop: "1px solid var(--glass-border)",
                         display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-            <button onClick={onClose} disabled={disabled} className="btn btn-secondary">Cancel</button>
+            {/* Phase 4.2 #3 (Codex full-PR MAJOR): Cancel preserves preview
+                when prior data exists. Only fully closes when no preview to
+                return to (initial open state). */}
+            <button
+              onClick={function() {
+                if (data && (questions.length > 0 || variants.length > 0)) {
+                  setState("preview");
+                } else {
+                  onClose();
+                }
+              }}
+              disabled={disabled}
+              className="btn btn-secondary"
+            >
+              Cancel
+            </button>
             <button onClick={handleGenerate} disabled={disabled} className="btn btn-primary">
               Generate
             </button>
