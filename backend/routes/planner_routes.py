@@ -3689,6 +3689,38 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
 # ASSESSMENT GENERATION
 # =============================================================================
 
+def _build_period_differentiation_block(target_period):
+    """Period-differentiation prompt block for generate_assessment.
+
+    Emitted only when target_period is non-empty. Period differentiation
+    modifies vocabulary, reading level, context complexity, and scaffolding
+    tone — it does NOT modify the DOK distribution. Without this clarifier,
+    the AI receives contradictory instructions when both a DOK distribution
+    AND a target_period with period-specific differentiation are present.
+    Mirrors the orthogonal-coexistence clarifier added to remediation in
+    Phase 4.2 #12 (PR #149) — see _build_remediation_prompt in
+    student_portal_routes.py.
+    """
+    if not target_period:
+        return ""
+    return (
+        f"TARGET PERIOD FOR THIS ASSESSMENT: {target_period}\n"
+        "CRITICAL: You MUST apply any period-specific differentiation rules "
+        "from the teacher instructions above to this period.\n"
+        "- If the instructions indicate this period is advanced, use more "
+        "challenging vocabulary, richer contexts, and less scaffolding — "
+        "but DO NOT modify the DOK distribution above.\n"
+        "- If the instructions indicate this period is standard or lower "
+        "level, use simpler vocabulary, more scaffolding, and clearer "
+        "examples — but DO NOT modify the DOK distribution above.\n"
+        "- Cognitive rigor (DOK) is set by the distribution; period "
+        "differentiation modifies vocabulary, reading level, context "
+        "complexity, and scaffolding only.\n"
+        "- They can coexist — e.g., \"Period 3 advanced\" + \"DOK 1 Recall\" "
+        "means a recall question with more challenging vocabulary.\n"
+    )
+
+
 @planner_bp.route('/api/generate-assessment', methods=['POST'])
 @limiter.limit("10 per minute")
 @require_teacher
@@ -4109,7 +4141,7 @@ SECTION CATEGORIES TO INCLUDE:
 
 {f"TEACHER'S ADDITIONAL REQUIREMENTS (MUST FOLLOW — every question must reflect these):" + chr(10) + config.get('requirements', '').strip() + chr(10) if config.get('requirements', '').strip() else ''}
 {f"TEACHER'S GLOBAL INSTRUCTIONS (MUST FOLLOW):" + chr(10) + global_ai_notes + chr(10) if global_ai_notes else ''}
-{f"TARGET PERIOD FOR THIS ASSESSMENT: {target_period}" + chr(10) + "CRITICAL: You MUST apply any period-specific differentiation rules from the teacher instructions above to this period." + chr(10) + "- If the instructions indicate this period is advanced, use more challenging vocabulary, higher-level thinking, and complex scenarios" + chr(10) + "- If the instructions indicate this period is standard or lower level, use simpler vocabulary, more scaffolding, and clearer examples" + chr(10) + "- Adjust question complexity, reading level, and depth of knowledge based on the period designation" + chr(10) if target_period else ''}
+{_build_period_differentiation_block(target_period)}
 Generate a complete assessment in this JSON format:
 {{
     "title": "{title}",
@@ -5130,6 +5162,7 @@ def regenerate_questions():
         prompt = f"""Generate {len(questions_to_replace)} replacement question(s) for a grade {grade} {subject} assessment.
 {subject_boundary}
 Each replacement must match the specified type, DOK level, and point value exactly.
+Cognitive rigor (DOK) is fixed by the specifications above; teacher instructions modify vocabulary and scaffolding tone only — they MUST NOT change DOK.
 DO NOT duplicate any of these existing questions:
 {existing_list}
 
