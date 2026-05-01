@@ -379,10 +379,15 @@ def _normalize_mastery_shape(raw):
 def _sanitize_standards_mastery(sub):
     """Sanitize standards_mastery in a submission dict IN PLACE.
 
-    Replaces missing/non-dict outer values with {} and drops individual
-    non-dict entries. Logs a WARNING per malformed case.
-    Shared between get_student_report_card and get_class_progress_rank.
-    Phase 2b extracted this from get_student_report_card to share between endpoints.
+    Phase 4.3 Sprint 2: also normalizes shape via _normalize_mastery_shape.
+    - Pre-Sprint-2 (old flat) entries get wrapped into {overall, by_dok: {}}
+    - New shape entries pass through with sub-structure validation
+    - Malformed entries (non-dict, or rejected by adapter) are dropped
+    - Outer non-dict gets reset to {}
+
+    Args:
+        sub: a submission dict (mutated in place); typically the row
+             from student_submissions.
     """
     results = sub.get('results') or {}
     raw = results.get('standards_mastery')
@@ -398,16 +403,16 @@ def _sanitize_standards_mastery(sub):
         results['standards_mastery'] = {}
         sub['results'] = results
         return
-    # Valid dict at the outer level; drop individual non-dict values.
     cleaned = {}
-    for code, m in raw.items():
-        if isinstance(m, dict):
-            cleaned[code] = m
-        else:
+    for code, entry in raw.items():
+        normalized = _normalize_mastery_shape(entry)
+        if normalized is None:
             _logger.warning(
                 "malformed standards_mastery entry (code=%s, type=%s) in submission %s — skipping entry",
-                code, type(m).__name__, sub.get('id'),
+                code, type(entry).__name__, sub.get('id'),
             )
+            continue
+        cleaned[code] = normalized
     results['standards_mastery'] = cleaned
     sub['results'] = results
 
