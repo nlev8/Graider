@@ -3439,6 +3439,32 @@ def get_class_remediation_effectiveness(class_id):
             return None
         return round((earned / possible) * 100, 1)
 
+    # Phase 4.3 Sprint 3: per-DOK split of mastery percentage for a standard.
+    # Returns {int_dok: float_percentage} for every DOK that contributed at
+    # least one question (points_possible > 0). Empty dict for legacy data
+    # (old flat shape, or new shape with empty by_dok).
+    def _per_dok_percentages_for_standard(sub, std_code):
+        mastery = (sub.get('results') or {}).get('standards_mastery') or {}
+        if not isinstance(mastery, dict):
+            return {}
+        entry = mastery.get(std_code)
+        normalized = _normalize_mastery_shape(entry)
+        if normalized is None:
+            return {}
+        out = {}
+        for dok, dok_agg in (normalized.get('by_dok') or {}).items():
+            if not isinstance(dok_agg, dict):
+                continue
+            try:
+                earned = float(dok_agg.get('points_earned') or 0)
+                possible = float(dok_agg.get('points_possible') or 0)
+            except (ValueError, TypeError):
+                continue
+            if possible <= 0:
+                continue
+            out[dok] = round((earned / possible) * 100, 1)
+        return out
+
     # 7) For each (remediation, student_id) pair, compute before/after/delta.
     out_remediations = []
     for rem, std_code in rems_with_std:
@@ -3458,10 +3484,12 @@ def get_class_remediation_effectiveness(class_id):
             # Before: first item where submitted_at < remediation.created_at.
             # Bucket is sorted newest-first; iterate to find latest pre-event sub.
             before = None
+            before_by_dok = {}
             for sub in bucket:
                 sub_dt = _parse_ts(sub.get('submitted_at'))
                 if sub_dt < rem_created_dt:
                     before = _percentage_for_standard(sub, std_code)
+                    before_by_dok = _per_dok_percentages_for_standard(sub, std_code)
                     break
 
             # After: newest item in bucket (regardless of which content
@@ -3470,12 +3498,22 @@ def get_class_remediation_effectiveness(class_id):
             # cases, an older card's `after` reflects the latest mastery
             # state — possibly moved further by a later remediation.
             after = None
+            after_by_dok = {}
             if bucket:
                 after = _percentage_for_standard(bucket[0], std_code)
+                after_by_dok = _per_dok_percentages_for_standard(bucket[0], std_code)
 
             delta = None
             if before is not None and after is not None:
                 delta = round(after - before, 1)
+
+            # Phase 4.3 Sprint 3: per-DOK delta only for DOKs present in BOTH
+            # before AND after (Codex MAJOR — keeps {N: pct} contract clean;
+            # frontend renders the union via dashes for missing sides).
+            delta_by_dok = {}
+            for dok, before_pct in before_by_dok.items():
+                if dok in after_by_dok:
+                    delta_by_dok[dok] = round(after_by_dok[dok] - before_pct, 1)
 
             attempt_count = int(attempts_by_student_content.get((sid, rem_id), 0))
             completed = attempt_count > 0
@@ -3488,6 +3526,11 @@ def get_class_remediation_effectiveness(class_id):
                 'delta': delta,
                 'completed': completed,
                 'attempt_count': attempt_count,
+                # Phase 4.3 Sprint 3: per-DOK split. Empty dicts for legacy
+                # submissions (no by_dok data); frontend hides expander.
+                'before_by_dok': before_by_dok,
+                'after_by_dok': after_by_dok,
+                'delta_by_dok': delta_by_dok,
             })
 
         out_remediations.append({
