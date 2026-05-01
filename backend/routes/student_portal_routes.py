@@ -3355,15 +3355,20 @@ def get_class_remediation_effectiveness(class_id):
         if not isinstance(mastery, dict):
             return None
         entry = mastery.get(std_code)
-        if not isinstance(entry, dict):
+        # Phase 4.3 Sprint 2: route through the shape adapter so both old
+        # flat and new {overall, by_dok} entries work transparently.
+        normalized = _normalize_mastery_shape(entry)
+        if normalized is None:
             return None
-        # Prefer pre-computed percentage; otherwise derive from points.
-        pct = entry.get('percentage')
+        ov = normalized['overall']
+        # Prefer pre-computed percentage (legacy aggregated entries can
+        # carry it); otherwise derive from points.
+        pct = ov.get('percentage')
         if isinstance(pct, (int, float)):
             return float(pct)
         try:
-            earned = float(entry.get('points_earned') or 0)
-            possible = float(entry.get('points_possible') or 0)
+            earned = float(ov.get('points_earned') or 0)
+            possible = float(ov.get('points_possible') or 0)
         except (ValueError, TypeError):
             return None
         if possible <= 0:
