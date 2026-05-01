@@ -360,8 +360,26 @@ def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
     """
     rows = []
     for code, m in mastery_by_code.items():
+        # Phase 4.3 Sprint 2 — when aggregator was called with include_dok=True,
+        # `m` carries {overall, by_dok}. Otherwise it's flat (pre-Sprint-2
+        # contract). Detect via 'overall' presence.
+        if 'overall' in m:
+            ov = m['overall']
+            by_dok_rows = []
+            for dok in sorted(m.get('by_dok') or {}):
+                d = m['by_dok'][dok]
+                by_dok_rows.append({
+                    'dok': dok,
+                    'percentage': d.get('percentage', 0),
+                    'points_earned': d.get('points_earned', 0),
+                    'points_possible': d.get('points_possible', 0),
+                    'question_count': d.get('question_count', 0),
+                })
+        else:
+            ov = m
+            by_dok_rows = []
         enriched_contribs = []
-        for c in m.get("contributing_submissions", []):
+        for c in ov.get("contributing_submissions", []):
             pts_poss = c.get("points_possible") or 0
             pts_earned = c.get("points_earned") or 0
             pct = round((pts_earned / pts_poss) * 100, 1) if pts_poss > 0 else 0.0
@@ -377,11 +395,12 @@ def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
             })
         rows.append({
             "code": code,
-            "percentage": m.get("percentage", 0),
-            "points_earned": m.get("points_earned", 0),
-            "points_possible": m.get("points_possible", 0),
-            "question_count": m.get("question_count", 0),
+            "percentage": ov.get("percentage", 0),
+            "points_earned": ov.get("points_earned", 0),
+            "points_possible": ov.get("points_possible", 0),
+            "question_count": ov.get("question_count", 0),
             "contributing_submissions": enriched_contribs,
+            "by_dok": by_dok_rows,
         })
     rows.sort(key=lambda r: r["percentage"])  # ASC = worst-first
     return rows
@@ -1980,7 +1999,9 @@ def get_student_report_card(class_id, student_id):
         if cid:
             subs_by_content[cid].append(s)
     selected = _select_submissions_by_mode(subs_by_content, attempt_mode)
-    mastery_by_code = _aggregate_mastery_for_student(selected, content_titles, attempt_mode)
+    mastery_by_code = _aggregate_mastery_for_student(
+        selected, content_titles, attempt_mode, include_dok=True,
+    )
     submission_lookup = {s.get('id'): s for s in submissions if s.get('id')}
     standards_breakdown = _build_standards_breakdown_for_student(mastery_by_code, submission_lookup)
 
