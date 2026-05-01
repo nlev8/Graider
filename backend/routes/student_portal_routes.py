@@ -165,92 +165,176 @@ def _select_submissions_by_mode(submissions_by_content, attempt_mode):
     return selected
 
 
-def _aggregate_mastery_for_student(selected_submissions_by_content, content_titles, attempt_mode):
+def _aggregate_mastery_for_student(selected_submissions_by_content, content_titles, attempt_mode, *, include_dok=False):
     """Aggregate standards_mastery across submissions into a per-standard dict.
 
-    Input: { content_id: [submission, ...] } (one per content unless attempt_mode=='average')
-    Output: { standard_code: { percentage, points_earned, points_possible, question_count, contributing_submissions } }
+    Phase 4.3 Sprint 2 — internals operate on normalized (new) shape via
+    _normalize_mastery_shape. Output is flat-by-default (preserves the
+    pre-Sprint-2 API contract for existing routes); pass include_dok=True
+    to emit new shape with by_dok aggregates (Student Report Card).
+
+    Args:
+        selected_submissions_by_content: { content_id: [submission, ...] }
+            (one per content unless attempt_mode == 'average')
+        content_titles: { content_id: title }
+        attempt_mode: 'latest' | 'best' | 'average'
+        include_dok: when True, emit {overall, by_dok} per standard.
+
+    Returns:
+        Flat shape (default):
+            { standard_code: { percentage, points_earned, points_possible,
+              question_count, contributing_submissions } }
+        New shape (include_dok=True):
+            { standard_code: { overall: {percentage, points_earned,
+              points_possible, question_count, contributing_submissions},
+              by_dok: { N: {percentage, points_earned, points_possible,
+              question_count} } } }
     """
     from collections import defaultdict
-    totals = defaultdict(lambda: {
-        'points_earned': 0.0,
-        'points_possible': 0.0,
-        'question_count': 0,
-        'contributing_submissions': [],
-    })
+
+    def _new_overall_total():
+        return {
+            'points_earned': 0.0,
+            'points_possible': 0.0,
+            'question_count': 0,
+            'contributing_submissions': [],
+        }
+
+    def _new_dok_total():
+        return {
+            'points_earned': 0.0,
+            'points_possible': 0.0,
+            'question_count': 0,
+        }
+
+    overall_totals = defaultdict(_new_overall_total)
+    # by_dok_totals[code][dok] -> dok_total dict
+    by_dok_totals = defaultdict(lambda: defaultdict(_new_dok_total))
 
     for content_id, subs in selected_submissions_by_content.items():
         if not subs:
             continue
         if attempt_mode == 'average' and len(subs) > 1:
             # Average each standard's percentage across attempts, then scale
-            per_standard_avg = defaultdict(lambda: {'pct_sum': 0.0, 'count': 0, 'pts_poss': 0, 'q_count': 0, 'attempts': []})
+            # to "weighted earned" by attempt.
+            per_standard_avg = defaultdict(lambda: {
+                'pct_sum': 0.0, 'count': 0, 'pts_poss': 0, 'q_count': 0,
+                'attempts': [], 'by_dok_pct_sum': defaultdict(float),
+                'by_dok_pct_count': defaultdict(int),
+                'by_dok_pts_poss': defaultdict(int),
+                'by_dok_q_count': defaultdict(int),
+            })
             for sub in subs:
                 results = sub.get('results') or {}
                 mastery = results.get('standards_mastery') or {}
-                for code, m in mastery.items():
-                    if not m or not m.get('points_possible'):
+                for code, raw_entry in mastery.items():
+                    normalized = _normalize_mastery_shape(raw_entry)
+                    if normalized is None:
                         continue
-                    pct = (m.get('points_earned', 0) / m['points_possible']) * 100
+                    overall = normalized['overall']
+                    if not overall.get('points_possible'):
+                        continue
+                    pct = (overall.get('points_earned', 0) / overall['points_possible']) * 100
                     per_standard_avg[code]['pct_sum'] += pct
                     per_standard_avg[code]['count'] += 1
-                    per_standard_avg[code]['pts_poss'] = m.get('points_possible', 0)
-                    per_standard_avg[code]['q_count'] = m.get('question_count', 0)
+                    per_standard_avg[code]['pts_poss'] = overall.get('points_possible', 0)
+                    per_standard_avg[code]['q_count'] = overall.get('question_count', 0)
                     per_standard_avg[code]['attempts'].append({
                         'submission_id': sub.get('id'),
                         'attempt_number': sub.get('attempt_number', 1),
-                        'points_earned': m.get('points_earned', 0),
-                        'points_possible': m['points_possible'],
+                        'points_earned': overall.get('points_earned', 0),
+                        'points_possible': overall['points_possible'],
                     })
+                    if include_dok:
+                        for dok, d_agg in normalized.get('by_dok', {}).items():
+                            if not d_agg.get('points_possible'):
+                                continue
+                            d_pct = (d_agg.get('points_earned', 0) / d_agg['points_possible']) * 100
+                            per_standard_avg[code]['by_dok_pct_sum'][dok] += d_pct
+                            per_standard_avg[code]['by_dok_pct_count'][dok] += 1
+                            per_standard_avg[code]['by_dok_pts_poss'][dok] = d_agg.get('points_possible', 0)
+                            per_standard_avg[code]['by_dok_q_count'][dok] = d_agg.get('question_count', 0)
             for code, agg in per_standard_avg.items():
                 avg_pct = agg['pct_sum'] / agg['count']
-                totals[code]['points_earned'] += (avg_pct / 100.0) * agg['pts_poss']
-                totals[code]['points_possible'] += agg['pts_poss']
-                totals[code]['question_count'] += agg['q_count']
-                # In average mode, record each contributing attempt individually
+                overall_totals[code]['points_earned'] += (avg_pct / 100.0) * agg['pts_poss']
+                overall_totals[code]['points_possible'] += agg['pts_poss']
+                overall_totals[code]['question_count'] += agg['q_count']
                 for a in agg['attempts']:
-                    totals[code]['contributing_submissions'].append({
+                    overall_totals[code]['contributing_submissions'].append({
                         'submission_id': a['submission_id'],
                         'title': content_titles.get(content_id, ''),
                         'points_earned': a['points_earned'],
                         'points_possible': a['points_possible'],
                         'attempt_number': a['attempt_number'],
                     })
+                if include_dok:
+                    for dok, ct in agg['by_dok_pct_count'].items():
+                        if ct == 0:
+                            continue
+                        d_avg_pct = agg['by_dok_pct_sum'][dok] / ct
+                        d_pts_poss = agg['by_dok_pts_poss'][dok]
+                        by_dok_totals[code][dok]['points_earned'] += (d_avg_pct / 100.0) * d_pts_poss
+                        by_dok_totals[code][dok]['points_possible'] += d_pts_poss
+                        by_dok_totals[code][dok]['question_count'] += agg['by_dok_q_count'][dok]
         else:
+            # latest / best (already pre-selected upstream) — sum directly
             for sub in subs:
                 results = sub.get('results') or {}
                 mastery = results.get('standards_mastery') or {}
-                for code, m in mastery.items():
-                    if not m or not m.get('points_possible'):
+                for code, raw_entry in mastery.items():
+                    normalized = _normalize_mastery_shape(raw_entry)
+                    if normalized is None:
                         continue
-                    totals[code]['points_earned'] += m.get('points_earned', 0)
-                    totals[code]['points_possible'] += m['points_possible']
-                    totals[code]['question_count'] += m.get('question_count', 0)
-                    totals[code]['contributing_submissions'].append({
+                    overall = normalized['overall']
+                    if not overall.get('points_possible'):
+                        continue
+                    overall_totals[code]['points_earned'] += overall.get('points_earned', 0)
+                    overall_totals[code]['points_possible'] += overall['points_possible']
+                    overall_totals[code]['question_count'] += overall.get('question_count', 0)
+                    overall_totals[code]['contributing_submissions'].append({
                         'submission_id': sub.get('id'),
                         'title': content_titles.get(content_id, ''),
-                        'points_earned': m.get('points_earned', 0),
-                        'points_possible': m['points_possible'],
+                        'points_earned': overall.get('points_earned', 0),
+                        'points_possible': overall['points_possible'],
                         'attempt_number': sub.get('attempt_number', 1),
                     })
+                    if include_dok:
+                        for dok, d_agg in normalized.get('by_dok', {}).items():
+                            if not d_agg.get('points_possible'):
+                                continue
+                            by_dok_totals[code][dok]['points_earned'] += d_agg.get('points_earned', 0)
+                            by_dok_totals[code][dok]['points_possible'] += d_agg['points_possible']
+                            by_dok_totals[code][dok]['question_count'] += d_agg.get('question_count', 0)
 
-    # Compute final percentages and cap contributing_submissions at 10 (most recent first)
+    # Compute final percentages and project output shape
     result = {}
-    for code, t in totals.items():
+    for code, t in overall_totals.items():
         pct = round((t['points_earned'] / t['points_possible']) * 100, 1) if t['points_possible'] > 0 else 0
-        # Sort contributing submissions by attempt_number desc before capping
         contributing = sorted(
             t['contributing_submissions'],
             key=lambda c: c.get('attempt_number') or 0,
             reverse=True,
         )[:10]
-        result[code] = {
+        overall_out = {
             'percentage': pct,
             'points_earned': round(t['points_earned'], 2),
             'points_possible': t['points_possible'],
             'question_count': t['question_count'],
             'contributing_submissions': contributing,
         }
+        if include_dok:
+            by_dok_out = {}
+            for dok, dt in by_dok_totals[code].items():
+                d_pct = round((dt['points_earned'] / dt['points_possible']) * 100, 1) if dt['points_possible'] > 0 else 0
+                by_dok_out[dok] = {
+                    'percentage': d_pct,
+                    'points_earned': round(dt['points_earned'], 2),
+                    'points_possible': dt['points_possible'],
+                    'question_count': dt['question_count'],
+                }
+            result[code] = {'overall': overall_out, 'by_dok': by_dok_out}
+        else:
+            result[code] = overall_out
     return result
 
 
