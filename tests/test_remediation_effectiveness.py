@@ -677,6 +677,7 @@ class TestEffectivenessPerDokSplit:
             ],
         })
         resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        assert resp.status_code == 200
         body = resp.get_json()
         row = body['remediations'][0]['rows'][0]
         # Overall still works
@@ -722,6 +723,7 @@ class TestEffectivenessPerDokSplit:
             ],
         })
         resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        assert resp.status_code == 200
         body = resp.get_json()
         row = body['remediations'][0]['rows'][0]
         # JSON serializes int dict keys as strings — assert via either form
@@ -769,12 +771,57 @@ class TestEffectivenessPerDokSplit:
             ],
         })
         resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        assert resp.status_code == 200
         body = resp.get_json()
         row = body['remediations'][0]['rows'][0]
         # before_by_dok has DOK 1 only; after has DOK 1 + 3
         assert len(row['before_by_dok']) == 1
         assert len(row['after_by_dok']) == 2
         # delta_by_dok is the intersection — only DOK 1 (Codex MAJOR)
+        assert len(row['delta_by_dok']) == 1
+        assert ('1' in row['delta_by_dok']) or (1 in row['delta_by_dok'])
+        assert ('3' not in row['delta_by_dok']) and (3 not in row['delta_by_dok'])
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_mirror_asymmetric_before_has_extra_dok(self, mock_sb_fn, client, teacher_headers):
+        """Mirror of the prior test: before has DOK 1 + DOK 3; after has
+        DOK 1 only (e.g., the post-rem assessment was DOK 1 only).
+        delta_by_dok still only contains the intersection (DOK 1)."""
+        pre_mastery = {STD_AR_1: {
+            'overall': {'points_earned': 5, 'points_possible': 12, 'question_count': 4},
+            'by_dok': {
+                1: {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+                3: {'points_earned': 1, 'points_possible': 8, 'question_count': 3},
+            },
+        }}
+        post_mastery = {STD_AR_1: {
+            'overall': {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+            'by_dok': {
+                1: {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+            },
+        }}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'published_content': [
+                _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
+                _non_rem(CID_ASSESSMENT_1),
+            ],
+            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'student_submissions': [
+                _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
+                     submitted_at='2026-04-10T10:00:00Z'),
+                _sub('s-rem', STU_1, CID_REM_1, post_mastery,
+                     submitted_at='2026-04-16T10:00:00Z'),
+            ],
+        })
+        resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        row = body['remediations'][0]['rows'][0]
+        # before has DOK 1 + 3; after has DOK 1 only
+        assert len(row['before_by_dok']) == 2
+        assert len(row['after_by_dok']) == 1
+        # delta_by_dok intersection — only DOK 1 (Codex MINOR — mirror case)
         assert len(row['delta_by_dok']) == 1
         assert ('1' in row['delta_by_dok']) or (1 in row['delta_by_dok'])
         assert ('3' not in row['delta_by_dok']) and (3 not in row['delta_by_dok'])
