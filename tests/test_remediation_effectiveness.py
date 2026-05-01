@@ -631,4 +631,150 @@ class TestRemediationEffectivenessNewShape:
         # so percentage is derived: 6/8 = 75.0, not None.
         assert row['after'] == 75.0
         assert row['before'] == 25.0
-        assert row['delta'] == 50.0
+
+
+# ============ Phase 4.3 Sprint 3: per-DOK split ============
+# Spec: docs/superpowers/specs/2026-05-01-phase4.3-sprint3-effectiveness-dok-design.md
+#
+# Per-(remediation × student) row gains additive fields:
+#   before_by_dok: {N: pct}
+#   after_by_dok:  {N: pct}
+#   delta_by_dok:  {N: pct} — ONLY for DOKs in BOTH before AND after (Codex MAJOR)
+# Frontend reads JSON object keys as strings; sorts numerically before render.
+
+class TestEffectivenessPerDokSplit:
+    """Sprint 3 — surfaces by_dok data Sprint 2 produced.
+
+    `delta_by_dok` is the intersection of before+after DOK keys (numeric
+    deltas only); the frontend renders the union with dashes for missing
+    sides, but the contract `{N: pct}` stays clean here.
+    """
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_legacy_old_shape_emits_empty_dicts(self, mock_sb_fn, client, teacher_headers):
+        """Old flat-shape stored data has no by_dok info; all three
+        per-DOK fields must be empty {} so frontend hides the expander."""
+        pre_mastery = {STD_AR_1: {
+            'percentage': 25.0, 'points_earned': 2, 'points_possible': 8,
+            'question_count': 2,
+        }}
+        post_mastery = {STD_AR_1: {
+            'percentage': 75.0, 'points_earned': 6, 'points_possible': 8,
+            'question_count': 2,
+        }}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'published_content': [
+                _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
+                _non_rem(CID_ASSESSMENT_1),
+            ],
+            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'student_submissions': [
+                _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
+                     submitted_at='2026-04-10T10:00:00Z'),
+                _sub('s-rem', STU_1, CID_REM_1, post_mastery,
+                     submitted_at='2026-04-16T10:00:00Z'),
+            ],
+        })
+        resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        body = resp.get_json()
+        row = body['remediations'][0]['rows'][0]
+        # Overall still works
+        assert row['before'] == 25.0
+        assert row['after'] == 75.0
+        # Per-DOK fields present but empty (legacy data)
+        assert row['before_by_dok'] == {}
+        assert row['after_by_dok'] == {}
+        assert row['delta_by_dok'] == {}
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_dok_overlap_computes_per_dok_deltas(self, mock_sb_fn, client, teacher_headers):
+        """Both before+after carry by_dok with overlapping DOKs — delta_by_dok
+        contains the numeric per-DOK deltas (intersection)."""
+        # Pre-rem: DOK 1 at 100% + DOK 3 at 25%
+        pre_mastery = {STD_AR_1: {
+            'overall': {'points_earned': 5, 'points_possible': 12, 'question_count': 4},
+            'by_dok': {
+                1: {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+                3: {'points_earned': 1, 'points_possible': 8, 'question_count': 3},
+            },
+        }}
+        # Post-rem: DOK 1 at 100% + DOK 3 at 75%
+        post_mastery = {STD_AR_1: {
+            'overall': {'points_earned': 10, 'points_possible': 12, 'question_count': 4},
+            'by_dok': {
+                1: {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+                3: {'points_earned': 6, 'points_possible': 8, 'question_count': 3},
+            },
+        }}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'published_content': [
+                _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
+                _non_rem(CID_ASSESSMENT_1),
+            ],
+            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'student_submissions': [
+                _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
+                     submitted_at='2026-04-10T10:00:00Z'),
+                _sub('s-rem', STU_1, CID_REM_1, post_mastery,
+                     submitted_at='2026-04-16T10:00:00Z'),
+            ],
+        })
+        resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        body = resp.get_json()
+        row = body['remediations'][0]['rows'][0]
+        # JSON serializes int dict keys as strings — assert via either form
+        before_dok = row['before_by_dok']
+        after_dok = row['after_by_dok']
+        delta_dok = row['delta_by_dok']
+        assert before_dok.get('1') == 100.0 or before_dok.get(1) == 100.0
+        assert before_dok.get('3') == 12.5 or before_dok.get(3) == 12.5
+        assert after_dok.get('1') == 100.0 or after_dok.get(1) == 100.0
+        assert after_dok.get('3') == 75.0 or after_dok.get(3) == 75.0
+        # Per-DOK deltas (intersection of before+after keys)
+        assert delta_dok.get('1') == 0.0 or delta_dok.get(1) == 0.0
+        assert delta_dok.get('3') == 62.5 or delta_dok.get(3) == 62.5
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_asymmetric_dok_emits_partial_delta(self, mock_sb_fn, client, teacher_headers):
+        """Before has DOK 1 only; after has DOK 1 + DOK 3 — delta_by_dok
+        only contains DOK 1 (the intersection). Frontend renders "—" for
+        missing-before DOK 3 in the after column, no delta."""
+        pre_mastery = {STD_AR_1: {
+            'overall': {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+            'by_dok': {
+                1: {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+            },
+        }}
+        post_mastery = {STD_AR_1: {
+            'overall': {'points_earned': 7, 'points_possible': 12, 'question_count': 4},
+            'by_dok': {
+                1: {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+                3: {'points_earned': 3, 'points_possible': 8, 'question_count': 3},
+            },
+        }}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'published_content': [
+                _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
+                _non_rem(CID_ASSESSMENT_1),
+            ],
+            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'student_submissions': [
+                _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
+                     submitted_at='2026-04-10T10:00:00Z'),
+                _sub('s-rem', STU_1, CID_REM_1, post_mastery,
+                     submitted_at='2026-04-16T10:00:00Z'),
+            ],
+        })
+        resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        body = resp.get_json()
+        row = body['remediations'][0]['rows'][0]
+        # before_by_dok has DOK 1 only; after has DOK 1 + 3
+        assert len(row['before_by_dok']) == 1
+        assert len(row['after_by_dok']) == 2
+        # delta_by_dok is the intersection — only DOK 1 (Codex MAJOR)
+        assert len(row['delta_by_dok']) == 1
+        assert ('1' in row['delta_by_dok']) or (1 in row['delta_by_dok'])
+        assert ('3' not in row['delta_by_dok']) and (3 not in row['delta_by_dok'])

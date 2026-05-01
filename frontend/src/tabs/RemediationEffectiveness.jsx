@@ -53,6 +53,10 @@ export default function RemediationEffectiveness({ classId, addToast }) {
   // publishes a new remediation (matches ProgressRankGrid Phase 4.2 fix).
   var [reloadKey, setReloadKey] = useState(0);
 
+  // Phase 4.3 Sprint 3: per-row DOK breakdown expander. Key = "<rem_id>:<sid>"
+  // since the same student can appear across multiple remediation cards.
+  var [expandedDokKey, setExpandedDokKey] = useState(null);
+
   useEffect(function() {
     if (!classId) return;
     var cancelled = false;
@@ -222,9 +226,41 @@ export default function RemediationEffectiveness({ classId, addToast }) {
                         var beforeBadge = row.before == null
                           ? <span style={{ fontSize: "0.72rem", padding: "2px 6px", borderRadius: "4px", background: "var(--glass-bg)", color: "var(--text-muted)" }}>No baseline</span>
                           : pctText(row.before);
+                        // Phase 4.3 Sprint 3: per-DOK split expander.
+                        // JSON serializes int dict keys to strings (Codex MINOR);
+                        // union the keys, sort numerically.
+                        var beforeDok = row.before_by_dok || {};
+                        var afterDok = row.after_by_dok || {};
+                        var deltaDok = row.delta_by_dok || {};
+                        var dokKeys = {};
+                        Object.keys(beforeDok).forEach(function(k) { dokKeys[k] = true; });
+                        Object.keys(afterDok).forEach(function(k) { dokKeys[k] = true; });
+                        var sortedDoks = Object.keys(dokKeys).sort(function(a, b) {
+                          return parseInt(a, 10) - parseInt(b, 10);
+                        });
+                        var hasDok = sortedDoks.length > 0;
+                        var dokKey = rem.remediation_id + ":" + row.student_id;
+                        var isDokExpanded = expandedDokKey === dokKey;
                         return (
-                          <tr key={row.student_id}>
-                            <td style={{ position: "sticky", left: 0, background: "var(--card-bg)", zIndex: 1, padding: "10px 12px", fontWeight: 600, borderBottom: "1px solid var(--glass-border)" }}>{row.student_name || "(unknown)"}</td>
+                          <React.Fragment key={row.student_id}>
+                          <tr>
+                            <td style={{ position: "sticky", left: 0, background: "var(--card-bg)", zIndex: 1, padding: "10px 12px", fontWeight: 600, borderBottom: "1px solid var(--glass-border)" }}>
+                              {row.student_name || "(unknown)"}
+                              {hasDok && (
+                                <button
+                                  type="button"
+                                  onClick={function() {
+                                    setExpandedDokKey(isDokExpanded ? null : dokKey);
+                                  }}
+                                  style={{
+                                    background: "transparent", border: "none",
+                                    color: "var(--accent-primary)", fontSize: "0.7rem",
+                                    cursor: "pointer", padding: "2px 0", marginLeft: "8px",
+                                    fontWeight: 600,
+                                  }}
+                                >{isDokExpanded ? String.fromCharCode(9662) + " DOK" : String.fromCharCode(9656) + " DOK"}</button>
+                              )}
+                            </td>
                             <td style={{ padding: "10px", textAlign: "center", borderBottom: "1px solid var(--glass-border)" }}>{beforeBadge}</td>
                             <td style={{ padding: "10px", textAlign: "center", borderBottom: "1px solid var(--glass-border)" }}>{pctText(row.after)}</td>
                             <td style={{ padding: "10px", textAlign: "center", borderBottom: "1px solid var(--glass-border)" }}>
@@ -247,6 +283,40 @@ export default function RemediationEffectiveness({ classId, addToast }) {
                               >Remediate again</button>
                             </td>
                           </tr>
+                          {isDokExpanded && hasDok && (
+                            <tr>
+                              <td colSpan={7} style={{
+                                padding: "10px 16px", borderBottom: "1px solid var(--glass-border)",
+                                background: "rgba(99,102,241,0.05)",
+                              }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                  {sortedDoks.map(function(dokKeyStr) {
+                                    var bPct = beforeDok[dokKeyStr];
+                                    var aPct = afterDok[dokKeyStr];
+                                    var dPct = deltaDok[dokKeyStr];
+                                    var bText = (typeof bPct === "number") ? (bPct + "%") : String.fromCharCode(8212);
+                                    var aText = (typeof aPct === "number") ? (aPct + "%") : String.fromCharCode(8212);
+                                    var dText = (typeof dPct === "number")
+                                      ? ((dPct > 0 ? "+" : "") + dPct)
+                                      : String.fromCharCode(8212);
+                                    var dColor = (typeof dPct === "number")
+                                      ? (dPct > 0 ? "var(--success)" : (dPct < 0 ? "var(--danger)" : "var(--text-muted)"))
+                                      : "var(--text-muted)";
+                                    return (
+                                      <div key={dokKeyStr} style={{ display: "flex", gap: "12px", fontSize: "0.78rem", alignItems: "center" }}>
+                                        <span style={{ width: "60px", fontWeight: 600, color: "var(--accent-primary)" }}>{"DOK " + dokKeyStr}</span>
+                                        <span style={{ width: "70px", color: "var(--text-secondary)" }}>{bText}</span>
+                                        <span style={{ color: "var(--text-muted)" }}>{String.fromCharCode(8594)}</span>
+                                        <span style={{ width: "70px", color: "var(--text-secondary)" }}>{aText}</span>
+                                        <span style={{ color: dColor, fontWeight: 700 }}>{dText}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
                         );
                       })}
                     </tbody>
