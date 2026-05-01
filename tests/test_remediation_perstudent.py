@@ -491,6 +491,56 @@ class TestVariantGeneration:
     @patch('backend.services.assignment_post_processing._post_process_assignment')
     @patch('backend.accommodations.build_accommodation_prompt')
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_personalized_mode_threads_dok_into_all_variants(
+        self, mock_sb_fn, mock_bap, mock_pp, mock_adapter_cls, mock_get_api_key,
+        client, teacher_headers,
+    ):
+        """Phase 4.2 #12 (Codex round 2 MINOR): personalized mode threads
+        dok into each variant's prompt. All N variants get the same DOK
+        directive."""
+        mock_bap.side_effect = lambda sid, tid: (
+            "STUDENT ACCOMMODATIONS\n- Extra time" if sid == STU_2 else ""
+        )
+
+        captured_prompts = []
+        def make_adapter(*args, **kwargs):
+            adapter = MagicMock()
+            def chat_side(req):
+                captured_prompts.append(req.messages[0].content[0].text)
+                completion = MagicMock()
+                completion.usage = None
+                text_part = MagicMock()
+                text_part.text = json.dumps(_make_ai_response())
+                completion.content_parts = [text_part]
+                return completion
+            adapter.chat.side_effect = chat_side
+            return adapter
+        mock_adapter_cls.side_effect = make_adapter
+        mock_get_api_key.return_value = "sk-test-fake"
+
+        mock_pp.return_value = _post_processed_assignment()
+        mock_sb_fn.return_value = _build_red_tier_supabase([STU_1, STU_2, STU_3])
+
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+            'dok': 3,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body['mode'] == 'personalized'
+        assert body['dok'] == 3
+        # Every variant prompt must contain the DOK 3 directive.
+        assert len(captured_prompts) == 3
+        for prompt in captured_prompts:
+            assert 'DOK level 3' in prompt
+            assert 'Strategic Thinking' in prompt
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.accommodations.build_accommodation_prompt')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_uniform_n_no_accommodation_student_still_gets_variant(
         self, mock_sb_fn, mock_bap, mock_pp, mock_adapter_cls, mock_get_api_key,
         client, teacher_headers,

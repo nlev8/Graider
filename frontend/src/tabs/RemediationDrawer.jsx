@@ -28,6 +28,9 @@ export default function RemediationDrawer({
   // current behavior; teacher tweaks before clicking Generate.
   var [configCount, setConfigCount] = useState(8);
   var [configDifficulty, setConfigDifficulty] = useState("same");
+  // Phase 4.2 #12: DOK control. Default null = "Auto" (no DOK directive
+  // in prompt; preserves current behavior for backwards-compat).
+  var [configDok, setConfigDok] = useState(null);
   // Validation error is shown inline in the preview state (not the error state).
   // Separate state slot so the drawer doesn't drop into the full-screen "error"
   // path (which is reserved for network/server errors).
@@ -67,6 +70,7 @@ export default function RemediationDrawer({
     setValidationError(null);
     setConfigCount(8);  // Reset config to defaults on every open (not sticky).
     setConfigDifficulty("same");
+    setConfigDok(null);  // Phase 4.2 #12: reset DOK to Auto on every open.
     return function() {
       if (cancelRef.current) cancelRef.current.cancelled = true;
       if (successTimerRef.current) {
@@ -90,6 +94,7 @@ export default function RemediationDrawer({
       target_mode: targetMode,
       count: configCount,
       difficulty: configDifficulty,
+      dok: configDok,  // null = Auto; backend treats null as missing (Phase 4.2 #12).
     };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
     api.postRemediate(classId, payload)
@@ -149,6 +154,7 @@ export default function RemediationDrawer({
       target_mode: targetMode,
       count: configCount,
       difficulty: configDifficulty,
+      dok: configDok,  // null = Auto; backend treats null as missing (Phase 4.2 #12).
     };
     if (targetMode === "single_student") payload.target_student_id = targetStudentId;
     api.postRemediate(classId, payload)
@@ -454,6 +460,44 @@ export default function RemediationDrawer({
                     : configDifficulty === "harder"
                     ? "More challenging vocabulary, higher cognitive demand."
                     : "Grade-level review."}
+                </p>
+              </div>
+              {/* Phase 4.2 #12: DOK (Webb's Depth of Knowledge) toggle.
+                  null = Auto (no DOK directive); 1-4 = explicit cognitive
+                  rigor target. Coexists with difficulty (orthogonal —
+                  difficulty is vocab/scaffolding tone). */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px" }}>
+                  Cognitive demand (DOK)
+                </label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {[null, 1, 2, 3, 4].map(function(level) {
+                    var active = level === configDok;
+                    var label = level === null ? "Auto" : String(level);
+                    return (
+                      <button key={String(level)}
+                              onClick={function() { setConfigDok(level); }}
+                              disabled={disabled}
+                              style={{
+                                flex: "1 1 60px", padding: "8px 12px", fontSize: "0.85rem",
+                                borderRadius: "6px", fontWeight: active ? 700 : 500,
+                                border: active ? "1px solid var(--accent-primary)" : "1px solid var(--glass-border)",
+                                background: active ? "rgba(99,102,241,0.15)" : "transparent",
+                                color: active ? "var(--accent-primary)" : "var(--text-primary)",
+                                cursor: disabled ? "not-allowed" : "pointer",
+                              }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ margin: "6px 0 0", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                  {configDok === null
+                    ? "AI picks the cognitive level appropriate to the standard."
+                    : configDok === 1 ? "DOK 1 — Recall & Reproduction."
+                    : configDok === 2 ? "DOK 2 — Skills & Concepts."
+                    : configDok === 3 ? "DOK 3 — Strategic Thinking."
+                    : "DOK 4 — Extended Thinking."}
                 </p>
               </div>
             </div>

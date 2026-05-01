@@ -1952,6 +1952,7 @@ Rules:
 - Fix mathematical inconsistencies so given values are correct
 - For MC questions, ensure the answer matches one option
 - Keep the same difficulty level and topic
+- Keep the same DOK level. If the original question has a 'dok' field, the corrected question MUST include the same 'dok' field with the same value. Do NOT change DOK levels during auto-fix.
 - If flagged as off-subject, replace with an on-subject question for the correct standard
 - Return ONLY the JSON array, no other text"""
 

@@ -431,6 +431,20 @@ REMEDIATION_COUNT_DEFAULT = 8
 DIFFICULTY_OPTIONS = ('easier', 'same', 'harder')
 REMEDIATION_DIFFICULTY_DEFAULT = 'same'
 
+# Phase 4.2 #12: DOK (Webb's Depth of Knowledge) control on remediation.
+# Spec: docs/superpowers/specs/2026-04-30-phase4.2-dok-control-design.md
+# Single backend source for prompt directive + validation; the frontend
+# MIRRORS the display labels in the drawer (Python constants can't
+# directly source React tooltips without a codegen/API layer).
+DOK_OPTIONS = (1, 2, 3, 4)
+REMEDIATION_DOK_DEFAULT = None  # None = "Auto" (no DOK directive in prompt)
+DOK_DESCRIPTIONS = {
+    1: "Recall & Reproduction — facts, terms, simple procedures.",
+    2: "Skills & Concepts — compare, organize, explain relationships, apply concepts.",
+    3: "Strategic Thinking — analyze with evidence, justify reasoning, multi-step decisions.",
+    4: "Extended Thinking — synthesize across sources, design solutions, sustained investigation.",
+}
+
 
 def _check_remediation_cap(db, teacher_id, target_student_ids):
     """Phase 4.2 #8: returns a list of capped student IDs (those who would
@@ -515,19 +529,25 @@ def _difficulty_directive(difficulty, grade):
     return "Difficulty: grade-level review."
 
 
-def _build_remediation_prompt(*, grade, subject, standard_code, count=None, difficulty=None):
+def _build_remediation_prompt(*, grade, subject, standard_code, count=None, difficulty=None, dok=None):
     """Build the base prompt used by both shared and personalized remediation.
 
     Phase 4.2 #1 added the lesson section.
     Phase 4.2 #3 parameterized count + difficulty (Codex MAJOR — earlier
     duplicate inline shared-mode prompt is now removed; this function is
     the single source of truth for the prompt).
+    Phase 4.2 #12 parameterized dok (1-4 or None=Auto). When set, the
+    prompt orders DOK as the cognitive-rigor constraint and difficulty
+    as vocab/scaffolding tone — so AI handles "DOK 4 + easier" coherently.
 
     `count` defaults to REMEDIATION_COUNT_DEFAULT and is used for:
       - "Generate exactly N..." in the prompt
       - MC/SA mix split: mc=round(N*0.6), sa=N-mc
     `difficulty` defaults to REMEDIATION_DIFFICULTY_DEFAULT and threads
     through `_difficulty_directive`.
+    `dok` defaults to REMEDIATION_DOK_DEFAULT (None = no directive).
+    When dok in DOK_OPTIONS, prompt requires per-question `dok: N` field
+    and clarifies DOK + difficulty are orthogonal.
     """
     if count is None:
         count = REMEDIATION_COUNT_DEFAULT
@@ -536,6 +556,20 @@ def _build_remediation_prompt(*, grade, subject, standard_code, count=None, diff
     mc = round(count * 0.6)
     sa = count - mc
     diff_directive = _difficulty_directive(difficulty, grade)
+
+    # Phase 4.2 #12: optional DOK directive. Codex MAJOR — explicit
+    # ordering clarifier prevents AI confusion on "DOK 4 + easier" cases.
+    dok_directive = ""
+    if dok in DOK_OPTIONS:
+        dok_directive = (
+            f"Each question MUST be at DOK level {dok}: "
+            f"{DOK_DESCRIPTIONS[dok]} "
+            f"Cognitive rigor is set by DOK; vocabulary and scaffolding tone "
+            f"are set by difficulty. They can coexist — e.g., DOK 4 + easier "
+            f"means extended thinking with simpler reading load. Each question "
+            f"MUST include a 'dok' integer field set to {dok}. "
+        )
+
     return (
         f"Generate exactly {count} grade-{grade} {subject} practice questions aligned to "
         f"standard {standard_code}, AND a short lesson explaining the standard.\n\n"
@@ -544,7 +578,7 @@ def _build_remediation_prompt(*, grade, subject, standard_code, count=None, diff
         f"choice letter (A/B/C/D) or the choice text) and {sa} short-answer questions "
         f"(each with an 'answer' field containing the model answer). "
         f"Each question MUST include a 'standard' field equal to '{standard_code}'. "
-        f"{diff_directive}\n\n"
+        f"{dok_directive}{diff_directive}\n\n"
         f"LESSON: A 300-400 word total mini-lesson with three string fields: "
         f"`intro` (~80-120 words explaining what standard {standard_code} is and "
         f"why it matters), `worked_example` (~150-200 words: a single fully worked "
@@ -2520,6 +2554,25 @@ def post_remediate(class_id):
             400,
         )
 
+    # Phase 4.2 #12: validate optional dok param. Same defensive pattern as
+    # count — reject booleans (Python bool is int subclass), require int in
+    # DOK_OPTIONS range. Default None (= Auto, no DOK directive in prompt).
+    raw_dok = body.get('dok')
+    if raw_dok is None:
+        dok = REMEDIATION_DOK_DEFAULT
+    else:
+        if isinstance(raw_dok, bool) or not isinstance(raw_dok, int):
+            return error_response(
+                f"dok must be an integer in {list(DOK_OPTIONS)}",
+                400,
+            )
+        if raw_dok not in DOK_OPTIONS:
+            return error_response(
+                "dok must be one of: " + ", ".join(str(d) for d in DOK_OPTIONS),
+                400,
+            )
+        dok = raw_dok
+
     target_student_ids = []
 
     # Resolve current-class assessment/assignment content (matches Phase 2
@@ -2708,7 +2761,7 @@ def post_remediate(class_id):
         subject = cls_row.get('subject') or 'General'
         base_prompt = _build_remediation_prompt(
             grade=grade, subject=subject, standard_code=standard_code,
-            count=count, difficulty=difficulty,
+            count=count, difficulty=difficulty, dok=dok,
         )
 
         # Capture per-request context BEFORE submitting to the worker pool.
@@ -2792,6 +2845,7 @@ def post_remediate(class_id):
             "mode": "personalized",
             "count": count,
             "difficulty": difficulty,
+            "dok": dok,
             "variants": variants,
             "target_mode": target_mode,
             "standard_code": standard_code,
@@ -2806,7 +2860,7 @@ def post_remediate(class_id):
     subject = cls_row.get('subject') or 'General'
     base_prompt = _build_remediation_prompt(
         grade=grade, subject=subject, standard_code=standard_code,
-        count=count, difficulty=difficulty,
+        count=count, difficulty=difficulty, dok=dok,
     )
 
     accommodation_segment = ""
@@ -2928,6 +2982,7 @@ def post_remediate(class_id):
         "mode": "shared",
         "count": count,
         "difficulty": difficulty,
+        "dok": dok,
         "questions": questions,
         "lesson": clean_lesson,
         "target_mode": target_mode,

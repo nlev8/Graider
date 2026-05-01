@@ -1499,3 +1499,195 @@ class TestRemediationConfigGradeClamping:
         prompt = _llm_request_prompt_text(mock_adapter)
         assert 'grade-13' not in prompt, "grade-13 must never appear (K-12 clamp)"
         assert 'grade-12' in prompt
+
+
+# ============ Phase 4.2 #12: DOK control ============
+# Spec: docs/superpowers/specs/2026-04-30-phase4.2-dok-control-design.md
+
+class TestRemediationDokValidation:
+    """Strict 400 on invalid dok values; defaults to None (Auto) when missing."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_dok_missing_defaults_to_null(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        """Body missing dok → defaults to Auto (response.dok is null)."""
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'P', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            # No dok → defaults
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body.get('dok') is None
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_dok_out_of_range_returns_400(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'dok': 5,  # out of [1, 4]
+        }, headers=teacher_headers)
+        assert resp.status_code == 400
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_dok_boolean_returns_400(self, mock_sb_fn, client, teacher_headers):
+        """Codex MAJOR pattern: Python bool is int subclass — must be rejected
+        explicitly so dok=True doesn't slip past isinstance(int) and become 1."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'dok': True,
+        }, headers=teacher_headers)
+        assert resp.status_code == 400, "dok=True must be rejected (bool is int subclass)"
+
+
+class TestRemediationDokPromptIntegration:
+    """Verify dok lands in the AI prompt + clarifier for orthogonal coexistence."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_dok_2_lands_in_prompt(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        """dok=2 → prompt contains 'DOK level 2: Skills & Concepts' and the
+        cognitive-rigor-vs-vocab clarifier."""
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'P', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'dok': 2,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        prompt = _llm_request_prompt_text(mock_adapter)
+        assert 'DOK level 2' in prompt
+        assert 'Skills & Concepts' in prompt
+        # Codex MAJOR: orthogonal-coexistence clarifier must appear.
+        assert 'Cognitive rigor is set by DOK' in prompt
+        body = resp.get_json()
+        assert body.get('dok') == 2
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_dok_auto_no_directive_in_prompt(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        """dok missing/null → no DOK directive in the prompt (preserves
+        backwards-compat for legacy callers)."""
+        mock_adapter = _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'P', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2'}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        prompt = _llm_request_prompt_text(mock_adapter)
+        assert 'DOK level' not in prompt, "Auto mode must NOT inject a DOK directive"
+
+
+class TestDokFieldPassThrough:
+    """Codex round 2 MINOR: AI's per-question `dok: N` field must survive
+    _post_process_assignment + response flattening to reach the response body."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_ai_dok_field_passes_through_to_response(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key, client, teacher_headers,
+    ):
+        """Mock _post_process_assignment to return questions WITH dok fields;
+        verify the response flattens them through and `dok: 2` survives."""
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'P', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq',
+                 'standard': 'MA.6.AR.1.2', 'dok': 2}  # dok field on each question
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        mastery = {'MA.6.AR.1.2': {'points_earned': 4, 'points_possible': 10, 'question_count': 2}}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [{'class_id': 'cls-1', 'student_id': STU_1}],
+            'students': [{'id': STU_1}],
+            'student_submissions': [_sub('s-1', STU_1, CID_Q1, 40, mastery)],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'single_student', 'target_student_id': STU_1,
+            'dok': 2,
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        # Each question must keep its dok field through flattening.
+        for q in body.get('questions') or []:
+            assert q.get('dok') == 2, (
+                "Per-question dok field must survive _post_process_assignment "
+                "+ response flattening (Codex round 2 MINOR — pass-through "
+                "contract is the most-likely-to-regress behavior)"
+            )
