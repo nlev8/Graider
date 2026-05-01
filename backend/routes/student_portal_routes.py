@@ -348,15 +348,25 @@ def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
       Pulls `submitted_at` from `submission_lookup` (a dict keyed by
       submission_id). Keeps the existing 10-cap from the upstream helper.
 
+    Phase 4.3 Sprint 2: when input carries the new shape (mastery_by_code
+    entries with `overall` + `by_dok` keys, emitted by the aggregator
+    when called with `include_dok=True`), each row gains a `by_dok`
+    array of {dok, percentage, points_earned, points_possible,
+    question_count} sorted ASC by dok. For flat-shape input
+    (pre-Sprint-2 stored data or include_dok=False callers), `by_dok`
+    is `[]`.
+
     Args:
         mastery_by_code: dict from _aggregate_mastery_for_student
         submission_lookup: dict[submission_id -> submission row] for enrichment
     Returns:
-        list[dict] sorted by percentage ASC; each dict has
+        list[dict] sorted ASC by percentage; each dict has
         {code, percentage, points_earned, points_possible, question_count,
-         contributing_submissions: [...]} with each contributing_submission
-        having submission_id, title, attempt_number, points_earned,
-        points_possible, percentage, submitted_at.
+         contributing_submissions, by_dok}. Each contributing_submission
+        has submission_id, title, attempt_number, points_earned,
+        points_possible, percentage, submitted_at. Each by_dok entry has
+        dok, percentage, points_earned, points_possible, question_count
+        (sorted ASC by dok); empty list when no DOK data is present.
     """
     rows = []
     for code, m in mastery_by_code.items():
