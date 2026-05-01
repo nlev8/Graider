@@ -170,7 +170,8 @@ def grade_student_submission(assessment, answers):
                 "points_possible": points,
                 "points_earned": 0,
                 "is_correct": False,
-                "feedback": ""
+                "feedback": "",
+                "dok": question.get("dok"),
             }
 
             # For matching questions, check match-specific keys instead of base key
@@ -318,7 +319,8 @@ def grade_instant_only(assessment, answers):
                 "points_possible": points,
                 "points_earned": 0,
                 "is_correct": False,
-                "feedback": ""
+                "feedback": "",
+                "dok": question.get("dok"),
             }
 
             if q_type in ("short_answer", "extended_response", "essay", "written"):
