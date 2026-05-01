@@ -1914,7 +1914,7 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
     for w in error_items:
         s = assignment.get('sections', [])[w['section_idx']]
         q = s.get('questions', [])[w['question_idx']]
-        batch.append({
+        item = {
             'index': len(batch),
             'section_idx': w['section_idx'],
             'question_idx': w['question_idx'],
@@ -1923,7 +1923,13 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
             'answer': q.get('answer', ''),
             'options': q.get('options', []),
             'issue': w['issue'],
-        })
+        }
+        # Phase 4.2 #12 (Codex full-PR MINOR): include `dok` when present
+        # so the auto-fix model can honor the "Keep the same DOK level" rule.
+        # Without this, the model has no signal of the original cognitive level.
+        if 'dok' in q:
+            item['dok'] = q['dok']
+        batch.append(item)
 
     if not batch or len(batch) > 20:
         return  # Skip if too many — something else is wrong
@@ -1952,6 +1958,7 @@ Rules:
 - Fix mathematical inconsistencies so given values are correct
 - For MC questions, ensure the answer matches one option
 - Keep the same difficulty level and topic
+- Keep the same DOK level. If the original question has a 'dok' field, the corrected question MUST include the same 'dok' field with the same value. Do NOT change DOK levels during auto-fix.
 - If flagged as off-subject, replace with an on-subject question for the correct standard
 - Return ONLY the JSON array, no other text"""
 
