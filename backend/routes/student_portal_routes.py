@@ -237,6 +237,10 @@ def _aggregate_mastery_for_student(selected_submissions_by_content, content_titl
                     pct = (overall.get('points_earned', 0) / overall['points_possible']) * 100
                     per_standard_avg[code]['pct_sum'] += pct
                     per_standard_avg[code]['count'] += 1
+                    # Average mode: pts_poss / q_count overwrite per attempt (last wins).
+                    # Consistent with pre-Sprint-2 behavior — the load-bearing value is
+                    # the averaged percentage, computed below. Same invariant applies to
+                    # by_dok_pts_poss / by_dok_q_count (see ~15 lines down).
                     per_standard_avg[code]['pts_poss'] = overall.get('points_possible', 0)
                     per_standard_avg[code]['q_count'] = overall.get('question_count', 0)
                     per_standard_avg[code]['attempts'].append({
@@ -487,6 +491,57 @@ def _normalize_mastery_shape(raw):
         return {'overall': overall, 'by_dok': by_dok}
     # Old flat shape — wrap.
     return {'overall': dict(raw), 'by_dok': {}}
+
+
+def _flatten_mastery_for_response(results):
+    """Project new-shape standards_mastery to flat shape for response.
+
+    Phase 4.3 Sprint 2 — endpoints that return raw `results` JSONB
+    (e.g., assessment results, class content submissions) must keep
+    emitting the pre-Sprint-2 flat shape per the API contract policy.
+    Only Student Report Card opts into the new {overall, by_dok} shape
+    via aggregator's include_dok flag.
+
+    Reads `results['standards_mastery']`. For each new-shape entry
+    ({overall, by_dok}), emits flat {percentage, points_earned,
+    points_possible, question_count}. Old flat entries pass through
+    unchanged. Returns a NEW results dict (does not mutate input).
+
+    Returns the input unchanged when results is None or not a dict.
+    """
+    if not isinstance(results, dict):
+        return results
+    raw = results.get('standards_mastery')
+    if not isinstance(raw, dict):
+        return results
+    flattened = {}
+    for code, entry in raw.items():
+        if not isinstance(entry, dict):
+            continue
+        if 'overall' in entry and isinstance(entry.get('overall'), dict):
+            ov = entry['overall']
+            pts_earned = ov.get('points_earned', 0) or 0
+            pts_possible = ov.get('points_possible', 0) or 0
+            pct = ov.get('percentage')
+            if not isinstance(pct, (int, float)):
+                pct = round((pts_earned / pts_possible) * 100, 1) if pts_possible > 0 else 0
+            flattened[code] = {
+                'percentage': pct,
+                'points_earned': pts_earned,
+                'points_possible': pts_possible,
+                'question_count': ov.get('question_count', 0),
+            }
+        else:
+            # Old flat shape — pass through (filter out by_dok if present)
+            flattened[code] = {
+                'percentage': entry.get('percentage', 0),
+                'points_earned': entry.get('points_earned', 0),
+                'points_possible': entry.get('points_possible', 0),
+                'question_count': entry.get('question_count', 0),
+            }
+    new_results = dict(results)
+    new_results['standards_mastery'] = flattened
+    return new_results
 
 
 def _sanitize_standards_mastery(sub):
@@ -1138,7 +1193,7 @@ def get_assessment_results(code):
             "percentage": s.get('percentage'),
             "time_taken_seconds": s.get('time_taken_seconds'),
             "submitted_at": s.get('submitted_at'),
-            "results": s.get('results'),
+            "results": _flatten_mastery_for_response(s.get('results')),
         } for s in submissions_result.data]
 
         return jsonify({
@@ -1785,7 +1840,7 @@ def list_content_submissions(content_id):
                 'time_taken_seconds': s.get('time_taken_seconds'),
                 'question_times': s.get('question_times'),
                 'submitted_at': s.get('submitted_at'),
-                'results': s.get('results'),
+                'results': _flatten_mastery_for_response(s.get('results')),
             })
 
         return jsonify({

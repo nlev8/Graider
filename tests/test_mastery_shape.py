@@ -69,3 +69,67 @@ class TestNormalizeMasteryShape:
         assert _normalize_mastery_shape("invalid") is None
         assert _normalize_mastery_shape([1, 2, 3]) is None
         assert _normalize_mastery_shape(42) is None
+
+
+class TestFlattenMasteryForResponse:
+    """Phase 4.3 Sprint 2 (Codex full-PR MAJOR) — endpoints that return
+    raw `results` JSONB project the new {overall, by_dok} shape down to
+    flat shape so existing API consumers don't break."""
+
+    def test_new_shape_flattens_to_flat(self):
+        from backend.routes.student_portal_routes import _flatten_mastery_for_response
+        result = _flatten_mastery_for_response({
+            'standards_mastery': {
+                'MA.6.AR.1': {
+                    'overall': {'points_earned': 8, 'points_possible': 10, 'question_count': 2},
+                    'by_dok': {3: {'points_earned': 8, 'points_possible': 10, 'question_count': 2}},
+                },
+            },
+        })
+        entry = result['standards_mastery']['MA.6.AR.1']
+        assert entry == {
+            'percentage': 80.0,
+            'points_earned': 8,
+            'points_possible': 10,
+            'question_count': 2,
+        }
+        assert 'overall' not in entry
+        assert 'by_dok' not in entry
+
+    def test_flat_shape_passes_through(self):
+        from backend.routes.student_portal_routes import _flatten_mastery_for_response
+        result = _flatten_mastery_for_response({
+            'standards_mastery': {
+                'MA.6.AR.1': {
+                    'percentage': 80, 'points_earned': 8,
+                    'points_possible': 10, 'question_count': 2,
+                },
+            },
+        })
+        entry = result['standards_mastery']['MA.6.AR.1']
+        assert entry['percentage'] == 80
+        assert entry['points_earned'] == 8
+
+    def test_does_not_mutate_input(self):
+        from backend.routes.student_portal_routes import _flatten_mastery_for_response
+        original = {
+            'standards_mastery': {
+                'MA.6.AR.1': {
+                    'overall': {'points_earned': 8, 'points_possible': 10, 'question_count': 2},
+                    'by_dok': {3: {'points_earned': 8, 'points_possible': 10, 'question_count': 2}},
+                },
+            },
+        }
+        _flatten_mastery_for_response(original)
+        # Input still has new shape
+        assert 'overall' in original['standards_mastery']['MA.6.AR.1']
+
+    def test_none_results_returns_none(self):
+        from backend.routes.student_portal_routes import _flatten_mastery_for_response
+        assert _flatten_mastery_for_response(None) is None
+
+    def test_no_standards_mastery_passes_through(self):
+        from backend.routes.student_portal_routes import _flatten_mastery_for_response
+        result = _flatten_mastery_for_response({'score': 5, 'total_points': 10})
+        # Other fields preserved; standards_mastery untouched (absent)
+        assert result.get('score') == 5
