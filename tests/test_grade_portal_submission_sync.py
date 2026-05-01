@@ -99,4 +99,40 @@ def test_sync_has_no_flask_context_references():
     # Note: 'g.user_id' / 'g.district_id' access should also be absent.
     # But 'g' alone might appear in strings/comments; check for specific access patterns.
     assert 'getattr(g,' not in src
+
+
+def test_per_question_scores_emit_dok_at_every_write_site():
+    """Phase 4.3 Sprint 1: per_question_scores dict literals must include
+    `"dok": q.get("dok")` at every write site so DOK propagates from
+    published_content.content.questions[i].dok to
+    student_submissions.results.questions[i].dok.
+
+    There are three write sites in grade_portal_submission_sync:
+      1. WRITTEN_TYPES branch (AI grading result)
+      2. WRITTEN_TYPES error branch (grading error fallback)
+      3. Instant grading branch (MC/TF/matching)
+
+    Without this passthrough, the SubmissionDetail per-question response
+    has no DOK to surface (Codex round 1 MAJOR — caught that the original
+    spec missed the upstream writer).
+    """
+    import inspect
+    from backend.services.portal_grading import grade_portal_submission_sync
+    src = inspect.getsource(grade_portal_submission_sync)
+
+    # The function appends per_question_scores in 3 places (AI, error, instant).
+    # Pin the count so a future refactor doesn't silently drop a write site.
+    append_count = src.count('per_question_scores.append({')
+    assert append_count == 3, (
+        f"Expected 3 per_question_scores.append sites; found {append_count}. "
+        "Update this test if the writers were intentionally restructured."
+    )
+
+    # Every append site must include the dok passthrough.
+    dok_keyline_count = src.count('"dok": q.get("dok")')
+    assert dok_keyline_count == 3, (
+        f"Expected `\"dok\": q.get(\"dok\")` in all 3 writer dicts; "
+        f"found {dok_keyline_count}. The per-question DOK passthrough must "
+        "match the per_question_scores.append site count exactly."
+    )
     assert 'flask_g' not in src or 'from flask import' not in src

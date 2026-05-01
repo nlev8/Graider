@@ -446,6 +446,56 @@ DOK_DESCRIPTIONS = {
 }
 
 
+def _validate_dok(value):
+    """Normalize a stored/incoming DOK value to int in DOK_OPTIONS or None.
+
+    Phase 4.3 Sprint 1 (Codex MINOR): legacy storage and AI output drift can
+    produce string DOKs ("3") instead of ints (3). Normalize on read so the
+    frontend predicate stays simple. Bools must be rejected explicitly
+    because bool is an int subclass, so ``isinstance(True, int)`` is True.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value in DOK_OPTIONS else None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            as_int = int(stripped)
+        except ValueError:
+            return None
+        return as_int if as_int in DOK_OPTIONS else None
+    return None
+
+
+def _derive_uniform_dok(content):
+    """Return the uniform DOK from content.questions when all share one
+    valid level (1..4), else None.
+
+    Phase 4.3 Sprint 1: Gradebook + SubmissionDetail header derive a single
+    DOK badge for remediation rows from the source content. Only emits a
+    value when EVERY question contributes a valid DOK and they all agree —
+    mixed DOK or any missing/invalid value collapses to None (no badge).
+    """
+    if not isinstance(content, dict):
+        return None
+    questions = content.get('questions')
+    if not isinstance(questions, list) or not questions:
+        return None
+    dok_values = []
+    for q in questions:
+        if not isinstance(q, dict):
+            return None
+        normalized = _validate_dok(q.get('dok'))
+        if normalized is None:
+            return None
+        dok_values.append(normalized)
+    first = dok_values[0]
+    return first if all(d == first for d in dok_values) else None
+
+
 def _check_remediation_cap(db, teacher_id, target_student_ids):
     """Phase 4.2 #8: returns a list of capped student IDs (those who would
     exceed the per-(teacher, student) weekly cap if a new remediation
@@ -1947,6 +1997,38 @@ def get_class_gradebook(class_id):
             "assessments": [], "grades": {},
         })
 
+    # Phase 4.3 Sprint 1: derive uniform DOK for remediation rows only.
+    # The metadata SELECT above intentionally omits `content` (JSONB blob —
+    # could be 50-200KB per row × dozens of rows). Remediation rows are
+    # typically 1-3 per class, so a focused second fetch keeps the payload
+    # tight while letting the gradebook column header render a "DOK N" pill.
+    remediation_ids = [
+        c['id'] for c in assessments
+        if c.get('target_student_ids') and c.get('id')
+    ]
+    assessment_dok_by_id = {}
+    if remediation_ids:
+        # Paginate via .range() — same pattern as the submissions fetch
+        # below. PostgREST's default row cap is 1000; a class can in
+        # principle accumulate more remediations over time (Phase 4.2 #8
+        # caps publishes per-(teacher × student × rolling 7-day) but the
+        # historical total can grow). Without pagination, later rows would
+        # silently miss assessment_dok (Codex full-PR MINOR).
+        page_size = 1000
+        rem_start = 0
+        while True:
+            rem_page = db.table('published_content').select(
+                'id, content'
+            ).in_('id', remediation_ids).range(rem_start, rem_start + page_size - 1).execute()
+            rem_rows = rem_page.data or []
+            for row in rem_rows:
+                cid = row.get('id')
+                if cid:
+                    assessment_dok_by_id[cid] = _derive_uniform_dok(row.get('content'))
+            if len(rem_rows) < page_size:
+                break
+            rem_start += page_size
+
     # 4) Fetch non-draft submissions for these students × these contents.
     # Paginate via .range() because PostgREST's default row cap is 1000 —
     # a real class (30 students x 40 assessments x several attempts each) can
@@ -2023,7 +2105,10 @@ def get_class_gradebook(class_id):
              'publish_date': c.get('publish_date'), 'due_date': c.get('due_date'),
              # Phase 4.2 #7: surface remediation flags for the badge UI.
              'is_active': c.get('is_active'),
-             'target_student_ids': c.get('target_student_ids')}
+             'target_student_ids': c.get('target_student_ids'),
+             # Phase 4.3 Sprint 1: uniform DOK for remediation rows only.
+             # Non-remediation rows always get None (no badge).
+             'assessment_dok': assessment_dok_by_id.get(c['id'])}
             for c in assessments
         ],
         "grades": grades,
@@ -2053,7 +2138,7 @@ def get_student_submission_detail(submission_id):
     # badges that match the gradebook column header.
     content_id = sub.get('content_id')
     content_row = db.table('published_content').select(
-        'id, title, class_id, is_active, target_student_ids'
+        'id, title, class_id, is_active, target_student_ids, content'
     ).eq('id', content_id).execute()
     if not content_row.data:
         return error_response("Submission's content no longer exists", 404)
@@ -2106,6 +2191,7 @@ def get_student_submission_detail(submission_id):
                 "ai_feedback": _coalesce(q.get('feedback'), q.get('reasoning'), q.get('quality'), default=''),
                 "points_earned": _coalesce(q.get('points_earned'), q.get('score'), default=0),
                 "points_possible": _coalesce(q.get('points_possible'), q.get('points'), default=0),
+                "dok": _validate_dok(q.get('dok')),
             })
     elif raw_questions is not None:
         _logger.warning("malformed results.questions (type=%s) in submission %s — returning empty",
@@ -2121,6 +2207,9 @@ def get_student_submission_detail(submission_id):
         # header can render the badges (matches Gradebook column header).
         "is_active": content.get('is_active'),
         "target_student_ids": content.get('target_student_ids'),
+        # Phase 4.3 Sprint 1: uniform DOK across all questions, else null.
+        # Drives the optional "DOK N" pill in RemediationBadges.
+        "assessment_dok": _derive_uniform_dok(content.get('content')),
         "attempt_number": sub.get('attempt_number'),
         "total_attempts": len(siblings),
         "submitted_at": sub.get('submitted_at'),

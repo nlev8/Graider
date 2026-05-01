@@ -1691,3 +1691,97 @@ class TestDokFieldPassThrough:
                 "+ response flattening (Codex round 2 MINOR — pass-through "
                 "contract is the most-likely-to-regress behavior)"
             )
+
+
+# ============ Phase 4.3 Sprint 1: DOK display helpers ============
+# Spec: docs/superpowers/specs/2026-05-01-phase4.3-sprint1-dok-display-design.md
+
+class TestValidateDok:
+    """_validate_dok normalizes int / numeric-string DOKs to int 1..4 or None.
+
+    Codex round 1 MINOR: legacy storage and AI output drift can produce
+    string DOKs ("3") instead of ints (3). Normalize on read so the
+    frontend predicate stays simple. bool must be rejected explicitly.
+    """
+
+    def test_valid_int_returns_self(self):
+        from backend.routes.student_portal_routes import _validate_dok
+        for n in (1, 2, 3, 4):
+            assert _validate_dok(n) == n
+
+    def test_numeric_string_normalizes_to_int(self):
+        from backend.routes.student_portal_routes import _validate_dok
+        assert _validate_dok("1") == 1
+        assert _validate_dok("3") == 3
+        assert _validate_dok("  4  ") == 4
+
+    def test_bool_rejected_even_though_int_subclass(self):
+        from backend.routes.student_portal_routes import _validate_dok
+        # bool is a subclass of int — without an explicit isinstance(value, bool)
+        # check, True would slip through and become 1.
+        assert _validate_dok(True) is None
+        assert _validate_dok(False) is None
+
+    def test_int_out_of_range_returns_none(self):
+        from backend.routes.student_portal_routes import _validate_dok
+        assert _validate_dok(0) is None
+        assert _validate_dok(5) is None
+        assert _validate_dok(-1) is None
+
+    def test_non_numeric_string_returns_none(self):
+        from backend.routes.student_portal_routes import _validate_dok
+        assert _validate_dok("foo") is None
+        assert _validate_dok("") is None
+        assert _validate_dok("3.0") is None  # not a clean int
+
+    def test_none_returns_none(self):
+        from backend.routes.student_portal_routes import _validate_dok
+        assert _validate_dok(None) is None
+
+    def test_unsupported_types_return_none(self):
+        from backend.routes.student_portal_routes import _validate_dok
+        assert _validate_dok(3.0) is None  # float
+        assert _validate_dok([3]) is None  # list
+        assert _validate_dok({"dok": 3}) is None  # dict
+
+
+class TestDeriveUniformDok:
+    """_derive_uniform_dok returns the shared DOK from content.questions
+    when ALL questions agree on a valid level (1..4), else None."""
+
+    def test_uniform_dok_returns_value(self):
+        from backend.routes.student_portal_routes import _derive_uniform_dok
+        content = {'questions': [{'dok': 3}, {'dok': 3}, {'dok': 3}]}
+        assert _derive_uniform_dok(content) == 3
+
+    def test_mixed_dok_returns_none(self):
+        from backend.routes.student_portal_routes import _derive_uniform_dok
+        content = {'questions': [{'dok': 2}, {'dok': 3}, {'dok': 2}]}
+        assert _derive_uniform_dok(content) is None
+
+    def test_any_question_missing_dok_returns_none(self):
+        from backend.routes.student_portal_routes import _derive_uniform_dok
+        content = {'questions': [{'dok': 3}, {'dok': 3}, {}]}
+        assert _derive_uniform_dok(content) is None
+
+    def test_empty_questions_returns_none(self):
+        from backend.routes.student_portal_routes import _derive_uniform_dok
+        assert _derive_uniform_dok({'questions': []}) is None
+
+    def test_no_questions_key_returns_none(self):
+        from backend.routes.student_portal_routes import _derive_uniform_dok
+        assert _derive_uniform_dok({}) is None
+
+    def test_non_dict_content_returns_none(self):
+        from backend.routes.student_portal_routes import _derive_uniform_dok
+        assert _derive_uniform_dok(None) is None
+        assert _derive_uniform_dok("invalid") is None
+        assert _derive_uniform_dok([{'dok': 3}]) is None  # list at top-level
+
+    def test_string_dok_normalized_uniformly(self):
+        """Codex MINOR follow-up — if the AI ever wrote dok as string,
+        the helper still derives uniform DOK because _validate_dok
+        normalizes "3" → 3 first."""
+        from backend.routes.student_portal_routes import _derive_uniform_dok
+        content = {'questions': [{'dok': "3"}, {'dok': 3}, {'dok': "3"}]}
+        assert _derive_uniform_dok(content) == 3
