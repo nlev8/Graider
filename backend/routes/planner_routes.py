@@ -3701,6 +3701,7 @@ def _build_period_differentiation_block(target_period):
     Phase 4.2 #12 (PR #149) — see _build_remediation_prompt in
     student_portal_routes.py.
     """
+    target_period = str(target_period).strip() if target_period is not None else ""
     if not target_period:
         return ""
     return (

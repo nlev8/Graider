@@ -128,6 +128,26 @@ class TestBuildPeriodDifferentiationBlock:
         assert "depth of knowledge based on the period designation" not in block
         assert "higher-level thinking" not in block
 
+    def test_whitespace_only_target_period_returns_empty_string(self):
+        """Whitespace-only target_period is treated as empty (Codex MINOR — without
+        normalization, ``"   "`` is truthy and would emit a malformed header)."""
+        assert _build_period_differentiation_block("   ") == ""
+        assert _build_period_differentiation_block("\t\n") == ""
+
+    def test_target_period_is_stripped_in_output(self):
+        """Surrounding whitespace is stripped from the period label in the
+        emitted block (defensive against teacher typos)."""
+        block = _build_period_differentiation_block("  Period 3  ")
+        assert "TARGET PERIOD FOR THIS ASSESSMENT: Period 3\n" in block
+        # Leading/trailing whitespace must not survive into the prompt.
+        assert "TARGET PERIOD FOR THIS ASSESSMENT:   " not in block
+
+    def test_special_characters_preserved_after_strip(self):
+        """Special characters within the period name (ampersands, parens, em-dashes)
+        flow through verbatim — only outer whitespace is trimmed."""
+        block = _build_period_differentiation_block("AP Lit & Comp (P3) — honors")
+        assert "TARGET PERIOD FOR THIS ASSESSMENT: AP Lit & Comp (P3) — honors\n" in block
+
 
 # ---------------------------------------------------------------------------
 # TestLoadStandards
