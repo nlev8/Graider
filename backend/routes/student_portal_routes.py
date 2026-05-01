@@ -2842,6 +2842,15 @@ def post_remediate(class_id):
             ).in_('student_id', valid_ids).in_(
                 'content_id', class_content_ids
             ).neq('status', 'draft').execute()
+
+            # Phase 4.3 Sprint 2 (Codex MAJOR): sanitize before aggregation
+            # so old-shape and malformed entries are normalized in place
+            # before _aggregate_mastery_for_student inspects them. The
+            # aggregator's internal adapter handles shape conversion, but
+            # this also drops malformed entries early.
+            for s in (class_subs.data or []):
+                _sanitize_standards_mastery(s)
+
             # Group submissions by student -> content_id -> [submissions].
             from collections import defaultdict
             per_student = defaultdict(lambda: defaultdict(list))
