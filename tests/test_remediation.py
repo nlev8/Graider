@@ -1705,41 +1705,41 @@ class TestValidateDok:
     """
 
     def test_valid_int_returns_self(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         for n in (1, 2, 3, 4):
             assert _validate_dok(n) == n
 
     def test_numeric_string_normalizes_to_int(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok("1") == 1
         assert _validate_dok("3") == 3
         assert _validate_dok("  4  ") == 4
 
     def test_bool_rejected_even_though_int_subclass(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         # bool is a subclass of int — without an explicit isinstance(value, bool)
         # check, True would slip through and become 1.
         assert _validate_dok(True) is None
         assert _validate_dok(False) is None
 
     def test_int_out_of_range_returns_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok(0) is None
         assert _validate_dok(5) is None
         assert _validate_dok(-1) is None
 
     def test_non_numeric_string_returns_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok("foo") is None
         assert _validate_dok("") is None
         assert _validate_dok("3.0") is None  # not a clean int
 
     def test_none_returns_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok(None) is None
 
     def test_unsupported_types_return_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok(3.0) is None  # float
         assert _validate_dok([3]) is None  # list
         assert _validate_dok({"dok": 3}) is None  # dict
@@ -1750,30 +1750,30 @@ class TestDeriveUniformDok:
     when ALL questions agree on a valid level (1..4), else None."""
 
     def test_uniform_dok_returns_value(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': 3}, {'dok': 3}, {'dok': 3}]}
         assert _derive_uniform_dok(content) == 3
 
     def test_mixed_dok_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': 2}, {'dok': 3}, {'dok': 2}]}
         assert _derive_uniform_dok(content) is None
 
     def test_any_question_missing_dok_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': 3}, {'dok': 3}, {}]}
         assert _derive_uniform_dok(content) is None
 
     def test_empty_questions_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         assert _derive_uniform_dok({'questions': []}) is None
 
     def test_no_questions_key_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         assert _derive_uniform_dok({}) is None
 
     def test_non_dict_content_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         assert _derive_uniform_dok(None) is None
         assert _derive_uniform_dok("invalid") is None
         assert _derive_uniform_dok([{'dok': 3}]) is None  # list at top-level
@@ -1782,6 +1782,6 @@ class TestDeriveUniformDok:
         """Codex MINOR follow-up — if the AI ever wrote dok as string,
         the helper still derives uniform DOK because _validate_dok
         normalizes "3" → 3 first."""
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': "3"}, {'dok': 3}, {'dok': "3"}]}
         assert _derive_uniform_dok(content) == 3
