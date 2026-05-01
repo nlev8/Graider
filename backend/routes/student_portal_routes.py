@@ -344,6 +344,38 @@ def _build_trajectory_for_student(submissions, content_titles):
     return out
 
 
+def _normalize_mastery_shape(raw):
+    """Convert old flat shape -> new {overall, by_dok} shape; pass new through.
+
+    Phase 4.3 Sprint 2 — the single boundary adapter for both shapes.
+
+    Old flat shape (`{points_earned, points_possible, question_count, percentage}`)
+    is wrapped into `{overall: <flat fields>, by_dok: {}}`. Pre-Sprint-2 stored
+    JSONB has this shape. Aggregator output may also include `percentage` and
+    `contributing_submissions` — both are preserved into `overall`.
+
+    New shape (`{overall, by_dok}`) is passed through with sub-structure
+    validation: by_dok keys are normalized via _validate_dok (handles
+    "3" -> 3 from JSON serialization), and any non-dict per-DOK value is
+    dropped.
+
+    Returns None for malformed input (non-dict raw).
+    """
+    if not isinstance(raw, dict):
+        return None
+    if 'overall' in raw:
+        overall = raw['overall'] if isinstance(raw['overall'], dict) else {}
+        by_dok_raw = raw.get('by_dok') if isinstance(raw.get('by_dok'), dict) else {}
+        by_dok = {}
+        for k, v in by_dok_raw.items():
+            normalized_k = _validate_dok(k)
+            if normalized_k is not None and isinstance(v, dict):
+                by_dok[normalized_k] = v
+        return {'overall': overall, 'by_dok': by_dok}
+    # Old flat shape — wrap.
+    return {'overall': dict(raw), 'by_dok': {}}
+
+
 def _sanitize_standards_mastery(sub):
     """Sanitize standards_mastery in a submission dict IN PLACE.
 
