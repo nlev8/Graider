@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from backend.routes.planner_routes import (
     _extract_usage,
     _build_subject_boundary_prompt,
+    _build_period_differentiation_block,
     load_standards,
 )
 from tests.conftest_routes import client, flask_app, mock_grading_state, grading_lock
@@ -87,6 +88,65 @@ class TestBuildSubjectBoundaryPrompt:
         """Empty grade returns empty string."""
         assert _build_subject_boundary_prompt("Science", "") == ''
         assert _build_subject_boundary_prompt("Science", None) == ''
+
+
+# ---------------------------------------------------------------------------
+# TestBuildPeriodDifferentiationBlock
+# ---------------------------------------------------------------------------
+
+class TestBuildPeriodDifferentiationBlock:
+    """Tests for _build_period_differentiation_block helper.
+
+    Phase 4.2 #12 (PR #149) added an "orthogonal coexistence" clarifier to
+    the remediation prompt so DOK and difficulty would not conflict. This
+    helper backports the same clarifier to the Planner's generate_assessment
+    prompt, which had a worse conflict: a hard DOK distribution AND a
+    target_period block that told the AI to "adjust depth of knowledge
+    based on period." Those are contradictory instructions.
+    """
+
+    def test_empty_target_period_returns_empty_string(self):
+        """Empty/None target_period returns empty string (no block emitted)."""
+        assert _build_period_differentiation_block("") == ""
+        assert _build_period_differentiation_block(None) == ""
+
+    def test_non_empty_target_period_includes_period_label(self):
+        """Non-empty target_period appears in the emitted block."""
+        block = _build_period_differentiation_block("Period 3")
+        assert "TARGET PERIOD FOR THIS ASSESSMENT: Period 3" in block
+
+    def test_block_contains_dok_preservation_clarifier(self):
+        """The block must explicitly tell the AI not to modify DOK."""
+        block = _build_period_differentiation_block("Period 3")
+        assert "DO NOT modify the DOK distribution above" in block
+        assert "Cognitive rigor (DOK) is set by the distribution" in block
+
+    def test_block_excludes_old_dok_conflict_wording(self):
+        """The legacy "depth of knowledge" / "higher-level thinking" wording
+        must not appear — those terms collided with the DOK distribution."""
+        block = _build_period_differentiation_block("Period 3")
+        assert "depth of knowledge based on the period designation" not in block
+        assert "higher-level thinking" not in block
+
+    def test_whitespace_only_target_period_returns_empty_string(self):
+        """Whitespace-only target_period is treated as empty (Codex MINOR — without
+        normalization, ``"   "`` is truthy and would emit a malformed header)."""
+        assert _build_period_differentiation_block("   ") == ""
+        assert _build_period_differentiation_block("\t\n") == ""
+
+    def test_target_period_is_stripped_in_output(self):
+        """Surrounding whitespace is stripped from the period label in the
+        emitted block (defensive against teacher typos)."""
+        block = _build_period_differentiation_block("  Period 3  ")
+        assert "TARGET PERIOD FOR THIS ASSESSMENT: Period 3\n" in block
+        # Leading/trailing whitespace must not survive into the prompt.
+        assert "TARGET PERIOD FOR THIS ASSESSMENT:   " not in block
+
+    def test_special_characters_preserved_after_strip(self):
+        """Special characters within the period name (ampersands, parens, em-dashes)
+        flow through verbatim — only outer whitespace is trimmed."""
+        block = _build_period_differentiation_block("AP Lit & Comp (P3) — honors")
+        assert "TARGET PERIOD FOR THIS ASSESSMENT: AP Lit & Comp (P3) — honors\n" in block
 
 
 # ---------------------------------------------------------------------------
