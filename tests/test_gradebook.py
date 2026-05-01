@@ -520,3 +520,100 @@ class TestGradebookRemediationFields:
             "Recalled remediation must surface is_active=False so the "
             "Recalled pill renders alongside the Remediation pill"
         )
+
+
+# ============ Phase 4.3 Sprint 1: assessment_dok ============
+# Spec: docs/superpowers/specs/2026-05-01-phase4.3-sprint1-dok-display-design.md
+
+class TestGradebookAssessmentDok:
+    """Per-row assessment_dok is derived from each remediation's
+    content.questions via _derive_uniform_dok. Non-remediation rows always
+    return None (no DOK badge). The metadata SELECT intentionally omits the
+    bulk `content` JSONB; remediation content is fetched in a focused
+    second query keyed by id."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_remediation_with_uniform_dok_returns_assessment_dok(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Remediation with all questions at DOK 3 → assessment_dok=3.
+
+        The route does TWO published_content queries: a metadata SELECT
+        (id, title, content_type, ..., target_student_ids — no `content`)
+        and a focused content fetch for remediation rows. With the shared
+        _make_chain mock both queries return the same fixture rows; the
+        derivation extracts dok from the `content` field on the same row.
+        """
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'rem-dok3', 'class_id': 'cls-1', 'title': 'Remediation: DOK 3',
+                'content_type': 'assessment',
+                'publish_date': '2026-04-15T00:00:00Z',
+                'is_active': True,
+                'target_student_ids': ['stu-1'],
+                'content': {'questions': [{'dok': 3}, {'dok': 3}, {'dok': 3}]},
+            }],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        body = resp.get_json()
+        a = body['assessments'][0]
+        assert a['assessment_dok'] == 3
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_remediation_with_mixed_dok_returns_null(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Remediation with mixed DOK across questions → assessment_dok=null
+        (no badge). Frontend predicate _validDok(null) is false."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'rem-mixed', 'class_id': 'cls-1', 'title': 'Mixed DOK',
+                'content_type': 'assessment',
+                'publish_date': '2026-04-15T00:00:00Z',
+                'is_active': True,
+                'target_student_ids': ['stu-1'],
+                'content': {'questions': [{'dok': 1}, {'dok': 2}, {'dok': 3}]},
+            }],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        body = resp.get_json()
+        a = body['assessments'][0]
+        assert a['assessment_dok'] is None
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_non_remediation_row_skips_content_fetch_and_returns_null(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Regular (non-remediation) Planner assessment → assessment_dok=null
+        regardless of its content's DOK distribution. The selective fetch
+        deliberately skips non-remediation rows for payload-size reasons,
+        and per the locked default Sprint 1 only badges remediation rows."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'name': 'P3', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'planner-1', 'class_id': 'cls-1', 'title': 'Planner Quiz',
+                'content_type': 'assessment',
+                'publish_date': '2026-04-01T00:00:00Z',
+                'is_active': True,
+                'target_student_ids': None,  # NOT a remediation
+                'content': {'questions': [{'dok': 2}, {'dok': 2}, {'dok': 2}]},
+            }],
+            'student_submissions': [],
+        })
+        resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
+        body = resp.get_json()
+        a = body['assessments'][0]
+        assert a['assessment_dok'] is None, (
+            "Non-remediation rows must return assessment_dok=null even if "
+            "their content has uniform DOK — Sprint 1 scope is remediation-only"
+        )

@@ -684,6 +684,7 @@ def grade_portal_submission_sync(
                         "quality": grade.get("quality", ""),
                         "student_answer": student_answer,
                         "standard": q.get("standard"),
+                        "dok": q.get("dok"),
                     })
                     written_idx += 1
                 else:
@@ -695,6 +696,7 @@ def grade_portal_submission_sync(
                         "reasoning": "Grading error",
                         "student_answer": student_answer,
                         "standard": q.get("standard"),
+                        "dok": q.get("dok"),
                     })
             else:
                 # Instant grading (MC/TF/matching) — re-score deterministically
@@ -751,6 +753,7 @@ def grade_portal_submission_sync(
                     "correct_answer": correct_answer,
                     "is_correct": is_correct,
                     "standard": q.get("standard"),
+                    "dok": q.get("dok"),
                 })
 
         # Generate overall feedback via Pass 3

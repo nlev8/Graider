@@ -292,3 +292,179 @@ class TestSubmissionDetailRemediationFields:
         assert body['is_active'] is True
         # Sanity: regular content_title still surfaces alongside the new fields.
         assert body['content_title'] == 'Remediation: MA.6.AR.1.2'
+
+
+# ============ Phase 4.3 Sprint 1: DOK display ============
+# Spec: docs/superpowers/specs/2026-05-01-phase4.3-sprint1-dok-display-design.md
+
+class TestSubmissionDetailDokFields:
+    """Per-question payload surfaces the dok field when present in
+    student_submissions.results.questions, normalized via _validate_dok.
+
+    The portal_grading.py 3-site fix (this sprint) makes the field land in
+    results.questions in the first place; this test exercises the read side
+    only — populates results.questions directly and verifies passthrough.
+    """
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_int_dok_surfaces_to_response(self, mock_sb_fn, client, teacher_headers):
+        """results.questions[i].dok=3 → response.questions[i].dok=3."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-1', 'student_id': 'stu-1', 'content_id': 'rem-1',
+                 'attempt_number': 1, 'percentage': 75, 'submitted_at': '2026-04-16T10:00:00Z',
+                 'results': {'questions': [
+                     {'question': 'Q1', 'type': 'multiple_choice', 'student_answer': 'A',
+                      'correct_answer': 'A', 'is_correct': True, 'points': 5, 'dok': 3},
+                 ]},
+                 'status': 'graded', 'score': 6, 'total_points': 8},
+            ],
+            'published_content': [{
+                'id': 'rem-1', 'title': 'Rem', 'class_id': 'cls-1',
+                'is_active': True, 'target_student_ids': ['stu-1'],
+                'content': {'questions': [{'dok': 3}]},
+            }],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-1/detail', headers=teacher_headers)
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert body['questions'][0]['dok'] == 3
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_missing_dok_surfaces_as_null(self, mock_sb_fn, client, teacher_headers):
+        """results.questions[i] without dok → response.questions[i].dok=None.
+        Legacy submissions (pre-Phase 4.2 #12) hit this path."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-2', 'student_id': 'stu-1', 'content_id': 'ct-old',
+                 'attempt_number': 1, 'percentage': 80, 'submitted_at': '2026-04-16T10:00:00Z',
+                 'results': {'questions': [
+                     {'question': 'Q1', 'type': 'multiple_choice', 'student_answer': 'A',
+                      'correct_answer': 'A', 'is_correct': True, 'points': 5},
+                 ]},
+                 'status': 'graded', 'score': 5, 'total_points': 5},
+            ],
+            'published_content': [{
+                'id': 'ct-old', 'title': 'Legacy', 'class_id': 'cls-1',
+                'is_active': True, 'target_student_ids': None,
+                'content': {'questions': []},
+            }],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-2/detail', headers=teacher_headers)
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert body['questions'][0]['dok'] is None
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_string_dok_normalizes_to_int(self, mock_sb_fn, client, teacher_headers):
+        """results.questions[i].dok='3' (string) → response.questions[i].dok=3
+        (int). Defends against AI output drift that wrote DOK as string."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-3', 'student_id': 'stu-1', 'content_id': 'rem-1',
+                 'attempt_number': 1, 'percentage': 75, 'submitted_at': '2026-04-16T10:00:00Z',
+                 'results': {'questions': [
+                     {'question': 'Q1', 'type': 'multiple_choice', 'student_answer': 'A',
+                      'correct_answer': 'A', 'is_correct': True, 'points': 5, 'dok': '3'},
+                 ]},
+                 'status': 'graded', 'score': 6, 'total_points': 8},
+            ],
+            'published_content': [{
+                'id': 'rem-1', 'title': 'Rem', 'class_id': 'cls-1',
+                'is_active': True, 'target_student_ids': ['stu-1'],
+                'content': {'questions': [{'dok': '3'}]},
+            }],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-3/detail', headers=teacher_headers)
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert body['questions'][0]['dok'] == 3
+        assert isinstance(body['questions'][0]['dok'], int)
+
+
+class TestSubmissionDetailHeaderAssessmentDok:
+    """Top-level assessment_dok is derived from published_content.content.questions
+    via _derive_uniform_dok and surfaces in the response header so the drawer
+    can render the optional 'DOK N' pill."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_uniform_dok_in_content_emits_assessment_dok(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """All questions share dok=3 → assessment_dok=3."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-1', 'student_id': 'stu-1', 'content_id': 'rem-1',
+                 'attempt_number': 1, 'percentage': 75, 'submitted_at': '2026-04-16T10:00:00Z',
+                 'results': {'questions': []},
+                 'status': 'graded', 'score': 6, 'total_points': 8},
+            ],
+            'published_content': [{
+                'id': 'rem-1', 'title': 'Rem', 'class_id': 'cls-1',
+                'is_active': True, 'target_student_ids': ['stu-1'],
+                'content': {'questions': [{'dok': 3}, {'dok': 3}, {'dok': 3}]},
+            }],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-1/detail', headers=teacher_headers)
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert body['assessment_dok'] == 3
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_mixed_dok_in_content_emits_null(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Mixed DOK across questions → assessment_dok=null (no badge)."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-mixed', 'student_id': 'stu-1', 'content_id': 'mix-1',
+                 'attempt_number': 1, 'percentage': 80, 'submitted_at': '2026-04-16T10:00:00Z',
+                 'results': {'questions': []},
+                 'status': 'graded', 'score': 8, 'total_points': 10},
+            ],
+            'published_content': [{
+                'id': 'mix-1', 'title': 'Mixed', 'class_id': 'cls-1',
+                'is_active': True, 'target_student_ids': None,
+                'content': {'questions': [{'dok': 1}, {'dok': 2}, {'dok': 3}]},
+            }],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-mixed/detail', headers=teacher_headers)
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert body['assessment_dok'] is None
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_legacy_content_without_dok_emits_null(
+        self, mock_sb_fn, client, teacher_headers,
+    ):
+        """Pre-Phase 4.2 #12 content (no dok on questions) → assessment_dok=null.
+        Graceful fallback for legacy data."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'student_submissions': [
+                {'id': 'sub-legacy', 'student_id': 'stu-1', 'content_id': 'old-1',
+                 'attempt_number': 1, 'percentage': 90, 'submitted_at': '2026-03-01T10:00:00Z',
+                 'results': {'questions': []},
+                 'status': 'graded', 'score': 9, 'total_points': 10},
+            ],
+            'published_content': [{
+                'id': 'old-1', 'title': 'Legacy', 'class_id': 'cls-1',
+                'is_active': True, 'target_student_ids': None,
+                'content': {'questions': [{}, {}, {}]},  # no dok keys
+            }],
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+        })
+        resp = client.get('/api/teacher/submission/sub-legacy/detail', headers=teacher_headers)
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert body['assessment_dok'] is None

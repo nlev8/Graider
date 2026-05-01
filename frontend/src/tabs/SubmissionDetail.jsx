@@ -19,6 +19,19 @@ function formatDate(iso) {
   }
 }
 
+// Phase 4.3 Sprint 1 — only render the per-question DOK token when the
+// backend surfaces a valid integer 1..4. Backend already normalizes string
+// "3" → 3 via _validate_dok before sending; this is defense in depth.
+function validDok(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 4;
+}
+
+// Format question_type for display ("multiple_choice" → "Multiple choice").
+function formatQType(t) {
+  if (!t || typeof t !== "string") return "";
+  return t.replace(/_/g, " ").replace(/^./, function(c) { return c.toUpperCase(); });
+}
+
 export default function SubmissionDetail({ submissionId, onClose }) {
   // Local state — attempt selector mutates this, NOT the prop
   var [activeSubmissionId, setActiveSubmissionId] = useState(submissionId);
@@ -131,8 +144,22 @@ export default function SubmissionDetail({ submissionId, onClose }) {
                     <div key={i} style={{ border: "1px solid var(--glass-border)", borderRadius: "8px", padding: "10px 12px", background: color.bg }}>
                       <div onClick={function() { setExpandedQuestionIndex(isExpanded ? null : i); }}
                            style={{ display: "flex", justifyContent: "space-between", cursor: "pointer", alignItems: "center" }}>
-                        <div style={{ flex: 1, fontSize: "0.85rem", color: color.text, fontWeight: 600 }}>
-                          {(i + 1) + ". " + (q.question_text || '(no question text)')}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "0.85rem", color: color.text, fontWeight: 600 }}>
+                            {(i + 1) + ". " + (q.question_text || '(no question text)')}
+                          </div>
+                          <div style={{ marginTop: "4px", fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                            <span>{"Q" + (i + 1)}</span>
+                            {q.question_type && (<><span>·</span><span>{formatQType(q.question_type)}</span></>)}
+                            <span>·</span>
+                            <span>{q.points_possible + " pts"}</span>
+                            {validDok(q.dok) && (
+                              <>
+                                <span>·</span>
+                                <span style={{ color: "var(--accent-primary)", fontWeight: 600 }}>{"DOK " + q.dok}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                         <div style={{ fontWeight: 700, color: color.text, fontSize: "0.9rem", marginLeft: "10px" }}>
                           {q.points_earned}/{q.points_possible}
