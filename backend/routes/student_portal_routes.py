@@ -2008,13 +2008,26 @@ def get_class_gradebook(class_id):
     ]
     assessment_dok_by_id = {}
     if remediation_ids:
-        rem_content_rows = db.table('published_content').select(
-            'id, content'
-        ).in_('id', remediation_ids).execute()
-        for row in (rem_content_rows.data or []):
-            cid = row.get('id')
-            if cid:
-                assessment_dok_by_id[cid] = _derive_uniform_dok(row.get('content'))
+        # Paginate via .range() — same pattern as the submissions fetch
+        # below. PostgREST's default row cap is 1000; a class can in
+        # principle accumulate more remediations over time (Phase 4.2 #8
+        # caps publishes per-(teacher × student × rolling 7-day) but the
+        # historical total can grow). Without pagination, later rows would
+        # silently miss assessment_dok (Codex full-PR MINOR).
+        page_size = 1000
+        rem_start = 0
+        while True:
+            rem_page = db.table('published_content').select(
+                'id, content'
+            ).in_('id', remediation_ids).range(rem_start, rem_start + page_size - 1).execute()
+            rem_rows = rem_page.data or []
+            for row in rem_rows:
+                cid = row.get('id')
+                if cid:
+                    assessment_dok_by_id[cid] = _derive_uniform_dok(row.get('content'))
+            if len(rem_rows) < page_size:
+                break
+            rem_start += page_size
 
     # 4) Fetch non-draft submissions for these students × these contents.
     # Paginate via .range() because PostgREST's default row cap is 1000 —
