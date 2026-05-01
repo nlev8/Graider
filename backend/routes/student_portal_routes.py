@@ -27,6 +27,15 @@ from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import error_response, handle_route_errors
 from backend.extensions import limiter
 from backend.services.grading_service import grade_deterministic_question, grade_student_submission, grade_instant_only
+# Phase 4.2 #12 / Phase 4.3 Sprint 2: shared DOK helpers live in
+# backend/services/dok.py — see that module's docstring for rationale.
+from backend.services.dok import (
+    DOK_OPTIONS,
+    DOK_DESCRIPTIONS,
+    REMEDIATION_DOK_DEFAULT,
+    _validate_dok,
+    _derive_uniform_dok,
+)
 from backend.observability import critical_path
 
 
@@ -156,92 +165,180 @@ def _select_submissions_by_mode(submissions_by_content, attempt_mode):
     return selected
 
 
-def _aggregate_mastery_for_student(selected_submissions_by_content, content_titles, attempt_mode):
+def _aggregate_mastery_for_student(selected_submissions_by_content, content_titles, attempt_mode, *, include_dok=False):
     """Aggregate standards_mastery across submissions into a per-standard dict.
 
-    Input: { content_id: [submission, ...] } (one per content unless attempt_mode=='average')
-    Output: { standard_code: { percentage, points_earned, points_possible, question_count, contributing_submissions } }
+    Phase 4.3 Sprint 2 — internals operate on normalized (new) shape via
+    _normalize_mastery_shape. Output is flat-by-default (preserves the
+    pre-Sprint-2 API contract for existing routes); pass include_dok=True
+    to emit new shape with by_dok aggregates (Student Report Card).
+
+    Args:
+        selected_submissions_by_content: { content_id: [submission, ...] }
+            (one per content unless attempt_mode == 'average')
+        content_titles: { content_id: title }
+        attempt_mode: 'latest' | 'best' | 'average'
+        include_dok: when True, emit {overall, by_dok} per standard.
+
+    Returns:
+        Flat shape (default):
+            { standard_code: { percentage, points_earned, points_possible,
+              question_count, contributing_submissions } }
+        New shape (include_dok=True):
+            { standard_code: { overall: {percentage, points_earned,
+              points_possible, question_count, contributing_submissions},
+              by_dok: { N: {percentage, points_earned, points_possible,
+              question_count} } } }
     """
     from collections import defaultdict
-    totals = defaultdict(lambda: {
-        'points_earned': 0.0,
-        'points_possible': 0.0,
-        'question_count': 0,
-        'contributing_submissions': [],
-    })
+
+    def _new_overall_total():
+        return {
+            'points_earned': 0.0,
+            'points_possible': 0.0,
+            'question_count': 0,
+            'contributing_submissions': [],
+        }
+
+    def _new_dok_total():
+        return {
+            'points_earned': 0.0,
+            'points_possible': 0.0,
+            'question_count': 0,
+        }
+
+    overall_totals = defaultdict(_new_overall_total)
+    # by_dok_totals[code][dok] -> dok_total dict
+    by_dok_totals = defaultdict(lambda: defaultdict(_new_dok_total))
 
     for content_id, subs in selected_submissions_by_content.items():
         if not subs:
             continue
         if attempt_mode == 'average' and len(subs) > 1:
             # Average each standard's percentage across attempts, then scale
-            per_standard_avg = defaultdict(lambda: {'pct_sum': 0.0, 'count': 0, 'pts_poss': 0, 'q_count': 0, 'attempts': []})
+            # to "weighted earned" by attempt.
+            per_standard_avg = defaultdict(lambda: {
+                'pct_sum': 0.0, 'count': 0, 'pts_poss': 0, 'q_count': 0,
+                'attempts': [], 'by_dok_pct_sum': defaultdict(float),
+                'by_dok_pct_count': defaultdict(int),
+                'by_dok_pts_poss': defaultdict(int),
+                'by_dok_q_count': defaultdict(int),
+            })
             for sub in subs:
                 results = sub.get('results') or {}
                 mastery = results.get('standards_mastery') or {}
-                for code, m in mastery.items():
-                    if not m or not m.get('points_possible'):
+                for code, raw_entry in mastery.items():
+                    normalized = _normalize_mastery_shape(raw_entry)
+                    if normalized is None:
                         continue
-                    pct = (m.get('points_earned', 0) / m['points_possible']) * 100
+                    overall = normalized['overall']
+                    if not overall.get('points_possible'):
+                        continue
+                    pct = (overall.get('points_earned', 0) / overall['points_possible']) * 100
                     per_standard_avg[code]['pct_sum'] += pct
                     per_standard_avg[code]['count'] += 1
-                    per_standard_avg[code]['pts_poss'] = m.get('points_possible', 0)
-                    per_standard_avg[code]['q_count'] = m.get('question_count', 0)
+                    # Average mode: pts_poss / q_count overwrite per attempt (last wins).
+                    # Consistent with pre-Sprint-2 behavior — the load-bearing value is
+                    # the averaged percentage, computed below. Same invariant applies to
+                    # by_dok_pts_poss / by_dok_q_count (see ~15 lines down).
+                    per_standard_avg[code]['pts_poss'] = overall.get('points_possible', 0)
+                    per_standard_avg[code]['q_count'] = overall.get('question_count', 0)
                     per_standard_avg[code]['attempts'].append({
                         'submission_id': sub.get('id'),
                         'attempt_number': sub.get('attempt_number', 1),
-                        'points_earned': m.get('points_earned', 0),
-                        'points_possible': m['points_possible'],
+                        'points_earned': overall.get('points_earned', 0),
+                        'points_possible': overall['points_possible'],
                     })
+                    if include_dok:
+                        for dok, d_agg in normalized.get('by_dok', {}).items():
+                            if not d_agg.get('points_possible'):
+                                continue
+                            d_pct = (d_agg.get('points_earned', 0) / d_agg['points_possible']) * 100
+                            per_standard_avg[code]['by_dok_pct_sum'][dok] += d_pct
+                            per_standard_avg[code]['by_dok_pct_count'][dok] += 1
+                            per_standard_avg[code]['by_dok_pts_poss'][dok] = d_agg.get('points_possible', 0)
+                            per_standard_avg[code]['by_dok_q_count'][dok] = d_agg.get('question_count', 0)
             for code, agg in per_standard_avg.items():
                 avg_pct = agg['pct_sum'] / agg['count']
-                totals[code]['points_earned'] += (avg_pct / 100.0) * agg['pts_poss']
-                totals[code]['points_possible'] += agg['pts_poss']
-                totals[code]['question_count'] += agg['q_count']
-                # In average mode, record each contributing attempt individually
+                overall_totals[code]['points_earned'] += (avg_pct / 100.0) * agg['pts_poss']
+                overall_totals[code]['points_possible'] += agg['pts_poss']
+                overall_totals[code]['question_count'] += agg['q_count']
                 for a in agg['attempts']:
-                    totals[code]['contributing_submissions'].append({
+                    overall_totals[code]['contributing_submissions'].append({
                         'submission_id': a['submission_id'],
                         'title': content_titles.get(content_id, ''),
                         'points_earned': a['points_earned'],
                         'points_possible': a['points_possible'],
                         'attempt_number': a['attempt_number'],
                     })
+                if include_dok:
+                    for dok, ct in agg['by_dok_pct_count'].items():
+                        if ct == 0:
+                            continue
+                        d_avg_pct = agg['by_dok_pct_sum'][dok] / ct
+                        d_pts_poss = agg['by_dok_pts_poss'][dok]
+                        by_dok_totals[code][dok]['points_earned'] += (d_avg_pct / 100.0) * d_pts_poss
+                        by_dok_totals[code][dok]['points_possible'] += d_pts_poss
+                        by_dok_totals[code][dok]['question_count'] += agg['by_dok_q_count'][dok]
         else:
+            # latest / best (already pre-selected upstream) — sum directly
             for sub in subs:
                 results = sub.get('results') or {}
                 mastery = results.get('standards_mastery') or {}
-                for code, m in mastery.items():
-                    if not m or not m.get('points_possible'):
+                for code, raw_entry in mastery.items():
+                    normalized = _normalize_mastery_shape(raw_entry)
+                    if normalized is None:
                         continue
-                    totals[code]['points_earned'] += m.get('points_earned', 0)
-                    totals[code]['points_possible'] += m['points_possible']
-                    totals[code]['question_count'] += m.get('question_count', 0)
-                    totals[code]['contributing_submissions'].append({
+                    overall = normalized['overall']
+                    if not overall.get('points_possible'):
+                        continue
+                    overall_totals[code]['points_earned'] += overall.get('points_earned', 0)
+                    overall_totals[code]['points_possible'] += overall['points_possible']
+                    overall_totals[code]['question_count'] += overall.get('question_count', 0)
+                    overall_totals[code]['contributing_submissions'].append({
                         'submission_id': sub.get('id'),
                         'title': content_titles.get(content_id, ''),
-                        'points_earned': m.get('points_earned', 0),
-                        'points_possible': m['points_possible'],
+                        'points_earned': overall.get('points_earned', 0),
+                        'points_possible': overall['points_possible'],
                         'attempt_number': sub.get('attempt_number', 1),
                     })
+                    if include_dok:
+                        for dok, d_agg in normalized.get('by_dok', {}).items():
+                            if not d_agg.get('points_possible'):
+                                continue
+                            by_dok_totals[code][dok]['points_earned'] += d_agg.get('points_earned', 0)
+                            by_dok_totals[code][dok]['points_possible'] += d_agg['points_possible']
+                            by_dok_totals[code][dok]['question_count'] += d_agg.get('question_count', 0)
 
-    # Compute final percentages and cap contributing_submissions at 10 (most recent first)
+    # Compute final percentages and project output shape
     result = {}
-    for code, t in totals.items():
+    for code, t in overall_totals.items():
         pct = round((t['points_earned'] / t['points_possible']) * 100, 1) if t['points_possible'] > 0 else 0
-        # Sort contributing submissions by attempt_number desc before capping
         contributing = sorted(
             t['contributing_submissions'],
             key=lambda c: c.get('attempt_number') or 0,
             reverse=True,
         )[:10]
-        result[code] = {
+        overall_out = {
             'percentage': pct,
             'points_earned': round(t['points_earned'], 2),
             'points_possible': t['points_possible'],
             'question_count': t['question_count'],
             'contributing_submissions': contributing,
         }
+        if include_dok:
+            by_dok_out = {}
+            for dok, dt in by_dok_totals[code].items():
+                d_pct = round((dt['points_earned'] / dt['points_possible']) * 100, 1) if dt['points_possible'] > 0 else 0
+                by_dok_out[dok] = {
+                    'percentage': d_pct,
+                    'points_earned': round(dt['points_earned'], 2),
+                    'points_possible': dt['points_possible'],
+                    'question_count': dt['question_count'],
+                }
+            result[code] = {'overall': overall_out, 'by_dok': by_dok_out}
+        else:
+            result[code] = overall_out
     return result
 
 
@@ -255,20 +352,48 @@ def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
       Pulls `submitted_at` from `submission_lookup` (a dict keyed by
       submission_id). Keeps the existing 10-cap from the upstream helper.
 
+    Phase 4.3 Sprint 2: when input carries the new shape (mastery_by_code
+    entries with `overall` + `by_dok` keys, emitted by the aggregator
+    when called with `include_dok=True`), each row gains a `by_dok`
+    array of {dok, percentage, points_earned, points_possible,
+    question_count} sorted ASC by dok. For flat-shape input
+    (pre-Sprint-2 stored data or include_dok=False callers), `by_dok`
+    is `[]`.
+
     Args:
         mastery_by_code: dict from _aggregate_mastery_for_student
         submission_lookup: dict[submission_id -> submission row] for enrichment
     Returns:
-        list[dict] sorted by percentage ASC; each dict has
+        list[dict] sorted ASC by percentage; each dict has
         {code, percentage, points_earned, points_possible, question_count,
-         contributing_submissions: [...]} with each contributing_submission
-        having submission_id, title, attempt_number, points_earned,
-        points_possible, percentage, submitted_at.
+         contributing_submissions, by_dok}. Each contributing_submission
+        has submission_id, title, attempt_number, points_earned,
+        points_possible, percentage, submitted_at. Each by_dok entry has
+        dok, percentage, points_earned, points_possible, question_count
+        (sorted ASC by dok); empty list when no DOK data is present.
     """
     rows = []
     for code, m in mastery_by_code.items():
+        # Phase 4.3 Sprint 2 — when aggregator was called with include_dok=True,
+        # `m` carries {overall, by_dok}. Otherwise it's flat (pre-Sprint-2
+        # contract). Detect via 'overall' presence.
+        if 'overall' in m:
+            ov = m['overall']
+            by_dok_rows = []
+            for dok in sorted(m.get('by_dok') or {}):
+                d = m['by_dok'][dok]
+                by_dok_rows.append({
+                    'dok': dok,
+                    'percentage': d.get('percentage', 0),
+                    'points_earned': d.get('points_earned', 0),
+                    'points_possible': d.get('points_possible', 0),
+                    'question_count': d.get('question_count', 0),
+                })
+        else:
+            ov = m
+            by_dok_rows = []
         enriched_contribs = []
-        for c in m.get("contributing_submissions", []):
+        for c in ov.get("contributing_submissions", []):
             pts_poss = c.get("points_possible") or 0
             pts_earned = c.get("points_earned") or 0
             pct = round((pts_earned / pts_poss) * 100, 1) if pts_poss > 0 else 0.0
@@ -284,11 +409,12 @@ def _build_standards_breakdown_for_student(mastery_by_code, submission_lookup):
             })
         rows.append({
             "code": code,
-            "percentage": m.get("percentage", 0),
-            "points_earned": m.get("points_earned", 0),
-            "points_possible": m.get("points_possible", 0),
-            "question_count": m.get("question_count", 0),
+            "percentage": ov.get("percentage", 0),
+            "points_earned": ov.get("points_earned", 0),
+            "points_possible": ov.get("points_possible", 0),
+            "question_count": ov.get("question_count", 0),
             "contributing_submissions": enriched_contribs,
+            "by_dok": by_dok_rows,
         })
     rows.sort(key=lambda r: r["percentage"])  # ASC = worst-first
     return rows
@@ -335,13 +461,101 @@ def _build_trajectory_for_student(submissions, content_titles):
     return out
 
 
+def _normalize_mastery_shape(raw):
+    """Convert old flat shape -> new {overall, by_dok} shape; pass new through.
+
+    Phase 4.3 Sprint 2 — the single boundary adapter for both shapes.
+
+    Old flat shape (`{points_earned, points_possible, question_count, percentage}`)
+    is wrapped into `{overall: <flat fields>, by_dok: {}}`. Pre-Sprint-2 stored
+    JSONB has this shape. Aggregator output may also include `percentage` and
+    `contributing_submissions` — both are preserved into `overall`.
+
+    New shape (`{overall, by_dok}`) is passed through with sub-structure
+    validation: by_dok keys are normalized via _validate_dok (handles
+    "3" -> 3 from JSON serialization), and any non-dict per-DOK value is
+    dropped.
+
+    Returns None for malformed input (non-dict raw).
+    """
+    if not isinstance(raw, dict):
+        return None
+    if 'overall' in raw:
+        overall = raw['overall'] if isinstance(raw['overall'], dict) else {}
+        by_dok_raw = raw.get('by_dok') if isinstance(raw.get('by_dok'), dict) else {}
+        by_dok = {}
+        for k, v in by_dok_raw.items():
+            normalized_k = _validate_dok(k)
+            if normalized_k is not None and isinstance(v, dict):
+                by_dok[normalized_k] = v
+        return {'overall': overall, 'by_dok': by_dok}
+    # Old flat shape — wrap.
+    return {'overall': dict(raw), 'by_dok': {}}
+
+
+def _flatten_mastery_for_response(results):
+    """Project new-shape standards_mastery to flat shape for response.
+
+    Phase 4.3 Sprint 2 — endpoints that return raw `results` JSONB
+    (e.g., assessment results, class content submissions) must keep
+    emitting the pre-Sprint-2 flat shape per the API contract policy.
+    Only Student Report Card opts into the new {overall, by_dok} shape
+    via aggregator's include_dok flag.
+
+    Reads `results['standards_mastery']`. For each new-shape entry
+    ({overall, by_dok}), emits flat {percentage, points_earned,
+    points_possible, question_count}. Old flat entries pass through
+    unchanged. Returns a NEW results dict (does not mutate input).
+
+    Returns the input unchanged when results is None or not a dict.
+    """
+    if not isinstance(results, dict):
+        return results
+    raw = results.get('standards_mastery')
+    if not isinstance(raw, dict):
+        return results
+    flattened = {}
+    for code, entry in raw.items():
+        if not isinstance(entry, dict):
+            continue
+        if 'overall' in entry and isinstance(entry.get('overall'), dict):
+            ov = entry['overall']
+            pts_earned = ov.get('points_earned', 0) or 0
+            pts_possible = ov.get('points_possible', 0) or 0
+            pct = ov.get('percentage')
+            if not isinstance(pct, (int, float)):
+                pct = round((pts_earned / pts_possible) * 100, 1) if pts_possible > 0 else 0
+            flattened[code] = {
+                'percentage': pct,
+                'points_earned': pts_earned,
+                'points_possible': pts_possible,
+                'question_count': ov.get('question_count', 0),
+            }
+        else:
+            # Old flat shape — pass through (filter out by_dok if present)
+            flattened[code] = {
+                'percentage': entry.get('percentage', 0),
+                'points_earned': entry.get('points_earned', 0),
+                'points_possible': entry.get('points_possible', 0),
+                'question_count': entry.get('question_count', 0),
+            }
+    new_results = dict(results)
+    new_results['standards_mastery'] = flattened
+    return new_results
+
+
 def _sanitize_standards_mastery(sub):
     """Sanitize standards_mastery in a submission dict IN PLACE.
 
-    Replaces missing/non-dict outer values with {} and drops individual
-    non-dict entries. Logs a WARNING per malformed case.
-    Shared between get_student_report_card and get_class_progress_rank.
-    Phase 2b extracted this from get_student_report_card to share between endpoints.
+    Phase 4.3 Sprint 2: also normalizes shape via _normalize_mastery_shape.
+    - Pre-Sprint-2 (old flat) entries get wrapped into {overall, by_dok: {}}
+    - New shape entries pass through with sub-structure validation
+    - Malformed entries (non-dict, or rejected by adapter) are dropped
+    - Outer non-dict gets reset to {}
+
+    Args:
+        sub: a submission dict (mutated in place); typically the row
+             from student_submissions.
     """
     results = sub.get('results') or {}
     raw = results.get('standards_mastery')
@@ -357,16 +571,16 @@ def _sanitize_standards_mastery(sub):
         results['standards_mastery'] = {}
         sub['results'] = results
         return
-    # Valid dict at the outer level; drop individual non-dict values.
     cleaned = {}
-    for code, m in raw.items():
-        if isinstance(m, dict):
-            cleaned[code] = m
-        else:
+    for code, entry in raw.items():
+        normalized = _normalize_mastery_shape(entry)
+        if normalized is None:
             _logger.warning(
                 "malformed standards_mastery entry (code=%s, type=%s) in submission %s — skipping entry",
-                code, type(m).__name__, sub.get('id'),
+                code, type(entry).__name__, sub.get('id'),
             )
+            continue
+        cleaned[code] = normalized
     results['standards_mastery'] = cleaned
     sub['results'] = results
 
@@ -430,70 +644,6 @@ REMEDIATION_COUNT_MAX = 15
 REMEDIATION_COUNT_DEFAULT = 8
 DIFFICULTY_OPTIONS = ('easier', 'same', 'harder')
 REMEDIATION_DIFFICULTY_DEFAULT = 'same'
-
-# Phase 4.2 #12: DOK (Webb's Depth of Knowledge) control on remediation.
-# Spec: docs/superpowers/specs/2026-04-30-phase4.2-dok-control-design.md
-# Single backend source for prompt directive + validation; the frontend
-# MIRRORS the display labels in the drawer (Python constants can't
-# directly source React tooltips without a codegen/API layer).
-DOK_OPTIONS = (1, 2, 3, 4)
-REMEDIATION_DOK_DEFAULT = None  # None = "Auto" (no DOK directive in prompt)
-DOK_DESCRIPTIONS = {
-    1: "Recall & Reproduction — facts, terms, simple procedures.",
-    2: "Skills & Concepts — compare, organize, explain relationships, apply concepts.",
-    3: "Strategic Thinking — analyze with evidence, justify reasoning, multi-step decisions.",
-    4: "Extended Thinking — synthesize across sources, design solutions, sustained investigation.",
-}
-
-
-def _validate_dok(value):
-    """Normalize a stored/incoming DOK value to int in DOK_OPTIONS or None.
-
-    Phase 4.3 Sprint 1 (Codex MINOR): legacy storage and AI output drift can
-    produce string DOKs ("3") instead of ints (3). Normalize on read so the
-    frontend predicate stays simple. Bools must be rejected explicitly
-    because bool is an int subclass, so ``isinstance(True, int)`` is True.
-    """
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value if value in DOK_OPTIONS else None
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return None
-        try:
-            as_int = int(stripped)
-        except ValueError:
-            return None
-        return as_int if as_int in DOK_OPTIONS else None
-    return None
-
-
-def _derive_uniform_dok(content):
-    """Return the uniform DOK from content.questions when all share one
-    valid level (1..4), else None.
-
-    Phase 4.3 Sprint 1: Gradebook + SubmissionDetail header derive a single
-    DOK badge for remediation rows from the source content. Only emits a
-    value when EVERY question contributes a valid DOK and they all agree —
-    mixed DOK or any missing/invalid value collapses to None (no badge).
-    """
-    if not isinstance(content, dict):
-        return None
-    questions = content.get('questions')
-    if not isinstance(questions, list) or not questions:
-        return None
-    dok_values = []
-    for q in questions:
-        if not isinstance(q, dict):
-            return None
-        normalized = _validate_dok(q.get('dok'))
-        if normalized is None:
-            return None
-        dok_values.append(normalized)
-    first = dok_values[0]
-    return first if all(d == first for d in dok_values) else None
 
 
 def _check_remediation_cap(db, teacher_id, target_student_ids):
@@ -1043,7 +1193,7 @@ def get_assessment_results(code):
             "percentage": s.get('percentage'),
             "time_taken_seconds": s.get('time_taken_seconds'),
             "submitted_at": s.get('submitted_at'),
-            "results": s.get('results'),
+            "results": _flatten_mastery_for_response(s.get('results')),
         } for s in submissions_result.data]
 
         return jsonify({
@@ -1690,7 +1840,7 @@ def list_content_submissions(content_id):
                 'time_taken_seconds': s.get('time_taken_seconds'),
                 'question_times': s.get('question_times'),
                 'submitted_at': s.get('submitted_at'),
-                'results': s.get('results'),
+                'results': _flatten_mastery_for_response(s.get('results')),
             })
 
         return jsonify({
@@ -1914,7 +2064,9 @@ def get_student_report_card(class_id, student_id):
         if cid:
             subs_by_content[cid].append(s)
     selected = _select_submissions_by_mode(subs_by_content, attempt_mode)
-    mastery_by_code = _aggregate_mastery_for_student(selected, content_titles, attempt_mode)
+    mastery_by_code = _aggregate_mastery_for_student(
+        selected, content_titles, attempt_mode, include_dok=True,
+    )
     submission_lookup = {s.get('id'): s for s in submissions if s.get('id')}
     standards_breakdown = _build_standards_breakdown_for_student(mastery_by_code, submission_lookup)
 
@@ -2745,6 +2897,15 @@ def post_remediate(class_id):
             ).in_('student_id', valid_ids).in_(
                 'content_id', class_content_ids
             ).neq('status', 'draft').execute()
+
+            # Phase 4.3 Sprint 2 (Codex MAJOR): sanitize before aggregation
+            # so old-shape and malformed entries are normalized in place
+            # before _aggregate_mastery_for_student inspects them. The
+            # aggregator's internal adapter handles shape conversion, but
+            # this also drops malformed entries early.
+            for s in (class_subs.data or []):
+                _sanitize_standards_mastery(s)
+
             # Group submissions by student -> content_id -> [submissions].
             from collections import defaultdict
             per_student = defaultdict(lambda: defaultdict(list))
@@ -3258,15 +3419,20 @@ def get_class_remediation_effectiveness(class_id):
         if not isinstance(mastery, dict):
             return None
         entry = mastery.get(std_code)
-        if not isinstance(entry, dict):
+        # Phase 4.3 Sprint 2: route through the shape adapter so both old
+        # flat and new {overall, by_dok} entries work transparently.
+        normalized = _normalize_mastery_shape(entry)
+        if normalized is None:
             return None
-        # Prefer pre-computed percentage; otherwise derive from points.
-        pct = entry.get('percentage')
+        ov = normalized['overall']
+        # Prefer pre-computed percentage (legacy aggregated entries can
+        # carry it); otherwise derive from points.
+        pct = ov.get('percentage')
         if isinstance(pct, (int, float)):
             return float(pct)
         try:
-            earned = float(entry.get('points_earned') or 0)
-            possible = float(entry.get('points_possible') or 0)
+            earned = float(ov.get('points_earned') or 0)
+            possible = float(ov.get('points_possible') or 0)
         except (ValueError, TypeError):
             return None
         if possible <= 0:

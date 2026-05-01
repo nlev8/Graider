@@ -600,3 +600,130 @@ class TestProgressRankToleratesMalformedMastery:
         # Only the well-formed row's standard appears in the column union
         assert body['standards'] == ['MA.6.AR.1.1']
 
+
+class TestStudentReportCardByDok:
+    """Phase 4.3 Sprint 2 — Student Report Card response includes
+    optional by_dok rows per standard for the showcase UI.
+    """
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_by_dok_rendered_in_breakdown_when_data_present(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'Sarah', 'last_name': 'Q'}],
+            'published_content': [{
+                'id': 'rem-1', 'class_id': 'cls-1', 'title': 'Rem',
+                'content_type': 'assessment', 'publish_date': '2026-04-15',
+                'is_active': True, 'target_student_ids': ['stu-1'],
+            }],
+            'student_submissions': [{
+                'id': 'sub-1', 'student_id': 'stu-1', 'content_id': 'rem-1',
+                'attempt_number': 1, 'percentage': 70, 'submitted_at': '2026-04-16T10:00:00Z',
+                'status': 'graded',
+                'results': {'standards_mastery': {
+                    'MA.6.AR.1': {
+                        'overall': {'points_earned': 7, 'points_possible': 10, 'question_count': 2},
+                        'by_dok': {
+                            1: {'points_earned': 4, 'points_possible': 4, 'question_count': 1},
+                            3: {'points_earned': 3, 'points_possible': 6, 'question_count': 1},
+                        },
+                    },
+                }, 'questions': []},
+            }],
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        rows = body.get('standards_breakdown') or []
+        assert len(rows) == 1
+        row = rows[0]
+        assert row['code'] == 'MA.6.AR.1'
+        assert row['percentage'] == 70
+        # NEW: by_dok rows
+        assert 'by_dok' in row
+        assert sorted(d['dok'] for d in row['by_dok']) == [1, 3]
+        dok1 = next(d for d in row['by_dok'] if d['dok'] == 1)
+        assert dok1['percentage'] == 100
+        assert dok1['points_earned'] == 4
+        assert dok1['points_possible'] == 4
+        assert dok1['question_count'] == 1
+        dok3 = next(d for d in row['by_dok'] if d['dok'] == 3)
+        assert dok3['percentage'] == 50
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_legacy_data_no_by_dok_emits_empty_list(self, mock_sb_fn, client, teacher_headers):
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'old-1', 'class_id': 'cls-1', 'title': 'Old', 'content_type': 'assessment',
+                'publish_date': '2026-03-01',
+            }],
+            'student_submissions': [{
+                'id': 'sub-old', 'student_id': 'stu-1', 'content_id': 'old-1',
+                'attempt_number': 1, 'percentage': 80, 'submitted_at': '2026-03-02T10:00:00Z',
+                'status': 'graded',
+                # OLD flat shape — pre-Sprint-2 stored data
+                'results': {'standards_mastery': {
+                    'MA.6.AR.1': {'points_earned': 8, 'points_possible': 10, 'question_count': 2},
+                }, 'questions': []},
+            }],
+        })
+        resp = client.get('/api/teacher/class/cls-1/student/stu-1/report-card', headers=teacher_headers)
+        body = resp.get_json()
+        row = body['standards_breakdown'][0]
+        assert row['by_dok'] == [], "legacy data has no DOK info; by_dok must be empty list"
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_average_mode_aggregates_by_dok_across_attempts(self, mock_sb_fn, client, teacher_headers):
+        """Multiple attempts at the same content with new-shape mastery — by_dok
+        should aggregate per-DOK percentages across attempts in average mode."""
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': [{'id': 'cls-1', 'teacher_id': 'test-teacher-001'}],
+            'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
+            'students': [{'id': 'stu-1', 'first_name': 'A', 'last_name': 'B'}],
+            'published_content': [{
+                'id': 'rem-1', 'class_id': 'cls-1', 'title': 'Rem',
+                'content_type': 'assessment', 'publish_date': '2026-04-15',
+                'is_active': True, 'target_student_ids': ['stu-1'],
+            }],
+            'student_submissions': [
+                {'id': 'sub-a1', 'student_id': 'stu-1', 'content_id': 'rem-1',
+                 'attempt_number': 1, 'percentage': 50, 'submitted_at': '2026-04-16T10:00:00Z',
+                 'status': 'graded',
+                 'results': {'standards_mastery': {
+                     'MA.6.AR.1': {
+                         'overall': {'points_earned': 4, 'points_possible': 8, 'question_count': 2},
+                         'by_dok': {3: {'points_earned': 4, 'points_possible': 8, 'question_count': 2}},
+                     },
+                 }, 'questions': []}},
+                {'id': 'sub-a2', 'student_id': 'stu-1', 'content_id': 'rem-1',
+                 'attempt_number': 2, 'percentage': 75, 'submitted_at': '2026-04-17T10:00:00Z',
+                 'status': 'graded',
+                 'results': {'standards_mastery': {
+                     'MA.6.AR.1': {
+                         'overall': {'points_earned': 6, 'points_possible': 8, 'question_count': 2},
+                         'by_dok': {3: {'points_earned': 6, 'points_possible': 8, 'question_count': 2}},
+                     },
+                 }, 'questions': []}},
+            ],
+        })
+        resp = client.get(
+            '/api/teacher/class/cls-1/student/stu-1/report-card?attempt_mode=average',
+            headers=teacher_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        rows = body.get('standards_breakdown') or []
+        assert len(rows) == 1
+        row = rows[0]
+        # Average percentage: (50% + 75%) / 2 = 62.5%
+        assert row['percentage'] == 62.5
+        # by_dok averaged the same way
+        dok_rows = row['by_dok']
+        assert len(dok_rows) == 1
+        assert dok_rows[0]['dok'] == 3
+        assert dok_rows[0]['percentage'] == 62.5
+

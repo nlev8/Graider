@@ -14374,9 +14374,14 @@ ${signature}`;
                                 if (!mastery) return;
                                 Object.keys(mastery).forEach(function(code) {
                                   var m = mastery[code];
-                                  if (!byStandard[code]) byStandard[code] = { earned: 0, possible: 0, question_count: m.question_count };
-                                  byStandard[code].earned += m.points_earned || 0;
-                                  byStandard[code].possible += m.points_possible || 0;
+                                  // Phase 4.3 Sprint 2 — backend may emit either old flat shape or
+                                  // new {overall, by_dok} shape (only Student Report Card route emits
+                                  // by_dok in its response; the rest preserve flat — but defend at
+                                  // every read site).
+                                  var ov = (m && m.overall) ? m.overall : (m || {});
+                                  if (!byStandard[code]) byStandard[code] = { earned: 0, possible: 0, question_count: ov.question_count };
+                                  byStandard[code].earned += ov.points_earned || 0;
+                                  byStandard[code].possible += ov.points_possible || 0;
                                 });
                               });
                               var codes = Object.keys(byStandard);

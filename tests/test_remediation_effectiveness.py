@@ -579,3 +579,56 @@ class TestEffectivenessIsActive:
             "Dashboard must surface is_active=False for recalled remediations "
             "so the frontend can render the Recalled badge"
         )
+
+
+# ============ Phase 4.3 Sprint 2: new-shape mastery compatibility ============
+
+class TestRemediationEffectivenessNewShape:
+    """Phase 4.3 Sprint 2 — _percentage_for_standard reads from new
+    {overall, by_dok} shape via the normalize adapter. Old shape still
+    works (covered by every other test in this file)."""
+
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_new_shape_submissions_compute_percentage(self, mock_sb_fn, client, teacher_headers):
+        """New-shape stored mastery (overall+by_dok) must produce a non-None
+        `after` percentage. Without the adapter, _percentage_for_standard
+        would read entry.get('points_earned') directly off the wrapper and
+        miss the nested 'overall' fields, returning None."""
+        # Pre-rem (old flat shape): 25% baseline so we get a numeric `before`.
+        pre_rem_mastery = {STD_AR_1: {
+            'percentage': 25.0, 'points_earned': 2, 'points_possible': 8,
+            'question_count': 2,
+        }}
+        # Post-rem submission stores standards_mastery in the NEW shape.
+        new_shape_mastery = {STD_AR_1: {
+            'overall': {
+                'points_earned': 6, 'points_possible': 8, 'question_count': 2,
+            },
+            'by_dok': {
+                3: {'points_earned': 6, 'points_possible': 8, 'question_count': 2},
+            },
+        }}
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'published_content': [
+                _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
+                _non_rem(CID_ASSESSMENT_1),
+            ],
+            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'student_submissions': [
+                _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_rem_mastery,
+                     submitted_at='2026-04-10T10:00:00Z'),
+                _sub('s-rem', STU_1, CID_REM_1, new_shape_mastery,
+                     submitted_at='2026-04-16T10:00:00Z'),
+            ],
+        })
+        resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert len(body['remediations']) == 1
+        row = body['remediations'][0]['rows'][0]
+        # Adapter must surface the nested {overall.points_earned/possible}
+        # so percentage is derived: 6/8 = 75.0, not None.
+        assert row['after'] == 75.0
+        assert row['before'] == 25.0
+        assert row['delta'] == 50.0

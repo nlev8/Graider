@@ -1705,41 +1705,41 @@ class TestValidateDok:
     """
 
     def test_valid_int_returns_self(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         for n in (1, 2, 3, 4):
             assert _validate_dok(n) == n
 
     def test_numeric_string_normalizes_to_int(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok("1") == 1
         assert _validate_dok("3") == 3
         assert _validate_dok("  4  ") == 4
 
     def test_bool_rejected_even_though_int_subclass(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         # bool is a subclass of int — without an explicit isinstance(value, bool)
         # check, True would slip through and become 1.
         assert _validate_dok(True) is None
         assert _validate_dok(False) is None
 
     def test_int_out_of_range_returns_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok(0) is None
         assert _validate_dok(5) is None
         assert _validate_dok(-1) is None
 
     def test_non_numeric_string_returns_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok("foo") is None
         assert _validate_dok("") is None
         assert _validate_dok("3.0") is None  # not a clean int
 
     def test_none_returns_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok(None) is None
 
     def test_unsupported_types_return_none(self):
-        from backend.routes.student_portal_routes import _validate_dok
+        from backend.services.dok import _validate_dok
         assert _validate_dok(3.0) is None  # float
         assert _validate_dok([3]) is None  # list
         assert _validate_dok({"dok": 3}) is None  # dict
@@ -1750,30 +1750,30 @@ class TestDeriveUniformDok:
     when ALL questions agree on a valid level (1..4), else None."""
 
     def test_uniform_dok_returns_value(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': 3}, {'dok': 3}, {'dok': 3}]}
         assert _derive_uniform_dok(content) == 3
 
     def test_mixed_dok_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': 2}, {'dok': 3}, {'dok': 2}]}
         assert _derive_uniform_dok(content) is None
 
     def test_any_question_missing_dok_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': 3}, {'dok': 3}, {}]}
         assert _derive_uniform_dok(content) is None
 
     def test_empty_questions_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         assert _derive_uniform_dok({'questions': []}) is None
 
     def test_no_questions_key_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         assert _derive_uniform_dok({}) is None
 
     def test_non_dict_content_returns_none(self):
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         assert _derive_uniform_dok(None) is None
         assert _derive_uniform_dok("invalid") is None
         assert _derive_uniform_dok([{'dok': 3}]) is None  # list at top-level
@@ -1782,6 +1782,69 @@ class TestDeriveUniformDok:
         """Codex MINOR follow-up — if the AI ever wrote dok as string,
         the helper still derives uniform DOK because _validate_dok
         normalizes "3" → 3 first."""
-        from backend.routes.student_portal_routes import _derive_uniform_dok
+        from backend.services.dok import _derive_uniform_dok
         content = {'questions': [{'dok': "3"}, {'dok': 3}, {'dok': "3"}]}
         assert _derive_uniform_dok(content) == 3
+
+
+class TestRedTierWithNewShapeSubmissions:
+    """Phase 4.3 Sprint 2 — red-tier classification handles submissions
+    stored in new {overall, by_dok} shape. Without the sanitize call,
+    aggregator's internal adapter still works, but malformed entries
+    would slip through."""
+
+    @patch('backend.api_keys.get_api_key')
+    @patch('backend.services.llm_adapter.OpenAIAdapter')
+    @patch('backend.services.assignment_post_processing._post_process_assignment')
+    @patch('backend.routes.student_portal_routes._get_teacher_supabase')
+    def test_red_tier_uses_new_shape_overall_for_threshold(
+        self, mock_sb_fn, mock_pp, mock_adapter_cls, mock_get_api_key,
+        client, teacher_headers,
+    ):
+        _set_up_llm_mocks(mock_adapter_cls, mock_get_api_key)
+        mock_pp.return_value = ({
+            'title': 'P', 'sections': [{'name': 'P', 'questions': [
+                {'id': i, 'text': f'Q{i}', 'type': 'mcq', 'standard': 'MA.6.AR.1.2', 'dok': 2}
+                for i in range(1, 9)
+            ]}],
+        }, {'total_tokens': 1500})
+        # Two students. STU_1 has new-shape mastery at 50% → red tier.
+        # STU_2 has new-shape mastery at 90% → not red tier.
+        mock_sb_fn.return_value = _multi_table_sb({
+            'classes': CLS_OWNED,
+            'class_students': [
+                {'class_id': 'cls-1', 'student_id': STU_1},
+                {'class_id': 'cls-1', 'student_id': STU_2},
+            ],
+            'students': [{'id': STU_1}, {'id': STU_2}],
+            'student_submissions': [
+                {'id': 's-1', 'student_id': STU_1, 'content_id': CID_Q1,
+                 'attempt_number': 1, 'percentage': 50, 'submitted_at': '2026-04-10T10:00:00Z',
+                 'results': {'standards_mastery': {
+                     'MA.6.AR.1.2': {
+                         'overall': {'points_earned': 5, 'points_possible': 10, 'question_count': 2},
+                         'by_dok': {2: {'points_earned': 5, 'points_possible': 10, 'question_count': 2}},
+                     },
+                 }, 'score': 5, 'total_points': 10},
+                 'status': 'graded'},
+                {'id': 's-2', 'student_id': STU_2, 'content_id': CID_Q1,
+                 'attempt_number': 1, 'percentage': 90, 'submitted_at': '2026-04-10T10:00:00Z',
+                 'results': {'standards_mastery': {
+                     'MA.6.AR.1.2': {
+                         'overall': {'points_earned': 9, 'points_possible': 10, 'question_count': 2},
+                         'by_dok': {2: {'points_earned': 9, 'points_possible': 10, 'question_count': 2}},
+                     },
+                 }, 'score': 9, 'total_points': 10},
+                 'status': 'graded'},
+            ],
+            'published_content': [{'id': CID_Q1, 'class_id': 'cls-1', 'title': 'Q1',
+                                   'content_type': 'assessment'}],
+        })
+        resp = client.post('/api/teacher/class/cls-1/remediate', json={
+            'standard_code': 'MA.6.AR.1.2',
+            'target_mode': 'red_tier_in_class',
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert STU_1 in body['target_student_ids'], "50% must be classified red tier"
+        assert STU_2 not in body['target_student_ids'], "90% must NOT be classified red tier"

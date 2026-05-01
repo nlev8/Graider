@@ -24,6 +24,7 @@ export default function StudentReportCard({ classId, studentId, attemptMode, onC
   var [loading, setLoading] = useState(true);
   var [error, setError] = useState(null);
   var [expandedStandard, setExpandedStandard] = useState(null);
+  var [expandedDokRow, setExpandedDokRow] = useState(null);
 
   useEffect(function() {
     if (!classId || !studentId) return;
@@ -154,6 +155,8 @@ export default function StudentReportCard({ classId, studentId, attemptMode, onC
                   {data.standards_breakdown.map(function(s) {
                     var color = masteryColor(s.percentage);
                     var isExpanded = expandedStandard === s.code;
+                    var hasDok = Array.isArray(s.by_dok) && s.by_dok.length > 0;
+                    var isDokExpanded = expandedDokRow === s.code;
                     return (
                       <div key={s.code} style={{ border: "1px solid var(--glass-border)", borderRadius: "8px", padding: "10px 12px", background: color.bg }}>
                         <div
@@ -170,6 +173,55 @@ export default function StudentReportCard({ classId, studentId, attemptMode, onC
                           </div>
                           <div style={{ fontWeight: 700, color: color.text, fontSize: "1rem" }}>{color.label}</div>
                         </div>
+                        {hasDok && (
+                          <div style={{ marginTop: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={function(e) {
+                                e.stopPropagation();
+                                setExpandedDokRow(isDokExpanded ? null : s.code);
+                              }}
+                              style={{
+                                background: "transparent", border: "none",
+                                color: "var(--accent-primary)", fontSize: "0.72rem",
+                                cursor: "pointer", padding: "2px 0", fontWeight: 600,
+                              }}
+                            >
+                              {isDokExpanded
+                                ? String.fromCharCode(9662) + " Hide DOK breakdown"
+                                : String.fromCharCode(9656) + " DOK breakdown"}
+                            </button>
+                            {isDokExpanded && (
+                              <div style={{
+                                marginTop: "4px", padding: "8px",
+                                background: "rgba(99,102,241,0.07)",
+                                borderRadius: "6px",
+                                display: "flex", flexDirection: "column", gap: "4px",
+                              }}>
+                                {s.by_dok.map(function(d) {
+                                  return (
+                                    <div key={d.dok} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.78rem" }}>
+                                      <span style={{ width: "60px", fontWeight: 600, color: "var(--accent-primary)" }}>
+                                        {"DOK " + d.dok}
+                                      </span>
+                                      <div style={{ flex: 1, height: "8px", background: "rgba(99,102,241,0.12)", borderRadius: "4px", overflow: "hidden" }}>
+                                        <div style={{
+                                          height: "100%",
+                                          width: (d.percentage || 0) + "%",
+                                          background: "var(--accent-primary)",
+                                          transition: "width 0.2s ease",
+                                        }} />
+                                      </div>
+                                      <span style={{ width: "100px", textAlign: "right", color: "var(--text-secondary)" }}>
+                                        {d.percentage + "% (" + d.points_earned + "/" + d.points_possible + ")"}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {isExpanded && (
                           <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--glass-border)", display: "flex", flexDirection: "column", gap: "6px" }}>
                             {s.contributing_submissions.map(function(c, i) {

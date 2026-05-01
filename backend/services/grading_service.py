@@ -8,29 +8,62 @@ import json
 import logging
 import sentry_sdk
 
+from backend.services.dok import _validate_dok
+
 logger = logging.getLogger(__name__)
 
 
-def _build_standards_mastery(question_results):
-    """Roll up per-question scores into a standards_mastery dict.
+def _new_mastery_agg():
+    """Return a fresh mastery aggregator dict.
 
-    Input: list of question result dicts (each may have a 'standard' key).
-    Output: { standard_code: { points_earned, points_possible, question_count } }
-    Questions without a 'standard' field are skipped.
+    Stores the 3 base fields (no `percentage` — derived at aggregation time
+    by `_aggregate_mastery_for_student`, matching the pre-Sprint-2
+    convention so the JSONB stays minimal).
+    """
+    return {
+        'points_earned': 0,
+        'points_possible': 0,
+        'question_count': 0,
+    }
+
+
+def _accumulate_question(agg, qr):
+    """Add a single question result to the aggregator in-place."""
+    agg['points_earned'] += qr.get('points_earned') or 0
+    agg['points_possible'] += qr.get('points_possible') or 0
+    agg['question_count'] += 1
+
+
+def _build_standards_mastery(question_results):
+    """Roll up per-question scores into the per-standard mastery dict.
+
+    Phase 4.3 Sprint 2 — emits new shape:
+        {standard: {overall: {...3 base fields}, by_dok: {N: {...3 base fields}}}}
+
+    `overall` aggregates EVERY question with a `standard` key (regardless
+    of whether `dok` is present/valid).
+    `by_dok` only gets a bucket for DOKs that contributed at least one
+    question with `_validate_dok(qr.get('dok')) is not None`.
+
+    Questions without a `standard` field are skipped at the outer level.
+
+    Output preserves the no-percentage convention; aggregation downstream
+    (`_aggregate_mastery_for_student`) computes percentages.
     """
     mastery = {}
-    for qr in question_results:
+    for qr in (question_results or []):
         code = qr.get('standard')
         if not code:
             continue
-        bucket = mastery.setdefault(code, {
-            'points_earned': 0,
-            'points_possible': 0,
-            'question_count': 0,
+        entry = mastery.setdefault(code, {
+            'overall': _new_mastery_agg(),
+            'by_dok': {},
         })
-        bucket['points_earned'] += qr.get('points_earned') or 0
-        bucket['points_possible'] += qr.get('points_possible') or 0
-        bucket['question_count'] += 1
+        _accumulate_question(entry['overall'], qr)
+        dok = _validate_dok(qr.get('dok'))
+        if dok is not None:
+            d_agg = entry['by_dok'].setdefault(dok, _new_mastery_agg())
+            _accumulate_question(d_agg, qr)
     return mastery
 
 
@@ -170,7 +203,8 @@ def grade_student_submission(assessment, answers):
                 "points_possible": points,
                 "points_earned": 0,
                 "is_correct": False,
-                "feedback": ""
+                "feedback": "",
+                "dok": question.get("dok"),
             }
 
             # For matching questions, check match-specific keys instead of base key
@@ -318,7 +352,8 @@ def grade_instant_only(assessment, answers):
                 "points_possible": points,
                 "points_earned": 0,
                 "is_correct": False,
-                "feedback": ""
+                "feedback": "",
+                "dok": question.get("dok"),
             }
 
             if q_type in ("short_answer", "extended_response", "essay", "written"):
