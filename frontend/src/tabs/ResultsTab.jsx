@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import Icon from "../components/Icon";
 import * as api from "../services/api";
+import {
+  getAuthenticityStatus,
+  getAIFlagColor,
+  getPlagFlagColor,
+} from "../utils/authenticity";
 
 /*
  * Props required by ResultsTab:
- *
- * --- Helper functions (top-level, imported here or passed as props) ---
- * getAuthenticityStatus  - function(result) => { ai, plag, overallStatus }
- * getAIFlagColor         - function(flag) => { bg, text }
- * getPlagFlagColor       - function(flag) => { bg, text }
  *
  * --- State values ---
  * status                 - { results, is_running, log, complete }
@@ -302,10 +302,6 @@ var dropdownItemStyle = {
 }
 
 export default React.memo(function ResultsTab({
-  // Helper functions passed as props
-  getAuthenticityStatus,
-  getAIFlagColor,
-  getPlagFlagColor,
   // State
   status,
   config,
