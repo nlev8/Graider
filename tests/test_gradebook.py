@@ -246,6 +246,10 @@ class TestGradebookHappyPath:
 
     @patch('backend.routes.student_portal_routes._get_teacher_supabase')
     def test_assessments_sorted_by_publish_date_asc(self, mock_sb_fn, client, teacher_headers):
+        # 2026-05-01 column-name fix: real schema uses `created_at`, not
+        # `publish_date`. Fixtures set `created_at` accordingly; the response
+        # still surfaces `publish_date` (sourced from created_at) for
+        # backward compat with frontend consumers.
         mock_sb_fn.return_value = _multi_table_sb({
             'classes': [{'id': 'cls-1', 'name': 'C', 'teacher_id': 'test-teacher-001'}],
             'class_students': [{'class_id': 'cls-1', 'student_id': 'stu-1'}],
@@ -253,18 +257,18 @@ class TestGradebookHappyPath:
             'published_content': [
                 # Inserted out-of-order on purpose
                 {'id': 'ct-late', 'class_id': 'cls-1', 'title': 'Z-Late', 'content_type': 'assessment',
-                 'publish_date': '2026-04-20T00:00:00Z'},
+                 'created_at': '2026-04-20T00:00:00Z'},
                 {'id': 'ct-early', 'class_id': 'cls-1', 'title': 'A-Early', 'content_type': 'assessment',
-                 'publish_date': '2026-04-01T00:00:00Z'},
+                 'created_at': '2026-04-01T00:00:00Z'},
                 {'id': 'ct-mid', 'class_id': 'cls-1', 'title': 'M-Mid', 'content_type': 'assessment',
-                 'publish_date': '2026-04-10T00:00:00Z'},
+                 'created_at': '2026-04-10T00:00:00Z'},
             ],
             'student_submissions': [],
         })
         resp = client.get('/api/teacher/class/cls-1/gradebook', headers=teacher_headers)
         assert resp.status_code == 200
         body = resp.get_json()
-        # Sorted ASC by publish_date
+        # Sorted ASC by created_at (response field still named publish_date)
         assert [a['content_id'] for a in body['assessments']] == ['ct-early', 'ct-mid', 'ct-late']
 
 

@@ -229,7 +229,7 @@ class TestEffectivenessHappyPath:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 # Pre-rem: scored 40% on the standard.
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, _mastery(earned=4, possible=10),
@@ -265,7 +265,7 @@ class TestEffectivenessHappyPath:
                 _rem(CID_REM_1, [STU_1]),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, _mastery(earned=6, possible=10),
                      submitted_at='2026-04-10T10:00:00Z'),
@@ -291,7 +291,7 @@ class TestEffectivenessHappyPath:
                 _rem(CID_REM_2, [STU_1], created_at='2026-04-20T10:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, _mastery(earned=4, possible=10),
                      submitted_at='2026-04-10T10:00:00Z'),
@@ -323,7 +323,7 @@ class TestEffectivenessEdgeCases:
             'published_content': [
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 # Only post-rem submission exists.
                 _sub('s-rem', STU_1, CID_REM_1, _mastery(earned=7, possible=10),
@@ -348,7 +348,7 @@ class TestEffectivenessEdgeCases:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 # Pre-rem mastery of 40%
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, _mastery(earned=4, possible=10),
@@ -376,8 +376,8 @@ class TestEffectivenessEdgeCases:
                 _non_rem(CID_ASSESSMENT_1),
             ],
             'students': [
-                {'id': STU_1, 'name': 'Alex'},
-                {'id': STU_2, 'name': 'Bailey'},
+                {'id': STU_1, 'first_name': 'Alex', 'last_name': ''},
+                {'id': STU_2, 'first_name': 'Bailey', 'last_name': ''},
             ],
             'student_submissions': [
                 _sub('s1-pre', STU_1, CID_ASSESSMENT_1, _mastery(earned=3, possible=10),
@@ -409,7 +409,7 @@ class TestEffectivenessEdgeCases:
         mock_sb_fn.return_value = _multi_table_sb({
             'classes': CLS_OWNED,
             'published_content': [rem_row, _non_rem(CID_ASSESSMENT_1)],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, _mastery(earned=4, possible=10),
                      submitted_at='2026-04-10T10:00:00Z'),
@@ -436,7 +436,7 @@ class TestEffectivenessEdgeCases:
                 _rem(CID_REM_2, [STU_1], created_at='2026-04-20T10:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, _mastery(earned=4, possible=10),
                      submitted_at='2026-04-10T10:00:00Z'),  # 40%
@@ -476,7 +476,7 @@ class TestEffectivenessIsolation:
                      created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),  # cls-1
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [],
         })
         resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
@@ -498,7 +498,7 @@ class TestEffectivenessIsolation:
                 # Actual remediation.
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [],
         })
         resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
@@ -520,7 +520,7 @@ class TestEffectivenessIsolation:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 # cls-1 has NO baseline content for this student.
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 # Out-of-class submission (CID_OTHER_CLASS is NOT in cls-1's published_content).
                 # Must NOT count as cls-1's pre-rem baseline.
@@ -554,7 +554,7 @@ class TestEffectivenessIsActive:
         mock_sb_fn.return_value = _multi_table_sb({
             'classes': CLS_OWNED,
             'published_content': [_rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z')],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [],
         })
         resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
@@ -570,7 +570,7 @@ class TestEffectivenessIsActive:
         mock_sb_fn.return_value = _multi_table_sb({
             'classes': CLS_OWNED,
             'published_content': [recalled_row],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [],
         })
         resp = client.get('/api/teacher/class/cls-1/remediation-effectiveness', headers=teacher_headers)
@@ -614,7 +614,7 @@ class TestRemediationEffectivenessNewShape:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_rem_mastery,
                      submitted_at='2026-04-10T10:00:00Z'),
@@ -668,7 +668,7 @@ class TestEffectivenessPerDokSplit:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
                      submitted_at='2026-04-10T10:00:00Z'),
@@ -714,7 +714,7 @@ class TestEffectivenessPerDokSplit:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
                      submitted_at='2026-04-10T10:00:00Z'),
@@ -762,7 +762,7 @@ class TestEffectivenessPerDokSplit:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
                      submitted_at='2026-04-10T10:00:00Z'),
@@ -806,7 +806,7 @@ class TestEffectivenessPerDokSplit:
                 _rem(CID_REM_1, [STU_1], created_at='2026-04-15T12:00:00Z'),
                 _non_rem(CID_ASSESSMENT_1),
             ],
-            'students': [{'id': STU_1, 'name': 'Alex'}],
+            'students': [{'id': STU_1, 'first_name': 'Alex', 'last_name': ''}],
             'student_submissions': [
                 _sub('s-pre', STU_1, CID_ASSESSMENT_1, pre_mastery,
                      submitted_at='2026-04-10T10:00:00Z'),
