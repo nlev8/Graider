@@ -65,13 +65,27 @@ def _discover_teachers():
         if not config_result.data:
             return []
 
-        # Get teachers with recent activity (student sessions in last 30 days)
+        # Get teachers with recent activity (student sessions in last 30 days).
+        # 2026-05-02 schema audit fix: student_sessions has student_id, not
+        # teacher_id (verified via tools/audit_select_columns.py --live). Hop
+        # through students.teacher_id instead.
         cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat()
         session_result = sb.table('student_sessions').select(
-            'teacher_id'
+            'student_id'
         ).gt('created_at', cutoff).execute()
-
-        active_teacher_ids = {s['teacher_id'] for s in (session_result.data or [])}
+        active_student_ids = list({
+            s['student_id'] for s in (session_result.data or [])
+            if s.get('student_id')
+        })
+        active_teacher_ids: set[str] = set()
+        if active_student_ids:
+            students_rows = sb.table('students').select('teacher_id').in_(
+                'id', active_student_ids
+            ).execute()
+            active_teacher_ids = {
+                s['teacher_id'] for s in (students_rows.data or [])
+                if s.get('teacher_id')
+            }
 
         # Also include teachers whose SIS config was updated in last 30 days
         eligible = []

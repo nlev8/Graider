@@ -65,7 +65,10 @@ SIS_CAPTURES = [
     ("backend/roster_sync.py", 168),
     ("backend/roster_sync.py", 270),
     ("backend/roster_sync.py", 288),
-    ("backend/routes/sync_routes.py", 145),
+    # 2026-05-02: shifted 145 -> 159 by the schema-audit fix that added a
+    # two-step query in _discover_teachers (~14 lines). Pin tracks the
+    # _save_cursor try-block.
+    ("backend/routes/sync_routes.py", 159),
     ("backend/services/oneroster_gradebook.py", 95),
 ]
 
