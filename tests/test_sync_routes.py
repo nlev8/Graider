@@ -207,8 +207,28 @@ class TestSyncWebhookOrchestration:
 # ---------------------------------------------------------------------------
 
 def _mock_supabase_for_discovery(config_rows, session_rows, cursor_data=None):
-    """Mock Supabase for teacher discovery tests."""
+    """Mock Supabase for teacher discovery tests.
+
+    Test inputs are kept stable across the 2026-05-02 schema-audit fix
+    that switched _discover_teachers from a single bad query
+    (student_sessions.teacher_id, which doesn't exist as a column) to a
+    two-step hop: student_sessions.student_id → students.teacher_id.
+
+    `session_rows` is still expressed as `[{"teacher_id": ...}]` for
+    test readability ("teachers who had a recent session"). Internally
+    we synthesize:
+      - student_sessions rows with `student_id = "stu_{teacher_id}"`
+      - students rows mapping each synthetic student_id back to teacher_id
+    so the new two-step query resolves to the same teacher_id set.
+    """
     mock_sb = MagicMock()
+
+    synthetic_session_rows = [
+        {"student_id": f"stu_{r['teacher_id']}"} for r in session_rows
+    ]
+    synthetic_student_rows = [
+        {"teacher_id": r["teacher_id"]} for r in session_rows
+    ]
 
     def table_router(name):
         mock_table = MagicMock()
@@ -216,7 +236,9 @@ def _mock_supabase_for_discovery(config_rows, session_rows, cursor_data=None):
         if name == 'teacher_data':
             result.data = config_rows
         elif name == 'student_sessions':
-            result.data = session_rows
+            result.data = synthetic_session_rows
+        elif name == 'students':
+            result.data = synthetic_student_rows
         else:
             result.data = []
         for method in ('select', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte',
