@@ -2128,14 +2128,18 @@ def get_class_gradebook(class_id):
             "students": [], "assessments": [], "grades": {},
         })
 
-    # 3) Fetch all class assessments/assignments. Sort ASC by publish_date.
+    # 3) Fetch all class assessments/assignments. Sort ASC by created_at.
+    # Note: 2026-05-01 — fixed long-standing column name bug (was `publish_date`,
+    # which doesn't exist on published_content; the actual write-time column is
+    # `created_at`). Tests passed with mocks; this route never hit real Supabase
+    # until Phase 4.3 work surfaced it.
     content_rows = db.table('published_content').select(
-        'id, title, content_type, publish_date, due_date, is_active, target_student_ids'
+        'id, title, content_type, created_at, due_date, is_active, target_student_ids'
     ).eq('class_id', class_id).in_('content_type', ['assessment', 'assignment']).execute()
 
     assessments = sorted(
         (content_rows.data or []),
-        key=lambda c: (c.get('publish_date') or '', c.get('id') or ''),
+        key=lambda c: (c.get('created_at') or '', c.get('id') or ''),
     )
     # Phase 4.2 #7: capture is_active and target_student_ids for the
     # remediation-badge UI. The grouping logic below keys off c['id'] only,
@@ -2254,7 +2258,10 @@ def get_class_gradebook(class_id):
         "students": [{'student_id': s['student_id'], 'student_name': s['student_name']} for s in student_records],
         "assessments": [
             {'content_id': c['id'], 'title': c.get('title', ''), 'content_type': c.get('content_type'),
-             'publish_date': c.get('publish_date'), 'due_date': c.get('due_date'),
+             # Response field kept as `publish_date` for backward compat with
+             # frontend consumers that may look for it; sourced from the actual
+             # `created_at` column.
+             'publish_date': c.get('created_at'), 'due_date': c.get('due_date'),
              # Phase 4.2 #7: surface remediation flags for the badge UI.
              'is_active': c.get('is_active'),
              'target_student_ids': c.get('target_student_ids'),
@@ -3356,11 +3363,15 @@ def get_class_remediation_effectiveness(class_id):
 
     student_name_by_id = {}
     if all_target_student_ids:
-        stu_rows = db.table('students').select('id, name').in_(
+        # 2026-05-01 column-name fix: real schema uses first_name + last_name,
+        # not a single `name` column. Tests passed with mocks; this only
+        # surfaced when the route hit real Supabase.
+        stu_rows = db.table('students').select('id, first_name, last_name').in_(
             'id', list(all_target_student_ids)
         ).execute()
         student_name_by_id = {
-            s['id']: (s.get('name') or '') for s in (stu_rows.data or []) if s.get('id')
+            s['id']: ((s.get('first_name') or '') + ' ' + (s.get('last_name') or '')).strip()
+            for s in (stu_rows.data or []) if s.get('id')
         }
 
     # 5) Fetch student_submissions for these students — SCOPED to current-class
