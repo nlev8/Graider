@@ -2426,10 +2426,12 @@ def get_class_assessment_comparison(class_id):
         return error_response("Compare at most 6 assessments at once", 400)
 
     # 5) Fetch published_content rows scoped to this class.
-    # Select content + settings (both JSONB) so the max_points read site can fall
-    # back through row column → content.max_points → settings.max_points per spec.
+    # 2026-05-02 schema audit fix: max_points is NOT a column on
+    # published_content (verified via tools/audit_select_columns.py --live).
+    # The intent was a fallback ladder; max_points lives only in
+    # content.max_points / settings.max_points (both JSONB).
     content_rows = db.table('published_content').select(
-        'id, title, content_type, max_points, content, settings'
+        'id, title, content_type, content, settings'
     ).in_('id', content_ids).eq('class_id', class_id).execute()
     raw_found = content_rows.data or []
     # Reject anything that isn't an assessment — assignments must not be comparable here.
