@@ -104,6 +104,10 @@ vi.mock('../services/api', () => {
     saveRubric: noopAsync,
     saveGlobalSettings: noopAsync,
     track: vi.fn(),
+    // 2026-05-02: StudentPortal calls getDraft on mount when contentId+studentToken
+    // are present. Without this mock the useEffect rejects and the render fails.
+    getDraft: vi.fn().mockResolvedValue({ draft: null }),
+    saveDraft: vi.fn().mockResolvedValue({}),
     getStatus: vi.fn().mockResolvedValue({ is_running: false, log: [], results: [] }),
     startGrading: vi.fn().mockResolvedValue({}),
     stopGrading: vi.fn().mockResolvedValue({}),
