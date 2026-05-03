@@ -25,6 +25,16 @@ _logger = logging.getLogger(__name__)
 
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import error_response, handle_route_errors
+from backend.utils.ttl_cache import TTLCache
+
+# Process-local cache for the class-scoped progress-rank grid. The
+# computation re-aggregates thousands of submissions for districts with
+# 150+ students × multiple periods × multiple assessments. A 30-second
+# TTL turns repeated polls (the dashboard auto-refreshes) into O(1)
+# lookups while keeping data freshness within a teacher's tolerance.
+# Followup work: replace with a `student_standards_mastery` materialized
+# rollup table, see docs/perf-progress-rank.md.
+_progress_rank_cache = TTLCache(ttl_seconds=30)
 from backend.extensions import limiter
 from backend.services.grading_service import grade_deterministic_question, grade_student_submission, grade_instant_only
 # Phase 4.2 #12 / Phase 4.3 Sprint 2: shared DOK helpers live in
@@ -1863,6 +1873,12 @@ def get_class_progress_rank(class_id):
 
     Query params:
       attempt_mode: 'latest' (default) | 'best' | 'average'
+
+    Caching: 30-second per-(teacher, class, attempt_mode) TTL cache on the
+    full response. Auth check is OUTSIDE the cache, so a teacher who loses
+    access to a class will hit the 403 path within one TTL window even on
+    a cached response. See docs/perf-progress-rank.md for the planned
+    materialized rollup that replaces this in a follow-up.
     """
     try:
         db = _get_teacher_supabase()
@@ -1871,10 +1887,17 @@ def get_class_progress_rank(class_id):
         if attempt_mode not in ('latest', 'best', 'average'):
             attempt_mode = 'latest'
 
-        # Verify class ownership
+        # Verify class ownership FIRST — never cache the auth decision.
         cls = db.table('classes').select('id, name, teacher_id').eq('id', class_id).execute()
         if not cls.data or cls.data[0].get('teacher_id') != g.teacher_id:
             return jsonify({"error": "Not authorized"}), 403
+
+        # Cache lookup AFTER auth — keyed by (teacher, class, mode) so two
+        # teachers viewing the same class via different scopes don't share.
+        cache_key = (g.teacher_id, class_id, attempt_mode)
+        cached = _progress_rank_cache.get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
         class_name = cls.data[0].get('name')
 
         # Fetch class roster — query students directly by joining via class_students
@@ -1964,13 +1987,15 @@ def get_class_progress_rank(class_id):
                 'mastery': mastery,
             })
 
-        return jsonify({
+        payload = {
             "class_id": class_id,
             "class_name": class_name,
             "attempt_mode": attempt_mode,
             "standards": sorted(all_standards_in_class),
             "students": students_output,
-        })
+        }
+        _progress_rank_cache.set(cache_key, payload)
+        return jsonify(payload)
     except Exception as e:
         _logger.exception("Progress rank error")
         return jsonify({"error": "An internal error occurred"}), 500
