@@ -27,6 +27,7 @@ import Icon from "./components/Icon";
 import StandardCard from "./components/StandardCard";
 import PasswordResetScreen from "./components/PasswordResetScreen";
 import ShareWithClassesModal from "./components/ShareWithClassesModal";
+import ImportEventsModal from "./components/ImportEventsModal";
 import { AssignmentPlayer } from "./components";
 import QuestionEditToolbar from "./components/QuestionEditToolbar";
 import QuestionEditOverlay from "./components/QuestionEditOverlay";
@@ -14641,169 +14642,59 @@ ${signature}`;
                       )}
 
                       {/* Import Document Modal */}
-                      {showImportModal && (
-                        <div
-                          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
-                          onClick={() => setShowImportModal(false)}
-                        >
-                          <div
-                            className="glass-card"
-                            style={{ maxWidth: "560px", width: "100%", padding: "24px", maxHeight: "80vh", display: "flex", flexDirection: "column" }}
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-                              <Icon name="FileUp" size={20} style={{ color: "var(--accent-primary)" }} />
-                              Import Events from Document
-                            </h3>
-
-                            {/* Step 1: Select document */}
-                            <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-                              <select
-                                value={importSelectedDoc}
-                                onChange={e => { setImportSelectedDoc(e.target.value); setImportEvents([]); setImportChecked({}) }}
-                                style={{ flex: 1, padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
-                              >
-                                <option value="">Select a document...</option>
-                                {supportDocs.filter(d => /\.(pdf|docx?)$/i.test(d.filename)).map(d => (
-                                  <option key={d.filename} value={d.filename}>{d.filename}</option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={async () => {
-                                  if (!importSelectedDoc) return
-                                  setImportParsing(true)
-                                  setImportEvents([])
-                                  setImportChecked({})
-                                  try {
-                                    const data = await api.parseDocumentForCalendar(importSelectedDoc)
-                                    if (data.events) {
-                                      setImportEvents(data.events)
-                                      const checked = {}
-                                      data.events.forEach((_, i) => { checked[i] = true })
-                                      setImportChecked(checked)
-                                    } else if (data.error) {
-                                      if (addToast) addToast(data.error, 'error')
-                                    }
-                                  } catch (e) {
-                                    if (addToast) addToast('Failed to parse document', 'error')
-                                  } finally {
-                                    setImportParsing(false)
-                                  }
-                                }}
-                                className="btn btn-primary"
-                                style={{ padding: "8px 16px", fontSize: "0.85rem", whiteSpace: "nowrap" }}
-                                disabled={!importSelectedDoc || importParsing}
-                              >
-                                {importParsing ? 'Parsing...' : 'Parse Document'}
-                              </button>
-                            </div>
-
-                            {importParsing && (
-                              <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-                                <Icon name="Loader2" size={24} style={{ animation: "spin 1s linear infinite", marginBottom: "8px" }} />
-                                <div>AI is extracting events from your document...</div>
-                              </div>
-                            )}
-
-                            {/* Step 2: Event list with checkboxes */}
-                            {importEvents.length > 0 && !importParsing && (
-                              <>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>
-                                    {importEvents.length} events found
-                                  </span>
-                                  <div style={{ display: "flex", gap: "8px" }}>
-                                    <button
-                                      onClick={() => {
-                                        const all = {}
-                                        importEvents.forEach((_, i) => { all[i] = true })
-                                        setImportChecked(all)
-                                      }}
-                                      style={{ background: "none", border: "none", color: "var(--accent-primary)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, padding: "2px 6px" }}
-                                    >
-                                      Select All
-                                    </button>
-                                    <button
-                                      onClick={() => setImportChecked({})}
-                                      style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, padding: "2px 6px" }}
-                                    >
-                                      Deselect All
-                                    </button>
-                                  </div>
-                                </div>
-                                <div style={{ flex: 1, overflowY: "auto", maxHeight: "340px", border: "1px solid var(--glass-border)", borderRadius: "8px", marginBottom: "16px" }}>
-                                  {importEvents.map((ev, i) => (
-                                    <label
-                                      key={i}
-                                      style={{
-                                        display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px",
-                                        borderBottom: i < importEvents.length - 1 ? "1px solid var(--glass-border)" : "none",
-                                        cursor: "pointer", fontSize: "0.85rem",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!importChecked[i]}
-                                        onChange={() => setImportChecked(prev => ({ ...prev, [i]: !prev[i] }))}
-                                        style={{ accentColor: "var(--accent-primary)" }}
-                                      />
-                                      <span style={{
-                                        display: "inline-block", padding: "2px 8px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 600,
-                                        background: ev.type === 'holiday' ? "rgba(239, 68, 68, 0.15)" : "rgba(99, 102, 241, 0.15)",
-                                        color: ev.type === 'holiday' ? "#ef4444" : "#6366f1",
-                                        minWidth: "52px", textAlign: "center",
-                                      }}>
-                                        {ev.type === 'holiday' ? 'Holiday' : 'Lesson'}
-                                      </span>
-                                      <span style={{ fontWeight: 500, color: "var(--text-primary)", flex: 1 }}>{ev.title}</span>
-                                      <span style={{ color: "var(--text-secondary)", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{ev.date}</span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-
-                            {/* Action buttons */}
-                            <div style={{ display: "flex", gap: "8px" }}>
-                              {importEvents.length > 0 && !importParsing && (
-                                <button
-                                  onClick={async () => {
-                                    const selected = importEvents.filter((_, i) => importChecked[i])
-                                    if (selected.length === 0) return
-                                    setImportImporting(true)
-                                    try {
-                                      const data = await api.importCalendarEvents(selected)
-                                      if (data.status === 'imported') {
-                                        loadCalendar()
-                                        setShowImportModal(false)
-                                        if (addToast) addToast('Imported ' + data.lessons_added + ' lessons and ' + data.holidays_added + ' holidays', 'success')
-                                      } else if (data.error) {
-                                        if (addToast) addToast(data.error, 'error')
-                                      }
-                                    } catch (e) {
-                                      if (addToast) addToast('Failed to import events', 'error')
-                                    } finally {
-                                      setImportImporting(false)
-                                    }
-                                  }}
-                                  className="btn btn-primary"
-                                  style={{ flex: 1 }}
-                                  disabled={importImporting || Object.values(importChecked).filter(Boolean).length === 0}
-                                >
-                                  {importImporting ? 'Importing...' : 'Import ' + Object.values(importChecked).filter(Boolean).length + ' Events'}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => setShowImportModal(false)}
-                                className="btn btn-secondary"
-                                style={{ flex: importEvents.length > 0 && !importParsing ? undefined : 1 }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <ImportEventsModal
+                        open={showImportModal}
+                        onClose={() => setShowImportModal(false)}
+                        selectedDoc={importSelectedDoc}
+                        setSelectedDoc={setImportSelectedDoc}
+                        events={importEvents}
+                        setEvents={setImportEvents}
+                        checked={importChecked}
+                        setChecked={setImportChecked}
+                        parsing={importParsing}
+                        importing={importImporting}
+                        supportDocs={supportDocs}
+                        onParse={async () => {
+                          if (!importSelectedDoc) return;
+                          setImportParsing(true);
+                          setImportEvents([]);
+                          setImportChecked({});
+                          try {
+                            const data = await api.parseDocumentForCalendar(importSelectedDoc);
+                            if (data.events) {
+                              setImportEvents(data.events);
+                              const checked = {};
+                              data.events.forEach((_, i) => { checked[i] = true; });
+                              setImportChecked(checked);
+                            } else if (data.error) {
+                              if (addToast) addToast(data.error, "error");
+                            }
+                          } catch (e) {
+                            if (addToast) addToast("Failed to parse document", "error");
+                          } finally {
+                            setImportParsing(false);
+                          }
+                        }}
+                        onImport={async () => {
+                          const selected = importEvents.filter((_, i) => importChecked[i]);
+                          if (selected.length === 0) return;
+                          setImportImporting(true);
+                          try {
+                            const data = await api.importCalendarEvents(selected);
+                            if (data.status === "imported") {
+                              loadCalendar();
+                              setShowImportModal(false);
+                              if (addToast) addToast("Imported " + data.lessons_added + " lessons and " + data.holidays_added + " holidays", "success");
+                            } else if (data.error) {
+                              if (addToast) addToast(data.error, "error");
+                            }
+                          } catch (e) {
+                            if (addToast) addToast("Failed to import events", "error");
+                          } finally {
+                            setImportImporting(false);
+                          }
+                        }}
+                      />
                     </div>
                   )}
 
