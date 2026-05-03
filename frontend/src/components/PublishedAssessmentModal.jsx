@@ -17,6 +17,9 @@
  *   isClassBased: bool — switches the displayed label + instructions
  *   onCopied: () => void — invoked after `navigator.clipboard.writeText`
  *                          succeeds (App typically pipes this to a toast)
+ *   title?: string — header text, default "Published!"
+ *   subtitle?: string — body text below the header, default
+ *                       "Students can now access this using the code below."
  */
 import React from "react";
 import Icon from "./Icon";
@@ -28,6 +31,8 @@ export default function PublishedAssessmentModal({
   joinLink,
   isClassBased,
   onCopied,
+  title = "Published!",
+  subtitle = "Students can now access this using the code below.",
 }) {
   if (!open) return null;
 
@@ -62,10 +67,10 @@ export default function PublishedAssessmentModal({
           <Icon name="CheckCircle" size={48} style={{ color: "#22c55e" }} />
         </div>
         <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "10px" }}>
-          Published!
+          {title}
         </h2>
         <p style={{ color: "var(--text-secondary)", marginBottom: "25px" }}>
-          Students can now access this using the code below.
+          {subtitle}
         </p>
 
         {/* Join Code Display */}
