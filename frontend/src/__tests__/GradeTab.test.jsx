@@ -31,15 +31,8 @@ const makeProps = (overrides = {}) => ({
   setStatus: vi.fn(),
   addToast: vi.fn(),
   periods: [],
-  setGradeFilterStudent: vi.fn(),
   sortedPeriods: [],
-  gradeFilterStudent: '',
-  setGradeImportedDoc: vi.fn(),
-  availableFiles: [],
-  selectedFiles: [],
-  setSelectedFiles: vi.fn(),
   emailApprovals: {},
-  MODEL_COST_PER_ASSIGNMENT: {},
   ...overrides,
 });
 

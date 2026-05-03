@@ -5,15 +5,18 @@ import * as api from "../services/api";
 import { getAuthHeaders } from "../services/api";
 
 /*
- * Grade tab — JSX + (after PR 3) toggle/log + individual-upload + period
- * + assignment-config local state.
+ * Grade tab — fully extracted. By end of PR 4, App.jsx no longer declares any
+ * Grade-specific useState; this component owns its own state.
  *
- * Per docs/superpowers/plans/2026-05-03-grade-tab-extraction.md, this is the
- * extracted Grade tab. PR 1 was the pure JSX lift; PR 2 moved toggles + the
- * showActivityLog vertical slice; PR 3 (this revision) moves the individual-
- * upload slice (state + 4 handlers) plus selectedPeriod, periodStudents,
- * loadPeriodStudents, the assignment filter (gradeFilterAssignment), and the
- * gradeAssignment loader. Future PR 4 cleans up the dead file-selection branch.
+ * Per docs/superpowers/plans/2026-05-03-grade-tab-extraction.md:
+ *   - PR 1 was the pure JSX lift.
+ *   - PR 2 moved toggles + the showActivityLog vertical slice.
+ *   - PR 3 moved selectedPeriod / periodStudents / gradeFilterAssignment /
+ *     individualUpload / gradeAssignment plus their handlers.
+ *   - PR 4 (this revision) moves gradeFilterStudent as pure local UI state and
+ *     deletes the dead portal-era file-selection branch (matching-files UI,
+ *     selectedFiles, availableFiles, fileMatchesPeriodStudent helper, cost
+ *     estimate banner) plus the dead gradeImportedDoc setter call.
  *
  * Mount: this component is always-mounted with display:none-style hiding from
  * App.jsx (Assistant-tab precedent), so local state survives tab switches.
@@ -22,21 +25,15 @@ import { getAuthHeaders } from "../services/api";
  *   --- App-shell state (read-only) ---
  *   status, config, globalAINotes
  *   savedAssignments, savedAssignmentData, periods, sortedPeriods
- *   availableFiles, emailApprovals
- *   MODEL_COST_PER_ASSIGNMENT (App-local constant; could lift to a util later)
+ *   emailApprovals
  *
  *   --- App-shell mutators ---
  *   setStatus               - Used by error-banner Dismiss + handleIndividualGrade
  *   setSavedAssignmentData  - SHARED MUTABLE state (Codex Round 2 #4); written
  *                             from completion-only toggle and due-date editor.
  *   addToast                - App-shell utility
- *   setGradeImportedDoc     - DEAD state (PR 4 deletes); kept until then
  *
- *   --- Grade-specific state remaining in props (will move in PR 4) ---
- *   gradeFilterStudent / setGradeFilterStudent
- *   selectedFiles / setSelectedFiles  - part of dead branch (PR 4 deletes)
- *
- * GradeTab-owned (PR 2 + PR 3):
+ * GradeTab-owned state:
  *   PR 2: gradingModesExpanded, showActivityLog, skipVerified,
  *         excludeGradedStudents, excludeApprovedStudents, logRef,
  *         auto-scroll log effect, auto-expand-on-error effect.
@@ -45,6 +42,7 @@ import { getAuthHeaders } from "../services/api";
  *         handleIndividualFileSelect, handleIndividualGrade,
  *         clearIndividualUpload, getStudentSuggestions,
  *         blob-URL revoke effect for individualUpload.preview.
+ *   PR 4: gradeFilterStudent (pure local UI filter).
  */
 
 export default function GradeTab(props) {
@@ -58,15 +56,8 @@ export default function GradeTab(props) {
     setStatus,
     addToast,
     periods,
-    setGradeFilterStudent,
     sortedPeriods,
-    gradeFilterStudent,
-    setGradeImportedDoc,
-    availableFiles,
-    selectedFiles,
-    setSelectedFiles,
     emailApprovals,
-    MODEL_COST_PER_ASSIGNMENT,
   } = props;
 
   // PR 2 — local Grade-tab state (pure toggles + showActivityLog vertical slice).
@@ -81,6 +72,9 @@ export default function GradeTab(props) {
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [periodStudents, setPeriodStudents] = useState([]);
   const [gradeFilterAssignment, setGradeFilterAssignment] = useState("");
+
+  // PR 4 — local Grade-tab state (pure UI filter; no App-level effect, no dead helpers).
+  const [gradeFilterStudent, setGradeFilterStudent] = useState("");
   const [gradeAssignment, setGradeAssignment] = useState({
     title: "",
     customMarkers: [],
@@ -901,11 +895,8 @@ export default function GradeTab(props) {
                         excludeMarkers:
                           data.assignment.excludeMarkers || [],
                       });
-                      if (data.assignment.importedDoc) {
-                        setGradeImportedDoc(
-                          data.assignment.importedDoc,
-                        );
-                      }
+                      // PR 4: setGradeImportedDoc was removed — that App-level
+                      // state was dead (set but never read).
                       addToast(
                         `Loaded "${assignmentName}"`,
                         "success",
@@ -1028,213 +1019,10 @@ export default function GradeTab(props) {
           </div>
         )}
 
-        {/* Matching Files Preview - Show when student filter is set */}
-        {gradeFilterStudent && availableFiles.length > 0 && (
-          <div
-            style={{
-              padding: "15px",
-              background:
-                "linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05))",
-              borderRadius: "12px",
-              border: "1px solid rgba(59, 130, 246, 0.2)",
-              marginBottom: "20px",
-            }}
-          >
-            <label
-              className="label"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginBottom: "10px",
-              }}
-            >
-              <Icon
-                name="FileSearch"
-                size={16}
-                style={{ color: "#3b82f6" }}
-              />
-              Matching Submissions for "{gradeFilterStudent}"
-            </label>
-            {(() => {
-              let studentName = gradeFilterStudent.toLowerCase();
-              // Handle "Last; First" or "Last, First" roster format
-              if (studentName.includes(';') || studentName.includes(',')) {
-                const parts = studentName.split(/[;,]/).map(p => p.trim());
-                if (parts.length >= 2) {
-                  const lastName = parts[0];
-                  const firstName = parts[1].split(' ')[0];
-                  studentName = firstName + ' ' + lastName;
-                }
-              }
-              const matchingFiles = availableFiles.filter((f) => {
-                const fileName = f.name.toLowerCase();
-                return (
-                  fileName.includes(
-                    studentName.replace(/\s+/g, ""),
-                  ) ||
-                  fileName.includes(
-                    studentName.replace(/\s+/g, "_"),
-                  ) ||
-                  fileName.includes(
-                    studentName.replace(/\s+/g, "-"),
-                  ) ||
-                  fileName.includes(studentName)
-                );
-              });
-
-              if (matchingFiles.length === 0) {
-                return (
-                  <p
-                    style={{
-                      fontSize: "0.85rem",
-                      color: "var(--text-muted)",
-                      margin: 0,
-                    }}
-                  >
-                    No files found matching "{gradeFilterStudent}"
-                  </p>
-                );
-              }
-
-              return (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#3b82f6",
-                      margin: "0 0 5px 0",
-                    }}
-                  >
-                    {matchingFiles.length} file
-                    {matchingFiles.length !== 1 ? "s" : ""} found -
-                    select to grade:
-                  </p>
-                  {matchingFiles.map((file, idx) => (
-                    <label
-                      key={idx}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        padding: "10px 12px",
-                        background: selectedFiles.includes(
-                          file.name,
-                        )
-                          ? "rgba(59, 130, 246, 0.2)"
-                          : "var(--input-bg)",
-                        borderRadius: "8px",
-                        border: selectedFiles.includes(file.name)
-                          ? "1px solid rgba(59, 130, 246, 0.4)"
-                          : "1px solid var(--glass-border)",
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedFiles.includes(file.name)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedFiles([
-                              ...selectedFiles,
-                              file.name,
-                            ]);
-                          } else {
-                            setSelectedFiles(
-                              selectedFiles.filter(
-                                (f) => f !== file.name,
-                              ),
-                            );
-                          }
-                        }}
-                        style={{
-                          width: "16px",
-                          height: "16px",
-                          cursor: "pointer",
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <span
-                          style={{
-                            fontSize: "0.9rem",
-                            fontWeight: 500,
-                          }}
-                        >
-                          {file.name}
-                        </span>
-                        {file.graded && (
-                          <span
-                            style={{
-                              marginLeft: "8px",
-                              padding: "2px 6px",
-                              background: "rgba(16, 185, 129, 0.2)",
-                              borderRadius: "4px",
-                              fontSize: "0.7rem",
-                              color: "#10b981",
-                            }}
-                          >
-                            Already Graded
-                          </span>
-                        )}
-                      </div>
-                    </label>
-                  ))}
-                  {selectedFiles.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "10px",
-                        marginTop: "5px",
-                      }}
-                    >
-                      <button
-                        onClick={() =>
-                          setSelectedFiles(
-                            matchingFiles.map((f) => f.name),
-                          )
-                        }
-                        style={{
-                          padding: "6px 12px",
-                          background: "rgba(59, 130, 246, 0.1)",
-                          border:
-                            "1px solid rgba(59, 130, 246, 0.3)",
-                          borderRadius: "6px",
-                          color: "#3b82f6",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Select All
-                      </button>
-                      <button
-                        onClick={() => setSelectedFiles([])}
-                        style={{
-                          padding: "6px 12px",
-                          background: "rgba(239, 68, 68, 0.1)",
-                          border:
-                            "1px solid rgba(239, 68, 68, 0.3)",
-                          borderRadius: "6px",
-                          color: "#ef4444",
-                          fontSize: "0.8rem",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Clear Selection
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        )}
+        {/* PR 4 deleted the dead "Matching Files Preview" block here — it
+            depended on availableFiles (always empty after the portal-only
+            workflow shipped) and selectedFiles (a stub). The whole block
+            was unreachable. */}
 
         {/* Skip Verified Toggle - Show when there are unverified results */}
         {status.results &&
@@ -1874,16 +1662,9 @@ export default function GradeTab(props) {
           </div>
         )}
 
-        {/* Pre-grading cost estimate */}
-        {!status.is_running && selectedFiles.length > 0 && (
-          <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "8px" }}>
-            Estimated cost: ${(selectedFiles.length * (MODEL_COST_PER_ASSIGNMENT[config.ai_model] || 0.001)).toFixed(4)}
-            {" "}for {selectedFiles.length} file{selectedFiles.length !== 1 ? "s" : ""} with {config.ai_model}
-            {config.cost_limit_per_session > 0 && (
-              <span> (limit: ${config.cost_limit_per_session.toFixed(2)})</span>
-            )}
-          </div>
-        )}
+        {/* PR 4 deleted the pre-grading cost-estimate banner here — it gated
+            on selectedFiles.length > 0, which was always 0 after the dead
+            portal-era selection branch was removed. */}
 
       </div>
     </div>

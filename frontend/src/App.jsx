@@ -825,17 +825,15 @@ function App() {
     error: null,
   });
 
-  // File selection state
-  const [availableFiles, setAvailableFiles] = useState([]);
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [filesLoading, setFilesLoading] = useState(false);
-  // selectedPeriod, periodStudents, gradeFilterAssignment, individualUpload moved
-  // into tabs/GradeTab.jsx in PR 3 of the Grade tab extraction sprint (along with
-  // the handlers loadPeriodStudents, handleIndividualFileSelect, handleIndividualGrade,
-  // clearIndividualUpload, getStudentSuggestions, and the assignment-filter loader).
+  // PR 4 of the Grade tab extraction sprint deleted the dead portal-era file-selection
+  // branch: availableFiles, selectedFiles, filesLoading, loadAvailableFiles (no-op),
+  // the preload effect on gradeFilterStudent, the matching-files UI in the Grade tab,
+  // and the helpers fileMatchesPeriodStudent + stripNamePunctuation. PR 3 already
+  // moved selectedPeriod, periodStudents, gradeFilterAssignment, individualUpload,
+  // gradeAssignment, and the related handlers into tabs/GradeTab.jsx. PR 4 also moved
+  // gradeFilterStudent into GradeTab as pure local UI state.
   const [exportStudentSearch, setExportStudentSearch] = useState({ active: false, query: "", results: [], allStudents: [] });
   const [importStudentData, setImportStudentData] = useState({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" });
-  const [gradeFilterStudent, setGradeFilterStudent] = useState(""); // Filter by individual student
 
   const [activeTab, _setActiveTab] = useState("grade");
   const setActiveTab = useCallback((tab) => {
@@ -1018,12 +1016,8 @@ function App() {
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
   const skipAutoSaveRef = useRef(false); // Skip one auto-save cycle after loading from disk
-  // gradeAssignment moved into tabs/GradeTab.jsx in PR 3 of the Grade tab extraction sprint.
-  const [gradeImportedDoc, setGradeImportedDoc] = useState({
-    text: "",
-    html: "",
-    filename: "",
-  });
+  // gradeAssignment moved into tabs/GradeTab.jsx in PR 3.
+  // gradeImportedDoc was DEAD state (set but never read) — DELETED in PR 4.
   const [importedDoc, setImportedDoc] = useState({
     text: "",
     html: "",
@@ -2070,16 +2064,8 @@ function App() {
     }
   }, [status.is_running, status.current_file, status.results]);
 
-  // Load files when student filter is set (for file preview)
-  useEffect(() => {
-    if (
-      gradeFilterStudent &&
-      availableFiles.length === 0 &&
-      config.assignments_folder
-    ) {
-      loadAvailableFiles();
-    }
-  }, [gradeFilterStudent, config.assignments_folder]);
+  // PR 4 deleted the dead preload effect that called loadAvailableFiles() (a no-op)
+  // when gradeFilterStudent changed. Both the effect and the no-op are gone now.
 
   // Clear selected standards when grade/subject/state changes
   useEffect(() => {
@@ -2481,61 +2467,10 @@ function App() {
     lastResultCount.current = currentCount;
   }, [status.results, config.showToastNotifications]);
 
-  // Load available files (placeholder for portal-based workflow)
-  const loadAvailableFiles = async () => {
-    // No-op: files come from portal submissions, not local folders
-  };
-
-  // loadPeriodStudents moved into tabs/GradeTab.jsx (with periodStudents state)
-  // in PR 3 of the Grade tab extraction sprint.
-
-  // Check if a filename matches any student in the period
-  // Strips apostrophes/hyphens so "Da'juan" matches "Dajuan", "Mary-Jane" matches "MaryJane", etc.
-  var stripNamePunctuation = function(s) { return s.replace(/['\u2018\u2019\-]/g, ''); };
-  const fileMatchesPeriodStudent = (filename, students) => {
-    if (!students || students.length === 0) return true; // No filter
-    const lowerFilename = filename.toLowerCase();
-    const normFilename = stripNamePunctuation(lowerFilename);
-    return students.some((student) => {
-      const first = (student.first || "").toLowerCase().trim();
-      const last = (student.last || "").toLowerCase().trim();
-      const lastInitial = last.charAt(0);
-      const normFirst = stripNamePunctuation(first);
-      const normLast = stripNamePunctuation(last);
-
-      // Match patterns:
-      // "First, Last" or "First, L" (common format)
-      // "Last, First"
-      // "First Last" or "First_Last"
-      // Just first name + last initial
-      // All checks run against both original and punctuation-stripped versions
-      return (
-        // "First, Last" - e.g., "John, Smith"
-        (first && last && (lowerFilename.includes(first + ', ' + last) || normFilename.includes(normFirst + ', ' + normLast))) ||
-        // "First, L" - e.g., "John, S" (last initial only)
-        (first &&
-          lastInitial &&
-          (lowerFilename.includes(first + ', ' + lastInitial) || normFilename.includes(normFirst + ', ' + lastInitial))) ||
-        // "First L" - e.g., "John S" (no comma, last initial)
-        (first &&
-          lastInitial &&
-          (lowerFilename.match(
-            new RegExp(first + '\\s+' + lastInitial + '[^a-z]', 'i'),
-          ) || normFilename.match(
-            new RegExp(normFirst + '\\s+' + lastInitial + '[^a-z]', 'i'),
-          ))) ||
-        // "Last, First" - e.g., "Smith, John"
-        (first && last && (lowerFilename.includes(last + ', ' + first) || normFilename.includes(normLast + ', ' + normFirst))) ||
-        // "First Last" - e.g., "John Smith"
-        (first && last && (lowerFilename.includes(first + ' ' + last) || normFilename.includes(normFirst + ' ' + normLast))) ||
-        // "First_Last" - e.g., "John_Smith"
-        (first && last && (lowerFilename.includes(first + '_' + last) || normFilename.includes(normFirst + '_' + normLast))) ||
-        // Just first name at start of filename
-        (first && (lowerFilename.startsWith(first + ',') || normFilename.startsWith(normFirst + ','))) ||
-        (first && (lowerFilename.startsWith(first + ' ') || normFilename.startsWith(normFirst + ' ')))
-      );
-    });
-  };
+  // PR 4 deleted the dead portal-era loadAvailableFiles no-op and the unused
+  // fileMatchesPeriodStudent + stripNamePunctuation helpers. AnalyticsTab has
+  // its own independent local copy of stripNamePunctuation that still works.
+  // loadPeriodStudents was already moved into tabs/GradeTab.jsx in PR 3.
 
   // Sort periods numerically by extracting number from period_name (e.g., "Period 1" → 1)
   const sortedPeriods = useMemo(() => {
@@ -7147,15 +7082,8 @@ ${signature}`;
                   setSavedAssignmentData={setSavedAssignmentData}
                   addToast={addToast}
                   periods={periods}
-                  setGradeFilterStudent={setGradeFilterStudent}
                   sortedPeriods={sortedPeriods}
-                  gradeFilterStudent={gradeFilterStudent}
-                  setGradeImportedDoc={setGradeImportedDoc}
-                  availableFiles={availableFiles}
-                  selectedFiles={selectedFiles}
-                  setSelectedFiles={setSelectedFiles}
                   emailApprovals={emailApprovals}
-                  MODEL_COST_PER_ASSIGNMENT={MODEL_COST_PER_ASSIGNMENT}
                 />
               </div>
 
@@ -7535,8 +7463,6 @@ ${signature}`;
                   setExportStudentSearch={setExportStudentSearch}
                   showOnboardingWizard={showOnboardingWizard}
                   setShowOnboardingWizard={setShowOnboardingWizard}
-                  loadAvailableFiles={loadAvailableFiles}
-                  filesLoading={filesLoading}
                   sortedPeriods={sortedPeriods}
                   accommodationPresets={accommodationPresets}
                   EDTECH_TOOLS={EDTECH_TOOLS}
