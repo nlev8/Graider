@@ -64,8 +64,17 @@ jobs:
       - name: Install dependencies
         run: cd frontend && npm ci
 
-      - name: Run tests
-        run: cd frontend && npm test
+      - name: Run tests (with count floor)
+        run: |
+          cd frontend
+          npx vitest run --reporter=default --reporter=json --outputFile=/tmp/vitest.json
+          COUNT=$(node -e "console.log(require('/tmp/vitest.json').numTotalTests || 0)")
+          FLOOR=140
+          if [ "$COUNT" -lt "$FLOOR" ]; then
+            echo "::error::Frontend test count ($COUNT) is below floor ($FLOOR). Tests were likely deleted."
+            exit 1
+          fi
+          echo "::notice::Frontend test count: $COUNT (floor: $FLOOR)"
 
       - name: Build
         run: cd frontend && npm run build
