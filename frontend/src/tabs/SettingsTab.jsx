@@ -116,8 +116,9 @@ export default React.memo(function SettingsTab({
   setExportStudentSearch,
   showOnboardingWizard,
   setShowOnboardingWizard,
-  loadAvailableFiles,
-  filesLoading,
+  // PR 4 of the Grade tab extraction sprint deleted the dead pass-through of
+  // loadAvailableFiles + filesLoading from App.jsx. Both were unused inside
+  // SettingsTab body — the function was a no-op and the bool was never read.
   sortedPeriods,
   accommodationPresets,
   EDTECH_TOOLS,
