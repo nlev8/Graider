@@ -31,6 +31,7 @@ import ImportEventsModal from "./components/ImportEventsModal";
 import PublishedAssessmentModal from "./components/PublishedAssessmentModal";
 import PublishContentModal from "./components/PublishContentModal";
 import CurveModal from "./components/CurveModal";
+import NewUnitModal from "./components/NewUnitModal";
 import { AssignmentPlayer } from "./components";
 import QuestionEditToolbar from "./components/QuestionEditToolbar";
 import QuestionEditOverlay from "./components/QuestionEditOverlay";
@@ -16008,130 +16009,40 @@ ${signature}`;
       />
 
       {/* New Unit Name Modal */}
-      {newUnitModal && (
-        <div
-          style={{
-            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-            background: "var(--modal-bg)", display: "flex", alignItems: "center",
-            justifyContent: "center", zIndex: 9999, padding: "20px",
-          }}
-          onClick={function() { setNewUnitModal(null); }}
-        >
-          <div
-            className="glass-card"
-            style={{ maxWidth: "440px", width: "100%", padding: "28px", borderRadius: "16px" }}
-            onClick={function(e) { e.stopPropagation(); }}
-          >
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "6px", display: "flex", alignItems: "center", gap: "10px" }}>
-              <Icon name="FolderPlus" size={20} />
-              {newUnitModal.mode === 'tag' ? 'New Tag' : 'New Unit'}
-            </h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "18px" }}>
-              {newUnitModal.mode === 'tag' ? 'Enter a name for the new tag' : 'Enter a name for the new unit'}
-            </p>
-            <input
-              type="text"
-              value={newUnitModal.value}
-              onChange={function(e) { setNewUnitModal(Object.assign({}, newUnitModal, { value: e.target.value })); }}
-              onKeyDown={async function(e) {
-                if (e.key === 'Enter' && newUnitModal.value.trim()) {
-                  var val = newUnitModal.value.trim();
-                  var rid = newUnitModal.resourceId;
-                  setNewUnitModal(null);
-                  try {
-                    var mode = newUnitModal.mode || 'unit';
-                    var existing = newUnitModal.existingTags || [];
-                    if (mode === 'tag') {
-                      var data = await api.setContentTags(rid, existing.concat([val]));
-                      if (data.success) {
-                        var updatedTags = data.tags || existing.concat([val]);
-                        setSharedResources(function(prev) {
-                          return prev.map(function(r) { return r.id === rid ? Object.assign({}, r, { tags: updatedTags }) : r; });
-                        });
-                        setPublishedAssessments(function(prev) {
-                          return prev.map(function(a) { return (a.id === rid || a.join_code === rid) ? Object.assign({}, a, { tags: updatedTags }) : a; });
-                        });
-                        addToast('Added tag "' + val + '"', 'success');
-                        fetchTeacherTags();
-                      }
-                    } else {
-                      var data2 = await api.updateSharedResourceUnit(rid, val);
-                      if (data2.success) {
-                        setSharedResources(function(prev) {
-                          return prev.map(function(r) { return r.id === rid ? Object.assign({}, r, { unit_name: val }) : r; });
-                        });
-                        setPublishedAssessments(function(prev) {
-                          return prev.map(function(a) { return (a.id === rid || a.join_code === rid) ? Object.assign({}, a, { unit_name: val }) : a; });
-                        });
-                        addToast('Set unit to "' + val + '"', 'success');
-                        fetchTeacherTags();
-                      }
-                    }
-                  } catch (err) { addToast('Failed: ' + (err.message || 'unknown'), 'error'); }
-                } else if (e.key === 'Escape') {
-                  setNewUnitModal(null);
-                }
-              }}
-              placeholder={newUnitModal.mode === 'tag' ? 'e.g. Review, Formative, Civil War' : 'e.g. Unit 4: The Road to the Civil War'}
-              autoFocus
-              className="input"
-              style={{ width: "100%", padding: "10px 14px", fontSize: "0.95rem", marginBottom: "20px" }}
-            />
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button
-                onClick={function() { setNewUnitModal(null); }}
-                className="btn btn-secondary"
-                style={{ padding: "10px 20px" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async function() {
-                  if (!newUnitModal.value.trim()) return;
-                  var val = newUnitModal.value.trim();
-                  var rid = newUnitModal.resourceId;
-                  setNewUnitModal(null);
-                  try {
-                    var mode = newUnitModal.mode || 'unit';
-                    var existing = newUnitModal.existingTags || [];
-                    if (mode === 'tag') {
-                      var data = await api.setContentTags(rid, existing.concat([val]));
-                      if (data.success) {
-                        var updatedTags = data.tags || existing.concat([val]);
-                        setSharedResources(function(prev) {
-                          return prev.map(function(r) { return r.id === rid ? Object.assign({}, r, { tags: updatedTags }) : r; });
-                        });
-                        setPublishedAssessments(function(prev) {
-                          return prev.map(function(a) { return (a.id === rid || a.join_code === rid) ? Object.assign({}, a, { tags: updatedTags }) : a; });
-                        });
-                        addToast('Added tag "' + val + '"', 'success');
-                        fetchTeacherTags();
-                      }
-                    } else {
-                      var data2 = await api.updateSharedResourceUnit(rid, val);
-                      if (data2.success) {
-                        setSharedResources(function(prev) {
-                          return prev.map(function(r) { return r.id === rid ? Object.assign({}, r, { unit_name: val }) : r; });
-                        });
-                        setPublishedAssessments(function(prev) {
-                          return prev.map(function(a) { return (a.id === rid || a.join_code === rid) ? Object.assign({}, a, { unit_name: val }) : a; });
-                        });
-                        addToast('Set unit to "' + val + '"', 'success');
-                        fetchTeacherTags();
-                      }
-                    }
-                  } catch (err) { addToast('Failed: ' + (err.message || 'unknown'), 'error'); }
-                }}
-                className="btn btn-primary"
-                style={{ padding: "10px 20px" }}
-                disabled={!newUnitModal.value.trim()}
-              >
-                {newUnitModal.mode === 'tag' ? 'Create Tag' : 'Create Unit'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <NewUnitModal
+        open={!!newUnitModal}
+        onClose={() => setNewUnitModal(null)}
+        value={newUnitModal ? newUnitModal.value : ""}
+        setValue={(val) => setNewUnitModal(newUnitModal ? { ...newUnitModal, value: val } : null)}
+        mode={newUnitModal ? (newUnitModal.mode || "unit") : "unit"}
+        onSubmit={async (val) => {
+          if (!newUnitModal) return;
+          const rid = newUnitModal.resourceId;
+          const mode = newUnitModal.mode || "unit";
+          const existing = newUnitModal.existingTags || [];
+          setNewUnitModal(null);
+          try {
+            if (mode === "tag") {
+              const data = await api.setContentTags(rid, existing.concat([val]));
+              if (data.success) {
+                const updatedTags = data.tags || existing.concat([val]);
+                setSharedResources((prev) => prev.map((r) => r.id === rid ? { ...r, tags: updatedTags } : r));
+                setPublishedAssessments((prev) => prev.map((a) => (a.id === rid || a.join_code === rid) ? { ...a, tags: updatedTags } : a));
+                addToast('Added tag "' + val + '"', "success");
+                fetchTeacherTags();
+              }
+            } else {
+              const data2 = await api.updateSharedResourceUnit(rid, val);
+              if (data2.success) {
+                setSharedResources((prev) => prev.map((r) => r.id === rid ? { ...r, unit_name: val } : r));
+                setPublishedAssessments((prev) => prev.map((a) => (a.id === rid || a.join_code === rid) ? { ...a, unit_name: val } : a));
+                addToast('Set unit to "' + val + '"', "success");
+                fetchTeacherTags();
+              }
+            }
+          } catch (err) { addToast("Failed: " + (err.message || "unknown"), "error"); }
+        }}
+      />
 
       {/* Share with Class Modal */}
       <ShareWithClassesModal
