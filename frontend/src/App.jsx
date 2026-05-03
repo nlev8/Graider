@@ -919,10 +919,8 @@ function App() {
     field: "time",
     direction: "desc",
   }); // field: time, name, assignment, score, grade
-  const [skipVerified, setSkipVerified] = useState(false); // When true, regrade ALL including verified
-  const [excludeGradedStudents, setExcludeGradedStudents] = useState(false); // Exclude students already in results
-  const [excludeApprovedStudents, setExcludeApprovedStudents] = useState(false); // Exclude students already approved
-  const [showActivityLog, setShowActivityLog] = useState(false);
+  // Grade-specific state (skipVerified, excludeGradedStudents, excludeApprovedStudents,
+  // showActivityLog) moved into tabs/GradeTab.jsx in PR 2 of the Grade tab extraction sprint.
   const [globalAINotes, setGlobalAINotes] = useState("");
 
   // Check admin status
@@ -1025,7 +1023,7 @@ function App() {
   const [savedAssignmentData, setSavedAssignmentData] = useState({}); // Map of name -> {aliases: [], title: ""}
   const [savedAssignmentsExpanded, setSavedAssignmentsExpanded] =
     useState(false);
-  const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
+  // gradingModesExpanded moved into tabs/GradeTab.jsx in PR 2 of the Grade tab extraction sprint.
   const [modelAnswersLoading, setModelAnswersLoading] = useState(false);
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
@@ -1727,7 +1725,8 @@ function App() {
     gradingStyle: 'lenient',
   });
 
-  const logRef = useRef(null);
+  // logRef moved into tabs/GradeTab.jsx (with the auto-scroll + auto-expand-on-error effects)
+  // in PR 2 of the Grade tab extraction sprint.
   const fileInputRef = useRef(null);
   const docHtmlRef = useRef(null);
   const rosterInputRef = useRef(null);
@@ -2366,17 +2365,8 @@ function App() {
     return function() { clearInterval(interval); };
   }, [focusCommentsPolling]);
 
-  // Auto-scroll log
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [status.log]);
-
-  // Auto-expand Activity Monitor when error occurs
-  useEffect(() => {
-    if (status.error) {
-      setShowActivityLog(true);
-    }
-  }, [status.error]);
+  // Auto-scroll log + auto-expand-on-error effects moved into tabs/GradeTab.jsx
+  // (with logRef and showActivityLog state) in PR 2 of the Grade tab extraction sprint.
 
   // Load email approvals from persisted results AND re-index when results change.
   // emailApprovals is keyed by array index. When re-grading, the backend removes
@@ -7290,8 +7280,11 @@ ${signature}`;
 
           <div style={{ padding: activeTab === "results" ? "20px 15px" : "30px", flex: 1, overflowY: "auto" }}>
             <div style={{ maxWidth: activeTab === "results" ? "none" : "1400px", margin: "0 auto" }}>
-              {/* Grade Tab */}
-              {activeTab === "grade" && (
+              {/* Grade Tab — always-mounted with display:none so state persists across tab switches.
+                  Same precedent as the Assistant tab below at App.jsx:9306-9317.
+                  Required before PR 2 moves Grade-specific state into GradeTab — conditional
+                  mount + local state would reset state on every tab switch. */}
+              <div style={{ display: activeTab === "grade" ? "block" : "none" }}>
                 <GradeTab
                   status={status}
                   setStatus={setStatus}
@@ -7300,11 +7293,6 @@ ${signature}`;
                   savedAssignmentData={savedAssignmentData}
                   setSavedAssignmentData={setSavedAssignmentData}
                   addToast={addToast}
-                  gradingModesExpanded={gradingModesExpanded}
-                  setGradingModesExpanded={setGradingModesExpanded}
-                  showActivityLog={showActivityLog}
-                  setShowActivityLog={setShowActivityLog}
-                  logRef={logRef}
                   periods={periods}
                   selectedPeriod={selectedPeriod}
                   setSelectedPeriod={setSelectedPeriod}
@@ -7320,12 +7308,6 @@ ${signature}`;
                   availableFiles={availableFiles}
                   selectedFiles={selectedFiles}
                   setSelectedFiles={setSelectedFiles}
-                  skipVerified={skipVerified}
-                  setSkipVerified={setSkipVerified}
-                  excludeGradedStudents={excludeGradedStudents}
-                  setExcludeGradedStudents={setExcludeGradedStudents}
-                  excludeApprovedStudents={excludeApprovedStudents}
-                  setExcludeApprovedStudents={setExcludeApprovedStudents}
                   emailApprovals={emailApprovals}
                   individualUpload={individualUpload}
                   setIndividualUpload={setIndividualUpload}
@@ -7335,7 +7317,7 @@ ${signature}`;
                   clearIndividualUpload={clearIndividualUpload}
                   MODEL_COST_PER_ASSIGNMENT={MODEL_COST_PER_ASSIGNMENT}
                 />
-              )}
+              </div>
 
               {/* Results Tab */}
               {activeTab === "results" && (

@@ -20,11 +20,6 @@ const makeProps = (overrides = {}) => ({
   setSavedAssignmentData: vi.fn(),
   setStatus: vi.fn(),
   addToast: vi.fn(),
-  gradingModesExpanded: false,
-  setGradingModesExpanded: vi.fn(),
-  showActivityLog: false,
-  setShowActivityLog: vi.fn(),
-  logRef: { current: null },
   periods: [],
   selectedPeriod: '',
   setSelectedPeriod: vi.fn(),
@@ -40,12 +35,6 @@ const makeProps = (overrides = {}) => ({
   availableFiles: [],
   selectedFiles: [],
   setSelectedFiles: vi.fn(),
-  skipVerified: false,
-  setSkipVerified: vi.fn(),
-  excludeGradedStudents: false,
-  setExcludeGradedStudents: vi.fn(),
-  excludeApprovedStudents: false,
-  setExcludeApprovedStudents: vi.fn(),
   emailApprovals: {},
   individualUpload: { file: null, studentName: '', studentInfo: null, showSuggestions: false, isGrading: false, preview: null, result: null },
   setIndividualUpload: vi.fn(),
@@ -86,17 +75,33 @@ describe('GradeTab', () => {
     expect(next.other).toBe('keep');
   });
 
-  it('activity-log expander invokes setShowActivityLog when clicked', () => {
-    const setShowActivityLog = vi.fn();
-    render(
+  it('activity-log expander toggles internal showActivityLog state', () => {
+    // PR 2 moved showActivityLog into GradeTab as local state. ActivityLog
+    // returns null when open=false and renders the "Ready to grade..." empty
+    // state when open=true with an empty log — that's the observable signal.
+    render(<GradeTab {...makeProps()} />);
+
+    expect(screen.queryByText(/Ready to grade/)).toBeNull();
+
+    fireEvent.click(screen.getByText('Activity Monitor').closest('button'));
+
+    expect(screen.getByText(/Ready to grade/)).toBeTruthy();
+  });
+
+  it('auto-expand-on-error effect: status.error transition opens the activity log', () => {
+    // PR 2 moved the auto-expand effect into GradeTab. When status.error becomes
+    // truthy, setShowActivityLog(true) fires — ActivityLog goes from null to
+    // visible (the empty-state text becomes present).
+    const { rerender } = render(<GradeTab {...makeProps()} />);
+    expect(screen.queryByText(/Ready to grade/)).toBeNull();
+
+    rerender(
       <GradeTab
-        {...makeProps({ showActivityLog: false, setShowActivityLog })}
+        {...makeProps({ status: { ...makeProps().status, error: 'Something failed' } })}
       />,
     );
 
-    fireEvent.click(screen.getByText('Activity Monitor'));
-    expect(setShowActivityLog).toHaveBeenCalledTimes(1);
-    expect(setShowActivityLog).toHaveBeenCalledWith(true);
+    expect(screen.getByText(/Ready to grade/)).toBeTruthy();
   });
 
   it('assignment-filter selection invokes api.loadAssignment and updates state', async () => {
@@ -140,11 +145,15 @@ describe('GradeTab', () => {
           savedAssignments: ['Lab 1'],
           savedAssignmentData: { 'Lab 1': { completionOnly: false } },
           setSavedAssignmentData,
-          gradingModesExpanded: true,
           addToast,
         })}
       />,
     );
+
+    // gradingModesExpanded is now local state in GradeTab (PR 2). It defaults
+    // to false, so we must click the "Assignment Grading Modes" header first
+    // to expand it, then the per-row toggle becomes visible.
+    fireEvent.click(screen.getByText('Assignment Grading Modes'));
 
     // Click the AI Grading / Completion Only toggle button on the Lab 1 row.
     const toggleButton = screen.getByTitle('Click to set as completion only');
