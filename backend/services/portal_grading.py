@@ -559,6 +559,14 @@ def grade_portal_submission_sync(
         # Build AI instruction string with all grading factors
         accommodation_prompt = ""
         student_name = student_info.get("student_name", "")
+        # Initialize student_id at the top so it's defined for the history-context
+        # block below regardless of which accommodation strategy hits. Codex review
+        # caught that the prior version only set student_id inside the Strategy 2
+        # branch — when Strategy 1 succeeded, student_id was unbound and the
+        # downstream load_student_history call raised UnboundLocalError. Pre-PR
+        # the bare `except Exception: pass` swallowed it; the explicit log path
+        # surfaces it.
+        student_id = student_info.get("student_id", "")
 
         # Strategy 1: Use embedded accommodations from published content (works for both paths)
         if student_accommodations and student_name:
@@ -567,18 +575,21 @@ def grade_portal_submission_sync(
                 accommodation_prompt = build_prompt_from_student_accommodations(
                     student_name, student_accommodations, teacher_id
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                # Best-effort lookup: Strategy 2 below is the fallback. Debug-level
+                # only — failure here is not user-visible. Log student_id (not
+                # student_name) to avoid avoidable PII in log lines.
+                logger.debug("build_prompt_from_student_accommodations failed for student_id=%s: %s", student_id, e)
 
         # Strategy 2: Fall back to student_id lookup (works for class-based with roster data)
-        if not accommodation_prompt:
-            student_id = student_info.get("student_id", "")
-            if student_id:
-                try:
-                    from backend.accommodations import build_accommodation_prompt
-                    accommodation_prompt = build_accommodation_prompt(student_id, teacher_id)
-                except Exception:
-                    pass
+        if not accommodation_prompt and student_id:
+            try:
+                from backend.accommodations import build_accommodation_prompt
+                accommodation_prompt = build_accommodation_prompt(student_id, teacher_id)
+            except Exception as e:
+                # Best-effort: if both strategies fail, the student gets no
+                # accommodation prompt. Debug-level only.
+                logger.debug("build_accommodation_prompt failed for student_id=%s: %s", student_id, e)
 
         # Build student history context
         history_context = ""
@@ -587,8 +598,9 @@ def grade_portal_submission_sync(
             history = load_student_history(teacher_id, student_id)
             if history:
                 history_context = str(history)
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort: history is optional context. Debug-level only.
+            logger.debug("load_student_history failed for student_id=%s: %s", student_id, e)
 
         # Build correction context from teacher edit history
         _correction_ctx = ""
@@ -598,8 +610,9 @@ def grade_portal_submission_sync(
             if not _q_types:
                 _q_types = ["short_answer", "multiple_choice"]
             _correction_ctx = build_correction_context(teacher_id, teacher_config.get("subject", ""), _q_types)
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort: correction context is optional. Debug-level only.
+            logger.debug("build_correction_context failed for teacher %s: %s", teacher_id, e)
 
         ai_notes = build_portal_ai_notes(
             global_ai_notes=teacher_config.get("global_ai_notes", ""),
@@ -642,8 +655,16 @@ def grade_portal_submission_sync(
             keys = resolve_keys_for_teacher(teacher_id, district_id=district_id)
             if keys:
                 set_thread_keys(keys)
-        except Exception:
-            pass
+        except Exception as e:
+            # If key resolution fails, grading falls back to whatever
+            # backend.api_keys._get_api_key can find (thread-context, district
+            # admin, or env), not the intended teacher/district keys. That can
+            # mean stale keys or rate-limit issues that surface as confusing
+            # downstream errors. Capture in Sentry so the resolver failure is
+            # visible at the source instead of silently degrading.
+            logger.error("resolve_keys_for_teacher failed for teacher %s (district %s): %s",
+                         teacher_id, district_id, e)
+            sentry_sdk.capture_exception(e)
 
         written_results = grade_written_questions(
             questions=written_questions,
@@ -867,8 +888,11 @@ def grade_portal_submission_sync(
                     "status": "grading_failed",
                 }).eq("id", submission_id).execute()
                 logger.info("Marked submission %s as grading_failed", submission_id)
-        except Exception:
-            pass
+        except Exception as e:
+            # Critical: if we can't mark a submission as failed, it stays in
+            # 'partial' forever and never retries. Sentry must see this.
+            logger.error("Failed to mark submission %s as grading_failed: %s", submission_id, e)
+            sentry_sdk.capture_exception(e)
 
 
 @critical_path
@@ -899,8 +923,13 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                 sb = get_supabase()
                 if sb and submission_id:
                     sb.table(supabase_table).update({"status": "grading_deferred"}).eq("id", submission_id).execute()
-            except Exception:
-                pass
+            except Exception as e:
+                # Critical: status state matters. If we can't mark deferred,
+                # the submission stays in 'partial' through the redeploy and
+                # may not auto-retry on the new instance.
+                logger.error("Failed to mark submission %s as grading_deferred during shutdown: %s",
+                             submission_id, e)
+                sentry_sdk.capture_exception(e)
             return
 
         try:

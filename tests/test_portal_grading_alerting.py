@@ -132,3 +132,77 @@ def test_grading_thread_top_level_swallowed_exception_still_captures():
         )
         # Must have captured the swallowed exception.
         assert mock_sentry.capture_exception.call_count >= 1
+
+
+def test_history_context_block_works_when_strategy_1_succeeds_without_student_id():
+    """Regression for Codex MAJOR finding on the portal-grading observability
+    PR (chore/portal-grading-observability):
+
+    When Strategy 1 (embedded student_accommodations) builds the
+    accommodation_prompt successfully and student_info has no student_id,
+    the downstream load_student_history call must still see a defined
+    `student_id`. Pre-fix it raised UnboundLocalError because student_id
+    was only initialized inside the Strategy 2 branch — when Strategy 1
+    succeeded, the variable was never bound, and the subsequent
+    `load_student_history(teacher_id, student_id)` call (now wrapped in
+    a logging except) would NameError.
+
+    The fix: initialize `student_id = student_info.get("student_id", "")`
+    at the top of the body, before either strategy runs.
+    """
+    import sys
+    from backend.services import portal_grading
+
+    # Mock accommodations module: Strategy 1 success path.
+    accommodations_mod = MagicMock()
+    accommodations_mod.build_prompt_from_student_accommodations.return_value = "accom prompt"
+
+    # Mock storage: load_student_history fails. This is the line that
+    # would have raised UnboundLocalError pre-fix.
+    storage_mod = MagicMock()
+    storage_mod.load_student_history.side_effect = RuntimeError("history boom")
+
+    correction_mod = MagicMock()
+    correction_mod.build_correction_context.return_value = ""
+
+    saved_modules = {}
+    for name in ("backend.accommodations", "backend.storage", "backend.services.correction_patterns"):
+        saved_modules[name] = sys.modules.get(name)
+    sys.modules["backend.accommodations"] = accommodations_mod
+    sys.modules["backend.storage"] = storage_mod
+    sys.modules["backend.services.correction_patterns"] = correction_mod
+
+    try:
+        with patch("backend.supabase_client.get_supabase", return_value=None), \
+             patch.object(portal_grading.logger, "debug") as mock_debug, \
+             patch.object(portal_grading.logger, "info"):
+            # No submission_id, no flask context — minimal call to drive the
+            # accommodations + history-context block. Anything downstream
+            # that fails is caught by the function's outer try/except.
+            portal_grading.run_portal_grading_thread(
+                submission_id=None,
+                assessment={"questions": []},
+                answers={},
+                student_info={"student_name": "Alice"},  # NO student_id
+                teacher_config={"global_ai_notes": "", "grade_level": "",
+                                "subject": "", "grading_style": "standard"},
+                teacher_id="t1",
+                student_accommodations={"Alice": {"text": "x"}},
+            )
+
+            # Pre-fix the test would raise UnboundLocalError before reaching
+            # the assertion. Post-fix, the load_student_history failure is
+            # caught and logged at debug level with student_id="" in the msg.
+            debug_msgs = [c.args[0] for c in mock_debug.call_args_list if c.args]
+            history_logs = [m for m in debug_msgs if "load_student_history failed" in m]
+            assert history_logs, (
+                f"Expected load_student_history debug log to fire (proves "
+                f"student_id was bound). Got debug calls: {debug_msgs!r}"
+            )
+    finally:
+        # Restore original sys.modules entries.
+        for name, mod in saved_modules.items():
+            if mod is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = mod
