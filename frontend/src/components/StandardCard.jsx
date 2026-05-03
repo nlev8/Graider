@@ -3,10 +3,10 @@
  * expandable details (essential questions, learning targets, vocabulary,
  * item specs, sample assessment).
  *
- * Extracted from App.jsx + PlannerTab.jsx (2026-05-02) where it was
- * duplicated. The two copies were near-identical (only minor cosmetic
- * differences: comment lines + bullet glyph form). The App.jsx version
- * is canonical here.
+ * Extracted from App.jsx (2026-05-02), where it was duplicated against
+ * a parallel inline copy (since deleted). The two copies were near-
+ * identical (only minor cosmetic differences: comment lines + bullet
+ * glyph form). The App.jsx version is canonical here.
  *
  * Props:
  *   standard: object with code, benchmark, dok, topics, learning_targets,
