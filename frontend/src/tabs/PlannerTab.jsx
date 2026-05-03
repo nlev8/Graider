@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import Icon from "../components/Icon";
 import StandardCard from "../components/StandardCard";
+import PublishedAssessmentModal from "../components/PublishedAssessmentModal";
 import { AssignmentPlayer } from "../components";
 import QuestionEditToolbar from "../components/QuestionEditToolbar";
 import QuestionEditOverlay from "../components/QuestionEditOverlay";
@@ -7552,142 +7553,16 @@ export default React.memo(function PlannerTab({
       )}
 
       {/* Published Assessment Modal - Shows join code and link */}
-      {publishedAssessmentModal.show && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.8)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: "20px",
-          }}
-          onClick={() => setPublishedAssessmentModal({ show: false, joinCode: "", joinLink: "" })}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "#1a1a2e",
-              borderRadius: "16px",
-              padding: "30px",
-              maxWidth: "500px",
-              width: "100%",
-              textAlign: "center",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-            }}
-          >
-            <div style={{ marginBottom: "20px" }}>
-              <Icon name="CheckCircle" size={48} style={{ color: "#22c55e" }} />
-            </div>
-            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "10px" }}>
-              Assessment Published!
-            </h2>
-            <p style={{ color: "var(--text-secondary)", marginBottom: "25px" }}>
-              Students can now take this assessment using the code below.
-            </p>
-
-            {/* Join Code Display */}
-            <div
-              style={{
-                background: "linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(99, 102, 241, 0.2))",
-                border: "2px solid var(--accent-primary)",
-                borderRadius: "12px",
-                padding: "20px",
-                marginBottom: "20px",
-              }}
-            >
-              <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
-                Join Code
-              </div>
-              <div
-                style={{
-                  fontSize: "2.5rem",
-                  fontWeight: 800,
-                  letterSpacing: "0.15em",
-                  fontFamily: "monospace",
-                  color: "var(--accent-primary)",
-                }}
-              >
-                {publishedAssessmentModal.joinCode}
-              </div>
-            </div>
-
-            {/* Link */}
-            <div style={{ marginBottom: "25px" }}>
-              <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
-                Or share this link:
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  background: "var(--glass-bg)",
-                  padding: "12px 15px",
-                  borderRadius: "8px",
-                }}
-              >
-                <input
-                  type="text"
-                  readOnly
-                  value={publishedAssessmentModal.joinLink}
-                  style={{
-                    flex: 1,
-                    background: "transparent",
-                    border: "none",
-                    color: "var(--text-primary)",
-                    fontSize: "0.9rem",
-                    outline: "none",
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(publishedAssessmentModal.joinLink);
-                    addToast("Link copied to clipboard!", "success");
-                  }}
-                  className="btn btn-secondary"
-                  style={{ padding: "8px 12px" }}
-                >
-                  <Icon name="Copy" size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* Instructions */}
-            <div
-              style={{
-                background: "rgba(34, 197, 94, 0.1)",
-                border: "1px solid rgba(34, 197, 94, 0.3)",
-                borderRadius: "8px",
-                padding: "15px",
-                marginBottom: "25px",
-                textAlign: "left",
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: "8px", color: "#22c55e" }}>
-                <Icon name="Info" size={16} style={{ marginRight: "8px" }} />
-                How students join:
-              </div>
-              <ol style={{ margin: 0, paddingLeft: "20px", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-                <li>Go to <strong>graider.live/join</strong></li>
-                <li>Enter code: <strong>{publishedAssessmentModal.joinCode}</strong></li>
-                <li>Enter their name and start the assessment</li>
-              </ol>
-            </div>
-
-            <button
-              onClick={() => setPublishedAssessmentModal({ show: false, joinCode: "", joinLink: "" })}
-              className="btn btn-primary"
-              style={{ padding: "12px 30px" }}
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
+      <PublishedAssessmentModal
+        open={publishedAssessmentModal.show}
+        onClose={() => setPublishedAssessmentModal({ show: false, joinCode: "", joinLink: "" })}
+        joinCode={publishedAssessmentModal.joinCode}
+        joinLink={publishedAssessmentModal.joinLink}
+        isClassBased={false}
+        onCopied={() => addToast("Link copied to clipboard!", "success")}
+        title="Assessment Published!"
+        subtitle="Students can now take this assessment using the code below."
+      />
 
     </>
   );
