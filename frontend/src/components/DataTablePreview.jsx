@@ -1,9 +1,9 @@
 /**
  * DataTablePreview — renders a CSV at a URL as a sortable HTML table.
  *
- * Extracted from App.jsx + PlannerTab.jsx (2026-05-02) where it was
- * defined twice, byte-for-byte identical. Shared module is the single
- * source of truth.
+ * Extracted from App.jsx (2026-05-02), where it was defined twice
+ * (once in App.jsx, once in a parallel inline copy that has since been
+ * deleted). Shared module is the single source of truth.
  *
  * Props:
  *   url: string — the URL to fetch CSV from
