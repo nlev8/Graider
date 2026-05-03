@@ -1,17 +1,21 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Icon from "../components/Icon";
 import ActivityLog from "../components/ActivityLog";
 import * as api from "../services/api";
 
 /*
- * Grade tab — presentational extraction (PR 1 of the Grade tab extraction sprint).
+ * Grade tab — JSX + (after PR 2) toggle/log local state.
  *
- * Per docs/superpowers/plans/2026-05-03-grade-tab-extraction.md, this PR is a
- * pure JSX lift from App.jsx:7293-8913. State ownership stays in App.jsx;
- * GradeTab receives ~30+ closures as props. Subsequent PRs (2-4) progressively
- * move state ownership into GradeTab.
+ * Per docs/superpowers/plans/2026-05-03-grade-tab-extraction.md, this is the
+ * extracted Grade tab. PR 1 was the pure JSX lift; PR 2 (this revision) moves
+ * pure UI toggles + the showActivityLog vertical slice (state + ref + 2 effects)
+ * into the component. Future PRs (3-4) move the individual-upload slice and the
+ * student-filter cleanup.
  *
- * Closures the JSX captures (props):
+ * Mount: this component is always-mounted with display:none-style hiding from
+ * App.jsx (Assistant-tab precedent), so local state survives tab switches.
+ *
+ * Closures the JSX still captures (props):
  *   --- App-shell state (read-only) ---
  *   status, config
  *   savedAssignments, savedAssignmentData, periods, sortedPeriods, periodStudents
@@ -23,17 +27,11 @@ import * as api from "../services/api";
  *   setSavedAssignmentData  - SHARED MUTABLE state (Codex Round 2 #4); written
  *                             from completion-only toggle and due-date editor.
  *
- *   --- Grade-specific state (will move to GradeTab in PR 2-4) ---
- *   gradingModesExpanded / setGradingModesExpanded
- *   showActivityLog / setShowActivityLog
- *   logRef                  - forwardRef target on ActivityLog
+ *   --- Grade-specific state (will move to GradeTab in PR 3-4) ---
  *   selectedPeriod / setSelectedPeriod
  *   gradeFilterStudent / setGradeFilterStudent
  *   gradeFilterAssignment / setGradeFilterAssignment
  *   selectedFiles / setSelectedFiles
- *   skipVerified / setSkipVerified
- *   excludeGradedStudents / setExcludeGradedStudents
- *   excludeApprovedStudents / setExcludeApprovedStudents
  *   individualUpload / setIndividualUpload
  *   setGradeAssignment / setGradeImportedDoc  - written from the assignment-filter loader
  *
@@ -44,6 +42,13 @@ import * as api from "../services/api";
  *   handleIndividualGrade
  *   clearIndividualUpload
  *   addToast                - App-shell utility, stays in App
+ *
+ * GradeTab-owned (PR 2):
+ *   gradingModesExpanded, showActivityLog
+ *   skipVerified, excludeGradedStudents, excludeApprovedStudents
+ *   logRef
+ *   auto-scroll log effect
+ *   auto-expand-Activity-Monitor-on-error effect
  */
 
 export default function GradeTab(props) {
@@ -55,11 +60,6 @@ export default function GradeTab(props) {
     setSavedAssignmentData,
     setStatus,
     addToast,
-    gradingModesExpanded,
-    setGradingModesExpanded,
-    showActivityLog,
-    setShowActivityLog,
-    logRef,
     periods,
     selectedPeriod,
     setSelectedPeriod,
@@ -75,12 +75,6 @@ export default function GradeTab(props) {
     availableFiles,
     selectedFiles,
     setSelectedFiles,
-    skipVerified,
-    setSkipVerified,
-    excludeGradedStudents,
-    setExcludeGradedStudents,
-    excludeApprovedStudents,
-    setExcludeApprovedStudents,
     emailApprovals,
     individualUpload,
     setIndividualUpload,
@@ -90,6 +84,26 @@ export default function GradeTab(props) {
     clearIndividualUpload,
     MODEL_COST_PER_ASSIGNMENT,
   } = props;
+
+  // PR 2 — local Grade-tab state (pure toggles + showActivityLog vertical slice).
+  const [gradingModesExpanded, setGradingModesExpanded] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [skipVerified, setSkipVerified] = useState(false);
+  const [excludeGradedStudents, setExcludeGradedStudents] = useState(false);
+  const [excludeApprovedStudents, setExcludeApprovedStudents] = useState(false);
+  const logRef = useRef(null);
+
+  // Auto-scroll the activity log to the bottom when new entries arrive.
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [status.log]);
+
+  // Auto-expand the Activity Monitor when an error occurs so the user sees it.
+  useEffect(() => {
+    if (status.error) {
+      setShowActivityLog(true);
+    }
+  }, [status.error]);
 
   const pct = status.total > 0 ? (status.progress / status.total) * 100 : 0;
 
