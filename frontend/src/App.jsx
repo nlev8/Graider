@@ -829,23 +829,13 @@ function App() {
   const [availableFiles, setAvailableFiles] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [filesLoading, setFilesLoading] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState("");
-  const [periodStudents, setPeriodStudents] = useState([]);
+  // selectedPeriod, periodStudents, gradeFilterAssignment, individualUpload moved
+  // into tabs/GradeTab.jsx in PR 3 of the Grade tab extraction sprint (along with
+  // the handlers loadPeriodStudents, handleIndividualFileSelect, handleIndividualGrade,
+  // clearIndividualUpload, getStudentSuggestions, and the assignment-filter loader).
   const [exportStudentSearch, setExportStudentSearch] = useState({ active: false, query: "", results: [], allStudents: [] });
   const [importStudentData, setImportStudentData] = useState({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" });
   const [gradeFilterStudent, setGradeFilterStudent] = useState(""); // Filter by individual student
-  const [gradeFilterAssignment, setGradeFilterAssignment] = useState(""); // Filter by saved assignment
-
-  // Individual upload state (for paper/handwritten assignments)
-  const [individualUpload, setIndividualUpload] = useState({
-    file: null,
-    studentName: "",
-    studentInfo: null, // Full student info from CSV (id, email, etc.)
-    preview: null,
-    isGrading: false,
-    result: null,
-    showSuggestions: false,
-  });
 
   const [activeTab, _setActiveTab] = useState("grade");
   const setActiveTab = useCallback((tab) => {
@@ -1028,13 +1018,7 @@ function App() {
   const [loadedAssignmentName, setLoadedAssignmentName] = useState("");
   const [isLoadingAssignment, setIsLoadingAssignment] = useState(false); // Prevent auto-save during load
   const skipAutoSaveRef = useRef(false); // Skip one auto-save cycle after loading from disk
-  const [gradeAssignment, setGradeAssignment] = useState({
-    title: "",
-    customMarkers: [],
-    excludeMarkers: [],
-    gradingNotes: "",
-    responseSections: [],
-  });
+  // gradeAssignment moved into tabs/GradeTab.jsx in PR 3 of the Grade tab extraction sprint.
   const [gradeImportedDoc, setGradeImportedDoc] = useState({
     text: "",
     html: "",
@@ -2502,22 +2486,8 @@ function App() {
     // No-op: files come from portal submissions, not local folders
   };
 
-  // Load students from selected period
-  const loadPeriodStudents = async (periodFilename) => {
-    if (!periodFilename) {
-      setPeriodStudents([]);
-      return;
-    }
-    try {
-      const data = await api.getPeriodStudents(periodFilename);
-      if (data.students) {
-        setPeriodStudents(data.students);
-      }
-    } catch (e) {
-      console.error("Failed to load period students:", e);
-      setPeriodStudents([]);
-    }
-  };
+  // loadPeriodStudents moved into tabs/GradeTab.jsx (with periodStudents state)
+  // in PR 3 of the Grade tab extraction sprint.
 
   // Check if a filename matches any student in the period
   // Strips apostrophes/hyphens so "Da'juan" matches "Dajuan", "Mary-Jane" matches "MaryJane", etc.
@@ -2599,127 +2569,9 @@ function App() {
     }
   };
 
-  // Handle individual file upload for paper/handwritten assignments
-  const handleIndividualFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // Create preview URL for images
-    const preview = file.type.startsWith("image/")
-      ? URL.createObjectURL(file)
-      : null;
-    setIndividualUpload((prev) => ({
-      ...prev,
-      file,
-      preview,
-      result: null,
-    }));
-  };
-
-  const handleIndividualGrade = async () => {
-    if (!individualUpload.file || !individualUpload.studentName.trim()) {
-      addToast("Please select a file and enter the student name", "warning");
-      return;
-    }
-
-    setIndividualUpload((prev) => ({ ...prev, isGrading: true, result: null }));
-
-    try {
-      const formData = new FormData();
-      formData.append("file", individualUpload.file);
-      formData.append("student_name", individualUpload.studentName.trim());
-      formData.append("grade_level", config.grade_level);
-      formData.append("subject", config.subject);
-      formData.append("output_folder", config.output_folder);
-      formData.append("globalAINotes", globalAINotes);
-      formData.append("teacher_name", config.teacher_name || "");
-      formData.append("school_name", config.school_name || "");
-      // Pass class period for differentiated grading
-      if (selectedPeriod) {
-        const periodName = periods.find(p => p.filename === selectedPeriod)?.period_name || '';
-        formData.append("classPeriod", periodName);
-      }
-      // Pass student info from CSV if available
-      if (individualUpload.studentInfo) {
-        formData.append(
-          "studentInfo",
-          JSON.stringify(individualUpload.studentInfo),
-        );
-      }
-      // Pass assignment config if available
-      if (
-        gradeAssignment.gradingNotes ||
-        gradeAssignment.customMarkers?.length > 0 ||
-        gradeAssignment.title
-      ) {
-        formData.append("assignmentConfig", JSON.stringify(gradeAssignment));
-      }
-
-      const authHdrs = await getAuthHeaders();
-      const response = await fetch("/api/grade-individual", {
-        method: "POST",
-        headers: { ...authHdrs },
-        body: formData,
-      });
-      const result = await response.json();
-
-      if (result.error) {
-        addToast("Grading error: " + result.error, "error");
-        setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
-        return;
-      }
-
-      setIndividualUpload((prev) => ({ ...prev, isGrading: false, result }));
-
-      // Add to results list
-      setStatus((prev) => ({
-        ...prev,
-        results: [...prev.results, result],
-      }));
-
-      addToast(
-        `Graded - ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`,
-        "success",
-      );
-    } catch (error) {
-      console.error("Individual grading error:", error);
-      addToast("Failed to grade: " + error.message, "error");
-      setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
-    }
-  };
-
-  const clearIndividualUpload = () => {
-    if (individualUpload.preview) {
-      URL.revokeObjectURL(individualUpload.preview);
-    }
-    setIndividualUpload({
-      file: null,
-      studentName: "",
-      studentInfo: null,
-      preview: null,
-      isGrading: false,
-      result: null,
-      showSuggestions: false,
-    });
-  };
-
-  // Filter students for autocomplete
-  const getStudentSuggestions = (input) => {
-    if (!input || input.length < 2) return [];
-    const lowerInput = input.toLowerCase();
-    return periodStudents
-      .filter((s) => {
-        const fullName = s.full?.toLowerCase() || "";
-        const first = s.first?.toLowerCase() || "";
-        const last = s.last?.toLowerCase() || "";
-        return (
-          fullName.includes(lowerInput) ||
-          first.includes(lowerInput) ||
-          last.includes(lowerInput)
-        );
-      })
-      .slice(0, 5); // Limit to 5 suggestions
-  };
+  // handleIndividualFileSelect, handleIndividualGrade, clearIndividualUpload,
+  // getStudentSuggestions all moved into tabs/GradeTab.jsx (with the state they
+  // close over) in PR 3 of the Grade tab extraction sprint.
 
   // Generate default email body for a result (matches exactly what backend sends)
   const getDefaultEmailBody = (index) => {
@@ -7289,32 +7141,20 @@ ${signature}`;
                   status={status}
                   setStatus={setStatus}
                   config={config}
+                  globalAINotes={globalAINotes}
                   savedAssignments={savedAssignments}
                   savedAssignmentData={savedAssignmentData}
                   setSavedAssignmentData={setSavedAssignmentData}
                   addToast={addToast}
                   periods={periods}
-                  selectedPeriod={selectedPeriod}
-                  setSelectedPeriod={setSelectedPeriod}
                   setGradeFilterStudent={setGradeFilterStudent}
-                  loadPeriodStudents={loadPeriodStudents}
                   sortedPeriods={sortedPeriods}
-                  periodStudents={periodStudents}
                   gradeFilterStudent={gradeFilterStudent}
-                  gradeFilterAssignment={gradeFilterAssignment}
-                  setGradeFilterAssignment={setGradeFilterAssignment}
-                  setGradeAssignment={setGradeAssignment}
                   setGradeImportedDoc={setGradeImportedDoc}
                   availableFiles={availableFiles}
                   selectedFiles={selectedFiles}
                   setSelectedFiles={setSelectedFiles}
                   emailApprovals={emailApprovals}
-                  individualUpload={individualUpload}
-                  setIndividualUpload={setIndividualUpload}
-                  getStudentSuggestions={getStudentSuggestions}
-                  handleIndividualFileSelect={handleIndividualFileSelect}
-                  handleIndividualGrade={handleIndividualGrade}
-                  clearIndividualUpload={clearIndividualUpload}
                   MODEL_COST_PER_ASSIGNMENT={MODEL_COST_PER_ASSIGNMENT}
                 />
               </div>

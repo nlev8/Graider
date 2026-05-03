@@ -2,86 +2,70 @@ import React, { useState, useEffect, useRef } from "react";
 import Icon from "../components/Icon";
 import ActivityLog from "../components/ActivityLog";
 import * as api from "../services/api";
+import { getAuthHeaders } from "../services/api";
 
 /*
- * Grade tab — JSX + (after PR 2) toggle/log local state.
+ * Grade tab — JSX + (after PR 3) toggle/log + individual-upload + period
+ * + assignment-config local state.
  *
  * Per docs/superpowers/plans/2026-05-03-grade-tab-extraction.md, this is the
- * extracted Grade tab. PR 1 was the pure JSX lift; PR 2 (this revision) moves
- * pure UI toggles + the showActivityLog vertical slice (state + ref + 2 effects)
- * into the component. Future PRs (3-4) move the individual-upload slice and the
- * student-filter cleanup.
+ * extracted Grade tab. PR 1 was the pure JSX lift; PR 2 moved toggles + the
+ * showActivityLog vertical slice; PR 3 (this revision) moves the individual-
+ * upload slice (state + 4 handlers) plus selectedPeriod, periodStudents,
+ * loadPeriodStudents, the assignment filter (gradeFilterAssignment), and the
+ * gradeAssignment loader. Future PR 4 cleans up the dead file-selection branch.
  *
  * Mount: this component is always-mounted with display:none-style hiding from
  * App.jsx (Assistant-tab precedent), so local state survives tab switches.
  *
  * Closures the JSX still captures (props):
  *   --- App-shell state (read-only) ---
- *   status, config
- *   savedAssignments, savedAssignmentData, periods, sortedPeriods, periodStudents
+ *   status, config, globalAINotes
+ *   savedAssignments, savedAssignmentData, periods, sortedPeriods
  *   availableFiles, emailApprovals
  *   MODEL_COST_PER_ASSIGNMENT (App-local constant; could lift to a util later)
  *
  *   --- App-shell mutators ---
- *   setStatus               - Used by error-banner Dismiss
+ *   setStatus               - Used by error-banner Dismiss + handleIndividualGrade
  *   setSavedAssignmentData  - SHARED MUTABLE state (Codex Round 2 #4); written
  *                             from completion-only toggle and due-date editor.
+ *   addToast                - App-shell utility
+ *   setGradeImportedDoc     - DEAD state (PR 4 deletes); kept until then
  *
- *   --- Grade-specific state (will move to GradeTab in PR 3-4) ---
- *   selectedPeriod / setSelectedPeriod
+ *   --- Grade-specific state remaining in props (will move in PR 4) ---
  *   gradeFilterStudent / setGradeFilterStudent
- *   gradeFilterAssignment / setGradeFilterAssignment
- *   selectedFiles / setSelectedFiles
- *   individualUpload / setIndividualUpload
- *   setGradeAssignment / setGradeImportedDoc  - written from the assignment-filter loader
+ *   selectedFiles / setSelectedFiles  - part of dead branch (PR 4 deletes)
  *
- *   --- Handlers/helpers (will move to GradeTab in PR 3) ---
- *   loadPeriodStudents
- *   getStudentSuggestions
- *   handleIndividualFileSelect
- *   handleIndividualGrade
- *   clearIndividualUpload
- *   addToast                - App-shell utility, stays in App
- *
- * GradeTab-owned (PR 2):
- *   gradingModesExpanded, showActivityLog
- *   skipVerified, excludeGradedStudents, excludeApprovedStudents
- *   logRef
- *   auto-scroll log effect
- *   auto-expand-Activity-Monitor-on-error effect
+ * GradeTab-owned (PR 2 + PR 3):
+ *   PR 2: gradingModesExpanded, showActivityLog, skipVerified,
+ *         excludeGradedStudents, excludeApprovedStudents, logRef,
+ *         auto-scroll log effect, auto-expand-on-error effect.
+ *   PR 3: selectedPeriod, periodStudents, gradeFilterAssignment,
+ *         individualUpload, gradeAssignment, loadPeriodStudents,
+ *         handleIndividualFileSelect, handleIndividualGrade,
+ *         clearIndividualUpload, getStudentSuggestions,
+ *         blob-URL revoke effect for individualUpload.preview.
  */
 
 export default function GradeTab(props) {
   const {
     status,
     config,
+    globalAINotes,
     savedAssignments,
     savedAssignmentData,
     setSavedAssignmentData,
     setStatus,
     addToast,
     periods,
-    selectedPeriod,
-    setSelectedPeriod,
     setGradeFilterStudent,
-    loadPeriodStudents,
     sortedPeriods,
-    periodStudents,
     gradeFilterStudent,
-    gradeFilterAssignment,
-    setGradeFilterAssignment,
-    setGradeAssignment,
     setGradeImportedDoc,
     availableFiles,
     selectedFiles,
     setSelectedFiles,
     emailApprovals,
-    individualUpload,
-    setIndividualUpload,
-    getStudentSuggestions,
-    handleIndividualFileSelect,
-    handleIndividualGrade,
-    clearIndividualUpload,
     MODEL_COST_PER_ASSIGNMENT,
   } = props;
 
@@ -92,6 +76,27 @@ export default function GradeTab(props) {
   const [excludeGradedStudents, setExcludeGradedStudents] = useState(false);
   const [excludeApprovedStudents, setExcludeApprovedStudents] = useState(false);
   const logRef = useRef(null);
+
+  // PR 3 — local Grade-tab state (individual-upload + period + assignment-config slice).
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [periodStudents, setPeriodStudents] = useState([]);
+  const [gradeFilterAssignment, setGradeFilterAssignment] = useState("");
+  const [gradeAssignment, setGradeAssignment] = useState({
+    title: "",
+    customMarkers: [],
+    excludeMarkers: [],
+    gradingNotes: "",
+    responseSections: [],
+  });
+  const [individualUpload, setIndividualUpload] = useState({
+    file: null,
+    studentName: "",
+    studentInfo: null, // Full student info from CSV (id, email, etc.)
+    preview: null,
+    isGrading: false,
+    result: null,
+    showSuggestions: false,
+  });
 
   // Auto-scroll the activity log to the bottom when new entries arrive.
   useEffect(() => {
@@ -104,6 +109,161 @@ export default function GradeTab(props) {
       setShowActivityLog(true);
     }
   }, [status.error]);
+
+  // PR 3 — Codex Round 4 MINOR. Revoke blob URLs created by handleIndividualFileSelect
+  // to prevent memory leaks. Pre-PR-3 the state lived in App and never unmounted, so the
+  // only cleanup path was clearIndividualUpload(). With local state in an always-mounted
+  // GradeTab, the cleanup runs whenever individualUpload.preview changes (the previous
+  // value's URL gets revoked) and on component unmount.
+  useEffect(() => {
+    const url = individualUpload.preview;
+    return () => {
+      if (url && typeof url === "string" && url.startsWith("blob:")) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [individualUpload.preview]);
+
+  // PR 3 — Load students from selected period (was App-level loadPeriodStudents).
+  const loadPeriodStudents = async (periodFilename) => {
+    if (!periodFilename) {
+      setPeriodStudents([]);
+      return;
+    }
+    try {
+      const data = await api.getPeriodStudents(periodFilename);
+      if (data.students) {
+        setPeriodStudents(data.students);
+      }
+    } catch (e) {
+      console.error("Failed to load period students:", e);
+      setPeriodStudents([]);
+    }
+  };
+
+  // PR 3 — Handle individual file upload for paper/handwritten assignments.
+  const handleIndividualFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const preview = file.type.startsWith("image/")
+      ? URL.createObjectURL(file)
+      : null;
+    setIndividualUpload((prev) => ({
+      ...prev,
+      file,
+      preview,
+      result: null,
+    }));
+  };
+
+  // PR 3 — Submit the individual upload to /api/grade-individual.
+  const handleIndividualGrade = async () => {
+    if (!individualUpload.file || !individualUpload.studentName.trim()) {
+      addToast("Please select a file and enter the student name", "warning");
+      return;
+    }
+
+    setIndividualUpload((prev) => ({ ...prev, isGrading: true, result: null }));
+
+    try {
+      const formData = new FormData();
+      formData.append("file", individualUpload.file);
+      formData.append("student_name", individualUpload.studentName.trim());
+      formData.append("grade_level", config.grade_level);
+      formData.append("subject", config.subject);
+      formData.append("output_folder", config.output_folder);
+      formData.append("globalAINotes", globalAINotes);
+      formData.append("teacher_name", config.teacher_name || "");
+      formData.append("school_name", config.school_name || "");
+      // Pass class period for differentiated grading
+      if (selectedPeriod) {
+        const periodName = periods.find(p => p.filename === selectedPeriod)?.period_name || '';
+        formData.append("classPeriod", periodName);
+      }
+      // Pass student info from CSV if available
+      if (individualUpload.studentInfo) {
+        formData.append(
+          "studentInfo",
+          JSON.stringify(individualUpload.studentInfo),
+        );
+      }
+      // Pass assignment config if available
+      if (
+        gradeAssignment.gradingNotes ||
+        gradeAssignment.customMarkers?.length > 0 ||
+        gradeAssignment.title
+      ) {
+        formData.append("assignmentConfig", JSON.stringify(gradeAssignment));
+      }
+
+      const authHdrs = await getAuthHeaders();
+      const response = await fetch("/api/grade-individual", {
+        method: "POST",
+        headers: { ...authHdrs },
+        body: formData,
+      });
+      const result = await response.json();
+
+      if (result.error) {
+        addToast("Grading error: " + result.error, "error");
+        setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
+        return;
+      }
+
+      setIndividualUpload((prev) => ({ ...prev, isGrading: false, result }));
+
+      // Add to results list
+      setStatus((prev) => ({
+        ...prev,
+        results: [...prev.results, result],
+      }));
+
+      addToast(
+        `Graded - ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`,
+        "success",
+      );
+    } catch (error) {
+      console.error("Individual grading error:", error);
+      addToast("Failed to grade: " + error.message, "error");
+      setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
+    }
+  };
+
+  // PR 3 — Clear the individual upload form. Note: the blob-URL revoke effect
+  // also runs when preview changes, but explicit cleanup here covers the case
+  // where the user clicks the X button without replacing the file.
+  const clearIndividualUpload = () => {
+    if (individualUpload.preview) {
+      URL.revokeObjectURL(individualUpload.preview);
+    }
+    setIndividualUpload({
+      file: null,
+      studentName: "",
+      studentInfo: null,
+      preview: null,
+      isGrading: false,
+      result: null,
+      showSuggestions: false,
+    });
+  };
+
+  // PR 3 — Filter students for the individual-upload autocomplete.
+  const getStudentSuggestions = (input) => {
+    if (!input || input.length < 2) return [];
+    const lowerInput = input.toLowerCase();
+    return periodStudents
+      .filter((s) => {
+        const fullName = s.full?.toLowerCase() || "";
+        const first = s.first?.toLowerCase() || "";
+        const last = s.last?.toLowerCase() || "";
+        return (
+          fullName.includes(lowerInput) ||
+          first.includes(lowerInput) ||
+          last.includes(lowerInput)
+        );
+      })
+      .slice(0, 5); // Limit to 5 suggestions
+  };
 
   const pct = status.total > 0 ? (status.progress / status.total) * 100 : 0;
 
@@ -1581,6 +1741,8 @@ export default function GradeTab(props) {
                     onClick={clearIndividualUpload}
                     className="btn btn-secondary"
                     style={{ padding: "8px 12px" }}
+                    aria-label="Clear individual upload"
+                    title="Clear individual upload"
                   >
                     <Icon name="X" size={16} />
                   </button>
