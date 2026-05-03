@@ -32,6 +32,11 @@ import PublishedAssessmentModal from "./components/PublishedAssessmentModal";
 import PublishContentModal from "./components/PublishContentModal";
 import CurveModal from "./components/CurveModal";
 import NewUnitModal from "./components/NewUnitModal";
+import AttemptDrawer from "./components/AttemptDrawer";
+import HolidayModal from "./components/HolidayModal";
+import PlatformExportMenu from "./components/PlatformExportMenu";
+import ActivityLog from "./components/ActivityLog";
+import AIReasoningPanel from "./components/AIReasoningPanel";
 import { AssignmentPlayer } from "./components";
 import QuestionEditToolbar from "./components/QuestionEditToolbar";
 import QuestionEditOverlay from "./components/QuestionEditOverlay";
@@ -6143,46 +6148,11 @@ ${signature}`;
                             }}>&#9654;</span>
                             AI Reasoning
                           </button>
-                          {showAIReasoning && (
-                            <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                              <div>
-                                <label className="label">Prompt Input (Sent to AI)</label>
-                                <pre style={{
-                                  whiteSpace: "pre-wrap",
-                                  wordWrap: "break-word",
-                                  fontFamily: "monospace",
-                                  fontSize: "0.8rem",
-                                  lineHeight: "1.5",
-                                  color: "var(--text-secondary)",
-                                  background: "var(--glass-bg)",
-                                  padding: "12px",
-                                  borderRadius: "8px",
-                                  border: "1px solid var(--glass-border)",
-                                  maxHeight: "300px",
-                                  overflowY: "auto",
-                                  margin: 0,
-                                }}>{r.ai_input || "Not available"}</pre>
-                              </div>
-                              <div>
-                                <label className="label">Raw API Output (JSON)</label>
-                                <pre style={{
-                                  whiteSpace: "pre-wrap",
-                                  wordWrap: "break-word",
-                                  fontFamily: "monospace",
-                                  fontSize: "0.8rem",
-                                  lineHeight: "1.5",
-                                  color: "var(--text-secondary)",
-                                  background: "var(--glass-bg)",
-                                  padding: "12px",
-                                  borderRadius: "8px",
-                                  border: "1px solid var(--glass-border)",
-                                  maxHeight: "300px",
-                                  overflowY: "auto",
-                                  margin: 0,
-                                }}>{r.ai_response || "Not available"}</pre>
-                              </div>
-                            </div>
-                          )}
+                          <AIReasoningPanel
+                            open={showAIReasoning}
+                            aiInput={r.ai_input}
+                            aiResponse={r.ai_response}
+                          />
                         </div>
                       </div>
                     ) : (
@@ -7671,46 +7641,11 @@ ${signature}`;
                       />
                     </button>
 
-                    {showActivityLog && (
-                      <div
-                        ref={logRef}
-                        style={{
-                          marginTop: "15px",
-                          maxHeight: "200px",
-                          overflowY: "auto",
-                          background: "var(--input-bg)",
-                          borderRadius: "10px",
-                          padding: "15px",
-                          fontFamily: "Monaco, Consolas, monospace",
-                          fontSize: "0.8rem",
-                          lineHeight: "1.6",
-                        }}
-                      >
-                        {status.log.length === 0 ? (
-                          <p
-                            style={{
-                              color: "var(--text-muted)",
-                              margin: 0,
-                              textAlign: "center",
-                            }}
-                          >
-                            Ready to grade. Activity will appear here...
-                          </p>
-                        ) : (
-                          status.log.slice(-30).map((line, i) => (
-                            <div
-                              key={i}
-                              style={{
-                                marginBottom: "4px",
-                                color: "var(--text-secondary)",
-                              }}
-                            >
-                              {line}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
+                    <ActivityLog
+                      ref={logRef}
+                      open={showActivityLog}
+                      log={status.log}
+                    />
                   </div>
 
                   {/* Full width layout */}
@@ -12951,59 +12886,13 @@ ${signature}`;
                                     Export to Platform
                                     <Icon name="ChevronDown" size={14} style={{ marginLeft: "4px" }} />
                                   </button>
-                                  {showPlatformExport && (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        top: "100%",
-                                        right: 0,
-                                        marginTop: "5px",
-                                        background: "var(--surface)",
-                                        border: "1px solid var(--glass-border)",
-                                        borderRadius: "10px",
-                                        boxShadow: "0 10px 40px rgba(0,0,0,0.3)",
-                                        zIndex: 100,
-                                        minWidth: "200px",
-                                        overflow: "hidden",
-                                      }}
-                                    >
-                                      {[
-                                        { id: "wayground", name: "Wayground", icon: "FileSpreadsheet" },
-                                        { id: "csv", name: "CSV (Generic)", icon: "Table" },
-                                        { id: "canvas_qti", name: "Canvas (QTI)", icon: "GraduationCap" },
-                                        { id: "kahoot", name: "Kahoot", icon: "Gamepad2" },
-                                        { id: "quizlet", name: "Quizlet", icon: "BookOpen" },
-                                        { id: "google_forms", name: "Google Forms", icon: "FormInput" },
-                                      ].map((platform) => (
-                                        <button
-                                          key={platform.id}
-                                          onClick={() => {
-                                            exportAssessmentForPlatformHandler(platform.id);
-                                            setShowPlatformExport(false);
-                                          }}
-                                          style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            gap: "10px",
-                                            width: "100%",
-                                            padding: "12px 16px",
-                                            background: "transparent",
-                                            border: "none",
-                                            borderBottom: "1px solid var(--glass-border)",
-                                            color: "var(--text-primary)",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            fontSize: "0.9rem",
-                                          }}
-                                          onMouseEnter={(e) => e.target.style.background = "var(--glass-hover)"}
-                                          onMouseLeave={(e) => e.target.style.background = "transparent"}
-                                        >
-                                          <Icon name={platform.icon} size={18} />
-                                          {platform.name}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
+                                  <PlatformExportMenu
+                                    open={showPlatformExport}
+                                    onSelect={(platformId) => {
+                                      exportAssessmentForPlatformHandler(platformId);
+                                      setShowPlatformExport(false);
+                                    }}
+                                  />
                                 </div>
                                 <button
                                   onClick={publishAssessmentHandler}
@@ -14575,75 +14464,13 @@ ${signature}`;
                       )}
 
                       {/* Add Holiday Modal */}
-                      {showHolidayModal && (
-                        <div
-                          style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
-                          onClick={() => setShowHolidayModal(false)}
-                        >
-                          <div
-                            className="glass-card"
-                            style={{ maxWidth: "400px", width: "100%", padding: "24px" }}
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-                              <Icon name="CalendarOff" size={20} style={{ color: "#ef4444" }} />
-                              Add Holiday / Break
-                            </h3>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                              <div>
-                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Name</label>
-                                <input
-                                  type="text"
-                                  value={holidayForm.name}
-                                  onChange={e => setHolidayForm(prev => ({ ...prev, name: e.target.value }))}
-                                  placeholder="e.g., Spring Break"
-                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
-                                />
-                              </div>
-                              <div>
-                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>Start Date</label>
-                                <input
-                                  type="date"
-                                  value={holidayForm.date}
-                                  onChange={e => setHolidayForm(prev => ({ ...prev, date: e.target.value }))}
-                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
-                                />
-                              </div>
-                              <div>
-                                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>End Date (for multi-day breaks)</label>
-                                <input
-                                  type="date"
-                                  value={holidayForm.end_date}
-                                  onChange={e => setHolidayForm(prev => ({ ...prev, end_date: e.target.value }))}
-                                  style={{ width: "100%", padding: "8px 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: "8px", color: "var(--text-primary)", fontSize: "0.9rem" }}
-                                />
-                              </div>
-                              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                                <button
-                                  onClick={() => {
-                                    if (holidayForm.date && holidayForm.name) {
-                                      addHoliday(holidayForm)
-                                      setShowHolidayModal(false)
-                                    }
-                                  }}
-                                  className="btn btn-primary"
-                                  style={{ flex: 1 }}
-                                  disabled={!holidayForm.date || !holidayForm.name}
-                                >
-                                  Add Holiday
-                                </button>
-                                <button
-                                  onClick={() => setShowHolidayModal(false)}
-                                  className="btn btn-secondary"
-                                  style={{ flex: 1 }}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <HolidayModal
+                        open={showHolidayModal}
+                        onClose={() => setShowHolidayModal(false)}
+                        form={holidayForm}
+                        setForm={setHolidayForm}
+                        onAdd={addHoliday}
+                      />
 
                       {/* Import Document Modal */}
                       <ImportEventsModal
@@ -16068,60 +15895,10 @@ ${signature}`;
       />
 
       {/* Attempt History Drawer */}
-      {attemptDrawerStudent && (
-        <div
-          style={{
-            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-            background: "var(--modal-bg)", display: "flex", alignItems: "center",
-            justifyContent: "flex-end", zIndex: 9998, padding: "20px",
-          }}
-          onClick={function() { setAttemptDrawerStudent(null); }}
-        >
-          <div
-            className="glass-card"
-            style={{ width: "100%", maxWidth: "500px", maxHeight: "90vh", overflowY: "auto", padding: "24px", borderRadius: "16px" }}
-            onClick={function(e) { e.stopPropagation(); }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>
-                {attemptDrawerStudent.student_name}
-              </h3>
-              <button
-                onClick={function() { setAttemptDrawerStudent(null); }}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: "1.2rem" }}
-              >
-                {String.fromCharCode(10005)}
-              </button>
-            </div>
-            <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
-              {attemptDrawerStudent.attempts.length} attempts
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {attemptDrawerStudent.attempts.map(function(a) {
-                var submittedDate = a.submitted_at ? new Date(a.submitted_at).toLocaleString() : String.fromCharCode(8212);
-                var timeMin = a.time_taken_seconds ? Math.floor(a.time_taken_seconds / 60) + 'm ' + (a.time_taken_seconds % 60) + 's' : String.fromCharCode(8212);
-                var pct = a.percentage != null ? Math.round(a.percentage) + '%' : String.fromCharCode(8212);
-                return (
-                  <div key={a.submission_id} style={{ padding: "12px 14px", borderRadius: "10px", background: "var(--glass-bg)", border: "1px solid var(--glass-border)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                      <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>Attempt {a.attempt_number}</div>
-                      <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{pct}</div>
-                    </div>
-                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                      Submitted {submittedDate} {String.fromCharCode(8226)} {timeMin}
-                    </div>
-                    {a.score != null && (
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                        Score: {a.score} / {a.total_points}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      <AttemptDrawer
+        student={attemptDrawerStudent}
+        onClose={() => setAttemptDrawerStudent(null)}
+      />
     </div>
   );
 }
