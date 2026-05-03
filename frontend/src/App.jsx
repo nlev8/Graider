@@ -30,6 +30,7 @@ import ShareWithClassesModal from "./components/ShareWithClassesModal";
 import ImportEventsModal from "./components/ImportEventsModal";
 import PublishedAssessmentModal from "./components/PublishedAssessmentModal";
 import PublishContentModal from "./components/PublishContentModal";
+import CurveModal from "./components/CurveModal";
 import { AssignmentPlayer } from "./components";
 import QuestionEditToolbar from "./components/QuestionEditToolbar";
 import QuestionEditOverlay from "./components/QuestionEditOverlay";
@@ -15773,183 +15774,16 @@ ${signature}`;
       )}
 
       {/* Curve Modal */}
-      {curveModal.show && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.7)",
-            zIndex: 10000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setCurveModal({ ...curveModal, show: false })}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "#1a1a2e",
-              borderRadius: "12px",
-              width: "100%",
-              maxWidth: "400px",
-              padding: "25px",
-              border: "1px solid rgba(168, 85, 247, 0.3)",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "20px",
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  color: "#a855f7",
-                }}
-              >
-                <Icon name="TrendingUp" size={24} />
-                Apply Grade Curve
-              </h2>
-              <button
-                onClick={() => setCurveModal({ ...curveModal, show: false })}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "5px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <Icon name="X" size={20} />
-              </button>
-            </div>
-
-            <p
-              style={{
-                color: "var(--text-secondary)",
-                marginBottom: "20px",
-                fontSize: "0.9rem",
-              }}
-            >
-              Apply a curve to all{" "}
-              <span style={{ color: "#a855f7", fontWeight: 600 }}>
-                {resultsPeriodFilter}
-              </span>{" "}
-              results. This will update scores, letter grades, feedback, and emails.
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              <div>
-                <label className="label">Curve Type</label>
-                <select
-                  className="input"
-                  value={curveModal.curveType}
-                  onChange={(e) => setCurveModal({ ...curveModal, curveType: e.target.value })}
-                  style={{ width: "100%" }}
-                >
-                  <option value="add">Add Points (e.g., +5 to every score)</option>
-                  <option value="percent">Percentage Boost (e.g., +10% to every score)</option>
-                  <option value="set_min">Set Minimum Score (e.g., min 50)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">
-                  {curveModal.curveType === "add"
-                    ? "Points to Add"
-                    : curveModal.curveType === "percent"
-                      ? "Percentage Boost"
-                      : "Minimum Score"}
-                </label>
-                <input
-                  type="number"
-                  className="input"
-                  value={curveModal.curveValue}
-                  onChange={(e) => setCurveModal({ ...curveModal, curveValue: e.target.value })}
-                  placeholder={
-                    curveModal.curveType === "add"
-                      ? "5"
-                      : curveModal.curveType === "percent"
-                        ? "10"
-                        : "50"
-                  }
-                  style={{ width: "100%" }}
-                />
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "5px" }}>
-                  {curveModal.curveType === "add"
-                    ? "Adds this many points to each score (capped at 100)"
-                    : curveModal.curveType === "percent"
-                      ? "Increases each score by this percentage"
-                      : "Sets this as the minimum score for all results"}
-                </p>
-              </div>
-
-              {/* Preview */}
-              <div
-                style={{
-                  padding: "12px",
-                  background: "rgba(168, 85, 247, 0.1)",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(168, 85, 247, 0.2)",
-                }}
-              >
-                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "5px" }}>
-                  Preview (example):
-                </div>
-                <div style={{ fontWeight: 600 }}>
-                  {(() => {
-                    const val = parseFloat(curveModal.curveValue) || 0;
-                    const example = 75;
-                    let newScore;
-                    if (curveModal.curveType === "add") {
-                      newScore = Math.min(100, example + val);
-                    } else if (curveModal.curveType === "percent") {
-                      newScore = Math.min(100, Math.round(example * (1 + val / 100)));
-                    } else {
-                      newScore = Math.max(val, example);
-                    }
-                    return `75% → ${newScore}%`;
-                  })()}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-                <button
-                  onClick={() => setCurveModal({ ...curveModal, show: false })}
-                  className="btn btn-secondary"
-                  style={{ flex: 1 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={applyCurve}
-                  className="btn btn-primary"
-                  style={{
-                    flex: 1,
-                    background: "linear-gradient(135deg, #a855f7, #8b5cf6)",
-                  }}
-                >
-                  <Icon name="Check" size={18} />
-                  Apply Curve
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <CurveModal
+        open={curveModal.show}
+        onClose={() => setCurveModal({ ...curveModal, show: false })}
+        curveType={curveModal.curveType}
+        setCurveType={(val) => setCurveModal({ ...curveModal, curveType: val })}
+        curveValue={curveModal.curveValue}
+        setCurveValue={(val) => setCurveModal({ ...curveModal, curveValue: val })}
+        periodLabel={resultsPeriodFilter}
+        onApply={applyCurve}
+      />
 
       {/* Toast Notifications */}
       <div
