@@ -13,6 +13,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.utils.audit import audit_log
 import sentry_sdk
 
 email_bp = Blueprint('email', __name__)
@@ -132,6 +133,10 @@ def send_emails():
             else:
                 failed += 1
 
+        audit_log(
+            "EMAIL_SEND_GRADES",
+            f"Sent grade emails via Resend: sent={sent}, failed={failed}, total={len(students)}",
+        )
         return jsonify({"sent": sent, "failed": failed, "total": len(students)})
 
     except ImportError:
@@ -155,8 +160,10 @@ def test_email():
         test_address = data.get('email', 'delivered@resend.dev')
 
         if emailer.test_connection(test_address):
+            audit_log("EMAIL_TEST_SEND", f"Test email sent to {test_address}")
             return jsonify({"success": True, "message": f"Test email sent to {test_address}"})
         else:
+            audit_log("EMAIL_TEST_SEND_FAILED", f"Test email failed to {test_address}")
             return jsonify({
                 "success": False,
                 "message": "Failed to send test email. Check RESEND_API_KEY in .env"
@@ -570,6 +577,11 @@ def send_outlook_emails():
 
         from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
+        audit_log(
+            "EMAIL_SEND_OUTLOOK",
+            f"Outlook send launched: type={email_type}, recipients={len(emails)}",
+            teacher_id=teacher_id,
+        )
         result = launch_outlook_sender(emails, teacher_id=teacher_id)
         if "error" in result:
             return jsonify(result), 409

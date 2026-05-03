@@ -17,6 +17,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.utils.audit import audit_log
 from backend.retry import with_retry
 import sentry_sdk
 
@@ -400,6 +401,15 @@ def update_result():
                 import logging
                 sentry_sdk.capture_exception(e)
                 logging.getLogger(__name__).warning("Failed to record correction: %s", e)
+
+    # FERPA: audit teacher grade edits (score/feedback only — verified flag is not a PII change)
+    if 'score' in data or 'feedback' in data:
+        edited_fields = [f for f in ('score', 'letter_grade', 'feedback') if f in data]
+        audit_log(
+            "GRADE_EDIT",
+            f"Teacher edited result: file={filename[:80]}, fields={','.join(edited_fields)}",
+            teacher_id=teacher_id,
+        )
 
     return jsonify({
         "status": "updated",
@@ -809,6 +819,10 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
     safe_assignment = ''.join(c if c.isalnum() or c in ' -_' else '' for c in assignment).strip().replace(' ', '_')
     filename = f"focus_{safe_assignment}_{period}.csv"
 
+    audit_log(
+        "EXPORT_FOCUS_CSV",
+        f"Focus SIS CSV export: assignment={assignment[:60]}, period={period}, matched={matched_count}/{len(students_to_match)}",
+    )
     return jsonify({
         "csv": csv_content,
         "filename": filename,
@@ -901,6 +915,13 @@ def export_focus_batch():
     manifest_path = os.path.join(FOCUS_EXPORTS_DIR, "manifest.json")
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)
+
+    total_matched = sum(p.get("count", 0) for p in period_results)
+    audit_log(
+        "EXPORT_FOCUS_BATCH",
+        f"Focus batch export: assignment={assignment[:60]}, periods={len(period_results)}, total_matched={total_matched}",
+        teacher_id=teacher_id,
+    )
 
     # Open the exports folder in Finder (local dev only)
     if sys.platform == 'darwin':
@@ -1018,6 +1039,12 @@ def export_lms_csv():
     manifest_path = os.path.join(export_dir, "manifest.json")
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)
+
+    audit_log(
+        "EXPORT_LMS_CSV",
+        f"LMS CSV export: format={fmt}, assignment={assignment[:60]}, count={len(results)}",
+        teacher_id=teacher_id,
+    )
 
     # Open exports folder (local dev only)
     if sys.platform == 'darwin':
