@@ -1203,18 +1203,21 @@ function App() {
 
 
   // Question editing state
-  const [editMode, setEditMode] = useState(false);
-  const [selectedQuestions, setSelectedQuestions] = useState(new Set());
-  const [editingQuestion, setEditingQuestion] = useState(null); // "sIdx-qIdx" key
-  const [regeneratingQuestions, setRegeneratingQuestions] = useState(new Set());
+  // Question-editing slice (editMode, selectedQuestions, editingQuestion,
+  // regeneratingQuestions, sectionsDropdownOpen) moved into PlannerTab in
+  // PR 5 of the Planner extraction sprint. Per plan #190 Task 5 — the
+  // 6 question-editing helpers (toggleQuestionSelect, selectAllQuestions,
+  // saveEditedQuestion, deleteSelectedQuestions, regenerateSelectedQuestions,
+  // regenerateOneQuestion) moved with them. getActiveAssignment and
+  // setActiveAssignment stay in App because the publish flow at
+  // App.jsx:3681 + 3757 still calls them; they get passed as props to
+  // PlannerTab and the moved helpers consume them via closure.
 
-  // Reset preview results and edit state when assignment changes
+  // Reset preview results when assignment changes. The edit-state reset
+  // (editMode/selectedQuestions/editingQuestion/regeneratingQuestions) moved
+  // into PlannerTab in PR 5 alongside the states themselves.
   useEffect(() => {
     setPreviewResults(null);
-    setEditMode(false);
-    setSelectedQuestions(new Set());
-    setEditingQuestion(null);
-    setRegeneratingQuestions(new Set());
   }, [lessonPlan, generatedAssignment]);
 
   // Saved lessons for assessment generation
@@ -1289,7 +1292,7 @@ function App() {
     includeAnswerKey: true,
     includeStandardsReference: true,
   });
-  const [sectionsDropdownOpen, setSectionsDropdownOpen] = useState(false);
+  // sectionsDropdownOpen moved into PlannerTab in PR 5.
 
   // Helper function to distribute questions across types based on enabled section categories
   const distributeQuestions = (total, categories = null) => {
@@ -1540,13 +1543,8 @@ function App() {
   // PR 3 of the Planner extraction sprint.
   const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson", "assessment", "dashboard", or "calendar"
 
-  // Reset edit state when assessment changes
-  useEffect(() => {
-    setEditMode(false);
-    setSelectedQuestions(new Set());
-    setEditingQuestion(null);
-    setRegeneratingQuestions(new Set());
-  }, [generatedAssessment]);
+  // Edit-state reset on [generatedAssessment] change moved into PlannerTab in
+  // PR 5 alongside the moved states.
 
   const [publishingAssessment, setPublishingAssessment] = useState(false);
   const [teacherClasses, setTeacherClasses] = useState([]);
@@ -4386,214 +4384,11 @@ ${signature}`;
     return a.sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0);
   };
 
-  /** Toggle a question's selection */
-  const toggleQuestionSelect = (qKey) => {
-    setSelectedQuestions((prev) => {
-      const next = new Set(prev);
-      if (next.has(qKey)) next.delete(qKey);
-      else next.add(qKey);
-      return next;
-    });
-  };
-
-  /** Select all questions */
-  const selectAllQuestions = () => {
-    const a = getActiveAssignment();
-    if (!a?.sections) return;
-    const keys = new Set();
-    a.sections.forEach((s, sIdx) => {
-      (s.questions || []).forEach((_, qIdx) => keys.add(sIdx + "-" + qIdx));
-    });
-    setSelectedQuestions(keys);
-  };
-
-  /** Save an inline-edited question back into the assignment */
-  const saveEditedQuestion = (sIdx, qIdx, updatedQuestion) => {
-    const a = getActiveAssignment();
-    if (!a?.sections) return;
-    const copy = JSON.parse(JSON.stringify(a));
-    if (copy.sections[sIdx]?.questions?.[qIdx]) {
-      // Preserve the original number
-      updatedQuestion.number = copy.sections[sIdx].questions[qIdx].number;
-      copy.sections[sIdx].questions[qIdx] = updatedQuestion;
-      // Recalculate section points
-      copy.sections[sIdx].points = copy.sections[sIdx].questions.reduce(
-        (sum, q) => sum + (q.points || 0), 0
-      );
-      // Recalculate total
-      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
-      setActiveAssignment(copy);
-    }
-    setEditingQuestion(null);
-    addToast("Question updated", "success");
-  };
-
-  /** Delete all selected questions */
-  const deleteSelectedQuestions = () => {
-    const a = getActiveAssignment();
-    if (!a?.sections || selectedQuestions.size === 0) return;
-    const copy = JSON.parse(JSON.stringify(a));
-    const deleteCount = selectedQuestions.size;
-
-    // Filter out selected questions from each section
-    copy.sections.forEach((section, sIdx) => {
-      section.questions = (section.questions || []).filter(
-        (_, qIdx) => !selectedQuestions.has(sIdx + "-" + qIdx)
-      );
-      // Renumber
-      section.questions.forEach((q, i) => { q.number = i + 1; });
-      // Recalculate section points
-      section.points = section.questions.reduce((sum, q) => sum + (q.points || 0), 0);
-    });
-
-    // Remove empty sections
-    copy.sections = copy.sections.filter((s) => s.questions && s.questions.length > 0);
-
-    // Recalculate total
-    copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
-
-    setActiveAssignment(copy);
-    setSelectedQuestions(new Set());
-    addToast(deleteCount + " question(s) removed", "success");
-  };
-
-  /** Regenerate selected questions via AI */
-  const regenerateSelectedQuestions = async () => {
-    const a = getActiveAssignment();
-    if (!a?.sections || selectedQuestions.size === 0) return;
-
-    // Build the replacement specs and existing questions list
-    const questionsToReplace = [];
-    const existingQuestions = [];
-
-    a.sections.forEach((section, sIdx) => {
-      (section.questions || []).forEach((q, qIdx) => {
-        const key = sIdx + "-" + qIdx;
-        if (selectedQuestions.has(key)) {
-          questionsToReplace.push({
-            section_index: sIdx,
-            question_index: qIdx,
-            question_type: q.question_type || q.type || "short_answer",
-            points: q.points || 1,
-            dok: q.dok || 1,
-            standard: q.standard || "",
-          });
-        } else {
-          existingQuestions.push(q.question || "");
-        }
-      });
-    });
-
-    setRegeneratingQuestions(new Set(selectedQuestions));
-
-    try {
-      const data = await api.regenerateQuestions(
-        questionsToReplace,
-        existingQuestions,
-        {
-          grade: config.grade_level || "",
-          subject: config.subject || "",
-          globalAINotes: config.globalAINotes || "",
-          requirements: unitConfig.requirements || "",
-        }
-      );
-
-      if (data.error) {
-        addToast("Regeneration error: " + data.error, "error");
-        return;
-      }
-
-      // Merge replacements into the assignment
-      const copy = JSON.parse(JSON.stringify(a));
-      (data.replacements || []).forEach((r) => {
-        const section = copy.sections[r.section_index];
-        if (section?.questions?.[r.question_index]) {
-          // Preserve the original question number
-          r.question.number = section.questions[r.question_index].number;
-          section.questions[r.question_index] = r.question;
-        }
-      });
-
-      // Recalculate points
-      copy.sections.forEach((section) => {
-        section.points = section.questions.reduce((sum, q) => sum + (q.points || 0), 0);
-      });
-      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
-
-      setActiveAssignment(copy);
-      setSelectedQuestions(new Set());
-
-      const costMsg = data.usage?.cost_display ? " (" + data.usage.cost_display + ")" : "";
-      addToast(data.replacements.length + " question(s) regenerated" + costMsg, "success");
-    } catch (e) {
-      addToast("Regeneration failed: " + e.message, "error");
-    } finally {
-      setRegeneratingQuestions(new Set());
-    }
-  };
-
-  /** Regenerate a single question */
-  const regenerateOneQuestion = async (sIdx, qIdx) => {
-    const a = getActiveAssignment();
-    if (!a?.sections) return;
-    const q = a.sections[sIdx]?.questions?.[qIdx];
-    if (!q) return;
-
-    const key = sIdx + "-" + qIdx;
-    setRegeneratingQuestions(new Set([key]));
-
-    const existingTexts = [];
-    a.sections.forEach((s) => {
-      (s.questions || []).forEach((ques) => existingTexts.push(ques.question || ""));
-    });
-
-    try {
-      const data = await api.regenerateQuestions(
-        [{
-          section_index: sIdx,
-          question_index: qIdx,
-          question_type: q.question_type || q.type || "short_answer",
-          points: q.points || 1,
-          dok: q.dok || 1,
-          standard: q.standard || "",
-        }],
-        existingTexts,
-        {
-          grade: config.grade_level || "",
-          subject: config.subject || "",
-          globalAINotes: config.globalAINotes || "",
-          requirements: unitConfig.requirements || "",
-        }
-      );
-
-      if (data.error) {
-        addToast("Regeneration error: " + data.error, "error");
-        return;
-      }
-
-      const copy = JSON.parse(JSON.stringify(a));
-      (data.replacements || []).forEach((r) => {
-        const section = copy.sections[r.section_index];
-        if (section?.questions?.[r.question_index]) {
-          r.question.number = section.questions[r.question_index].number;
-          section.questions[r.question_index] = r.question;
-        }
-      });
-      copy.sections.forEach((section) => {
-        section.points = section.questions.reduce((sum, ques) => sum + (ques.points || 0), 0);
-      });
-      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
-
-      setActiveAssignment(copy);
-      setEditingQuestion(null);
-      const costMsg = data.usage?.cost_display ? " (" + data.usage.cost_display + ")" : "";
-      addToast("Question regenerated" + costMsg, "success");
-    } catch (e) {
-      addToast("Regeneration failed: " + e.message, "error");
-    } finally {
-      setRegeneratingQuestions(new Set());
-    }
-  };
+  // Question-editing helpers (toggleQuestionSelect, selectAllQuestions,
+  // saveEditedQuestion, deleteSelectedQuestions, regenerateSelectedQuestions,
+  // regenerateOneQuestion) moved into PlannerTab in PR 5 of the Planner
+  // extraction sprint. They consume getActiveAssignment + setActiveAssignment
+  // (still here, still passed as props) via closure inside PlannerTab.
 
   // Results/Email functions
   const openReview = (index) => setReviewModal({ show: true, index });
@@ -7562,16 +7357,6 @@ ${signature}`;
                   setSlideImages={setSlideImages}
                   slideFormat={slideFormat}
                   setSlideFormat={setSlideFormat}
-                  editingQuestion={editingQuestion}
-                  setEditingQuestion={setEditingQuestion}
-                  selectedQuestions={selectedQuestions}
-                  setSelectedQuestions={setSelectedQuestions}
-                  regeneratingQuestions={regeneratingQuestions}
-                  setRegeneratingQuestions={setRegeneratingQuestions}
-                  editMode={editMode}
-                  setEditMode={setEditMode}
-                  sectionsDropdownOpen={sectionsDropdownOpen}
-                  setSectionsDropdownOpen={setSectionsDropdownOpen}
                   assessmentLoading={assessmentLoading}
                   setAssessmentLoading={setAssessmentLoading}
                   gradingAssessment={gradingAssessment}
@@ -7653,12 +7438,6 @@ ${signature}`;
                   standardsScrollRef={standardsScrollRef}
                   assessmentStandardsScrollRef={assessmentStandardsScrollRef}
                   handleMatchStandards={handleMatchStandards}
-                  deleteSelectedQuestions={deleteSelectedQuestions}
-                  selectAllQuestions={selectAllQuestions}
-                  toggleQuestionSelect={toggleQuestionSelect}
-                  saveEditedQuestion={saveEditedQuestion}
-                  regenerateOneQuestion={regenerateOneQuestion}
-                  regenerateSelectedQuestions={regenerateSelectedQuestions}
                   deleteSavedAssessment={deleteSavedAssessment}
                   loadSavedAssessment={loadSavedAssessment}
                   saveAssessmentHandler={saveAssessmentHandler}
