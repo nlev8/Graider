@@ -1064,7 +1064,7 @@ function App() {
   // Planner state
   const [standards, setStandards] = useState([]);
   const [selectedStandards, setSelectedStandards] = useState([]);
-  const [expandedStandards, setExpandedStandards] = useState([]);
+  // expandedStandards moved into PlannerTab in PR 6a of the Planner extraction sprint.
   const standardsScrollRef = useRef(null);
   const assessmentStandardsScrollRef = useRef(null);
   const [lessonPlan, setLessonPlan] = useState(null);
@@ -1076,13 +1076,13 @@ function App() {
   const [generatedAssignment, setGeneratedAssignment] = useState(null);
   const [assignmentLoading, setAssignmentLoading] = useState(false);
   const [assignmentType, setAssignmentType] = useState("assignment");
-  const [assignmentSectionsOpen, setAssignmentSectionsOpen] = useState(false);
+  // assignmentSectionsOpen moved into PlannerTab in PR 6a.
   const [assignmentQuestionCounts, setAssignmentQuestionCounts] = useState({
     multiple_choice: 4, short_answer: 2, math_computation: 0,
     geometry_visual: 0, graphing: 0, data_analysis: 0,
     extended_writing: 1, vocabulary: 0, true_false: 0, florida_fast: 0,
   });
-  const [previewShowAnswers, setPreviewShowAnswers] = useState(true);
+  // previewShowAnswers moved into PlannerTab in PR 6a.
   const [previewResults, setPreviewResults] = useState(null);
 
   // Reference document upload state
@@ -1093,24 +1093,14 @@ function App() {
   const [matchResults, setMatchResults] = useState(null);
 
   // Study Guide state
-  const [studyGuide, setStudyGuide] = useState(null);
-  const [studyGuideGenerating, setStudyGuideGenerating] = useState(false);
-  const [studyGuideInstructions, setStudyGuideInstructions] = useState('');
+  // studyGuide + studyGuideGenerating + studyGuideInstructions moved into
+  // PlannerTab in PR 6a of the Planner extraction sprint.
   // Flashcard state
-  const [flashcards, setFlashcards] = useState(null);
-  const [flashcardsGenerating, setFlashcardsGenerating] = useState(false);
-  const [flashcardInstructions, setFlashcardInstructions] = useState('');
-  const [flashcardCount, setFlashcardCount] = useState(15);
+  // flashcards + flashcardsGenerating + flashcardInstructions + flashcardCount
+  // moved into PlannerTab in PR 6a of the Planner extraction sprint.
   // Slide Deck state
-  const [slideDeck, setSlideDeck] = useState(null);
-  const [slideDeckGenerating, setSlideDeckGenerating] = useState(false);
-  const [slideDeckInstructions, setSlideDeckInstructions] = useState('');
-  const [slideResources, setSlideResources] = useState([]);
-  const [slideResourceList, setSlideResourceList] = useState([]);
-  const [slideResourcesLoading, setSlideResourcesLoading] = useState(false);
-  const [slideCount, setSlideCount] = useState(10);
-  const [slideImages, setSlideImages] = useState(true);
-  const [slideFormat, setSlideFormat] = useState('detailed');
+  // slideDeck + 8 slide* states moved into PlannerTab in PR 6a of the
+  // Planner extraction sprint.
 
   async function shareWithClass(content, contentType, title) {
     var classes = teacherClasses;
@@ -7301,8 +7291,6 @@ ${signature}`;
                   setPlannerMode={setPlannerMode}
                   plannerLoading={plannerLoading}
                   setPlannerLoading={setPlannerLoading}
-                  expandedStandards={expandedStandards}
-                  setExpandedStandards={setExpandedStandards}
                   lessonVariations={lessonVariations}
                   setLessonVariations={setLessonVariations}
                   brainstormIdeas={brainstormIdeas}
@@ -7311,12 +7299,8 @@ ${signature}`;
                   setSelectedIdea={setSelectedIdea}
                   brainstormLoading={brainstormLoading}
                   setBrainstormLoading={setBrainstormLoading}
-                  assignmentSectionsOpen={assignmentSectionsOpen}
-                  setAssignmentSectionsOpen={setAssignmentSectionsOpen}
                   assignmentQuestionCounts={assignmentQuestionCounts}
                   setAssignmentQuestionCounts={setAssignmentQuestionCounts}
-                  previewShowAnswers={previewShowAnswers}
-                  setPreviewShowAnswers={setPreviewShowAnswers}
                   previewResults={previewResults}
                   setPreviewResults={setPreviewResults}
                   docUploading={docUploading}
@@ -7325,38 +7309,6 @@ ${signature}`;
                   setMatchingInProgress={setMatchingInProgress}
                   matchResults={matchResults}
                   setMatchResults={setMatchResults}
-                  studyGuide={studyGuide}
-                  setStudyGuide={setStudyGuide}
-                  studyGuideGenerating={studyGuideGenerating}
-                  setStudyGuideGenerating={setStudyGuideGenerating}
-                  studyGuideInstructions={studyGuideInstructions}
-                  setStudyGuideInstructions={setStudyGuideInstructions}
-                  flashcards={flashcards}
-                  setFlashcards={setFlashcards}
-                  flashcardsGenerating={flashcardsGenerating}
-                  setFlashcardsGenerating={setFlashcardsGenerating}
-                  flashcardInstructions={flashcardInstructions}
-                  setFlashcardInstructions={setFlashcardInstructions}
-                  flashcardCount={flashcardCount}
-                  setFlashcardCount={setFlashcardCount}
-                  slideDeck={slideDeck}
-                  setSlideDeck={setSlideDeck}
-                  slideDeckGenerating={slideDeckGenerating}
-                  setSlideDeckGenerating={setSlideDeckGenerating}
-                  slideDeckInstructions={slideDeckInstructions}
-                  setSlideDeckInstructions={setSlideDeckInstructions}
-                  slideResources={slideResources}
-                  setSlideResources={setSlideResources}
-                  slideResourceList={slideResourceList}
-                  setSlideResourceList={setSlideResourceList}
-                  slideResourcesLoading={slideResourcesLoading}
-                  setSlideResourcesLoading={setSlideResourcesLoading}
-                  slideCount={slideCount}
-                  setSlideCount={setSlideCount}
-                  slideImages={slideImages}
-                  setSlideImages={setSlideImages}
-                  slideFormat={slideFormat}
-                  setSlideFormat={setSlideFormat}
                   assessmentLoading={assessmentLoading}
                   setAssessmentLoading={setAssessmentLoading}
                   gradingAssessment={gradingAssessment}

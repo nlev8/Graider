@@ -60,26 +60,12 @@ export default function PlannerTab(props) {
     // ~91 Planner-only states (still in App until PR 2-7) — full list
     // discovered by build-fail iteration. Initial set:
     plannerMode, setPlannerMode, plannerLoading, setPlannerLoading,
-    expandedStandards, setExpandedStandards,
     lessonVariations, setLessonVariations, brainstormIdeas, setBrainstormIdeas,
     selectedIdea, setSelectedIdea, brainstormLoading, setBrainstormLoading,
-    assignmentSectionsOpen, setAssignmentSectionsOpen,
     assignmentQuestionCounts, setAssignmentQuestionCounts,
-    previewShowAnswers, setPreviewShowAnswers,
     previewResults, setPreviewResults,
     docUploading, setDocUploading,
     matchingInProgress, setMatchingInProgress, matchResults, setMatchResults,
-    studyGuide, setStudyGuide, studyGuideGenerating, setStudyGuideGenerating,
-    studyGuideInstructions, setStudyGuideInstructions,
-    flashcards, setFlashcards, flashcardsGenerating, setFlashcardsGenerating,
-    flashcardInstructions, setFlashcardInstructions,
-    flashcardCount, setFlashcardCount,
-    slideDeck, setSlideDeck, slideDeckGenerating, setSlideDeckGenerating,
-    slideDeckInstructions, setSlideDeckInstructions,
-    slideResources, setSlideResources, slideResourceList, setSlideResourceList,
-    slideResourcesLoading, setSlideResourcesLoading,
-    slideCount, setSlideCount, slideImages, setSlideImages,
-    slideFormat, setSlideFormat,
     assessmentLoading, setAssessmentLoading,
     gradingAssessment, setGradingAssessment,
     savingAssessment, setSavingAssessment,
@@ -138,6 +124,35 @@ export default function PlannerTab(props) {
    * request/response bridge for the tutorial. fetchTeacherClasses,
    * addToast, and activeTab also remain App-shell props.
    */
+  /*
+   * Lesson-core display states — moved into PlannerTab in PR 6a of the
+   * Planner extraction sprint. Per plan #190 Task 6 (clean subset only;
+   * the 14 remaining states with App-level handler/modal couplings —
+   * lesson generation, save-lesson modal — defer to PR 6b).
+   */
+  const [expandedStandards, setExpandedStandards] = useState([]);
+  const [assignmentSectionsOpen, setAssignmentSectionsOpen] = useState(false);
+  const [previewShowAnswers, setPreviewShowAnswers] = useState(true);
+  // Study guide
+  const [studyGuide, setStudyGuide] = useState(null);
+  const [studyGuideGenerating, setStudyGuideGenerating] = useState(false);
+  const [studyGuideInstructions, setStudyGuideInstructions] = useState('');
+  // Flashcards
+  const [flashcards, setFlashcards] = useState(null);
+  const [flashcardsGenerating, setFlashcardsGenerating] = useState(false);
+  const [flashcardInstructions, setFlashcardInstructions] = useState('');
+  const [flashcardCount, setFlashcardCount] = useState(15);
+  // Slide deck
+  const [slideDeck, setSlideDeck] = useState(null);
+  const [slideDeckGenerating, setSlideDeckGenerating] = useState(false);
+  const [slideDeckInstructions, setSlideDeckInstructions] = useState('');
+  const [slideResources, setSlideResources] = useState([]);
+  const [slideResourceList, setSlideResourceList] = useState([]);
+  const [slideResourcesLoading, setSlideResourcesLoading] = useState(false);
+  const [slideCount, setSlideCount] = useState(10);
+  const [slideImages, setSlideImages] = useState(true);
+  const [slideFormat, setSlideFormat] = useState('detailed');
+
   /*
    * Question-editing slice — owned locally by PlannerTab (PR 5 of the
    * Planner extraction sprint). Per plan #190 Task 5.
