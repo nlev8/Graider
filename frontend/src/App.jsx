@@ -1549,7 +1549,7 @@ function App() {
   const [shareModalSharing, setShareModalSharing] = useState(false);
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
-  const [showPlatformExport, setShowPlatformExport] = useState(false);
+  // showPlatformExport moved into PlannerTab in PR 7b of the Planner extraction sprint.
 
   // Teacher Dashboard state (Student Portal)
   const [publishedAssessments, setPublishedAssessments] = useState([]);
@@ -7348,8 +7348,6 @@ ${signature}`;
                   setLoadingSavedAssessments={setLoadingSavedAssessments}
                   savedLessons={savedLessons}
                   setSavedLessons={setSavedLessons}
-                  showPlatformExport={showPlatformExport}
-                  setShowPlatformExport={setShowPlatformExport}
                   allTeacherTags={allTeacherTags}
                   setAllTeacherTags={setAllTeacherTags}
                   selectedTagFilter={selectedTagFilter}
