@@ -28,8 +28,6 @@ import StandardCard from "./components/StandardCard";
 import PasswordResetScreen from "./components/PasswordResetScreen";
 import ShareWithClassesModal from "./components/ShareWithClassesModal";
 import ImportEventsModal from "./components/ImportEventsModal";
-import PublishedAssessmentModal from "./components/PublishedAssessmentModal";
-import PublishContentModal from "./components/PublishContentModal";
 import CurveModal from "./components/CurveModal";
 import NewUnitModal from "./components/NewUnitModal";
 import HolidayModal from "./components/HolidayModal";
@@ -1538,10 +1536,9 @@ function App() {
   // Edit-state reset on [generatedAssessment] change moved into PlannerTab in
   // PR 5 alongside the moved states.
 
-  const [publishingAssessment, setPublishingAssessment] = useState(false);
+  // publishingAssessment moved into PlannerTab in PR 7c (publish cluster).
   const [teacherClasses, setTeacherClasses] = useState([]);
-  const [publishClassId, setPublishClassId] = useState('');
-  const [publishedAssessmentModal, setPublishedAssessmentModal] = useState({ show: false, joinCode: "", joinLink: "" });
+  // publishClassId + publishedAssessmentModal moved into PlannerTab in PR 7c.
   // Share-with-class modal state
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareModalContent, setShareModalContent] = useState(null); // { content, contentType, title }
@@ -1571,26 +1568,9 @@ function App() {
   const [savedAssessments, setSavedAssessments] = useState([]);
   const [loadingSavedAssessments, setLoadingSavedAssessments] = useState(false);
 
-  // Publish Modal state (enhanced with period, student selection)
-  const [showPublishModal, setShowPublishModal] = useState(false);
-  const [publishSettings, setPublishSettings] = useState({
-    period: '',
-    periodFilename: '',
-    isMakeup: false,
-    selectedStudents: [],
-    timeLimit: null,
-    applyAccommodations: true,
-    contentType: 'assessment',
-    assessmentCategory: 'formative',
-    showScoreImmediately: false,
-    showCorrectAnswers: false,
-    allowMultipleAttempts: false,
-    dueDate: '',
-    availableFrom: '',
-    availableUntil: '',
-  });
-  const [publishModalStudents, setPublishModalStudents] = useState([]);
-  const [loadingPublishStudents, setLoadingPublishStudents] = useState(false);
+  // Publish Modal state (showPublishModal + publishSettings +
+  // publishModalStudents + loadingPublishStudents) moved into PlannerTab
+  // in PR 7c of the Planner extraction sprint.
   const [savingAssessment, setSavingAssessment] = useState(false);
   const [saveAssessmentName, setSaveAssessmentName] = useState('');
 
@@ -3666,170 +3646,9 @@ ${signature}`;
     }
   };
 
-  // Open publish modal for assessment
-  const publishAssessmentHandler = () => {
-    var content = getActiveAssignment();
-    if (!content) {
-      addToast("No content to publish", "warning");
-      return;
-    }
-    // Detect content type from which state variable holds the content
-    // generatedAssignment → assignment, generatedAssessment → assessment
-    var detectedType = 'assessment';
-    if (generatedAssignment || (lessonPlan && lessonPlan.sections && !lessonPlan.days)) {
-      detectedType = 'assignment';
-    }
-    // Reset publish settings, pre-fill time limit from content
-    setPublishSettings({
-      period: '',
-      periodFilename: '',
-      isMakeup: false,
-      selectedStudents: [],
-      timeLimit: detectedType === 'assignment' ? null : (content.time_limit || null),
-      applyAccommodations: true,
-      contentType: detectedType,
-      assessmentCategory: 'formative',
-    });
-    setPublishModalStudents([]);
-    setPublishClassId('');
-    fetchTeacherClasses();
-    setShowPublishModal(true);
-  };
-
-  // Load students when period is selected in publish modal
-  const loadPublishModalStudents = async (periodFilename) => {
-    if (!periodFilename) {
-      setPublishModalStudents([]);
-      return;
-    }
-    setLoadingPublishStudents(true);
-    try {
-      const data = await api.getPeriodStudents(periodFilename);
-      if (data.students) {
-        setPublishModalStudents(data.students);
-      }
-    } catch (e) {
-      console.error("Failed to load period students:", e);
-      setPublishModalStudents([]);
-    } finally {
-      setLoadingPublishStudents(false);
-    }
-  };
-
-  const handleContentTypeChange = (type) => {
-    if (type === 'assessment') {
-      setPublishSettings(prev => ({
-        ...prev,
-        contentType: 'assessment',
-        showScoreImmediately: false,
-        showCorrectAnswers: false,
-        allowMultipleAttempts: false,
-        dueDate: '',
-      }));
-    } else {
-      setPublishSettings(prev => ({
-        ...prev,
-        contentType: 'assignment',
-        assessmentCategory: null,
-        showScoreImmediately: true,
-        showCorrectAnswers: true,
-        allowMultipleAttempts: true,
-        isMakeup: false,
-        selectedStudents: [],
-        availableFrom: '',
-        availableUntil: '',
-      }));
-    }
-  };
-
-  // Confirm and publish assessment with settings
-  const confirmPublishAssessment = async () => {
-    var contentToPublish = getActiveAssignment();
-    if (!contentToPublish) return;
-
-    setPublishingAssessment(true);
-    try {
-      // Build student accommodations map if applying accommodations
-      let studentAccommodationsMap = {};
-      if (publishSettings.applyAccommodations && publishModalStudents.length > 0) {
-        publishModalStudents.forEach(student => {
-          const studentId = student.id || student.email || (student.first + ' ' + student.last);
-          const accommodation = studentAccommodations[studentId];
-          if (accommodation) {
-            studentAccommodationsMap[student.first + ' ' + student.last] = accommodation;
-          }
-        });
-      }
-
-      // Build restricted students list for makeup exams
-      let restrictedStudents = null;
-      if (publishSettings.isMakeup && publishSettings.selectedStudents.length > 0) {
-        restrictedStudents = publishSettings.selectedStudents;
-      }
-
-      let data;
-      if (publishClassId) {
-        const contentType = publishSettings.contentType;
-        const settings = {
-          teacher_name: config.teacher_name || "Teacher",
-          teacher_email: config.teacher_email,
-          show_correct_answers: publishSettings.showCorrectAnswers,
-          show_score_immediately: publishSettings.showScoreImmediately,
-          content_type: publishSettings.contentType,
-          assessment_category: publishSettings.assessmentCategory,
-          allow_multiple_attempts: publishSettings.allowMultipleAttempts,
-          period: publishSettings.period,
-          restricted_students: restrictedStudents,
-          student_accommodations: studentAccommodationsMap,
-          time_limit_minutes: publishSettings.timeLimit,
-          due_date: publishSettings.dueDate || null,
-          available_from: publishSettings.availableFrom || null,
-          available_until: publishSettings.availableUntil || null,
-        };
-        data = await api.publishToClass(publishClassId, contentToPublish, contentType, contentToPublish.title || 'Untitled', settings, publishSettings.dueDate || null);
-      } else {
-        data = await api.publishAssessmentToPortal(contentToPublish, {
-          teacher_name: config.teacher_name || "Teacher",
-          teacher_email: config.teacher_email,
-          show_correct_answers: publishSettings.showCorrectAnswers,
-          show_score_immediately: publishSettings.showScoreImmediately,
-          content_type: publishSettings.contentType,
-          assessment_category: publishSettings.assessmentCategory,
-          allow_multiple_attempts: publishSettings.allowMultipleAttempts,
-          period: publishSettings.period,
-          restricted_students: restrictedStudents,
-          student_accommodations: studentAccommodationsMap,
-          time_limit_minutes: publishSettings.timeLimit,
-          due_date: publishSettings.dueDate || null,
-          available_from: publishSettings.availableFrom || null,
-          available_until: publishSettings.availableUntil || null,
-        });
-      }
-
-      if (data.error) {
-        addToast("Error publishing: " + data.error, "error");
-      } else if (data.success) {
-        setShowPublishModal(false);
-        var selectedClass = publishClassId ? teacherClasses.find(function(c) { return c.id === publishClassId; }) : null;
-        setPublishedAssessmentModal({
-          show: true,
-          joinCode: publishClassId ? (selectedClass ? selectedClass.join_code : "") : data.join_code,
-          joinLink: publishClassId ? (window.location.origin + "/student") : data.join_link,
-          isClassBased: !!publishClassId,
-          className: selectedClass ? selectedClass.name : "",
-        });
-        addToast("Published to student portal!", "success");
-        // Refresh published assessments list
-        fetchPublishedAssessments();
-        fetchSharedResources();
-        fetchTeacherTags();
-      }
-    } catch (e) {
-      addToast("Error publishing: " + e.message, "error");
-    } finally {
-      setPublishingAssessment(false);
-    }
-  };
+  // publishAssessmentHandler / loadPublishModalStudents /
+  // handleContentTypeChange / confirmPublishAssessment moved into
+  // PlannerTab in PR 7c (publish cluster).
 
   // Save assessment locally for later use (makeup exams)
   const saveAssessmentHandler = async () => {
@@ -7250,6 +7069,7 @@ ${signature}`;
                   user={user}
                   activeTab={activeTab}
                   addToast={addToast}
+                  studentAccommodations={studentAccommodations}
                   lessonPlan={lessonPlan}
                   setLessonPlan={setLessonPlan}
                   generatedAssignment={generatedAssignment}
@@ -7326,8 +7146,6 @@ ${signature}`;
                   setSelectedSources={setSelectedSources}
                   selectedAssessmentResults={selectedAssessmentResults}
                   setSelectedAssessmentResults={setSelectedAssessmentResults}
-                  publishingAssessment={publishingAssessment}
-                  setPublishingAssessment={setPublishingAssessment}
                   publishedAssessments={publishedAssessments}
                   setPublishedAssessments={setPublishedAssessments}
                   loadingPublished={loadingPublished}
@@ -7362,12 +7180,6 @@ ${signature}`;
                   setShareModalSharing={setShareModalSharing}
                   newUnitModal={newUnitModal}
                   setNewUnitModal={setNewUnitModal}
-                  publishedAssessmentModal={publishedAssessmentModal}
-                  setPublishedAssessmentModal={setPublishedAssessmentModal}
-                  showPublishModal={showPublishModal}
-                  setShowPublishModal={setShowPublishModal}
-                  loadingPublishStudents={loadingPublishStudents}
-                  setLoadingPublishStudents={setLoadingPublishStudents}
                   tagDropdownOpenFor={tagDropdownOpenFor}
                   setTagDropdownOpenFor={setTagDropdownOpenFor}
                   loadAssignment={loadAssignment}
@@ -7384,7 +7196,6 @@ ${signature}`;
                   saveAssessmentHandler={saveAssessmentHandler}
                   generateAssessmentHandler={generateAssessmentHandler}
                   gradeAssessmentAnswersHandler={gradeAssessmentAnswersHandler}
-                  publishAssessmentHandler={publishAssessmentHandler}
                   exportAssessmentHandler={exportAssessmentHandler}
                   exportAssessmentForPlatformHandler={exportAssessmentForPlatformHandler}
                   deletePublishedAssessment={deletePublishedAssessment}
@@ -7794,23 +7605,7 @@ ${signature}`;
       {/* Save Lesson Modal moved into PlannerTab in PR 6b of the Planner
           extraction sprint. */}
 
-      {/* Publish Settings Modal - Period, Makeup, Student Selection */}
-      <PublishContentModal
-        open={showPublishModal}
-        onClose={() => setShowPublishModal(false)}
-        settings={publishSettings}
-        setSettings={setPublishSettings}
-        classId={publishClassId}
-        setClassId={setPublishClassId}
-        teacherClasses={teacherClasses}
-        periods={periods}
-        onPeriodChange={loadPublishModalStudents}
-        modalStudents={publishModalStudents}
-        loadingStudents={loadingPublishStudents}
-        studentAccommodations={studentAccommodations}
-        publishing={publishingAssessment}
-        onPublish={confirmPublishAssessment}
-      />
+      {/* PublishContentModal moved into PlannerTab in PR 7c (publish cluster). */}
 
       {/* New Unit Name Modal */}
       <NewUnitModal
@@ -7861,15 +7656,7 @@ ${signature}`;
         onShare={executeShareWithClasses}
       />
 
-      {/* Published Assessment Modal - Shows join code and link */}
-      <PublishedAssessmentModal
-        open={publishedAssessmentModal.show}
-        onClose={() => setPublishedAssessmentModal({ show: false, joinCode: "", joinLink: "" })}
-        joinCode={publishedAssessmentModal.joinCode}
-        joinLink={publishedAssessmentModal.joinLink}
-        isClassBased={publishedAssessmentModal.isClassBased}
-        onCopied={() => addToast("Link copied to clipboard!", "success")}
-      />
+      {/* PublishedAssessmentModal moved into PlannerTab in PR 7c. */}
 
       {/* AttemptDrawer moved into PlannerTab in PR 7a of the Planner
           extraction sprint. */}
