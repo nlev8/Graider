@@ -7572,10 +7572,28 @@ ${signature}`;
               )}
 
               {/* Planner Tab */}
-              {/* Planner Tab — extracted into tabs/PlannerTab.jsx in PR 1 of
-                  the Planner tab extraction sprint (plan
-                  docs/superpowers/plans/2026-05-04-planner-tab-extraction.md). */}
-              {activeTab === "planner" && (
+              {/* Planner Tab — extracted into tabs/PlannerTab.jsx in PR 1
+                  of the Planner tab extraction sprint (plan
+                  docs/superpowers/plans/2026-05-04-planner-tab-extraction.md).
+                  PR 2 (this revision) converts to always-mounted with
+                  display:none style — same precedent as Assistant tab
+                  (App.jsx:7497-7508) and Grade tab (App.jsx:7074). Required
+                  before any state moves into PlannerTab in PR 3-7;
+                  conditional mount + local state would reset state on every
+                  tab switch.
+
+                  Note on plan scope: per the live-code audit run during
+                  PR 2, both `plannerMode` and `calendarData` (the original
+                  PR 2 state targets) have helper-closure couplings —
+                  `calendarData` is written from loadCalendar /
+                  scheduleLesson / unscheduleLesson / addHoliday /
+                  removeHoliday (App.jsx:2121-2169), and `plannerMode` is
+                  read by the calendar fetch effect at App.jsx:2114-2118
+                  that ALSO writes calendarData. Moving either state
+                  without its helper cluster leaves stale setter closures
+                  in App. Both move together with the full calendar slice
+                  in PR 3. */}
+              <div style={{ display: activeTab === "planner" ? "block" : "none" }}>
                 <PlannerTab
                   status={status}
                   setStatus={setStatus}
@@ -7871,7 +7889,7 @@ ${signature}`;
                   setActiveTab={setActiveTab}
                   setLoadedAssignmentName={setLoadedAssignmentName}
                 />
-              )}
+              </div>
             </div>
           </div>
         </div>
