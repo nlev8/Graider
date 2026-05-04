@@ -1538,8 +1538,12 @@ function App() {
   const [assessmentAnswers, setAssessmentAnswers] = useState({}); // Track interactive answers for preview
   const [assessmentGradingResults, setAssessmentGradingResults] = useState(null); // Results from AI grading
   const [gradingAssessment, setGradingAssessment] = useState(false);
-  // plannerMode + calendar slice (16 states + 2 effects + 11 helpers) moved
-  // into PlannerTab in PR 3 of the Planner extraction sprint.
+  // plannerMode stays in App.jsx so TutorialOverlay (rendered at App level)
+  // can drive Planner tutorial steps that switch between lesson/assessment/
+  // dashboard/calendar modes. The rest of the calendar slice (calendarData
+  // + 14 UI states + 11 helpers + 2 useEffects) moved into PlannerTab in
+  // PR 3 of the Planner extraction sprint.
+  const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson", "assessment", "dashboard", or "calendar"
 
   // Reset edit state when assessment changes
   useEffect(() => {
@@ -7451,8 +7455,11 @@ ${signature}`;
                   PR 2 converted to always-mounted with display:none style —
                   same precedent as Assistant tab (App.jsx:7497-7508) and
                   Grade tab (App.jsx:7074). PR 3 moved the calendar slice
-                  (plannerMode + calendarData + 14 calendar UI states + 11
-                  calendar helpers + 2 calendar useEffects) into PlannerTab. */}
+                  (calendarData + 14 calendar UI states + 11 calendar
+                  helpers + 2 calendar useEffects) into PlannerTab.
+                  `plannerMode` stays here so TutorialOverlay (rendered at
+                  the App level) can flip Planner sub-modes during tutorial
+                  steps without a request/response bridge. */}
               <div style={{ display: activeTab === "planner" ? "block" : "none" }}>
                 <PlannerTab
                   status={status}
@@ -7500,6 +7507,8 @@ ${signature}`;
                   setAssessmentTemplates={setAssessmentTemplates}
                   uploadingTemplate={uploadingTemplate}
                   setUploadingTemplate={setUploadingTemplate}
+                  plannerMode={plannerMode}
+                  setPlannerMode={setPlannerMode}
                   plannerLoading={plannerLoading}
                   setPlannerLoading={setPlannerLoading}
                   expandedStandards={expandedStandards}

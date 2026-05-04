@@ -184,4 +184,25 @@ describe('PlannerTab', () => {
     // PRs alongside state moves (Grade-tab Round 2 MAJOR pattern).
     render(<PlannerTab {...makeProps()} />);
   });
+
+  it('calendar-mode effect fires fetch /api/calendar when plannerMode=calendar', async () => {
+    // PR 3 Codex MINOR follow-up: Proxy fallback masked missing-prop bugs;
+    // add a focused test that exercises the moved calendar fetch effect.
+    const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({}) });
+    global.fetch = fetchMock;
+
+    const { rerender } = render(
+      <PlannerTab {...makeProps({ activeTab: 'planner', plannerMode: 'lesson' })} />,
+    );
+    // Lesson mode → no calendar fetch.
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/calendar');
+
+    rerender(
+      <PlannerTab {...makeProps({ activeTab: 'planner', plannerMode: 'calendar' })} />,
+    );
+
+    // Effect runs synchronously after rerender; fetch should have been called.
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledWith('/api/calendar');
+  });
 });

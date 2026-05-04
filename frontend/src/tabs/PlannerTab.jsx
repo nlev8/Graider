@@ -59,7 +59,7 @@ export default function PlannerTab(props) {
     uploadingTemplate, setUploadingTemplate,
     // ~91 Planner-only states (still in App until PR 2-7) — full list
     // discovered by build-fail iteration. Initial set:
-    plannerLoading, setPlannerLoading,
+    plannerMode, setPlannerMode, plannerLoading, setPlannerLoading,
     expandedStandards, setExpandedStandards,
     lessonVariations, setLessonVariations, brainstormIdeas, setBrainstormIdeas,
     selectedIdea, setSelectedIdea, brainstormLoading, setBrainstormLoading,
@@ -134,14 +134,16 @@ export default function PlannerTab(props) {
 
   /*
    * Calendar slice — owned locally by PlannerTab (PR 3 of the Planner
-   * extraction sprint). plannerMode + calendarData + 14 calendar UI states
-   * + 11 calendar helpers + 2 calendar useEffects all moved out of
-   * App.jsx in this PR. Per plan #190 Task 3.
+   * extraction sprint). calendarData + 14 calendar UI states + 11 calendar
+   * helpers + 2 calendar useEffects all moved out of App.jsx in this PR.
+   * Per plan #190 Task 3.
    *
-   * fetchTeacherClasses, addToast, and activeTab remain App-shell props
-   * (their owners stay in App).
+   * `plannerMode` stays in App because TutorialOverlay (rendered at App
+   * level, App.jsx:4982) drives tutorial steps that flip Planner sub-modes
+   * via setPlannerMode. We keep it App-level rather than building a
+   * request/response bridge for the tutorial. fetchTeacherClasses,
+   * addToast, and activeTab also remain App-shell props.
    */
-  const [plannerMode, setPlannerMode] = useState("lesson");
   const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} });
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [calendarView, setCalendarView] = useState("month");
