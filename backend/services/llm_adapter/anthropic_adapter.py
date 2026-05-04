@@ -363,8 +363,11 @@ class AnthropicAdapter:
                 if etype == "message_start":
                     try:
                         input_tokens = event.message.usage.input_tokens or 0
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # SDK-defensive: usage shape varies across anthropic
+                        # versions. Missing → 0 input tokens (cost slightly
+                        # under-counted; no impact on grading correctness).
+                        _logger.debug("Failed to extract Anthropic message_start input_tokens: %s", e)
 
                 elif etype == "content_block_start":
                     cb = event.content_block
@@ -437,12 +440,17 @@ class AnthropicAdapter:
                 elif etype == "message_delta":
                     try:
                         output_tokens = event.usage.output_tokens or 0
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # SDK-defensive: message_delta usage shape varies.
+                        # Missing → keep prior output_tokens.
+                        _logger.debug("Failed to extract Anthropic message_delta output_tokens: %s", e)
                     try:
                         finish_reason_raw = event.delta.stop_reason
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # SDK-defensive: stop_reason may not be set on every
+                        # delta. Keeps the prior finish_reason_raw; if never
+                        # set, normalize_finish_reason(None) returns "stop".
+                        _logger.debug("Failed to extract Anthropic message_delta stop_reason: %s", e)
 
                 # message_stop — FinishEvent emitted after loop
 
@@ -466,16 +474,36 @@ class AnthropicAdapter:
             if ctx_holder[0] is not None:
                 try:
                     ctx_holder[0].__exit__(type(e), e, e.__traceback__)
-                except Exception:
-                    pass
+                except Exception as exit_err:
+                    # Cleanup-time failures must not mask the original `e`
+                    # (we re-raise it below). Swallow but log so the cleanup
+                    # path is observable. Don't sentry-capture: the original
+                    # exception is the one ops needs to see.
+                    _logger.debug("Anthropic stream context cleanup raised on error path: %s", exit_err)
             raise
         else:
             # Clean finish — release the context manager.
             if ctx_holder[0] is not None:
                 try:
                     ctx_holder[0].__exit__(None, None, None)
-                except Exception:
-                    pass
+                except Exception as exit_err:
+                    # Cleanup-time failures on the success path: the response
+                    # was already streamed successfully, so don't propagate
+                    # the cleanup error to the caller. Unlike the error path
+                    # below, there is no primary exception to preserve, so a
+                    # silent swallow at debug-only would be invisible in
+                    # production (default INFO+). Escalate to warning + emit
+                    # a structured observability event so resource-leak
+                    # symptoms have a paper trail (per Codex review).
+                    _logger.warning("Anthropic stream context cleanup raised on success path: %s", exit_err)
+                    emit(
+                        "llm.stream.cleanup_failure",
+                        level="warning",
+                        provider=self._provider,
+                        model=request.model,
+                        path="success",
+                        error_kind=type(exit_err).__name__,
+                    )
 
         usage = Usage(
             prompt_tokens=input_tokens,
