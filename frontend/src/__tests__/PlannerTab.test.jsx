@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import PlannerTab from '../tabs/PlannerTab';
 
@@ -204,5 +204,16 @@ describe('PlannerTab', () => {
     // Effect runs synchronously after rerender; fetch should have been called.
     await Promise.resolve();
     expect(fetchMock).toHaveBeenCalledWith('/api/calendar');
+  });
+
+  it('Calendar mode button click invokes setPlannerMode("calendar")', () => {
+    // PR 3 Codex Round 2 MINOR follow-up: Proxy fallback would silently
+    // satisfy a missing setPlannerMode prop. Pass an explicit mock + assert
+    // on click — proves the prop wiring is real, not Proxy-shimmed.
+    const setPlannerMode = vi.fn();
+    render(<PlannerTab {...makeProps({ setPlannerMode })} />);
+    const calendarButton = screen.getByText('Calendar').closest('button');
+    fireEvent.click(calendarButton);
+    expect(setPlannerMode).toHaveBeenCalledWith('calendar');
   });
 });
