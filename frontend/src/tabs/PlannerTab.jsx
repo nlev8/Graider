@@ -85,7 +85,6 @@ export default function PlannerTab(props) {
     savedAssessments, setSavedAssessments,
     loadingSavedAssessments, setLoadingSavedAssessments,
     savedLessons, setSavedLessons,
-    showPlatformExport, setShowPlatformExport,
     allTeacherTags, setAllTeacherTags,
     selectedTagFilter, setSelectedTagFilter,
     showShareModal, setShowShareModal,
@@ -138,6 +137,10 @@ export default function PlannerTab(props) {
    * drawer cluster. Per plan #190 Task 7.
    */
   const [attemptDrawerStudent, setAttemptDrawerStudent] = useState(null);
+
+  // showPlatformExport — moved into PlannerTab in PR 7b. Only truly-clean
+  // state remaining in the assessment/publish cluster (zero App-level usage).
+  const [showPlatformExport, setShowPlatformExport] = useState(false);
 
   /*
    * Lesson-core display states — moved into PlannerTab in PR 6a of the
