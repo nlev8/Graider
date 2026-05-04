@@ -315,3 +315,86 @@ def test_anthropic_stream_error_mid_iteration_emits_breadcrumb_and_event(mock_cl
     assert errors[-1][1]["error_kind"] == "ConnectionError"
     assert errors[-1][1]["streaming"] is True
     assert len(breadcrumbs) >= 1
+
+
+@patch("backend.services.llm_adapter.anthropic_adapter.anthropic.Anthropic")
+def test_anthropic_stream_error_path_cleanup_failure_does_not_mask_original(mock_cls, monkeypatch):
+    """Regression for chore/anthropic-adapter-observability + Codex review:
+
+    When the stream raises mid-iteration AND the context manager's __exit__
+    also raises during cleanup, the cleanup error MUST NOT mask the original
+    exception. The original ConnectionError is what ops needs to see.
+    """
+    monkeypatch.setattr("backend.services.llm_adapter.anthropic_adapter.emit",
+                       lambda *a, **kw: None)
+    monkeypatch.setattr("backend.services.llm_adapter.anthropic_adapter.sentry_sdk.add_breadcrumb",
+                       lambda **kw: None)
+
+    mock_client = MagicMock()
+    mock_cls.return_value = mock_client
+
+    def failing_iter():
+        yield _message_start_event(input_tokens=10)
+        raise ConnectionError("primary failure ops needs to see")
+
+    stream_ctx = MagicMock()
+    stream_ctx.__enter__ = MagicMock(return_value=failing_iter())
+    # __exit__ ALSO raises during cleanup. The fix must swallow this so the
+    # original ConnectionError is what propagates.
+    stream_ctx.__exit__ = MagicMock(side_effect=RuntimeError("cleanup boom"))
+    mock_client.messages.stream.return_value = stream_ctx
+
+    adapter = AnthropicAdapter(api_key="test-key")
+    with pytest.raises(ConnectionError, match="primary failure"):
+        list(adapter.stream_chat(_simple_request()))
+
+
+@patch("backend.services.llm_adapter.anthropic_adapter.anthropic.Anthropic")
+def test_anthropic_stream_success_path_cleanup_failure_emits_event(mock_cls, monkeypatch):
+    """Regression for chore/anthropic-adapter-observability + Codex review:
+
+    When the stream finishes successfully but __exit__ raises during cleanup,
+    the function MUST swallow the cleanup error (caller already has a clean
+    Usage/Finish payload) AND emit an `llm.stream.cleanup_failure` observability
+    event so the resource-leak symptom has a paper trail. Pre-Codex-review
+    the cleanup was logged at debug only — invisible at INFO+ production.
+    """
+    captured_events = []
+    monkeypatch.setattr("backend.services.llm_adapter.anthropic_adapter.emit",
+                       lambda name, **kw: captured_events.append((name, kw)))
+    monkeypatch.setattr("backend.services.llm_adapter.anthropic_adapter.sentry_sdk.add_breadcrumb",
+                       lambda **kw: None)
+
+    mock_client = MagicMock()
+    mock_cls.return_value = mock_client
+
+    events = [
+        _message_start_event(input_tokens=10),
+        _content_block_start_text(0),
+        _text_delta_event("ok", 0),
+        _content_block_stop(0),
+        _message_delta_event("end_turn", input_tokens=10, output_tokens=2),
+        _message_stop_event(),
+    ]
+    stream_ctx = MagicMock()
+    stream_ctx.__enter__ = MagicMock(return_value=iter(events))
+    # Success path: stream finishes cleanly, but __exit__ raises during release.
+    stream_ctx.__exit__ = MagicMock(side_effect=RuntimeError("cleanup boom"))
+    mock_client.messages.stream.return_value = stream_ctx
+
+    adapter = AnthropicAdapter(api_key="test-key")
+    # Must NOT raise — the response was already streamed successfully.
+    result = list(adapter.stream_chat(_simple_request()))
+
+    # Caller still gets the streamed events (text + finish + usage).
+    assert any(isinstance(e, TextDelta) for e in result)
+    assert any(isinstance(e, FinishEvent) for e in result)
+    assert any(isinstance(e, UsageEvent) for e in result)
+
+    # The cleanup failure was emitted as an observability event.
+    cleanup_events = [e for e in captured_events if e[0] == "llm.stream.cleanup_failure"]
+    assert len(cleanup_events) == 1, (
+        f"Expected one llm.stream.cleanup_failure event, got: {captured_events!r}"
+    )
+    assert cleanup_events[0][1]["path"] == "success"
+    assert cleanup_events[0][1]["error_kind"] == "RuntimeError"
