@@ -80,9 +80,6 @@ export default function PlannerTab(props) {
     slideResourcesLoading, setSlideResourcesLoading,
     slideCount, setSlideCount, slideImages, setSlideImages,
     slideFormat, setSlideFormat,
-    editingQuestion, setEditingQuestion, selectedQuestions, setSelectedQuestions,
-    regeneratingQuestions, setRegeneratingQuestions, editMode, setEditMode,
-    sectionsDropdownOpen, setSectionsDropdownOpen,
     assessmentLoading, setAssessmentLoading,
     gradingAssessment, setGradingAssessment,
     savingAssessment, setSavingAssessment,
@@ -124,7 +121,8 @@ export default function PlannerTab(props) {
     loadAssignment, saveAssignmentConfig,
 
     // PR 1 Codex Round 1 additions (missing closures):
-    domainNameMap, getDomains, scrollToDomain, toggleStandard, standardsScrollRef, assessmentStandardsScrollRef, handleMatchStandards, deleteSelectedQuestions, selectAllQuestions, toggleQuestionSelect, saveEditedQuestion, regenerateOneQuestion, regenerateSelectedQuestions, deleteSavedAssessment, loadSavedAssessment, saveAssessmentHandler, generateAssessmentHandler, gradeAssessmentAnswersHandler, publishAssessmentHandler, exportAssessmentHandler, exportAssessmentForPlatformHandler, deletePublishedAssessment, toggleAssessmentStatus, fetchAssessmentResults, fetchPublishedAssessments, fetchSavedAssessments, fetchSavedLessons, fetchSharedResources, fetchTeacherClasses, fetchTeacherTags, handleDeleteAllSharedResources, handleDeleteSharedResource, getTotalQuestionCount, distributeDOK, distributePoints, distributeQuestions, redistributePoints, exportLessonPlanHandler, brainstormIdeasHandler, generateLessonPlan, handleDocUpload, removeUploadedDoc, shareWithClass, renderTagRow, itemMatchesTagFilter, setActiveTab, setLoadedAssignmentName,
+    getActiveAssignment, setActiveAssignment,
+    domainNameMap, getDomains, scrollToDomain, toggleStandard, standardsScrollRef, assessmentStandardsScrollRef, handleMatchStandards, deleteSavedAssessment, loadSavedAssessment, saveAssessmentHandler, generateAssessmentHandler, gradeAssessmentAnswersHandler, publishAssessmentHandler, exportAssessmentHandler, exportAssessmentForPlatformHandler, deletePublishedAssessment, toggleAssessmentStatus, fetchAssessmentResults, fetchPublishedAssessments, fetchSavedAssessments, fetchSavedLessons, fetchSharedResources, fetchTeacherClasses, fetchTeacherTags, handleDeleteAllSharedResources, handleDeleteSharedResource, getTotalQuestionCount, distributeDOK, distributePoints, distributeQuestions, redistributePoints, exportLessonPlanHandler, brainstormIdeasHandler, generateLessonPlan, handleDocUpload, removeUploadedDoc, shareWithClass, renderTagRow, itemMatchesTagFilter, setActiveTab, setLoadedAssignmentName,
 
   } = props;
 
@@ -140,6 +138,224 @@ export default function PlannerTab(props) {
    * request/response bridge for the tutorial. fetchTeacherClasses,
    * addToast, and activeTab also remain App-shell props.
    */
+  /*
+   * Question-editing slice — owned locally by PlannerTab (PR 5 of the
+   * Planner extraction sprint). Per plan #190 Task 5.
+   *
+   * The 6 helpers below (toggleQuestionSelect, selectAllQuestions,
+   * saveEditedQuestion, deleteSelectedQuestions, regenerateSelectedQuestions,
+   * regenerateOneQuestion) consume getActiveAssignment + setActiveAssignment
+   * via props — those wrappers stay in App because the publish flow at
+   * App.jsx:3681 + 3757 still calls them; they get extracted in PR 7.
+   *
+   * The reset useEffect below combines the two App-level reset effects
+   * (formerly App.jsx:1212-1218 and App.jsx:1544-1549) into one with a
+   * 3-element dep array — semantically equivalent because the body is
+   * idempotent and only acts when the underlying assignment ref changes.
+   */
+  const [editMode, setEditMode] = useState(false);
+  const [selectedQuestions, setSelectedQuestions] = useState(new Set());
+  const [editingQuestion, setEditingQuestion] = useState(null); // "sIdx-qIdx" key
+  const [regeneratingQuestions, setRegeneratingQuestions] = useState(new Set());
+  const [sectionsDropdownOpen, setSectionsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    setEditMode(false);
+    setSelectedQuestions(new Set());
+    setEditingQuestion(null);
+    setRegeneratingQuestions(new Set());
+  }, [lessonPlan, generatedAssignment, generatedAssessment]);
+
+  const toggleQuestionSelect = (qKey) => {
+    setSelectedQuestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(qKey)) next.delete(qKey);
+      else next.add(qKey);
+      return next;
+    });
+  };
+
+  const selectAllQuestions = () => {
+    const a = getActiveAssignment();
+    if (!a?.sections) return;
+    const keys = new Set();
+    a.sections.forEach((s, sIdx) => {
+      (s.questions || []).forEach((_, qIdx) => keys.add(sIdx + "-" + qIdx));
+    });
+    setSelectedQuestions(keys);
+  };
+
+  const saveEditedQuestion = (sIdx, qIdx, updatedQuestion) => {
+    const a = getActiveAssignment();
+    if (!a?.sections) return;
+    const copy = JSON.parse(JSON.stringify(a));
+    if (copy.sections[sIdx]?.questions?.[qIdx]) {
+      updatedQuestion.number = copy.sections[sIdx].questions[qIdx].number;
+      copy.sections[sIdx].questions[qIdx] = updatedQuestion;
+      copy.sections[sIdx].points = copy.sections[sIdx].questions.reduce(
+        (sum, q) => sum + (q.points || 0), 0
+      );
+      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+      setActiveAssignment(copy);
+    }
+    setEditingQuestion(null);
+    addToast("Question updated", "success");
+  };
+
+  const deleteSelectedQuestions = () => {
+    const a = getActiveAssignment();
+    if (!a?.sections || selectedQuestions.size === 0) return;
+    const copy = JSON.parse(JSON.stringify(a));
+    const deleteCount = selectedQuestions.size;
+
+    copy.sections.forEach((section, sIdx) => {
+      section.questions = (section.questions || []).filter(
+        (_, qIdx) => !selectedQuestions.has(sIdx + "-" + qIdx)
+      );
+      section.questions.forEach((q, i) => { q.number = i + 1; });
+      section.points = section.questions.reduce((sum, q) => sum + (q.points || 0), 0);
+    });
+
+    copy.sections = copy.sections.filter((s) => s.questions && s.questions.length > 0);
+    copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+
+    setActiveAssignment(copy);
+    setSelectedQuestions(new Set());
+    addToast(deleteCount + " question(s) removed", "success");
+  };
+
+  const regenerateSelectedQuestions = async () => {
+    const a = getActiveAssignment();
+    if (!a?.sections || selectedQuestions.size === 0) return;
+
+    const questionsToReplace = [];
+    const existingQuestions = [];
+
+    a.sections.forEach((section, sIdx) => {
+      (section.questions || []).forEach((q, qIdx) => {
+        const key = sIdx + "-" + qIdx;
+        if (selectedQuestions.has(key)) {
+          questionsToReplace.push({
+            section_index: sIdx,
+            question_index: qIdx,
+            question_type: q.question_type || q.type || "short_answer",
+            points: q.points || 1,
+            dok: q.dok || 1,
+            standard: q.standard || "",
+          });
+        } else {
+          existingQuestions.push(q.question || "");
+        }
+      });
+    });
+
+    setRegeneratingQuestions(new Set(selectedQuestions));
+
+    try {
+      const data = await api.regenerateQuestions(
+        questionsToReplace,
+        existingQuestions,
+        {
+          grade: config.grade_level || "",
+          subject: config.subject || "",
+          globalAINotes: config.globalAINotes || "",
+          requirements: unitConfig.requirements || "",
+        }
+      );
+
+      if (data.error) {
+        addToast("Regeneration error: " + data.error, "error");
+        return;
+      }
+
+      const copy = JSON.parse(JSON.stringify(a));
+      (data.replacements || []).forEach((r) => {
+        const section = copy.sections[r.section_index];
+        if (section?.questions?.[r.question_index]) {
+          r.question.number = section.questions[r.question_index].number;
+          section.questions[r.question_index] = r.question;
+        }
+      });
+
+      copy.sections.forEach((section) => {
+        section.points = section.questions.reduce((sum, q) => sum + (q.points || 0), 0);
+      });
+      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+
+      setActiveAssignment(copy);
+      setSelectedQuestions(new Set());
+
+      const costMsg = data.usage?.cost_display ? " (" + data.usage.cost_display + ")" : "";
+      addToast(data.replacements.length + " question(s) regenerated" + costMsg, "success");
+    } catch (e) {
+      addToast("Regeneration failed: " + e.message, "error");
+    } finally {
+      setRegeneratingQuestions(new Set());
+    }
+  };
+
+  const regenerateOneQuestion = async (sIdx, qIdx) => {
+    const a = getActiveAssignment();
+    if (!a?.sections) return;
+    const q = a.sections[sIdx]?.questions?.[qIdx];
+    if (!q) return;
+
+    const key = sIdx + "-" + qIdx;
+    setRegeneratingQuestions(new Set([key]));
+
+    const existingTexts = [];
+    a.sections.forEach((s) => {
+      (s.questions || []).forEach((ques) => existingTexts.push(ques.question || ""));
+    });
+
+    try {
+      const data = await api.regenerateQuestions(
+        [{
+          section_index: sIdx,
+          question_index: qIdx,
+          question_type: q.question_type || q.type || "short_answer",
+          points: q.points || 1,
+          dok: q.dok || 1,
+          standard: q.standard || "",
+        }],
+        existingTexts,
+        {
+          grade: config.grade_level || "",
+          subject: config.subject || "",
+          globalAINotes: config.globalAINotes || "",
+          requirements: unitConfig.requirements || "",
+        }
+      );
+
+      if (data.error) {
+        addToast("Regeneration error: " + data.error, "error");
+        return;
+      }
+
+      const copy = JSON.parse(JSON.stringify(a));
+      (data.replacements || []).forEach((r) => {
+        const section = copy.sections[r.section_index];
+        if (section?.questions?.[r.question_index]) {
+          r.question.number = section.questions[r.question_index].number;
+          section.questions[r.question_index] = r.question;
+        }
+      });
+      copy.sections.forEach((section) => {
+        section.points = section.questions.reduce((sum, ques) => sum + (ques.points || 0), 0);
+      });
+      copy.total_points = copy.sections.reduce((sum, s) => sum + (s.points || 0), 0);
+
+      setActiveAssignment(copy);
+      setEditingQuestion(null);
+      const costMsg = data.usage?.cost_display ? " (" + data.usage.cost_display + ")" : "";
+      addToast("Question regenerated" + costMsg, "success");
+    } catch (e) {
+      addToast("Regeneration failed: " + e.message, "error");
+    } finally {
+      setRegeneratingQuestions(new Set());
+    }
+  };
+
   /*
    * Reading-level (RL) tools slice — owned locally by PlannerTab (PR 4
    * of the Planner extraction sprint). Isolated tools-mode workflow with
