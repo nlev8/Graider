@@ -64,6 +64,7 @@ import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
 import { checkRequirementsMismatch } from "./utils/standardsMismatch";
 import BuilderTab from "./tabs/BuilderTab";
 import GradeTab from "./tabs/GradeTab";
+import PlannerTab from "./tabs/PlannerTab";
 import ResultsTab from "./tabs/ResultsTab";
 import SettingsTab from "./tabs/SettingsTab";
 const AnalyticsTab = React.lazy(() => import("./tabs/AnalyticsTab"));
