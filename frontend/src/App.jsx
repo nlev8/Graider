@@ -7457,6 +7457,8 @@ ${signature}`;
                   fetchTeacherTags={fetchTeacherTags}
                   handleDeleteAllSharedResources={handleDeleteAllSharedResources}
                   handleDeleteSharedResource={handleDeleteSharedResource}
+                  getActiveAssignment={getActiveAssignment}
+                  setActiveAssignment={setActiveAssignment}
                   getTotalQuestionCount={getTotalQuestionCount}
                   distributeDOK={distributeDOK}
                   distributePoints={distributePoints}

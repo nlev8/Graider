@@ -121,6 +121,7 @@ export default function PlannerTab(props) {
     loadAssignment, saveAssignmentConfig,
 
     // PR 1 Codex Round 1 additions (missing closures):
+    getActiveAssignment, setActiveAssignment,
     domainNameMap, getDomains, scrollToDomain, toggleStandard, standardsScrollRef, assessmentStandardsScrollRef, handleMatchStandards, deleteSavedAssessment, loadSavedAssessment, saveAssessmentHandler, generateAssessmentHandler, gradeAssessmentAnswersHandler, publishAssessmentHandler, exportAssessmentHandler, exportAssessmentForPlatformHandler, deletePublishedAssessment, toggleAssessmentStatus, fetchAssessmentResults, fetchPublishedAssessments, fetchSavedAssessments, fetchSavedLessons, fetchSharedResources, fetchTeacherClasses, fetchTeacherTags, handleDeleteAllSharedResources, handleDeleteSharedResource, getTotalQuestionCount, distributeDOK, distributePoints, distributeQuestions, redistributePoints, exportLessonPlanHandler, brainstormIdeasHandler, generateLessonPlan, handleDocUpload, removeUploadedDoc, shareWithClass, renderTagRow, itemMatchesTagFilter, setActiveTab, setLoadedAssignmentName,
 
   } = props;
