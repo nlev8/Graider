@@ -250,8 +250,11 @@ class GeminiAdapter:
                 for part in candidate.content.parts:
                     if hasattr(part, "text") and part.text:
                         content_parts.append(TextPart(text=part.text))
-            except Exception:
-                pass
+            except Exception as e:
+                # SDK-defensive: candidate/parts shape varies across genai
+                # versions. Missing parts → empty content_parts (caller
+                # treats as no text response).
+                _logger.debug("Failed to extract Gemini content parts: %s", e)
 
         # Usage metadata (may not be present on all Gemini responses)
         prompt_tokens = 0
@@ -260,8 +263,11 @@ class GeminiAdapter:
             if hasattr(raw, "usage_metadata") and raw.usage_metadata:
                 prompt_tokens = getattr(raw.usage_metadata, "prompt_token_count", 0) or 0
                 completion_tokens = getattr(raw.usage_metadata, "candidates_token_count", 0) or 0
-        except Exception:
-            pass
+        except Exception as e:
+            # SDK-defensive: usage_metadata schema varies. Missing → 0/0
+            # tokens (cost will be reported as $0 for this call; cumulative
+            # cost tracking will be slightly under-counted).
+            _logger.debug("Failed to extract Gemini usage_metadata: %s", e)
 
         usage = Usage(
             prompt_tokens=prompt_tokens,
@@ -277,8 +283,11 @@ class GeminiAdapter:
             candidate = raw.candidates[0]
             fr = candidate.finish_reason
             raw_finish_reason = fr.name if hasattr(fr, "name") else str(fr)
-        except Exception:
-            pass
+        except Exception as e:
+            # SDK-defensive: candidate/finish_reason may be missing. Falls
+            # through to normalize_finish_reason(None) which returns the
+            # canonical default.
+            _logger.debug("Failed to extract Gemini finish_reason: %s", e)
         # Map Gemini's integer enum values (1=STOP, 2=MAX_TOKENS) before normalize
         if raw_finish_reason == "1":
             raw_finish_reason = "stop"
@@ -470,8 +479,10 @@ class GeminiAdapter:
                         if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
                             prompt_tokens = getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0
                             completion_tokens = getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # SDK-defensive: streaming chunk usage_metadata schema
+                        # varies. Missing → keep prior token counts.
+                        _logger.debug("Failed to extract Gemini stream usage_metadata: %s", e)
 
                     # Finish reason — from candidate (may only be set on last chunk)
                     try:
@@ -480,8 +491,11 @@ class GeminiAdapter:
                         raw = fr.name if hasattr(fr, "name") else str(fr)
                         if raw and raw not in ("", "FINISH_REASON_UNSPECIFIED", "0"):
                             finish_reason_raw = raw
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # SDK-defensive: streaming chunk candidates may be
+                        # absent until the last chunk. Falls through to
+                        # whatever finish_reason_raw was set elsewhere.
+                        _logger.debug("Failed to extract Gemini stream finish_reason: %s", e)
 
             except Exception as e:
                 duration_ms = int((time.monotonic() - t0) * 1000)
@@ -638,8 +652,10 @@ class GeminiAdapter:
             try:
                 fr = candidate.finish_reason
                 finish_reason_raw = fr.name if hasattr(fr, "name") else str(fr)
-            except Exception:
-                pass
+            except Exception as e:
+                # SDK-defensive: image-gen finish_reason may be absent.
+                # Falls through to prompt_feedback.block_reason check below.
+                _logger.debug("Failed to extract Gemini image finish_reason: %s", e)
         if finish_reason_raw is None:
             try:
                 pf = getattr(raw, "prompt_feedback", None)
@@ -647,8 +663,10 @@ class GeminiAdapter:
                     br = getattr(pf, "block_reason", None)
                     if br is not None:
                         finish_reason_raw = br.name if hasattr(br, "name") else str(br)
-            except Exception:
-                pass
+            except Exception as e:
+                # SDK-defensive: prompt_feedback shape varies. Falls through
+                # to "unknown" finish_reason in the blocked-call emit below.
+                _logger.debug("Failed to extract Gemini image block_reason: %s", e)
 
         if not images:
             emit(
