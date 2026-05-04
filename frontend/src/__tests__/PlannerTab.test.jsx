@@ -140,7 +140,6 @@ const baseProps = () => ({
   shareModalContent: null,
   shareModalSelected: [],
   shareModalSharing: false,
-  attemptDrawerStudent: null,
   newUnitModal: false,
   newUnitName: '',
   savedUnits: [],

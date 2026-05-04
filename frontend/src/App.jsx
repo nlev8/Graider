@@ -32,7 +32,6 @@ import PublishedAssessmentModal from "./components/PublishedAssessmentModal";
 import PublishContentModal from "./components/PublishContentModal";
 import CurveModal from "./components/CurveModal";
 import NewUnitModal from "./components/NewUnitModal";
-import AttemptDrawer from "./components/AttemptDrawer";
 import HolidayModal from "./components/HolidayModal";
 import PlatformExportMenu from "./components/PlatformExportMenu";
 import ActivityLog from "./components/ActivityLog";
