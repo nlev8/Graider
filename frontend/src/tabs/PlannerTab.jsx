@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Icon from "../components/Icon";
 import StandardCard from "../components/StandardCard";
 import PublishedAssessmentModal from "../components/PublishedAssessmentModal";
@@ -59,7 +59,7 @@ export default function PlannerTab(props) {
     uploadingTemplate, setUploadingTemplate,
     // ~91 Planner-only states (still in App until PR 2-7) — full list
     // discovered by build-fail iteration. Initial set:
-    plannerMode, setPlannerMode, plannerLoading, setPlannerLoading,
+    plannerLoading, setPlannerLoading,
     expandedStandards, setExpandedStandards,
     lessonVariations, setLessonVariations, brainstormIdeas, setBrainstormIdeas,
     selectedIdea, setSelectedIdea, brainstormLoading, setBrainstormLoading,
@@ -87,14 +87,6 @@ export default function PlannerTab(props) {
     editingQuestion, setEditingQuestion, selectedQuestions, setSelectedQuestions,
     regeneratingQuestions, setRegeneratingQuestions, editMode, setEditMode,
     sectionsDropdownOpen, setSectionsDropdownOpen,
-    calendarData, setCalendarData, calendarView, setCalendarView,
-    calendarMonth, setCalendarMonth, selectedCalendarDate, setSelectedCalendarDate,
-    calendarDragId, setCalendarDragId,
-    showHolidayModal, setShowHolidayModal, holidayForm, setHolidayForm,
-    showImportModal, setShowImportModal, importParsing, setImportParsing,
-    importEvents, setImportEvents, importChecked, setImportChecked,
-    importSelectedDoc, setImportSelectedDoc, importImporting, setImportImporting,
-    editingEvent, setEditingEvent, quickAddForm, setQuickAddForm,
     assessmentLoading, setAssessmentLoading,
     gradingAssessment, setGradingAssessment,
     savingAssessment, setSavingAssessment,
@@ -136,9 +128,152 @@ export default function PlannerTab(props) {
     loadAssignment, saveAssignmentConfig,
 
     // PR 1 Codex Round 1 additions (missing closures):
-    addHoliday, removeHoliday, isHoliday, isSchoolDay, getCalendarDays, getStartOfWeek, getWeekDays, getLessonsForDate, loadCalendar, scheduleLesson, unscheduleLesson, domainNameMap, getDomains, scrollToDomain, toggleStandard, standardsScrollRef, assessmentStandardsScrollRef, handleMatchStandards, deleteSelectedQuestions, selectAllQuestions, toggleQuestionSelect, saveEditedQuestion, regenerateOneQuestion, regenerateSelectedQuestions, deleteSavedAssessment, loadSavedAssessment, saveAssessmentHandler, generateAssessmentHandler, gradeAssessmentAnswersHandler, publishAssessmentHandler, exportAssessmentHandler, exportAssessmentForPlatformHandler, deletePublishedAssessment, toggleAssessmentStatus, fetchAssessmentResults, fetchPublishedAssessments, fetchSavedAssessments, fetchSavedLessons, fetchSharedResources, fetchTeacherClasses, fetchTeacherTags, handleDeleteAllSharedResources, handleDeleteSharedResource, getTotalQuestionCount, distributeDOK, distributePoints, distributeQuestions, redistributePoints, exportLessonPlanHandler, brainstormIdeasHandler, generateLessonPlan, handleDocUpload, removeUploadedDoc, shareWithClass, renderTagRow, itemMatchesTagFilter, setActiveTab, setLoadedAssignmentName,
+    domainNameMap, getDomains, scrollToDomain, toggleStandard, standardsScrollRef, assessmentStandardsScrollRef, handleMatchStandards, deleteSelectedQuestions, selectAllQuestions, toggleQuestionSelect, saveEditedQuestion, regenerateOneQuestion, regenerateSelectedQuestions, deleteSavedAssessment, loadSavedAssessment, saveAssessmentHandler, generateAssessmentHandler, gradeAssessmentAnswersHandler, publishAssessmentHandler, exportAssessmentHandler, exportAssessmentForPlatformHandler, deletePublishedAssessment, toggleAssessmentStatus, fetchAssessmentResults, fetchPublishedAssessments, fetchSavedAssessments, fetchSavedLessons, fetchSharedResources, fetchTeacherClasses, fetchTeacherTags, handleDeleteAllSharedResources, handleDeleteSharedResource, getTotalQuestionCount, distributeDOK, distributePoints, distributeQuestions, redistributePoints, exportLessonPlanHandler, brainstormIdeasHandler, generateLessonPlan, handleDocUpload, removeUploadedDoc, shareWithClass, renderTagRow, itemMatchesTagFilter, setActiveTab, setLoadedAssignmentName,
 
   } = props;
+
+  /*
+   * Calendar slice — owned locally by PlannerTab (PR 3 of the Planner
+   * extraction sprint). plannerMode + calendarData + 14 calendar UI states
+   * + 11 calendar helpers + 2 calendar useEffects all moved out of
+   * App.jsx in this PR. Per plan #190 Task 3.
+   *
+   * fetchTeacherClasses, addToast, and activeTab remain App-shell props
+   * (their owners stay in App).
+   */
+  const [plannerMode, setPlannerMode] = useState("lesson");
+  const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} });
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [calendarView, setCalendarView] = useState("month");
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  const [showHolidayModal, setShowHolidayModal] = useState(false);
+  const [holidayForm, setHolidayForm] = useState({ date: "", name: "", end_date: "" });
+  const [calendarDragId, setCalendarDragId] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importParsing, setImportParsing] = useState(false);
+  const [importEvents, setImportEvents] = useState([]);
+  const [importChecked, setImportChecked] = useState({});
+  const [importSelectedDoc, setImportSelectedDoc] = useState("");
+  const [importImporting, setImportImporting] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [quickAddForm, setQuickAddForm] = useState({ title: "", unit: "", color: "#6366f1" });
+
+  // Calendar fetch effect — moved from App.jsx PR 3.
+  useEffect(() => {
+    if (activeTab === "planner" && plannerMode === "calendar") {
+      fetch("/api/calendar").then(r => r.json()).then(setCalendarData).catch(() => {});
+    }
+  }, [activeTab, plannerMode]);
+
+  // Dashboard mode triggers a teacher-classes fetch — moved from App.jsx PR 3.
+  useEffect(() => {
+    if (plannerMode === "dashboard") {
+      fetchTeacherClasses();
+    }
+  }, [plannerMode]);
+
+  // Calendar helpers — moved from App.jsx PR 3.
+  function loadCalendar() {
+    fetch("/api/calendar").then(r => r.json()).then(setCalendarData).catch(() => {});
+  }
+
+  async function scheduleLesson(entry) {
+    try {
+      const resp = await fetch("/api/calendar/schedule", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      const data = await resp.json();
+      if (data.status === "scheduled") loadCalendar();
+    } catch (e) {
+      if (addToast) addToast("Failed to schedule lesson", "error");
+    }
+  }
+
+  async function unscheduleLesson(entryId) {
+    try {
+      await fetch("/api/calendar/schedule/" + entryId, { method: "DELETE" });
+      loadCalendar();
+    } catch (e) {
+      if (addToast) addToast("Failed to remove lesson", "error");
+    }
+  }
+
+  async function addHoliday(holiday) {
+    try {
+      const resp = await fetch("/api/calendar/holiday", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(holiday),
+      });
+      const data = await resp.json();
+      if (data.status === "added") loadCalendar();
+    } catch (e) {
+      if (addToast) addToast("Failed to add holiday", "error");
+    }
+  }
+
+  async function removeHoliday(date) {
+    try {
+      await fetch("/api/calendar/holiday?date=" + date, { method: "DELETE" });
+      loadCalendar();
+    } catch (e) {
+      if (addToast) addToast("Failed to remove holiday", "error");
+    }
+  }
+
+  function getCalendarDays(month) {
+    const year = month.getFullYear();
+    const m = month.getMonth();
+    const firstDay = new Date(year, m, 1);
+    const lastDay = new Date(year, m + 1, 0);
+    const startDow = firstDay.getDay();
+    const totalDays = lastDay.getDate();
+
+    const days = [];
+    for (let i = 0; i < startDow; i++) days.push(null);
+    for (let d = 1; d <= totalDays; d++) {
+      const dateStr = year + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+      days.push({ day: d, date: dateStr, dow: new Date(year, m, d).getDay() });
+    }
+    return days;
+  }
+
+  function getWeekDays(startOfWeek) {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek);
+      d.setDate(d.getDate() + i);
+      const dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      days.push({ day: d.getDate(), date: dateStr, dow: d.getDay(), fullDate: d });
+    }
+    return days;
+  }
+
+  function getStartOfWeek(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    d.setDate(d.getDate() - day);
+    return d;
+  }
+
+  function isHoliday(dateStr) {
+    return (calendarData.holidays || []).find(h => {
+      if (h.date === dateStr) return true;
+      if (h.end_date && dateStr >= h.date && dateStr <= h.end_date) return true;
+      return false;
+    });
+  }
+
+  function getLessonsForDate(dateStr) {
+    return (calendarData.scheduled_lessons || []).filter(s => s.date === dateStr);
+  }
+
+  function isSchoolDay(dow) {
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    return calendarData.school_days ? calendarData.school_days[dayNames[dow]] : (dow >= 1 && dow <= 5);
+  }
 
   return (
                 <div data-tutorial="planner-card" className="fade-in">

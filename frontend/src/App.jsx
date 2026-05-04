@@ -1538,7 +1538,8 @@ function App() {
   const [assessmentAnswers, setAssessmentAnswers] = useState({}); // Track interactive answers for preview
   const [assessmentGradingResults, setAssessmentGradingResults] = useState(null); // Results from AI grading
   const [gradingAssessment, setGradingAssessment] = useState(false);
-  const [plannerMode, setPlannerMode] = useState("lesson"); // "lesson", "assessment", "dashboard", or "calendar"
+  // plannerMode + calendar slice (16 states + 2 effects + 11 helpers) moved
+  // into PlannerTab in PR 3 of the Planner extraction sprint.
 
   // Reset edit state when assessment changes
   useEffect(() => {
@@ -1548,22 +1549,6 @@ function App() {
     setRegeneratingQuestions(new Set());
   }, [generatedAssessment]);
 
-  // Calendar state
-  const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} })
-  const [calendarMonth, setCalendarMonth] = useState(new Date())
-  const [calendarView, setCalendarView] = useState('month')
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
-  const [showHolidayModal, setShowHolidayModal] = useState(false)
-  const [holidayForm, setHolidayForm] = useState({ date: '', name: '', end_date: '' })
-  const [calendarDragId, setCalendarDragId] = useState(null)
-  const [showImportModal, setShowImportModal] = useState(false)
-  const [importParsing, setImportParsing] = useState(false)
-  const [importEvents, setImportEvents] = useState([])
-  const [importChecked, setImportChecked] = useState({})
-  const [importSelectedDoc, setImportSelectedDoc] = useState('')
-  const [importImporting, setImportImporting] = useState(false)
-  const [editingEvent, setEditingEvent] = useState(null)
-  const [quickAddForm, setQuickAddForm] = useState({ title: '', unit: '', color: '#6366f1' })
   const [publishingAssessment, setPublishingAssessment] = useState(false);
   const [teacherClasses, setTeacherClasses] = useState([]);
   const [publishClassId, setPublishClassId] = useState('');
@@ -2098,129 +2083,18 @@ function App() {
     }
   }, [config.state, config.grade_level, config.subject, activeTab]);
 
-  useEffect(function() {
-    if (plannerMode === "dashboard") {
-      fetchTeacherClasses();
-    }
-  }, [plannerMode]);
+  // Planner-mode dashboard fetch + calendar fetch effect + calendar helpers
+  // (loadCalendar/scheduleLesson/unscheduleLesson/addHoliday/removeHoliday/
+  // isHoliday/getLessonsForDate/isSchoolDay/getCalendarDays/getWeekDays/
+  // getStartOfWeek) moved into PlannerTab in PR 3 of the Planner extraction
+  // sprint. The analytics-tab fetch below stays — it's keyed off activeTab,
+  // not plannerMode.
 
   useEffect(function() {
     if (activeTab === "analytics" && teacherClasses.length === 0) {
       fetchTeacherClasses();
     }
   }, [activeTab]);
-
-  // Load calendar data when calendar mode is active
-  useEffect(() => {
-    if (activeTab === 'planner' && plannerMode === 'calendar') {
-      fetch('/api/calendar').then(r => r.json()).then(setCalendarData).catch(() => {})
-    }
-  }, [activeTab, plannerMode])
-
-  // Calendar helper functions
-  function loadCalendar() {
-    fetch('/api/calendar').then(r => r.json()).then(setCalendarData).catch(() => {})
-  }
-
-  async function scheduleLesson(entry) {
-    try {
-      const resp = await fetch('/api/calendar/schedule', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
-      })
-      const data = await resp.json()
-      if (data.status === 'scheduled') loadCalendar()
-    } catch (e) {
-      if (addToast) addToast('Failed to schedule lesson', 'error')
-    }
-  }
-
-  async function unscheduleLesson(entryId) {
-    try {
-      await fetch('/api/calendar/schedule/' + entryId, { method: 'DELETE' })
-      loadCalendar()
-    } catch (e) {
-      if (addToast) addToast('Failed to remove lesson', 'error')
-    }
-  }
-
-  async function addHoliday(holiday) {
-    try {
-      const resp = await fetch('/api/calendar/holiday', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(holiday),
-      })
-      const data = await resp.json()
-      if (data.status === 'added') loadCalendar()
-    } catch (e) {
-      if (addToast) addToast('Failed to add holiday', 'error')
-    }
-  }
-
-  async function removeHoliday(date) {
-    try {
-      await fetch('/api/calendar/holiday?date=' + date, { method: 'DELETE' })
-      loadCalendar()
-    } catch (e) {
-      if (addToast) addToast('Failed to remove holiday', 'error')
-    }
-  }
-
-  // Calendar grid computation
-  function getCalendarDays(month) {
-    const year = month.getFullYear()
-    const m = month.getMonth()
-    const firstDay = new Date(year, m, 1)
-    const lastDay = new Date(year, m + 1, 0)
-    const startDow = firstDay.getDay() // 0=Sun
-    const totalDays = lastDay.getDate()
-
-    const days = []
-    // Fill leading blanks (start from Sunday)
-    for (let i = 0; i < startDow; i++) days.push(null)
-    for (let d = 1; d <= totalDays; d++) {
-      const dateStr = year + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0')
-      days.push({ day: d, date: dateStr, dow: new Date(year, m, d).getDay() })
-    }
-    return days
-  }
-
-  function getWeekDays(startOfWeek) {
-    const days = []
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(startOfWeek)
-      d.setDate(d.getDate() + i)
-      const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
-      days.push({ day: d.getDate(), date: dateStr, dow: d.getDay(), fullDate: d })
-    }
-    return days
-  }
-
-  function getStartOfWeek(date) {
-    const d = new Date(date)
-    const day = d.getDay()
-    d.setDate(d.getDate() - day)
-    return d
-  }
-
-  function isHoliday(dateStr) {
-    return (calendarData.holidays || []).find(h => {
-      if (h.date === dateStr) return true
-      if (h.end_date && dateStr >= h.date && dateStr <= h.end_date) return true
-      return false
-    })
-  }
-
-  function getLessonsForDate(dateStr) {
-    return (calendarData.scheduled_lessons || []).filter(s => s.date === dateStr)
-  }
-
-  function isSchoolDay(dow) {
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    return calendarData.school_days ? calendarData.school_days[dayNames[dow]] : (dow >= 1 && dow <= 5)
-  }
 
   // Load VPortal credentials on startup so buttons are enabled on Results tab
   useEffect(() => {
@@ -7571,28 +7445,14 @@ ${signature}`;
                 </Suspense>
               )}
 
-              {/* Planner Tab */}
               {/* Planner Tab — extracted into tabs/PlannerTab.jsx in PR 1
                   of the Planner tab extraction sprint (plan
                   docs/superpowers/plans/2026-05-04-planner-tab-extraction.md).
-                  PR 2 (this revision) converts to always-mounted with
-                  display:none style — same precedent as Assistant tab
-                  (App.jsx:7497-7508) and Grade tab (App.jsx:7074). Required
-                  before any state moves into PlannerTab in PR 3-7;
-                  conditional mount + local state would reset state on every
-                  tab switch.
-
-                  Note on plan scope: per the live-code audit run during
-                  PR 2, both `plannerMode` and `calendarData` (the original
-                  PR 2 state targets) have helper-closure couplings —
-                  `calendarData` is written from loadCalendar /
-                  scheduleLesson / unscheduleLesson / addHoliday /
-                  removeHoliday (App.jsx:2121-2169), and `plannerMode` is
-                  read by the calendar fetch effect at App.jsx:2114-2118
-                  that ALSO writes calendarData. Moving either state
-                  without its helper cluster leaves stale setter closures
-                  in App. Both move together with the full calendar slice
-                  in PR 3. */}
+                  PR 2 converted to always-mounted with display:none style —
+                  same precedent as Assistant tab (App.jsx:7497-7508) and
+                  Grade tab (App.jsx:7074). PR 3 moved the calendar slice
+                  (plannerMode + calendarData + 14 calendar UI states + 11
+                  calendar helpers + 2 calendar useEffects) into PlannerTab. */}
               <div style={{ display: activeTab === "planner" ? "block" : "none" }}>
                 <PlannerTab
                   status={status}
@@ -7640,8 +7500,6 @@ ${signature}`;
                   setAssessmentTemplates={setAssessmentTemplates}
                   uploadingTemplate={uploadingTemplate}
                   setUploadingTemplate={setUploadingTemplate}
-                  plannerMode={plannerMode}
-                  setPlannerMode={setPlannerMode}
                   plannerLoading={plannerLoading}
                   setPlannerLoading={setPlannerLoading}
                   expandedStandards={expandedStandards}
@@ -7726,36 +7584,6 @@ ${signature}`;
                   setEditMode={setEditMode}
                   sectionsDropdownOpen={sectionsDropdownOpen}
                   setSectionsDropdownOpen={setSectionsDropdownOpen}
-                  calendarData={calendarData}
-                  setCalendarData={setCalendarData}
-                  calendarView={calendarView}
-                  setCalendarView={setCalendarView}
-                  calendarMonth={calendarMonth}
-                  setCalendarMonth={setCalendarMonth}
-                  selectedCalendarDate={selectedCalendarDate}
-                  setSelectedCalendarDate={setSelectedCalendarDate}
-                  calendarDragId={calendarDragId}
-                  setCalendarDragId={setCalendarDragId}
-                  showHolidayModal={showHolidayModal}
-                  setShowHolidayModal={setShowHolidayModal}
-                  holidayForm={holidayForm}
-                  setHolidayForm={setHolidayForm}
-                  showImportModal={showImportModal}
-                  setShowImportModal={setShowImportModal}
-                  importParsing={importParsing}
-                  setImportParsing={setImportParsing}
-                  importEvents={importEvents}
-                  setImportEvents={setImportEvents}
-                  importChecked={importChecked}
-                  setImportChecked={setImportChecked}
-                  importSelectedDoc={importSelectedDoc}
-                  setImportSelectedDoc={setImportSelectedDoc}
-                  importImporting={importImporting}
-                  setImportImporting={setImportImporting}
-                  editingEvent={editingEvent}
-                  setEditingEvent={setEditingEvent}
-                  quickAddForm={quickAddForm}
-                  setQuickAddForm={setQuickAddForm}
                   assessmentLoading={assessmentLoading}
                   setAssessmentLoading={setAssessmentLoading}
                   gradingAssessment={gradingAssessment}
@@ -7830,17 +7658,6 @@ ${signature}`;
                   setTagDropdownOpenFor={setTagDropdownOpenFor}
                   loadAssignment={loadAssignment}
                   saveAssignmentConfig={saveAssignmentConfig}
-                  addHoliday={addHoliday}
-                  removeHoliday={removeHoliday}
-                  isHoliday={isHoliday}
-                  isSchoolDay={isSchoolDay}
-                  getCalendarDays={getCalendarDays}
-                  getStartOfWeek={getStartOfWeek}
-                  getWeekDays={getWeekDays}
-                  getLessonsForDate={getLessonsForDate}
-                  loadCalendar={loadCalendar}
-                  scheduleLesson={scheduleLesson}
-                  unscheduleLesson={unscheduleLesson}
                   domainNameMap={domainNameMap}
                   getDomains={getDomains}
                   scrollToDomain={scrollToDomain}
