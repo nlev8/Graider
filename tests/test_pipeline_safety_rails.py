@@ -262,3 +262,73 @@ def test_pipeline_global_refs_all_resolve():
     finally:
         if "backend" in sys.path:
             sys.path.remove("backend")
+
+
+def test_master_csv_load_failure_alerts_to_sentry():
+    """Contract test: if master_grades.csv load fails inside
+    _run_grading_thread_inner, sentry_sdk.capture_exception MUST be called
+    so the corrupted CSV / regrade-anomaly is visible.
+
+    Pre-PR (chore/grading-pipeline-observability) this was a silent
+    `except Exception: pass`. The fix lives in the master_grades.csv
+    block's except handler. Source-inspection guards against accidental
+    removal — driving the full grading pipeline end-to-end is too heavy
+    for a regression test, but the contract is small enough to pin
+    structurally.
+    """
+    import inspect
+    from backend.grading import pipeline
+
+    src = inspect.getsource(pipeline._run_grading_thread_inner)
+    csv_idx = src.find('master_grades.csv')
+    assert csv_idx > 0, "master_grades.csv block must exist in _run_grading_thread_inner"
+    # Look at the next ~1500 chars after the master_grades.csv mention —
+    # that's the block including its except handler.
+    csv_block = src[csv_idx:csv_idx + 1500]
+    assert 'sentry_sdk.capture_exception' in csv_block, (
+        "master_grades.csv load failure MUST call sentry_sdk.capture_exception. "
+        "Pre-PR it was a silent `except: pass`; if you removed the alert call, "
+        "either restore it or update this test."
+    )
+    assert '_logger.error' in csv_block, (
+        "master_grades.csv load failure MUST log at error level "
+        "(not just sentry — log streams need it for ops debugging)."
+    )
+
+
+def test_baseline_deviation_failure_alerts_to_sentry():
+    """Contract test: if detect_baseline_deviation fails inside
+    _run_grading_thread_inner, sentry_sdk.capture_exception MUST be called
+    so missed cheating-signal detection is visible.
+
+    detect_baseline_deviation flags anomalous grades (significant deviation,
+    sudden 20-point improvements, new skills, per-category jumps —
+    backend/student_history.py). Silent failure means anomalies go
+    unflagged in production.
+
+    Pre-PR (chore/grading-pipeline-observability) this was a silent
+    `except Exception: pass`. The fix lives in the detect_baseline_deviation
+    call site's except handler.
+    """
+    import inspect
+    from backend.grading import pipeline
+
+    src = inspect.getsource(pipeline._run_grading_thread_inner)
+    deviation_idx = src.find('detect_baseline_deviation')
+    assert deviation_idx > 0, "detect_baseline_deviation call must exist"
+    deviation_block = src[deviation_idx:deviation_idx + 1500]
+    assert 'sentry_sdk.capture_exception' in deviation_block, (
+        "detect_baseline_deviation failure MUST call sentry_sdk.capture_exception. "
+        "Pre-PR it was a silent `except: pass`; if you removed the alert call, "
+        "either restore it or update this test."
+    )
+    assert '_logger.error' in deviation_block, (
+        "detect_baseline_deviation failure MUST log at error level."
+    )
+    # PII guard: log line must NOT include raw student_id; must hash it
+    # (per Codex review of the original PR — student_id is sensitive in
+    # this repo's logging conventions).
+    assert 'sid_hash' in deviation_block or "hexdigest" in deviation_block, (
+        "detect_baseline_deviation log must hash student_id (sid_hash=...) "
+        "instead of using the raw value — student IDs are PII for log streams."
+    )

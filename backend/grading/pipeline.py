@@ -272,8 +272,10 @@ def _run_grading_thread_inner(
                 try:
                     with open(os.path.join(assignments_dir, f), 'r') as cf:
                         all_configs[config_name.lower()] = json.load(cf)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Best-effort: malformed/missing config file just means this
+                    # one entry isn't available for matching. Other configs work.
+                    _logger.debug("Failed to load assignment config %s: %s", f, e)
 
     def extract_content_fingerprints(config_data: dict[str, Any]) -> set[str]:
         """Extract unique phrases from assignment's imported document for content matching."""
@@ -592,8 +594,11 @@ def _run_grading_thread_inner(
                                 meta = json.load(mf)
                                 period_name = meta.get('period_name', period_name)
                                 class_level = meta.get('class_level', 'standard')
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            # Best-effort: malformed metadata falls back to
+                            # defaults (period name from filename, standard
+                            # class level). Less personalization, not broken.
+                            _logger.debug("Failed to load period metadata %s: %s", meta_path, e)
 
                     period_class_level_map[period_name] = class_level
 
@@ -661,8 +666,13 @@ def _run_grading_thread_inner(
                         if filename:
                             already_graded.add(filename)
                             already_graded.add(_canon_csv(filename))  # type: ignore[no-untyped-call]
-            except Exception:
-                pass
+            except Exception as e:
+                # Behavior-critical: if we can't read the master CSV, the
+                # already_graded set stays empty and previously-graded files
+                # may be regraded (cost + duplicate results). Sentry must see
+                # this so the corrupted CSV gets fixed.
+                _logger.error("Failed to load master_grades.csv for already_graded set: %s", e)
+                sentry_sdk.capture_exception(e)
 
         # Also check in-memory results (loaded from saved JSON)
         # Track which files are verified (have markers/config) for skip_verified option
@@ -809,8 +819,13 @@ def _run_grading_thread_inner(
                             file_text = temp_file_data.get("content", "")
                             if file_text:
                                 matched_config = find_matching_config(filepath.name, file_text)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Best-effort: content-based matching failed. The
+                        # surrounding flow will then use whatever fallback
+                        # config / no-config handling exists for this file
+                        # (which can include skipping grading if no config
+                        # or markers can be derived). Debug-level only.
+                        _logger.debug("Content-based config matching failed for %s: %s", filepath.name, e)
 
                 # Track if config matches the submitted file
                 config_mismatch = False
@@ -1145,8 +1160,13 @@ STANDARD CLASS GRADING EXPECTATIONS:
                                                 "breakdown": {}
                                             }
                                             break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            # Best-effort: prior-session lookup is for resubmission
+                            # context. If the master CSV is unreadable, the
+                            # primary-session error already alerted via the
+                            # already_graded loader above; skip the resubmission
+                            # comparison and proceed.
+                            _logger.debug("Resubmission CSV fallback failed for sid=%s: %s", sid, e)
 
                     if prev_r:
                         prev_score = prev_r.get("score", "?")
@@ -1299,8 +1319,20 @@ STANDARD CLASS GRADING EXPECTATIONS:
                 if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
                     try:
                         baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Behavior-critical: baseline deviation detection flags
+                        # anomalous grades (potential cheating signal). Silent
+                        # failure means anomalies go unflagged. The grading
+                        # itself proceeds with the "normal" default, but the
+                        # detector failure must be visible in Sentry so it
+                        # gets fixed instead of degrading silently.
+                        # Per Codex review: hash the student_id for log
+                        # correlation; raw IDs are PII for log streams (the
+                        # repo's Sentry scrubber treats them as sensitive).
+                        import hashlib
+                        sid_hash = hashlib.sha256(str(student_info['student_id']).encode()).hexdigest()[:12]
+                        _logger.error("detect_baseline_deviation failed for sid_hash=%s: %s", sid_hash, e)
+                        sentry_sdk.capture_exception(e)
 
                 # Save to student history
                 if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
