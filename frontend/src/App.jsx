@@ -26,7 +26,6 @@ import {
 import Icon from "./components/Icon";
 import StandardCard from "./components/StandardCard";
 import PasswordResetScreen from "./components/PasswordResetScreen";
-import ShareWithClassesModal from "./components/ShareWithClassesModal";
 import ImportEventsModal from "./components/ImportEventsModal";
 import CurveModal from "./components/CurveModal";
 import NewUnitModal from "./components/NewUnitModal";
@@ -1099,90 +1098,8 @@ function App() {
   // slideDeck + 8 slide* states moved into PlannerTab in PR 6a of the
   // Planner extraction sprint.
 
-  async function shareWithClass(content, contentType, title) {
-    var classes = teacherClasses;
-    if (!classes || classes.length === 0) {
-      try {
-        var data = await api.listClasses();
-        if (data.classes && data.classes.length > 0) {
-          classes = data.classes;
-          setTeacherClasses(classes);
-        }
-      } catch (e) { /* fall through to check below */ }
-    }
-    if (!classes || classes.length === 0) {
-      addToast('No classes found. Sync your roster first.', 'warning');
-      return;
-    }
-    // Single class: publish directly, no modal needed
-    if (classes.length === 1) {
-      try {
-        var resp = await fetch('/api/publish-to-class', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            class_id: classes[0].id,
-            content: content,
-            content_type: contentType,
-            title: title,
-            settings: { unit_name: unitConfig.title || '' },
-          }),
-        });
-        var result = await resp.json();
-        if (result.error) {
-          addToast(result.error, 'error');
-        } else {
-          addToast('Shared "' + title + '" with ' + classes[0].name, 'success');
-        }
-      } catch (err) {
-        addToast('Failed to share: ' + err.message, 'error');
-      }
-      return;
-    }
-    // Multiple classes: open modal
-    setShareModalContent({ content: content, contentType: contentType, title: title, unitName: unitConfig.title || '' });
-    setShareModalSelected([]);
-    setShowShareModal(true);
-  }
-
-  async function executeShareWithClasses() {
-    if (!shareModalContent || shareModalSelected.length === 0) return;
-    setShareModalSharing(true);
-    var successes = 0;
-    var failures = 0;
-    for (var i = 0; i < shareModalSelected.length; i++) {
-      try {
-        var resp = await fetch('/api/publish-to-class', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            class_id: shareModalSelected[i],
-            content: shareModalContent.content,
-            content_type: shareModalContent.contentType,
-            title: shareModalContent.title,
-            settings: { unit_name: shareModalContent.unitName || '' },
-          }),
-        });
-        var result = await resp.json();
-        if (result.error) {
-          failures++;
-        } else {
-          successes++;
-        }
-      } catch (err) {
-        failures++;
-      }
-    }
-    setShareModalSharing(false);
-    setShowShareModal(false);
-    if (failures === 0) {
-      addToast('Shared "' + shareModalContent.title + '" with ' + successes + ' class' + (successes === 1 ? '' : 'es'), 'success');
-    } else if (successes > 0) {
-      addToast('Shared with ' + successes + ' class' + (successes === 1 ? '' : 'es') + ', ' + failures + ' failed', 'warning');
-    } else {
-      addToast('Failed to share with any classes', 'error');
-    }
-  }
+  // shareWithClass + executeShareWithClasses moved into PlannerTab in
+  // PR 7d (share cluster) of the Planner extraction sprint.
 
   // Reading-level (RL) tools state moved into PlannerTab in PR 4 of the
   // Planner extraction sprint. Per plan #190 Task 4 — isolated tools-mode
@@ -1540,10 +1457,8 @@ function App() {
   const [teacherClasses, setTeacherClasses] = useState([]);
   // publishClassId + publishedAssessmentModal moved into PlannerTab in PR 7c.
   // Share-with-class modal state
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [shareModalContent, setShareModalContent] = useState(null); // { content, contentType, title }
-  const [shareModalSelected, setShareModalSelected] = useState([]); // array of class IDs
-  const [shareModalSharing, setShareModalSharing] = useState(false);
+  // showShareModal + shareModalContent + shareModalSelected + shareModalSharing
+  // moved into PlannerTab in PR 7d (share cluster).
   const [assessmentTemplates, setAssessmentTemplates] = useState([]);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   // showPlatformExport moved into PlannerTab in PR 7b of the Planner extraction sprint.
@@ -7170,14 +7085,6 @@ ${signature}`;
                   setAllTeacherTags={setAllTeacherTags}
                   selectedTagFilter={selectedTagFilter}
                   setSelectedTagFilter={setSelectedTagFilter}
-                  showShareModal={showShareModal}
-                  setShowShareModal={setShowShareModal}
-                  shareModalContent={shareModalContent}
-                  setShareModalContent={setShareModalContent}
-                  shareModalSelected={shareModalSelected}
-                  setShareModalSelected={setShareModalSelected}
-                  shareModalSharing={shareModalSharing}
-                  setShareModalSharing={setShareModalSharing}
                   newUnitModal={newUnitModal}
                   setNewUnitModal={setNewUnitModal}
                   tagDropdownOpenFor={tagDropdownOpenFor}
@@ -7221,7 +7128,6 @@ ${signature}`;
                   generateLessonPlan={generateLessonPlan}
                   handleDocUpload={handleDocUpload}
                   removeUploadedDoc={removeUploadedDoc}
-                  shareWithClass={shareWithClass}
                   renderTagRow={renderTagRow}
                   itemMatchesTagFilter={itemMatchesTagFilter}
                   setActiveTab={setActiveTab}
@@ -7643,18 +7549,7 @@ ${signature}`;
         }}
       />
 
-      {/* Share with Class Modal */}
-      <ShareWithClassesModal
-        open={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        content={shareModalContent}
-        setContent={setShareModalContent}
-        selectedIds={shareModalSelected}
-        setSelectedIds={setShareModalSelected}
-        sharing={shareModalSharing}
-        classes={teacherClasses}
-        onShare={executeShareWithClasses}
-      />
+      {/* ShareWithClassesModal moved into PlannerTab in PR 7d. */}
 
       {/* PublishedAssessmentModal moved into PlannerTab in PR 7c. */}
 
