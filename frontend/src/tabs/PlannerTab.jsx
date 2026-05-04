@@ -94,10 +94,6 @@ export default function PlannerTab(props) {
     shareModalSharing, setShareModalSharing,
     attemptDrawerStudent, setAttemptDrawerStudent,
     newUnitModal, setNewUnitModal,
-    newUnitName, setNewUnitName,
-    savedUnits, setSavedUnits,
-    showSaveLesson, setShowSaveLesson,
-    saveLessonUnit, setSaveLessonUnit,
     publishedAssessmentModal, setPublishedAssessmentModal,
     showPublishModal, setShowPublishModal,
     loadingPublishStudents, setLoadingPublishStudents,
@@ -125,10 +121,23 @@ export default function PlannerTab(props) {
    * addToast, and activeTab also remain App-shell props.
    */
   /*
+   * Save Lesson modal slice — moved into PlannerTab in PR 6b of the
+   * Planner extraction sprint. The 3 modal states + the modal block at
+   * the bottom of this file (rendered globally before — App.jsx:7853-
+   * 7956) all live here now. `savedUnits` is no longer a state — it's
+   * derived inline from `savedLessons.units` (which remains a truly-
+   * shared App-shell prop) since they were always isomorphic.
+   */
+  const [showSaveLesson, setShowSaveLesson] = useState(false);
+  const [saveLessonUnit, setSaveLessonUnit] = useState('');
+  const [newUnitName, setNewUnitName] = useState('');
+  const savedUnits = Object.keys((savedLessons && savedLessons.units) || {});
+
+  /*
    * Lesson-core display states — moved into PlannerTab in PR 6a of the
    * Planner extraction sprint. Per plan #190 Task 6 (clean subset only;
-   * the 14 remaining states with App-level handler/modal couplings —
-   * lesson generation, save-lesson modal — defer to PR 6b).
+   * the 10 lesson-gen-coupled states with App-level handler couplings
+   * defer to a future PR).
    */
   const [expandedStandards, setExpandedStandards] = useState([]);
   const [assignmentSectionsOpen, setAssignmentSectionsOpen] = useState(false);
@@ -6457,6 +6466,111 @@ export default function PlannerTab(props) {
                       </div>
                     </div>
                   )}
+
+      {/* Save Lesson Modal — moved from App.jsx:7853-7956 in PR 6b. */}
+      {showSaveLesson && lessonPlan && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setShowSaveLesson(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="glass-card"
+            style={{ padding: "30px", width: "400px", maxWidth: "90vw" }}
+          >
+            <h3 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <Icon name="FolderPlus" size={24} style={{ color: "var(--primary)" }} />
+              Save Lesson to Unit
+            </h3>
+
+            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "20px" }}>
+              Save this lesson to use it as a content source when generating assessments.
+            </p>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label className="label">Select Existing Unit</label>
+              <select
+                className="input"
+                value={saveLessonUnit}
+                onChange={(e) => {
+                  setSaveLessonUnit(e.target.value);
+                  if (e.target.value) setNewUnitName('');
+                }}
+                style={{ width: "100%" }}
+              >
+                <option value="">-- Select or create new --</option>
+                {savedUnits.map((unit) => (
+                  <option key={unit} value={unit}>{unit}</option>
+                ))}
+              </select>
+            </div>
+
+            {!saveLessonUnit && (
+              <div style={{ marginBottom: "20px" }}>
+                <label className="label">Or Create New Unit</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g., Unit 3 - Fractions"
+                  value={newUnitName}
+                  onChange={(e) => setNewUnitName(e.target.value)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  setShowSaveLesson(false);
+                  setSaveLessonUnit('');
+                  setNewUnitName('');
+                }}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const unitName = saveLessonUnit || newUnitName;
+                  if (!unitName) {
+                    addToast('Please select or enter a unit name', 'error');
+                    return;
+                  }
+                  try {
+                    const result = await api.saveLessonPlan(lessonPlan, unitName);
+                    if (result.error) {
+                      addToast('Error: ' + result.error, 'error');
+                    } else {
+                      setShowSaveLesson(false);
+                      setSaveLessonUnit('');
+                      setNewUnitName('');
+                      fetchSavedLessons();
+                      addToast('Lesson saved to "' + unitName + '" — find it in the Resources tab under Content Sources', 'success');
+                    }
+                  } catch (err) {
+                    addToast('Failed to save: ' + err.message, 'error');
+                  }
+                }}
+                className="btn btn-primary"
+                disabled={!saveLessonUnit && !newUnitName}
+              >
+                <Icon name="Save" size={16} />
+                Save Lesson
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
                 </div>
   );
