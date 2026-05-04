@@ -80,10 +80,6 @@ export default function PlannerTab(props) {
     slideResourcesLoading, setSlideResourcesLoading,
     slideCount, setSlideCount, slideImages, setSlideImages,
     slideFormat, setSlideFormat,
-    rlInput, setRlInput, rlTargetLevel, setRlTargetLevel,
-    rlPreserveTerms, setRlPreserveTerms, rlTermInput, setRlTermInput,
-    rlLoading, setRlLoading, rlResult, setRlResult,
-    rlExtracting, setRlExtracting, rlFiles, setRlFiles,
     editingQuestion, setEditingQuestion, selectedQuestions, setSelectedQuestions,
     regeneratingQuestions, setRegeneratingQuestions, editMode, setEditMode,
     sectionsDropdownOpen, setSectionsDropdownOpen,
@@ -144,6 +140,20 @@ export default function PlannerTab(props) {
    * request/response bridge for the tutorial. fetchTeacherClasses,
    * addToast, and activeTab also remain App-shell props.
    */
+  /*
+   * Reading-level (RL) tools slice — owned locally by PlannerTab (PR 4
+   * of the Planner extraction sprint). Isolated tools-mode workflow with
+   * no cross-cutting consumers. Per plan #190 Task 4.
+   */
+  const [rlInput, setRlInput] = useState('');
+  const [rlTargetLevel, setRlTargetLevel] = useState('6');
+  const [rlPreserveTerms, setRlPreserveTerms] = useState([]);
+  const [rlTermInput, setRlTermInput] = useState('');
+  const [rlLoading, setRlLoading] = useState(false);
+  const [rlResult, setRlResult] = useState(null);
+  const [rlExtracting, setRlExtracting] = useState(false);
+  const [rlFiles, setRlFiles] = useState([]);
+
   const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} });
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [calendarView, setCalendarView] = useState("month");

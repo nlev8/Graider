@@ -1197,14 +1197,9 @@ function App() {
     }
   }
 
-  const [rlInput, setRlInput] = useState('');
-  const [rlTargetLevel, setRlTargetLevel] = useState('6');
-  const [rlPreserveTerms, setRlPreserveTerms] = useState([]);
-  const [rlTermInput, setRlTermInput] = useState('');
-  const [rlLoading, setRlLoading] = useState(false);
-  const [rlResult, setRlResult] = useState(null);
-  const [rlExtracting, setRlExtracting] = useState(false);
-  const [rlFiles, setRlFiles] = useState([]);
+  // Reading-level (RL) tools state moved into PlannerTab in PR 4 of the
+  // Planner extraction sprint. Per plan #190 Task 4 — isolated tools-mode
+  // workflow with no cross-cutting consumers.
 
 
   // Question editing state
@@ -7567,22 +7562,6 @@ ${signature}`;
                   setSlideImages={setSlideImages}
                   slideFormat={slideFormat}
                   setSlideFormat={setSlideFormat}
-                  rlInput={rlInput}
-                  setRlInput={setRlInput}
-                  rlTargetLevel={rlTargetLevel}
-                  setRlTargetLevel={setRlTargetLevel}
-                  rlPreserveTerms={rlPreserveTerms}
-                  setRlPreserveTerms={setRlPreserveTerms}
-                  rlTermInput={rlTermInput}
-                  setRlTermInput={setRlTermInput}
-                  rlLoading={rlLoading}
-                  setRlLoading={setRlLoading}
-                  rlResult={rlResult}
-                  setRlResult={setRlResult}
-                  rlExtracting={rlExtracting}
-                  setRlExtracting={setRlExtracting}
-                  rlFiles={rlFiles}
-                  setRlFiles={setRlFiles}
                   editingQuestion={editingQuestion}
                   setEditingQuestion={setEditingQuestion}
                   selectedQuestions={selectedQuestions}
