@@ -92,7 +92,6 @@ export default function PlannerTab(props) {
     shareModalContent, setShareModalContent,
     shareModalSelected, setShareModalSelected,
     shareModalSharing, setShareModalSharing,
-    attemptDrawerStudent, setAttemptDrawerStudent,
     newUnitModal, setNewUnitModal,
     publishedAssessmentModal, setPublishedAssessmentModal,
     showPublishModal, setShowPublishModal,
@@ -132,6 +131,13 @@ export default function PlannerTab(props) {
   const [saveLessonUnit, setSaveLessonUnit] = useState('');
   const [newUnitName, setNewUnitName] = useState('');
   const savedUnits = Object.keys((savedLessons && savedLessons.units) || {});
+
+  /*
+   * AttemptDrawer slice — moved from App.jsx in PR 7a of the Planner
+   * extraction sprint. Smallest contained unit in the publish/share/
+   * drawer cluster. Per plan #190 Task 7.
+   */
+  const [attemptDrawerStudent, setAttemptDrawerStudent] = useState(null);
 
   /*
    * Lesson-core display states — moved into PlannerTab in PR 6a of the
@@ -6466,6 +6472,12 @@ export default function PlannerTab(props) {
                       </div>
                     </div>
                   )}
+
+      {/* AttemptDrawer — moved from App.jsx in PR 7a. */}
+      <AttemptDrawer
+        student={attemptDrawerStudent}
+        onClose={() => setAttemptDrawerStudent(null)}
+      />
 
       {/* Save Lesson Modal — moved from App.jsx:7853-7956 in PR 6b. */}
       {showSaveLesson && lessonPlan && (

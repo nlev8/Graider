@@ -32,7 +32,6 @@ import PublishedAssessmentModal from "./components/PublishedAssessmentModal";
 import PublishContentModal from "./components/PublishContentModal";
 import CurveModal from "./components/CurveModal";
 import NewUnitModal from "./components/NewUnitModal";
-import AttemptDrawer from "./components/AttemptDrawer";
 import HolidayModal from "./components/HolidayModal";
 import PlatformExportMenu from "./components/PlatformExportMenu";
 import ActivityLog from "./components/ActivityLog";
@@ -1558,7 +1557,8 @@ function App() {
   const [selectedAssessmentResults, setSelectedAssessmentResults] = useState(null);
   const [inProgressDrafts, setInProgressDrafts] = useState([]);
   const [loadingResults, setLoadingResults] = useState(false);
-  const [attemptDrawerStudent, setAttemptDrawerStudent] = useState(null);
+  // attemptDrawerStudent + the AttemptDrawer modal block moved into
+  // PlannerTab in PR 7a of the Planner extraction sprint.
   const [contentSubmissionsGroups, setContentSubmissionsGroups] = useState([]);
   const [sharedResources, setSharedResources] = useState([]);
   const [loadingSharedResources, setLoadingSharedResources] = useState(false);
@@ -7362,8 +7362,6 @@ ${signature}`;
                   setShareModalSelected={setShareModalSelected}
                   shareModalSharing={shareModalSharing}
                   setShareModalSharing={setShareModalSharing}
-                  attemptDrawerStudent={attemptDrawerStudent}
-                  setAttemptDrawerStudent={setAttemptDrawerStudent}
                   newUnitModal={newUnitModal}
                   setNewUnitModal={setNewUnitModal}
                   publishedAssessmentModal={publishedAssessmentModal}
@@ -7875,11 +7873,8 @@ ${signature}`;
         onCopied={() => addToast("Link copied to clipboard!", "success")}
       />
 
-      {/* Attempt History Drawer */}
-      <AttemptDrawer
-        student={attemptDrawerStudent}
-        onClose={() => setAttemptDrawerStudent(null)}
-      />
+      {/* AttemptDrawer moved into PlannerTab in PR 7a of the Planner
+          extraction sprint. */}
     </div>
   );
 }
