@@ -444,8 +444,10 @@ def _load_period_differentiation():
             class_level = meta.get("class_level", "standard")
             if period_name:
                 levels[period_name] = class_level
-    except Exception:
-        pass
+    except Exception as e:
+        # Best-effort: period metadata is optional context for class-level
+        # differentiation. Falls back to defaults.
+        logger.debug("Failed to load period class levels: %s", e)
     return levels
 
 
@@ -491,8 +493,9 @@ def _load_resource_names():
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         meta = json.load(f)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Best-effort: malformed metadata uses defaults below.
+                    logger.debug("Failed to load doc metadata %s: %s", meta_path, e)
             doc_type = meta.get("doc_type", "general")
             description = meta.get("description", "")
             entry = fname
@@ -500,8 +503,10 @@ def _load_resource_names():
                 entry += f" — {description}"
             entry += f" ({doc_type})"
             names.append(entry)
-    except Exception:
-        pass
+    except Exception as e:
+        # Best-effort: directory enumeration failed. Returns whatever names
+        # were collected before the failure.
+        logger.debug("Failed to enumerate support documents: %s", e)
     return names
 
 
@@ -536,8 +541,9 @@ def _load_resource_content():
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         meta = json.load(f)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Best-effort: malformed metadata uses defaults below.
+                    logger.debug("Failed to load doc metadata %s: %s", meta_path, e)
 
             doc_type = meta.get("doc_type", "general")
             description = meta.get("description", "")
@@ -587,8 +593,17 @@ def _load_rubric():
         if os.path.exists(RUBRIC_FILE):
             with open(RUBRIC_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-    except Exception:
-        pass
+    except Exception as e:
+        # User-visible behavior change: silent rubric load failure means the
+        # assistant loses the teacher's custom rubric block from the system
+        # prompt and falls back to default grading context. Sentry must see
+        # this so the corrupted config gets fixed instead of teachers
+        # wondering why grading behaves differently.
+        # Per Codex review: log basename only (this line ships at WARNING
+        # in production; absolute paths leak host/home-path details).
+        logger.warning("Failed to load rubric file (%s): %s",
+                       os.path.basename(RUBRIC_FILE), e)
+        sentry_sdk.capture_exception(e)
     return None
 
 
@@ -618,8 +633,9 @@ def _load_assessment_templates():
                 "sample_rows": structure.get("sample_rows", [])[1:],  # Skip header-description row
                 "question_types": sorted(question_types) if question_types else [],
             })
-    except Exception:
-        pass
+    except Exception as e:
+        # Best-effort: returns whatever templates were loaded successfully.
+        logger.debug("Failed to enumerate platform templates: %s", e)
     return templates
 
 
@@ -641,8 +657,10 @@ def _load_analytics_snapshot():
             with open(settings_file, 'r') as f:
                 gs = json.load(f)
             output_folder = gs.get('output_folder', output_folder)
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort: malformed settings file uses the existing
+            # output_folder value (caller-supplied or default).
+            logger.debug("Failed to load output_folder from settings file: %s", e)
 
     master_file = os.path.join(output_folder, "master_grades.csv")
     if not os.path.exists(master_file):
@@ -786,8 +804,10 @@ def _build_system_prompt():
             grading_period = config.get('grading_period', '')
             global_ai_notes = settings.get('globalAINotes', '')
             available_tools = config.get('availableTools', [])
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort: settings load failure leaves these vars at their
+            # caller-default values.
+            logger.debug("Failed to load assistant settings/config: %s", e)
 
     teacher_context = ""
     if teacher_name or subject or school_name:
@@ -1011,8 +1031,10 @@ CRITICAL: If behavior tools return errors about missing data, call debug_behavio
                 prompt += "\n\n## PERSISTENT MEMORY\nThese are facts you've saved from previous conversations with this teacher:\n"
                 prompt += "\n".join(facts)
                 prompt += "\nUse these to personalize your responses. Save new important facts with the save_memory tool."
-    except Exception:
-        pass
+    except Exception as e:
+        # Best-effort: persistent memory load failure means the assistant
+        # answers without saved facts. Functional, just less personalized.
+        logger.debug("Failed to inject persistent memory facts: %s", e)
 
     # Standards: only inject a compact index (codes + short benchmarks).
     # Full details (vocabulary, topics, learning targets) fetched on demand via get_standards tool.
@@ -1307,8 +1329,10 @@ def _finalize_assistant_stream(
                 total_tts_chars=total_tts_chars,
                 active_model=active_model,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort: telemetry emit failure must not block stream
+            # finalization. The user-facing flow is unaffected.
+            logger.debug("Failed to emit assistant.stream.finalized event: %s", e)
     finally:
         with _finalizing_lock:
             _finalizing_sessions.discard(session_id)
@@ -1594,8 +1618,10 @@ def assistant_chat():
                     with open(SETTINGS_FILE, 'r') as f:
                         settings = json.load(f)
                     voice_choice = settings.get("config", {}).get("assistant_voice") or settings.get("assistant_voice")
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Best-effort: settings load failure leaves voice_choice
+                    # at its prior value (caller-default or earlier fallback).
+                    logger.debug("Failed to load voice from settings: %s", e)
                 tts_stream = OpenAITTSStream(voice=voice_choice)
                 tts_stream.connect()
                 sentence_buffer = SentenceBuffer()
@@ -1861,8 +1887,10 @@ def assistant_chat():
                                     if os.path.exists(pending_path):
                                         with open(pending_path, 'r') as _pf:
                                             event_data['pending_payload'] = json.load(_pf)
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    # Best-effort: missing pending payload
+                                    # falls back to the event without it.
+                                    logger.debug("Failed to load pending payload: %s", e)
 
                         yield f"data: {json.dumps(event_data)}\n\n"
 
@@ -2125,8 +2153,10 @@ def load_portal_credentials(teacher_id='local-dev'):
             password = base64.b64decode(data.get('password', '')).decode()
             if email and password:
                 return email, password
-        except Exception:
-            pass
+        except Exception as e:
+            # Best-effort: malformed creds file falls through to (None, None);
+            # caller handles the missing-creds case explicitly.
+            logger.debug("Failed to load credentials from file: %s", e)
     return None, None
 
 
@@ -2158,8 +2188,10 @@ def get_voice_config():
         with open(SETTINGS_FILE, 'r') as f:
             settings = json.load(f)
         voice = settings.get("config", {}).get("assistant_voice") or settings.get("assistant_voice", voice)
-    except Exception:
-        pass
+    except Exception as e:
+        # Best-effort: settings load failure keeps `voice` at the
+        # caller-default value.
+        logger.debug("Failed to load voice from settings: %s", e)
     return jsonify({
         "enabled": bool(api_key),
         "voice": voice,
