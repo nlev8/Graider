@@ -82,7 +82,7 @@ const baseProps = () => ({
   assignmentQuestionCounts: {},
   previewShowAnswers: false,
   previewResults: null,
-  docUploading: false,
+  // docUploading moved into PlannerTab in PR 8b.
   // matchingInProgress + matchResults moved into PlannerTab in PR 8a.
   studyGuide: null,
   studyGuideGenerating: false,
