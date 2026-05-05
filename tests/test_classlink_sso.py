@@ -783,3 +783,165 @@ class TestClassLinkStateNonceHardening:
         # But the warning was audit-logged
         event_types = [c[0][0] for c in audit_calls]
         assert "CLASSLINK_OAUTH_LAUNCHPAD_STATE_MISMATCH" in event_types
+
+    # ─── Round-2 regressions (Codex high-effort gate review, 2026-05-05) ────
+    # Findings:
+    #   1. CRITICAL — atomic pop downgraded subsequent callbacks to LaunchPad
+    #      after a strict-mode rejection. Fix: peek (don't pop); clear only on
+    #      success.
+    #   2. MINOR — error/no_code paths returned before any cleanup. With the
+    #      new design, markers SHOULD persist across error paths so a retry
+    #      benefits from strict-mode validation. Test pins the contract.
+    #   3. MINOR — state mismatch logging emitted raw state values. Fix:
+    #      presence booleans only.
+    # Each finding has a regression below.
+
+    def test_self_initiated_rejection_does_not_downgrade_subsequent_callback(self):
+        """Finding #1 (CRITICAL): a callback with mismatched state must not
+        clear markers, so a subsequent callback in the same session cannot
+        fall through to the permissive LaunchPad path. Reproduces the original
+        CSRF-bypass vector Codex repro'd against the PR snapshot."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        # Attacker would supply a validly-signed id_token from any source.
+        id_token = make_id_token(priv, aud="test-client-id")
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "u1", "Email": "u@x.com", "Role": "teacher", "TenantId": "t1"
+        }
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "expected-state"
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+
+            # Step 1: callback with wrong state → strict-mode rejection.
+            first = client.get("/api/classlink/callback?code=abc&state=wrong-state")
+            assert "classlink_error=state_mismatch" in first.location
+
+            # Markers MUST still be in session — single-use enforced on
+            # success only, never on rejection.
+            with client.session_transaction() as sess:
+                assert sess.get("classlink_oauth_state") == "expected-state"
+                assert sess.get("classlink_oauth_initiated_by_us") is True
+                assert sess.get("classlink_oauth_nonce") == "expected-nonce"
+
+            # Step 2: attacker sends callback with no state → must reject in
+            # strict mode (not succeed via LaunchPad-permissive downgrade).
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._link_classlink_account'), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                second = client.get("/api/classlink/callback?code=real-code")
+        assert "classlink_error=state_mismatch" in second.location
+        assert "classlink_login=success" not in second.location
+
+    def test_error_path_preserves_markers_for_retry_in_strict_mode(self):
+        """Finding #2: error/no_code paths must NOT clear markers — the user
+        can retry the flow and still benefit from strict-mode validation. With
+        the new design, markers persist across all non-success exits."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(priv, aud="test-client-id", nonce="expected-nonce")
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "u1", "Email": "u@x.com", "Role": "teacher", "TenantId": "t1"
+        }
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "expected-state"
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+
+            # User cancels at IdP → callback receives error → redirect.
+            err = client.get("/api/classlink/callback?error=access_denied")
+            assert "classlink_error=access_denied" in err.location
+
+            # Markers persist for the retry.
+            with client.session_transaction() as sess:
+                assert sess.get("classlink_oauth_state") == "expected-state"
+                assert sess.get("classlink_oauth_initiated_by_us") is True
+                assert sess.get("classlink_oauth_nonce") == "expected-nonce"
+
+            # Retry with correct state + nonce → strict-mode validation works.
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._link_classlink_account'), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                retry = client.get("/api/classlink/callback?code=abc&state=expected-state")
+        assert "classlink_login=success" in retry.location
+
+    def test_self_initiated_student_success_clears_markers(self):
+        """Single-use enforcement: successful self-initiated student login
+        clears all OAuth markers so subsequent flows in the same browser
+        session start fresh. (Teacher path uses session.clear(); student path
+        needs the explicit pops added in the fix.)"""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(priv, aud="test-client-id", nonce="expected-nonce")
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "s1", "Email": "s@x.com", "Role": "student", "TenantId": "t1"
+        }
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "expected-state"
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)):
+                resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
+            assert "classlink_login=success" in resp.location
+            # Markers cleared on success.
+            with client.session_transaction() as sess:
+                assert "classlink_oauth_state" not in sess
+                assert "classlink_oauth_initiated_by_us" not in sess
+                assert "classlink_oauth_nonce" not in sess
+
+    def test_state_mismatch_logging_does_not_leak_secrets(self):
+        """Finding #3: state values are auth secrets and must not appear in
+        audit-log payloads (presence booleans only)."""
+        app = _make_app()
+        secret_expected = "secret-expected-state-value-do-not-leak"
+        secret_attacker = "attacker-supplied-state-value-do-not-leak"
+        audit_calls = []
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = secret_expected
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+            with patch('backend.routes.classlink_routes.audit_log',
+                       side_effect=lambda *args, **kwargs: audit_calls.append((args, kwargs))):
+                client.get(f"/api/classlink/callback?code=abc&state={secret_attacker}")
+        # Mismatch was audit-logged
+        event_types = [c[0][0] for c in audit_calls]
+        assert "CLASSLINK_OAUTH_STATE_MISMATCH" in event_types
+        # ...but neither state value appears anywhere in the payload.
+        for args, kwargs in audit_calls:
+            payload = " ".join(str(a) for a in args) + " " + " ".join(str(v) for v in kwargs.values())
+            assert secret_expected not in payload
+            assert secret_attacker not in payload

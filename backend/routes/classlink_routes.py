@@ -11,7 +11,6 @@ Endpoints:
 """
 
 import os
-import re
 import time
 import logging
 import secrets
@@ -33,14 +32,6 @@ from backend.services.classlink_oidc import (
 logger = logging.getLogger(__name__)
 
 classlink_bp = Blueprint('classlink', __name__)
-
-_NON_PRINTABLE_RE = re.compile(r'[^\x20-\x7e]')
-
-
-def _sanitize_for_audit(value: str, max_len: int = 32) -> str:
-    """Truncate and replace non-printable ASCII with '?' for audit-log details."""
-    return _NON_PRINTABLE_RE.sub('?', (value or '')[:max_len])
-
 
 # ClassLink OAuth2 endpoints
 CLASSLINK_AUTH_URL = 'https://launchpad.classlink.com/oauth2/v2/auth'
@@ -216,14 +207,18 @@ def classlink_callback():
     if not code:
         return redirect("/?classlink_error=no_code")
 
-    # Pop all OAuth-flow session markers up-front so:
-    #   1. They cannot be replayed by a later callback in the same session
-    #   2. The callback's flow-type decision is made with consistent values
-    #   3. A failed validation does not leave stale markers behind
+    # PEEK at OAuth-flow session markers without popping. Markers persist
+    # until successful validation completes (cleared at the end of this
+    # function). This prevents a rejected callback (wrong state, expired
+    # token, nonce mismatch) from popping the markers and downgrading the
+    # next callback in the same session to the permissive LaunchPad path —
+    # which would otherwise allow an attacker to bypass CSRF defense by
+    # triggering one rejected callback first. Markers are overwritten by a
+    # fresh /api/classlink/login-url call or expire with the session.
     state = request.args.get('state', '')
-    expected_state = session.pop('classlink_oauth_state', '')
-    expected_nonce = session.pop('classlink_oauth_nonce', '')
-    initiated_by_us = session.pop('classlink_oauth_initiated_by_us', False)
+    expected_state = session.get('classlink_oauth_state', '')
+    expected_nonce = session.get('classlink_oauth_nonce', '')
+    initiated_by_us = session.get('classlink_oauth_initiated_by_us', False)
 
     # Validate CSRF state (flow-aware)
     # Self-initiated flows (login-url was called) require strict state match.
@@ -233,21 +228,37 @@ def classlink_callback():
     if initiated_by_us:
         # Strict mode: state must be present and match exactly.
         if not state or state != expected_state:
-            audit_log("CLASSLINK_OAUTH_STATE_MISMATCH",
-                      f"ClassLink state mismatch on self-initiated flow: got '{_sanitize_for_audit(state)}', expected '{_sanitize_for_audit(expected_state)}'",
-                      user="anonymous", teacher_id="")
-            logger.warning("ClassLink OAuth state mismatch (self-initiated): got %s, expected %s",
-                           state, expected_state)
+            # Log presence booleans only — state/nonce values are auth secrets
+            # that should not be persisted in logs even on rejected requests.
+            audit_log(
+                "CLASSLINK_OAUTH_STATE_MISMATCH",
+                "ClassLink state mismatch on self-initiated flow: "
+                f"state_present={bool(state)} expected_present={bool(expected_state)}",
+                user="anonymous",
+                teacher_id="",
+            )
+            logger.warning(
+                "ClassLink OAuth state mismatch (self-initiated): "
+                "state_present=%s expected_present=%s",
+                bool(state),
+                bool(expected_state),
+            )
             return redirect("/?classlink_error=state_mismatch")
     else:
         # Permissive mode: LaunchPad-initiated — id_token signature is the auth proof.
         # Only emit a warning + audit-log if both sides have state but they differ
         # (session pollution or attacker probe). Do NOT reject: LaunchPad is permissive.
         if expected_state and state and state != expected_state:
-            logger.warning("ClassLink OAuth state mismatch: got %s, expected %s", state, expected_state)
+            logger.warning(
+                "ClassLink OAuth state mismatch (LaunchPad): "
+                "state_present=%s expected_present=%s",
+                bool(state),
+                bool(expected_state),
+            )
             audit_log(
                 "CLASSLINK_OAUTH_LAUNCHPAD_STATE_MISMATCH",
-                f"unexpected state on LaunchPad-initiated flow: got '{_sanitize_for_audit(state)}'",
+                "unexpected state on LaunchPad-initiated flow: "
+                f"state_present={bool(state)} expected_present={bool(expected_state)}",
                 user="anonymous",
                 teacher_id="",
             )
@@ -323,8 +334,8 @@ def classlink_callback():
         return redirect("/?classlink_error=oidc_invalid")
 
     # Nonce check (self-initiated flows only)
-    # Both initiated_by_us and expected_nonce were already popped from session
-    # at the top of this function; use the local variables.
+    # initiated_by_us and expected_nonce were peeked at the top of the
+    # function; markers remain in session and are cleared on success below.
     if initiated_by_us:
         token_nonce = id_claims.get('nonce', '')
         if not token_nonce or token_nonce != expected_nonce:
@@ -361,6 +372,11 @@ def classlink_callback():
 
     # Student login → redirect to student portal
     if role == 'student':
+        # Clear OAuth-flow markers (single-use enforcement on success).
+        # Teacher path uses session.clear() below; student path needs explicit pops.
+        session.pop('classlink_oauth_state', None)
+        session.pop('classlink_oauth_nonce', None)
+        session.pop('classlink_oauth_initiated_by_us', None)
         session['classlink_student'] = {
             'classlink_id': classlink_id,
             'name': f"{first_name} {last_name}",

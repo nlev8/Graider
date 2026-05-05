@@ -61,8 +61,12 @@ SIS_CAPTURES = [
     # 2026-05-04: shifted 102 -> 115 and 161 -> 174 by PR 2 follow-up commit
     # which added `import re`, _NON_PRINTABLE_RE, _sanitize_for_audit helper
     # (~10 lines), and the LaunchPad audit_log block (~5 lines).
-    ("backend/routes/classlink_routes.py", 115),
-    ("backend/routes/classlink_routes.py", 174),
+    # 2026-05-05 (PR 2 round-2 fix): shifted 115 -> 106 and 174 -> 165 by
+    # removing _sanitize_for_audit + _NON_PRINTABLE_RE + `import re` (Codex
+    # gate review found logging raw/truncated state values leaks auth secrets;
+    # presence-boolean logging replaces it). Pins track the except blocks.
+    ("backend/routes/classlink_routes.py", 106),
+    ("backend/routes/classlink_routes.py", 165),
     ("backend/routes/oneroster_routes.py", 157),
     ("backend/routes/oneroster_routes.py", 204),
     ("backend/routes/oneroster_routes.py", 218),
