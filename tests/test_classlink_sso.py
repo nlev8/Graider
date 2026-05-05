@@ -745,3 +745,41 @@ class TestClassLinkStateNonceHardening:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "nonce=" in data["url"]
+
+    def test_launchpad_initiated_with_unexpected_state_audit_logs(self):
+        """If session somehow has expected_state but no initiated_by_us marker
+        (session pollution / attacker probe), and the callback supplies a
+        different state, the warning is audit-logged but the flow proceeds
+        (LaunchPad permissive)."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(priv, aud="test-client-id")
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "u1", "Email": "u@x.com", "Role": "teacher", "TenantId": "t1"
+        }
+        audit_calls = []
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "stale-state"
+                # NO classlink_oauth_initiated_by_us marker → LaunchPad path
+            with patch('backend.routes.classlink_routes.audit_log',
+                       side_effect=lambda *args, **kwargs: audit_calls.append((args, kwargs))), \
+                 patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._link_classlink_account'), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                resp = client.get("/api/classlink/callback?code=abc&state=different-state")
+        # Flow proceeds (LaunchPad permissive)
+        assert "classlink_login=success" in resp.location
+        # But the warning was audit-logged
+        event_types = [c[0][0] for c in audit_calls]
+        assert "CLASSLINK_OAUTH_LAUNCHPAD_STATE_MISMATCH" in event_types

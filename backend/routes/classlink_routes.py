@@ -11,6 +11,7 @@ Endpoints:
 """
 
 import os
+import re
 import time
 import logging
 import secrets
@@ -32,6 +33,14 @@ from backend.services.classlink_oidc import (
 logger = logging.getLogger(__name__)
 
 classlink_bp = Blueprint('classlink', __name__)
+
+_NON_PRINTABLE_RE = re.compile(r'[^\x20-\x7e]')
+
+
+def _sanitize_for_audit(value: str, max_len: int = 32) -> str:
+    """Truncate and replace non-printable ASCII with '?' for audit-log details."""
+    return _NON_PRINTABLE_RE.sub('?', (value or '')[:max_len])
+
 
 # ClassLink OAuth2 endpoints
 CLASSLINK_AUTH_URL = 'https://launchpad.classlink.com/oauth2/v2/auth'
@@ -225,16 +234,23 @@ def classlink_callback():
         # Strict mode: state must be present and match exactly.
         if not state or state != expected_state:
             audit_log("CLASSLINK_OAUTH_STATE_MISMATCH",
-                      f"ClassLink state mismatch on self-initiated flow: got '{state[:32]}', expected '{expected_state[:32]}'",
+                      f"ClassLink state mismatch on self-initiated flow: got '{_sanitize_for_audit(state)}', expected '{_sanitize_for_audit(expected_state)}'",
                       user="anonymous", teacher_id="")
             logger.warning("ClassLink OAuth state mismatch (self-initiated): got %s, expected %s",
                            state, expected_state)
             return redirect("/?classlink_error=state_mismatch")
     else:
-        # Permissive mode: LaunchPad-initiated — only validate if both sides have state.
+        # Permissive mode: LaunchPad-initiated — id_token signature is the auth proof.
+        # Only emit a warning + audit-log if both sides have state but they differ
+        # (session pollution or attacker probe). Do NOT reject: LaunchPad is permissive.
         if expected_state and state and state != expected_state:
             logger.warning("ClassLink OAuth state mismatch: got %s, expected %s", state, expected_state)
-            return redirect("/?classlink_error=state_mismatch")
+            audit_log(
+                "CLASSLINK_OAUTH_LAUNCHPAD_STATE_MISMATCH",
+                f"unexpected state on LaunchPad-initiated flow: got '{_sanitize_for_audit(state)}'",
+                user="anonymous",
+                teacher_id="",
+            )
 
     client_id, client_secret, redirect_uri = _get_classlink_config()
 

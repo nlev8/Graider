@@ -58,8 +58,11 @@ SIS_CAPTURES = [
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
-    ("backend/routes/classlink_routes.py", 102),
-    ("backend/routes/classlink_routes.py", 161),
+    # 2026-05-04: shifted 102 -> 115 and 161 -> 174 by PR 2 follow-up commit
+    # which added `import re`, _NON_PRINTABLE_RE, _sanitize_for_audit helper
+    # (~10 lines), and the LaunchPad audit_log block (~5 lines).
+    ("backend/routes/classlink_routes.py", 115),
+    ("backend/routes/classlink_routes.py", 174),
     ("backend/routes/oneroster_routes.py", 157),
     ("backend/routes/oneroster_routes.py", 204),
     ("backend/routes/oneroster_routes.py", 218),
