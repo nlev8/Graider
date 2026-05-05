@@ -163,7 +163,7 @@ export default React.memo(function SettingsTab({
   var [ltiToolConfig, setLtiToolConfig] = useState(null);
   var [ltiNewPlatform, setLtiNewPlatform] = useState({
     name: '', issuer: '', client_id: '', auth_login_url: '',
-    auth_token_url: '', jwks_url: '', deployment_id: '',
+    auth_token_url: '', jwks_url: '', deployment_ids: '',
   });
   var [ltiSaving, setLtiSaving] = useState(false);
   var [ltiShowForm, setLtiShowForm] = useState(false);
@@ -2537,9 +2537,9 @@ export default React.memo(function SettingsTab({
                       style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.85rem" }}
                     />
                     <input
-                      type="text" placeholder="Deployment ID (optional)"
-                      value={ltiNewPlatform.deployment_id}
-                      onChange={function(e) { setLtiNewPlatform(function(prev) { return Object.assign({}, prev, { deployment_id: e.target.value }); }); }}
+                      type="text" placeholder="Deployment IDs (comma-separated, optional)"
+                      value={ltiNewPlatform.deployment_ids}
+                      onChange={function(e) { setLtiNewPlatform(function(prev) { return Object.assign({}, prev, { deployment_ids: e.target.value }); }); }}
                       style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "var(--input-bg)", color: "var(--text-primary)", fontSize: "0.85rem" }}
                     />
                   </div>
@@ -2551,11 +2551,14 @@ export default React.memo(function SettingsTab({
                       onClick={async function() {
                         setLtiSaving(true);
                         try {
-                          var result = await api.registerLTIPlatform(ltiNewPlatform);
+                          var payload = Object.assign({}, ltiNewPlatform, {
+                            deployment_ids: ltiNewPlatform.deployment_ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean),
+                          });
+                          var result = await api.registerLTIPlatform(payload);
                           if (result.status === 'ok') {
                             setLtiPlatforms(result.platforms || []);
                             setLtiToolConfig(result.tool_config || ltiToolConfig);
-                            setLtiNewPlatform({ name: '', issuer: '', client_id: '', auth_login_url: '', auth_token_url: '', jwks_url: '', deployment_id: '' });
+                            setLtiNewPlatform({ name: '', issuer: '', client_id: '', auth_login_url: '', auth_token_url: '', jwks_url: '', deployment_ids: '' });
                             setLtiShowForm(false);
                             addToast("Platform registered", "success");
                           } else {
@@ -2578,7 +2581,7 @@ export default React.memo(function SettingsTab({
                       type="button"
                       onClick={function() {
                         setLtiShowForm(false);
-                        setLtiNewPlatform({ name: '', issuer: '', client_id: '', auth_login_url: '', auth_token_url: '', jwks_url: '', deployment_id: '' });
+                        setLtiNewPlatform({ name: '', issuer: '', client_id: '', auth_login_url: '', auth_token_url: '', jwks_url: '', deployment_ids: '' });
                       }}
                       style={{
                         background: "none", border: "1px solid var(--glass-border)", borderRadius: "8px",
