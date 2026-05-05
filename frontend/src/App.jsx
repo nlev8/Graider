@@ -1082,7 +1082,7 @@ function App() {
 
   // Reference document upload state
   const [uploadedDocs, setUploadedDocs] = useState([]);
-  const [docUploading, setDocUploading] = useState(false);
+  // docUploading moved into PlannerTab in PR 8b (doc upload cluster).
   const [contentOnly, setContentOnly] = useState(false);
   // matchingInProgress + matchResults moved into PlannerTab in PR 8a
   // (matching cluster).
@@ -3351,30 +3351,7 @@ ${signature}`;
   };
 
   // Reference document upload handlers
-  const handleDocUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    setDocUploading(true);
-    try {
-      for (const file of files) {
-        const textResult = await api.extractTextFromFile(file);
-        if (textResult && textResult.text) {
-          setUploadedDocs(prev => [...prev, {
-            filename: file.name,
-            size: file.size,
-            text: textResult.text,
-          }]);
-        } else {
-          addToast("Could not extract text from " + file.name, "warning");
-        }
-      }
-    } catch (err) {
-      addToast("Upload error: " + err.message, "error");
-    } finally {
-      setDocUploading(false);
-      e.target.value = "";
-    }
-  };
+  // handleDocUpload moved into PlannerTab in PR 8b (doc upload cluster).
 
   // removeUploadedDoc + handleMatchStandards moved into PlannerTab in
   // PR 8a (matching cluster). removeUploadedDoc moved with the cluster
@@ -6826,8 +6803,6 @@ ${signature}`;
                   setAssignmentQuestionCounts={setAssignmentQuestionCounts}
                   previewResults={previewResults}
                   setPreviewResults={setPreviewResults}
-                  docUploading={docUploading}
-                  setDocUploading={setDocUploading}
                   assessmentLoading={assessmentLoading}
                   setAssessmentLoading={setAssessmentLoading}
                   gradingAssessment={gradingAssessment}
@@ -6904,7 +6879,6 @@ ${signature}`;
                   exportLessonPlanHandler={exportLessonPlanHandler}
                   brainstormIdeasHandler={brainstormIdeasHandler}
                   generateLessonPlan={generateLessonPlan}
-                  handleDocUpload={handleDocUpload}
                   itemMatchesTagFilter={itemMatchesTagFilter}
                   setActiveTab={setActiveTab}
                   setLoadedAssignmentName={setLoadedAssignmentName}

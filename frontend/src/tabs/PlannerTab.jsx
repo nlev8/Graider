@@ -64,7 +64,7 @@ export default function PlannerTab(props) {
     selectedIdea, setSelectedIdea, brainstormLoading, setBrainstormLoading,
     assignmentQuestionCounts, setAssignmentQuestionCounts,
     previewResults, setPreviewResults,
-    docUploading, setDocUploading,
+    // docUploading moved into PlannerTab in PR 8b.
     // matchingInProgress + matchResults moved into PlannerTab in PR 8a.
     assessmentLoading, setAssessmentLoading,
     gradingAssessment, setGradingAssessment,
@@ -94,7 +94,7 @@ export default function PlannerTab(props) {
     // PR 1 Codex Round 1 additions (missing closures):
     getActiveAssignment, setActiveAssignment,
     studentAccommodations,
-    domainNameMap, getDomains, scrollToDomain, toggleStandard, standardsScrollRef, assessmentStandardsScrollRef, deleteSavedAssessment, loadSavedAssessment, saveAssessmentHandler, generateAssessmentHandler, gradeAssessmentAnswersHandler, exportAssessmentHandler, exportAssessmentForPlatformHandler, deletePublishedAssessment, toggleAssessmentStatus, fetchAssessmentResults, fetchPublishedAssessments, fetchSavedAssessments, fetchSavedLessons, fetchSharedResources, fetchTeacherClasses, fetchTeacherTags, handleDeleteAllSharedResources, handleDeleteSharedResource, getTotalQuestionCount, distributeDOK, distributePoints, distributeQuestions, redistributePoints, exportLessonPlanHandler, brainstormIdeasHandler, generateLessonPlan, handleDocUpload, itemMatchesTagFilter, setActiveTab, setLoadedAssignmentName,
+    domainNameMap, getDomains, scrollToDomain, toggleStandard, standardsScrollRef, assessmentStandardsScrollRef, deleteSavedAssessment, loadSavedAssessment, saveAssessmentHandler, generateAssessmentHandler, gradeAssessmentAnswersHandler, exportAssessmentHandler, exportAssessmentForPlatformHandler, deletePublishedAssessment, toggleAssessmentStatus, fetchAssessmentResults, fetchPublishedAssessments, fetchSavedAssessments, fetchSavedLessons, fetchSharedResources, fetchTeacherClasses, fetchTeacherTags, handleDeleteAllSharedResources, handleDeleteSharedResource, getTotalQuestionCount, distributeDOK, distributePoints, distributeQuestions, redistributePoints, exportLessonPlanHandler, brainstormIdeasHandler, generateLessonPlan, itemMatchesTagFilter, setActiveTab, setLoadedAssignmentName,
 
   } = props;
 
@@ -903,6 +903,38 @@ export default function PlannerTab(props) {
   const removeUploadedDoc = (index) => {
     setUploadedDocs(prev => prev.filter((_, i) => i !== index));
     setMatchResults(null);
+  };
+
+  /*
+   * Doc upload cluster — moved from App.jsx in PR 8b of the Planner
+   * extraction sprint. 1 useState + 1 handler. uploadedDocs +
+   * setUploadedDocs + addToast + api remain App-shell props/imports.
+   */
+  const [docUploading, setDocUploading] = useState(false);
+
+  const handleDocUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setDocUploading(true);
+    try {
+      for (const file of files) {
+        const textResult = await api.extractTextFromFile(file);
+        if (textResult && textResult.text) {
+          setUploadedDocs(prev => [...prev, {
+            filename: file.name,
+            size: file.size,
+            text: textResult.text,
+          }]);
+        } else {
+          addToast("Could not extract text from " + file.name, "warning");
+        }
+      }
+    } catch (err) {
+      addToast("Upload error: " + err.message, "error");
+    } finally {
+      setDocUploading(false);
+      e.target.value = "";
+    }
   };
 
   const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} });
