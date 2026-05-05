@@ -1078,7 +1078,7 @@ function App() {
     extended_writing: 1, vocabulary: 0, true_false: 0, florida_fast: 0,
   });
   // previewShowAnswers moved into PlannerTab in PR 6a.
-  const [previewResults, setPreviewResults] = useState(null);
+  // previewResults moved into PlannerTab in PR 8c (preview cluster).
 
   // Reference document upload state
   const [uploadedDocs, setUploadedDocs] = useState([]);
@@ -1116,12 +1116,8 @@ function App() {
   // App.jsx:3681 + 3757 still calls them; they get passed as props to
   // PlannerTab and the moved helpers consume them via closure.
 
-  // Reset preview results when assignment changes. The edit-state reset
-  // (editMode/selectedQuestions/editingQuestion/regeneratingQuestions) moved
-  // into PlannerTab in PR 5 alongside the states themselves.
-  useEffect(() => {
-    setPreviewResults(null);
-  }, [lessonPlan, generatedAssignment]);
+  // Preview-results reset useEffect moved into PlannerTab in PR 8c
+  // (preview cluster) alongside the previewResults state itself.
 
   // Saved lessons for assessment generation
   const [savedLessons, setSavedLessons] = useState({ units: {}, lessons: [] });
@@ -6801,8 +6797,6 @@ ${signature}`;
                   setBrainstormLoading={setBrainstormLoading}
                   assignmentQuestionCounts={assignmentQuestionCounts}
                   setAssignmentQuestionCounts={setAssignmentQuestionCounts}
-                  previewResults={previewResults}
-                  setPreviewResults={setPreviewResults}
                   assessmentLoading={assessmentLoading}
                   setAssessmentLoading={setAssessmentLoading}
                   gradingAssessment={gradingAssessment}

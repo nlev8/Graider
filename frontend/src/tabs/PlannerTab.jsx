@@ -63,7 +63,7 @@ export default function PlannerTab(props) {
     lessonVariations, setLessonVariations, brainstormIdeas, setBrainstormIdeas,
     selectedIdea, setSelectedIdea, brainstormLoading, setBrainstormLoading,
     assignmentQuestionCounts, setAssignmentQuestionCounts,
-    previewResults, setPreviewResults,
+    // previewResults moved into PlannerTab in PR 8c.
     // docUploading moved into PlannerTab in PR 8b.
     // matchingInProgress + matchResults moved into PlannerTab in PR 8a.
     assessmentLoading, setAssessmentLoading,
@@ -904,6 +904,19 @@ export default function PlannerTab(props) {
     setUploadedDocs(prev => prev.filter((_, i) => i !== index));
     setMatchResults(null);
   };
+
+  /*
+   * Preview cluster — moved from App.jsx in PR 8c of the Planner
+   * extraction sprint. 1 useState + 1 reset useEffect. The effect
+   * fires on lessonPlan or generatedAssignment ref change, clearing
+   * stale preview results. lessonPlan + generatedAssignment remain
+   * App-shell props.
+   */
+  const [previewResults, setPreviewResults] = useState(null);
+
+  useEffect(() => {
+    setPreviewResults(null);
+  }, [lessonPlan, generatedAssignment]);
 
   /*
    * Doc upload cluster — moved from App.jsx in PR 8b of the Planner
