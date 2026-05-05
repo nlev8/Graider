@@ -515,3 +515,89 @@ class TestClassLinkIdTokenValidation:
 
         assert resp.status_code == 302
         assert "classlink_error=oidc_claim_mismatch" in resp.headers["Location"]
+
+    # ── test 6: issuer mismatch → oidc_claim_mismatch ────────────────────────
+
+    def test_callback_rejects_issuer_mismatch(self):
+        """id_token with wrong issuer claim is rejected."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(
+            priv,
+            iss="https://attacker.example.com",  # wrong issuer
+            aud="test-client-id",
+        )
+        with app.test_client() as client:
+            with patch('backend.routes.classlink_routes.requests.post',
+                       return_value=self._make_token_response(id_token)), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)):
+                resp = client.get('/api/classlink/callback?code=abc')
+        assert resp.status_code == 302
+        assert "classlink_error=oidc_claim_mismatch" in resp.headers["Location"]
+
+    # ── test 7: alg=none unsigned token → oidc_invalid ───────────────────────
+
+    def test_callback_rejects_alg_none_token(self):
+        """Unsigned token with alg=none is rejected (algorithms pinned to RS256)."""
+        import jwt as pyjwt
+        # Build an unsigned token (alg=none) with otherwise-valid claims
+        claims = {
+            "iss": "https://launchpad.classlink.com",
+            "aud": "test-client-id",
+            "sub": "evil-user",
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()),
+            "nbf": int(time.time()),
+        }
+        unsigned_token = pyjwt.encode(claims, key="", algorithm="none")
+
+        app = _make_app()
+        _, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            with patch('backend.routes.classlink_routes.requests.post',
+                       return_value=self._make_token_response(unsigned_token)), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)):
+                resp = client.get('/api/classlink/callback?code=abc')
+        assert resp.status_code == 302
+        assert "classlink_error=oidc_invalid" in resp.headers["Location"]
+
+    # ── test 8: missing kid in token header → oidc_invalid ───────────────────
+
+    def test_callback_rejects_token_missing_kid(self):
+        """id_token without kid in header → JWKS lookup fails → oidc_invalid."""
+        import jwt as pyjwt
+        priv, pub = _make_rsa_keypair()
+        claims = {
+            "iss": "https://launchpad.classlink.com",
+            "aud": "test-client-id",
+            "sub": "user-no-kid",
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()),
+            "nbf": int(time.time()),
+        }
+        # Encode WITHOUT kid in the header — PyJWKClient.get_signing_key_from_jwt
+        # will fail to resolve a key.
+        no_kid_token = pyjwt.encode(claims, priv, algorithm="RS256")
+
+        app = _make_app()
+        # Mock JWKS client to raise on missing-kid lookup
+        from jwt.exceptions import PyJWKClientError
+        mock_jwks = MagicMock()
+        mock_jwks.get_signing_key_from_jwt.side_effect = PyJWKClientError("no kid in JWT")
+
+        with app.test_client() as client:
+            with patch('backend.routes.classlink_routes.requests.post',
+                       return_value=self._make_token_response(no_kid_token)), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=mock_jwks):
+                resp = client.get('/api/classlink/callback?code=abc')
+        assert resp.status_code == 302
+        assert "classlink_error=oidc_invalid" in resp.headers["Location"]

@@ -11,6 +11,7 @@ Endpoints:
 """
 
 import os
+import time
 import logging
 import secrets
 
@@ -257,6 +258,10 @@ def classlink_callback():
             audience=client_id,
             issuer=oidc_cfg.get("issuer"),
             leeway=10,
+            options={
+                "require": ["iat", "nbf", "exp", "iss", "aud", "sub"],
+                "verify_iat": True,
+            },
         )
     except pyjwt.ExpiredSignatureError:
         logger.warning("ClassLink id_token expired")
@@ -266,6 +271,17 @@ def classlink_callback():
         return redirect("/?classlink_error=oidc_claim_mismatch")
     except (pyjwt.PyJWTError, ClassLinkOIDCError) as e:
         logger.warning("ClassLink id_token validation failed: %s", e.__class__.__name__)
+        return redirect("/?classlink_error=oidc_invalid")
+
+    # iat sanity window: reject tokens minted >5 min in the future or >1 day stale.
+    # Defense-in-depth against misconfigured ClassLink tenants issuing long-lived tokens.
+    now_ts = time.time()
+    iat = id_claims.get("iat", 0)
+    if iat > now_ts + 300:
+        logger.warning("ClassLink id_token iat is in the future")
+        return redirect("/?classlink_error=oidc_invalid")
+    if iat < now_ts - 86400:
+        logger.warning("ClassLink id_token iat is more than 24h old")
         return redirect("/?classlink_error=oidc_invalid")
 
     # Fetch user info (userinfo becomes fallback for non-OIDC fields like TenantId)

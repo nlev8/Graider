@@ -65,6 +65,7 @@ def make_id_token(
         "aud": aud,
         "exp": now + exp_offset,
         "iat": now,
+        "nbf": now,
         "sub": sub,
         "email": email,
         "given_name": given_name,
