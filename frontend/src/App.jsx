@@ -1084,8 +1084,8 @@ function App() {
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [docUploading, setDocUploading] = useState(false);
   const [contentOnly, setContentOnly] = useState(false);
-  const [matchingInProgress, setMatchingInProgress] = useState(false);
-  const [matchResults, setMatchResults] = useState(null);
+  // matchingInProgress + matchResults moved into PlannerTab in PR 8a
+  // (matching cluster).
 
   // Study Guide state
   // studyGuide + studyGuideGenerating + studyGuideInstructions moved into
@@ -3376,43 +3376,9 @@ ${signature}`;
     }
   };
 
-  const removeUploadedDoc = (index) => {
-    const doc = uploadedDocs[index];
-    setUploadedDocs(prev => prev.filter((_, i) => i !== index));
-    setMatchResults(null);
-  };
-
-  const handleMatchStandards = async () => {
-    if (uploadedDocs.length === 0 || !config.subject || !config.grade_level) {
-      addToast("Upload documents and set subject/grade first", "warning");
-      return;
-    }
-    setMatchingInProgress(true);
-    try {
-      const combinedText = uploadedDocs.map(d => d.text).join("\n\n");
-      const result = await api.alignDocumentToStandards({ documentText: combinedText, subject: config.subject, grade: config.grade_level });
-      setMatchResults(result);
-      if (result && result.matched_standards) {
-        const matchedCodes = (result.matched_standards || []).filter(a => a.confidence >= 0.4).map(a => a.code);
-        // Alert if currently selected standards conflict with document content
-        if (selectedStandards.length > 0 && matchedCodes.length > 0) {
-          const conflicts = selectedStandards.filter(code => !matchedCodes.includes(code));
-          if (conflicts.length > 0) {
-            addToast("Heads up: " + conflicts.length + " selected standard" + (conflicts.length > 1 ? "s" : "") + " (" + conflicts.join(", ") + ") may not align with your uploaded documents", "warning", 8000);
-          }
-        }
-        if (matchedCodes.length > 0) {
-          addToast(matchedCodes.length + " matching standards found — click to select", "info");
-        } else {
-          addToast("No strong standard matches found in uploaded documents", "warning");
-        }
-      }
-    } catch (err) {
-      addToast("Matching error: " + err.message, "error");
-    } finally {
-      setMatchingInProgress(false);
-    }
-  };
+  // removeUploadedDoc + handleMatchStandards moved into PlannerTab in
+  // PR 8a (matching cluster). removeUploadedDoc moved with the cluster
+  // because it called setMatchResults(null) on doc removal.
 
   // Assessment generation handlers
   const generateAssessmentHandler = async () => {
@@ -6862,10 +6828,6 @@ ${signature}`;
                   setPreviewResults={setPreviewResults}
                   docUploading={docUploading}
                   setDocUploading={setDocUploading}
-                  matchingInProgress={matchingInProgress}
-                  setMatchingInProgress={setMatchingInProgress}
-                  matchResults={matchResults}
-                  setMatchResults={setMatchResults}
                   assessmentLoading={assessmentLoading}
                   setAssessmentLoading={setAssessmentLoading}
                   gradingAssessment={gradingAssessment}
@@ -6914,7 +6876,6 @@ ${signature}`;
                   toggleStandard={toggleStandard}
                   standardsScrollRef={standardsScrollRef}
                   assessmentStandardsScrollRef={assessmentStandardsScrollRef}
-                  handleMatchStandards={handleMatchStandards}
                   deleteSavedAssessment={deleteSavedAssessment}
                   loadSavedAssessment={loadSavedAssessment}
                   saveAssessmentHandler={saveAssessmentHandler}
@@ -6944,7 +6905,6 @@ ${signature}`;
                   brainstormIdeasHandler={brainstormIdeasHandler}
                   generateLessonPlan={generateLessonPlan}
                   handleDocUpload={handleDocUpload}
-                  removeUploadedDoc={removeUploadedDoc}
                   itemMatchesTagFilter={itemMatchesTagFilter}
                   setActiveTab={setActiveTab}
                   setLoadedAssignmentName={setLoadedAssignmentName}
