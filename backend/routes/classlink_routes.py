@@ -21,6 +21,8 @@ import sentry_sdk
 from flask import Blueprint, request, redirect, jsonify, session, g
 from urllib.parse import urlencode
 
+from backend.utils.audit import audit_log
+
 from backend.services.classlink_oidc import (
     ClassLinkOIDCError,
     get_classlink_oidc_config,
@@ -205,21 +207,25 @@ def classlink_callback():
     if not code:
         return redirect("/?classlink_error=no_code")
 
+    # Pop all OAuth-flow session markers up-front so:
+    #   1. They cannot be replayed by a later callback in the same session
+    #   2. The callback's flow-type decision is made with consistent values
+    #   3. A failed validation does not leave stale markers behind
+    state = request.args.get('state', '')
+    expected_state = session.pop('classlink_oauth_state', '')
+    expected_nonce = session.pop('classlink_oauth_nonce', '')
+    initiated_by_us = session.pop('classlink_oauth_initiated_by_us', False)
+
     # Validate CSRF state (flow-aware)
     # Self-initiated flows (login-url was called) require strict state match.
     # LaunchPad-initiated flows (ClassLink redirects directly, no login-url call)
     # have no state requirement — id_token signature validation (below) is the
     # auth proof. This mirrors Clever's "Instant Login" pattern.
-    state = request.args.get('state', '')
-    expected_state = session.pop('classlink_oauth_state', '')
-    initiated_by_us = session.pop('classlink_oauth_initiated_by_us', False)
-
     if initiated_by_us:
         # Strict mode: state must be present and match exactly.
         if not state or state != expected_state:
-            from backend.utils.audit import audit_log
             audit_log("CLASSLINK_OAUTH_STATE_MISMATCH",
-                      f"ClassLink state mismatch on self-initiated flow: got '{state}', expected '{expected_state}'",
+                      f"ClassLink state mismatch on self-initiated flow: got '{state[:32]}', expected '{expected_state[:32]}'",
                       user="anonymous", teacher_id="")
             logger.warning("ClassLink OAuth state mismatch (self-initiated): got %s, expected %s",
                            state, expected_state)
@@ -301,21 +307,16 @@ def classlink_callback():
         return redirect("/?classlink_error=oidc_invalid")
 
     # Nonce check (self-initiated flows only)
-    # initiated_by_us was already popped from session above; use the local var.
-    # The expected nonce is also popped here so it cannot be reused.
+    # Both initiated_by_us and expected_nonce were already popped from session
+    # at the top of this function; use the local variables.
     if initiated_by_us:
-        expected_nonce = session.pop('classlink_oauth_nonce', '')
         token_nonce = id_claims.get('nonce', '')
         if not token_nonce or token_nonce != expected_nonce:
-            from backend.utils.audit import audit_log
             audit_log("CLASSLINK_OAUTH_NONCE_MISMATCH",
                       "ClassLink nonce mismatch on self-initiated flow",
                       user="anonymous", teacher_id="")
             logger.warning("ClassLink id_token nonce mismatch (self-initiated)")
             return redirect("/?classlink_error=nonce_mismatch")
-    else:
-        # Still pop the nonce key if present to avoid session pollution.
-        session.pop('classlink_oauth_nonce', None)
 
     # Fetch user info (userinfo becomes fallback for non-OIDC fields like TenantId)
     try:
@@ -373,7 +374,6 @@ def classlink_callback():
     # Background roster sync (if OneRoster configured)
     _trigger_roster_sync(teacher_id, tenant_id)
 
-    from backend.utils.audit import audit_log
     audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {email}",
               user="teacher", teacher_id=teacher_id)
 
