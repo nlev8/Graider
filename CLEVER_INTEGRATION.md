@@ -1284,7 +1284,7 @@ Grading pipeline uses accommodations as before
 ## Future Enhancements (post-certification)
 
 1. **Multi-district token management** — Store district tokens in Supabase keyed by district ID instead of single env var
-2. **Scheduled sync** — Cron job to re-sync roster daily (Clever requirement: update at least once per day)
+2. ~~**Scheduled sync**~~ — ✅ **Shipped.** Cron webhook at `/api/sync/periodic-roster` (`backend/routes/sync_routes.py:269`) re-syncs daily via the `.github/workflows/roster-sync.yml` workflow. PERIODIC_SYNC_SECRET-gated.
 3. **Delta sync via Events API** — Instead of full roster pull, subscribe to Clever Events for real-time changes
-4. **Student SSO** — Allow students to log into the student portal via Clever (currently public/anonymous)
+4. **Student SSO** — ✅ Shipped (auth-code flow with 60s TTL — see Student SSO section above)
 5. **Clever Library certification** — For individual teacher discovery (lower priority than district SSO)
