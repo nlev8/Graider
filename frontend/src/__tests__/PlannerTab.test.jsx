@@ -71,15 +71,12 @@ const baseProps = () => ({
     format: 'Word',
   },
   setAssessmentConfig: vi.fn(),
-  // Planner-only state still in App for now (until PRs 4-7 move them).
-  plannerLoading: false,
+  // Planner-only state still in App for now.
+  // plannerLoading + lessonVariations + brainstormIdeas + selectedIdea +
+  // brainstormLoading + assignmentQuestionCounts moved into PlannerTab in
+  // PR 8d (lesson-gen big cluster).
   expandedStandards: {},
-  lessonVariations: [],
-  brainstormIdeas: [],
-  selectedIdea: null,
-  brainstormLoading: false,
   assignmentSectionsOpen: {},
-  assignmentQuestionCounts: {},
   previewShowAnswers: false,
   // previewResults moved into PlannerTab in PR 8c.
   // docUploading moved into PlannerTab in PR 8b.
@@ -150,6 +147,18 @@ const baseProps = () => ({
   // Constants and refs.
   domainNameMap: {},
   getDomains: () => [],
+  // PR 8d Codex Round 1 MAJOR + Round 2 MINOR fixture fidelity fix:
+  // PlannerTab's new subject-change effect calls
+  // getSubjectSectionDefaults(subject) → Object.values() the result. The
+  // Proxy fallback's bare vi.fn() returns undefined; without this stub
+  // Object.values(undefined) throws silently inside the effect. Stub
+  // mirrors the real App.jsx getSubjectSectionDefaults("Math") return
+  // (9 keys, 6 true) since baseProps sets config.subject to 'Math'.
+  getSubjectSectionDefaults: () => ({
+    multiple_choice: true, short_answer: true, math_computation: true,
+    geometry_visual: true, graphing: true, data_analysis: true,
+    extended_writing: false, vocabulary: false, true_false: false,
+  }),
   standardsScrollRef: { current: null },
   assessmentStandardsScrollRef: { current: null },
 });
