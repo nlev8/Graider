@@ -156,7 +156,6 @@ def _create_clever_student_session(clever_id, email):
         dict with keys 'token', 'student', 'class', or None if not found.
     """
     import secrets as _secrets
-    import hashlib
     from datetime import datetime, timezone, timedelta
 
     sb = _get_supabase_safe()
@@ -393,12 +392,16 @@ def clever_callback():
                 ]
                 if len(matches) == 1:
                     save_clever_link(clever_id, matches[0].id)
-                    logger.info("Merged Clever user %s with existing account %s (%s)",
-                                clever_id, matches[0].id, clever_email)
+                    logger.info(
+                        "Merged Clever user clever_id_hash=%s with existing account user_hash=%s email=%s",
+                        hashlib.sha256(str(clever_id).encode()).hexdigest()[:8],
+                        hashlib.sha256(str(matches[0].id).encode()).hexdigest()[:8],
+                        redact_email(clever_email),
+                    )
                 elif len(matches) > 1:
                     logger.warning(
-                        "Multiple Supabase users match email %s — skipping merge to avoid data conflict",
-                        clever_email,
+                        "Multiple Supabase users match email=%s — skipping merge to avoid data conflict",
+                        redact_email(clever_email),
                     )
         except Exception as e:
             logger.warning("Clever account merge check failed (non-fatal): %s", str(e))
@@ -502,8 +505,12 @@ def clever_sync_roster():
             if teacher_clever_id in teacher_ids:
                 own_sections.append(sec)
         roster["sections"] = own_sections
-        logger.info("Filtered sections for teacher %s: %d of %d",
-                     teacher_clever_id, len(own_sections), len(all_sections))
+        logger.info(
+            "Filtered sections for teacher_hash=%s: %d of %d",
+            hashlib.sha256(str(teacher_clever_id).encode()).hexdigest()[:8],
+            len(own_sections),
+            len(all_sections),
+        )
 
     # Filter sections if teacher selected specific ones
     sections = roster.get("sections", [])

@@ -309,3 +309,79 @@ class TestPIIRedaction:
             assert 'sha256' in call_block, (
                 f"Logger call at line {idx + 1} carries clever_id=%s but does not use sha256 hashing:\n{call_block}"
             )
+
+
+class TestNoBarePIIInLoggerCalls:
+    """AST-based check: no logger call in clever_routes.py references bare PII names.
+
+    This catches conversational log messages (e.g. "Merged user %s") that the
+    format-spec regex misses because they don't use ``email=%s`` / ``clever_id=%s``.
+    """
+
+    def test_no_bare_pii_in_logger_calls(self):
+        """No logger.{info,warning,error,debug,exception} call in clever_routes.py
+        references bare PII names (clever_email, clever_id, teacher_clever_id)
+        outside of a redact_email() or sha256() wrapper."""
+        import ast
+        from pathlib import Path
+
+        ROOT = Path(__file__).resolve().parent.parent
+        src = (ROOT / "backend" / "routes" / "clever_routes.py").read_text()
+        tree = ast.parse(src)
+
+        PII_NAMES = {"clever_email", "clever_id", "teacher_clever_id"}
+        REDACTORS = {"redact_email", "sha256"}
+        LOG_METHODS = {"info", "warning", "error", "debug", "exception"}
+
+        violations = []
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            # Match logger.info(...), logger.warning(...), etc.
+            func = node.func
+            if not (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "logger"
+                and func.attr in LOG_METHODS
+            ):
+                continue
+
+            # Check every positional argument (skip the format string itself at index 0)
+            for arg in node.args[1:]:
+                for sub in ast.walk(arg):
+                    if not (isinstance(sub, ast.Name) and sub.id in PII_NAMES):
+                        continue
+                    # Check whether this Name node is nested inside a redactor Call
+                    # within the same argument expression.
+                    inside_redactor = False
+                    for inner in ast.walk(arg):
+                        if not isinstance(inner, ast.Call):
+                            continue
+                        inner_func = inner.func
+                        call_name = None
+                        if isinstance(inner_func, ast.Name):
+                            call_name = inner_func.id
+                        elif isinstance(inner_func, ast.Attribute):
+                            call_name = inner_func.attr
+                        if call_name in REDACTORS:
+                            # Verify our PII Name is actually inside this call
+                            for inner_sub in ast.walk(inner):
+                                if (
+                                    isinstance(inner_sub, ast.Name)
+                                    and inner_sub.id == sub.id
+                                ):
+                                    inside_redactor = True
+                                    break
+                        if inside_redactor:
+                            break
+                    if not inside_redactor:
+                        violations.append(
+                            f"line {node.lineno}: bare '{sub.id}' in logger.{func.attr}() call"
+                        )
+
+        assert not violations, (
+            "Bare PII names found in logger calls — wrap with redact_email() or sha256():\n"
+            + "\n".join(violations)
+        )
