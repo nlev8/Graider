@@ -601,3 +601,125 @@ class TestClassLinkIdTokenValidation:
                 resp = client.get('/api/classlink/callback?code=abc')
         assert resp.status_code == 302
         assert "classlink_error=oidc_invalid" in resp.headers["Location"]
+
+
+class TestClassLinkStateNonceHardening:
+    """Task 3: state + nonce hardening for self-initiated ClassLink OAuth flows.
+
+    Self-initiated flows (login-url → callback) require strict state match AND
+    nonce match in the id_token.  LaunchPad-initiated flows (no initiated_by_us
+    marker) remain permissive — id_token signature is the auth proof.
+    """
+
+    def test_self_initiated_flow_requires_state(self):
+        """If we initiated, state MUST match. Missing state → reject."""
+        app = _make_app()
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "expected-state"
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+            resp = client.get("/api/classlink/callback?code=abc")  # no state param
+        assert resp.status_code == 302
+        assert "classlink_error=state_mismatch" in resp.location
+
+    def test_self_initiated_flow_rejects_state_mismatch(self):
+        """If we initiated, wrong state → reject."""
+        app = _make_app()
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "expected-state"
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+            resp = client.get("/api/classlink/callback?code=abc&state=wrong-state")
+        assert resp.status_code == 302
+        assert "classlink_error=state_mismatch" in resp.location
+
+    def test_launchpad_initiated_flow_accepts_no_state(self):
+        """LaunchPad path: no initiated_by_us marker, no state expected → success."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(priv, aud="test-client-id")
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "cl-1", "Email": "e@x.com", "Role": "teacher", "TenantId": "t1"
+        }
+        with app.test_client() as client:
+            # No classlink_oauth_initiated_by_us in session (LaunchPad-initiated)
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._link_classlink_account'), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                resp = client.get("/api/classlink/callback?code=abc")
+        assert resp.status_code == 302
+        assert "classlink_login=success" in resp.location
+
+    def test_self_initiated_nonce_mismatch_rejected(self):
+        """When we initiated, id_token's nonce must match session-stored nonce."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        # id_token has WRONG nonce
+        id_token = make_id_token(priv, aud="test-client-id", nonce="wrong-nonce")
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "expected-state"
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)):
+                resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
+        assert resp.status_code == 302
+        assert "classlink_error=nonce_mismatch" in resp.location
+
+    def test_self_initiated_nonce_match_accepted(self):
+        """When we initiated, matching nonce → success."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(priv, aud="test-client-id", nonce="expected-nonce")
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "u1", "Email": "u@x.com", "Role": "teacher", "TenantId": "t1"
+        }
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["classlink_oauth_state"] = "expected-state"
+                sess["classlink_oauth_initiated_by_us"] = True
+                sess["classlink_oauth_nonce"] = "expected-nonce"
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._link_classlink_account'), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
+        assert resp.status_code == 302
+        assert "classlink_login=success" in resp.location
+
+    def test_login_url_includes_nonce_param(self):
+        """/api/classlink/login-url generates a nonce and includes it in the URL."""
+        app = _make_app()
+        with app.test_client() as client:
+            resp = client.get("/api/classlink/login-url")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "nonce=" in data["url"]

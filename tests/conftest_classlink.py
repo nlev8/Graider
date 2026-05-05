@@ -50,6 +50,7 @@ def make_id_token(
     role="teacher",
     exp_offset=3600,
     kid="test-kid",
+    nonce=None,
     extra_claims=None,
 ):
     """Build and sign a ClassLink-style id_token (RS256).
@@ -57,7 +58,8 @@ def make_id_token(
     Args:
         private_key: cryptography RSAPrivateKey
         exp_offset: seconds from now for exp claim (negative = expired)
-        extra_claims: dict merged on top of defaults (use for nonce injection)
+        nonce: optional nonce claim (omitted from token when None)
+        extra_claims: dict merged on top of defaults
     """
     now = int(time.time())
     claims = {
@@ -72,6 +74,8 @@ def make_id_token(
         "family_name": family_name,
         "Role": role,
     }
+    if nonce is not None:
+        claims["nonce"] = nonce
     if extra_claims:
         claims.update(extra_claims)
     return pyjwt.encode(
