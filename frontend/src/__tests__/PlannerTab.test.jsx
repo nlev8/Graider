@@ -140,7 +140,7 @@ const baseProps = () => ({
   shareModalContent: null,
   shareModalSelected: [],
   shareModalSharing: false,
-  newUnitModal: false,
+  // newUnitModal + tagDropdownOpenFor moved into PlannerTab in PR 7e.
   newUnitName: '',
   savedUnits: [],
   showSaveLesson: false,
@@ -148,7 +148,6 @@ const baseProps = () => ({
   publishedAssessmentModal: { show: false, joinCode: '', joinLink: '' },
   showPublishModal: false,
   loadingPublishStudents: false,
-  tagDropdownOpenFor: null,
   // Constants and refs.
   domainNameMap: {},
   getDomains: () => [],
