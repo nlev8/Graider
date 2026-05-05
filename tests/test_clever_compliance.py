@@ -193,3 +193,119 @@ class TestSupabaseDeletion:
         # Should use teacher_id for scoping
         assert 'teacher_id' in source
         assert '.eq(' in source  # Supabase filter
+
+
+class TestPIIRedaction:
+    """Verify PII redaction helpers and log call sanitisation."""
+
+    def test_redact_email_simple(self):
+        from backend.utils.redaction import redact_email
+        assert redact_email("alice@example.com") == "a***@example.com"
+
+    def test_redact_email_short_local(self):
+        from backend.utils.redaction import redact_email
+        assert redact_email("a@example.com") == "***@example.com"
+
+    def test_redact_email_empty(self):
+        from backend.utils.redaction import redact_email
+        assert redact_email("") == ""
+        assert redact_email(None) == ""
+
+    def test_redact_email_no_at(self):
+        from backend.utils.redaction import redact_email
+        assert redact_email("notanemail") == ""
+
+    def test_clever_token_failure_does_not_log_response_body(self, caplog):
+        """backend/clever.py token-failure log must not log resp.text or redirect_uri."""
+        import asyncio
+        import logging
+        from unittest.mock import patch, MagicMock
+
+        async def fake_post(*args, **kwargs):
+            m = MagicMock()
+            m.status_code = 400
+            m.text = "ERROR_BODY_should_not_appear_in_log"
+            return m
+
+        with patch("backend.clever.httpx.AsyncClient") as mock_client_cls, \
+             patch.dict("os.environ", {
+                 "CLEVER_CLIENT_ID": "id",
+                 "CLEVER_CLIENT_SECRET": "secret",
+                 "CLEVER_REDIRECT_URI": "https://example.com/secret-redirect-path",
+             }), caplog.at_level(logging.ERROR):
+            mock_client = mock_client_cls.return_value.__aenter__.return_value
+            mock_client.post = fake_post
+            # Clear module-level cached config by patching get_clever_config
+            with patch("backend.clever.get_clever_config", return_value={
+                "client_id": "id",
+                "client_secret": "secret",
+                "redirect_uri": "https://example.com/secret-redirect-path",
+            }):
+                from backend.clever import exchange_code_for_token
+                result = asyncio.run(exchange_code_for_token("code"))
+
+        assert result is None
+        log_text = " ".join(r.getMessage() for r in caplog.records)
+        # The error body must not appear
+        assert "ERROR_BODY_should_not_appear_in_log" not in log_text
+        # The redirect_uri (which contains potentially sensitive routing info) must not appear
+        assert "secret-redirect-path" not in log_text
+        # But status code should appear
+        assert "400" in log_text
+
+    def test_clever_login_log_redacts_email_and_hashes_id(self):
+        """backend/routes/clever_routes.py login paths must redact email + hash clever_id.
+
+        Verified via source inspection: all three login log calls use redact_email()
+        and hashlib.sha256 truncated to 8 chars. Full route-level caplog test would
+        require deep Flask session mocking; deferred as future work.
+        """
+        import inspect
+        from backend.routes import clever_routes
+
+        source = inspect.getsource(clever_routes)
+
+        # All three login log calls must use redact_email and sha256 truncation
+        assert "redact_email" in source
+        assert "hashlib.sha256" in source
+        assert "hexdigest()[:8]" in source
+
+        # Check line-by-line: no single logger call line should contain raw PII patterns.
+        # We look for lines that reference email=%s or clever_id=%s and are logger calls,
+        # then verify the argument on the next non-empty line is redact_email / sha256, not raw.
+        import re
+        lines = source.splitlines()
+
+        # Find logger call lines that carry the email=%s or clever_id=%s format spec
+        email_fmt_lines = [
+            (i, line) for i, line in enumerate(lines)
+            if re.search(r'logger\.\w+\(', line) and 'email=%s' in line
+        ]
+        # None of those logger-call lines should also pass a raw clever_user email as a positional arg
+        for idx, line in email_fmt_lines:
+            # Collect this logger call's continuation lines (up to closing paren)
+            call_block = line
+            for j in range(idx + 1, min(idx + 6, len(lines))):
+                call_block += "\n" + lines[j]
+                if lines[j].strip().endswith(")"):
+                    break
+            # The argument must NOT be a raw .get("email") or ["email"] without redact_email
+            assert 'redact_email' in call_block, (
+                f"Logger call at line {idx + 1} carries email=%s but does not use redact_email():\n{call_block}"
+            )
+
+        # Similarly for clever_id=%s — check each logger call block individually
+        id_fmt_lines = [
+            (i, line) for i, line in enumerate(lines)
+            if re.search(r'logger\.\w+\(', line) and 'clever_id=%s' in line
+        ]
+        for idx, line in id_fmt_lines:
+            call_block = line
+            for j in range(idx + 1, min(idx + 6, len(lines))):
+                call_block += "\n" + lines[j]
+                if lines[j].strip().endswith(")"):
+                    break
+            # The argument must use sha256 truncation, not a raw ID
+            assert 'sha256' in call_block, (
+                f"Logger call at line {idx + 1} carries clever_id=%s but does not use sha256 hashing:\n{call_block}"
+            )
