@@ -571,3 +571,155 @@ class TestIsoNow:
         result = _iso_now()
         # ISO 8601 UTC timestamp should contain +00:00 or Z
         assert "+00:00" in result or result.endswith("Z")
+
+
+# ══════════════════════════════════════════════════════════════
+# DEPLOYMENT_ID ALLOWLIST (validate_launch_jwt)
+# ══════════════════════════════════════════════════════════════
+
+def _make_platform_config(**kwargs):
+    """Minimal platform_config for validate_launch_jwt tests."""
+    base = {
+        "issuer": "https://canvas.example.com",
+        "client_id": "client-123",
+        "jwks_uri": "https://canvas.example.com/.well-known/jwks",
+        "_registered_by": "teacher-001",
+        "deployment_ids": [],
+    }
+    base.update(kwargs)
+    return base
+
+
+def _make_claims(deployment_id="deploy-001", **kwargs):
+    """Minimal decoded LTI claims for validate_launch_jwt tests."""
+    base = {
+        "iss": "https://canvas.example.com",
+        "aud": "client-123",
+        "sub": "user-sub",
+        "https://purl.imsglobal.org/spec/lti/claim/message_type": "LtiResourceLinkRequest",
+        "https://purl.imsglobal.org/spec/lti/claim/version": "1.3.0",
+        "https://purl.imsglobal.org/spec/lti/claim/deployment_id": deployment_id,
+    }
+    base.update(kwargs)
+    return base
+
+
+@pytest.fixture
+def mock_jwt_decode(monkeypatch):
+    """Fixture that bypasses JWT signature verification in validate_launch_jwt.
+
+    Returns a setter so tests can inject specific claims.
+    """
+    claims_container = {"claims": _make_claims()}
+
+    import unittest.mock as _mock
+
+    mock_key = _mock.MagicMock()
+    mock_key.key = "fake-key"
+
+    mock_jwks_client = _mock.MagicMock()
+    mock_jwks_client.get_signing_key_from_jwt.return_value = mock_key
+
+    def fake_decode(token, key, **kwargs):
+        return claims_container["claims"]
+
+    monkeypatch.setattr("backend.lti.jwt.decode", fake_decode)
+
+    # Patch PyJWKClient constructor to return our mock instance
+    import jwt as pyjwt
+    monkeypatch.setattr(pyjwt, "PyJWKClient", lambda uri: mock_jwks_client)
+
+    def set_claims(c):
+        claims_container["claims"] = c
+
+    return set_claims
+
+
+class TestDeploymentIdAllowlist:
+
+    def test_launch_rejects_unlisted_deployment_id(self, mock_jwt_decode):
+        """Allowlist enforced: deployment_id not in list raises ValueError."""
+        mock_jwt_decode(_make_claims(deployment_id="unauthorized"))
+        cfg = _make_platform_config(deployment_ids=["allowed-deployment"])
+        from backend.lti import validate_launch_jwt
+        with pytest.raises(ValueError, match="not in allowlist"):
+            validate_launch_jwt("fake.token.here", cfg)
+
+    def test_launch_accepts_listed_deployment_id(self, mock_jwt_decode):
+        """Launch with deployment_id in allowlist returns claims."""
+        mock_jwt_decode(_make_claims(deployment_id="allowed-deployment"))
+        cfg = _make_platform_config(deployment_ids=["allowed-deployment"])
+        from backend.lti import validate_launch_jwt
+        claims = validate_launch_jwt("fake.token.here", cfg)
+        assert claims["https://purl.imsglobal.org/spec/lti/claim/deployment_id"] == "allowed-deployment"
+
+    def test_launch_accepts_one_of_multiple_allowlisted_ids(self, mock_jwt_decode):
+        """Any deployment_id in the list is accepted."""
+        mock_jwt_decode(_make_claims(deployment_id="dep-b"))
+        cfg = _make_platform_config(deployment_ids=["dep-a", "dep-b", "dep-c"])
+        from backend.lti import validate_launch_jwt
+        claims = validate_launch_jwt("fake.token.here", cfg)
+        assert claims["https://purl.imsglobal.org/spec/lti/claim/deployment_id"] == "dep-b"
+
+    def test_launch_tofu_records_first_seen_when_allowlist_empty(self, mock_jwt_decode, monkeypatch):
+        """TOFU: empty allowlist → save_platform_config called with first-seen id."""
+        mock_jwt_decode(_make_claims(deployment_id="first-seen"))
+        cfg = _make_platform_config(deployment_ids=[])
+        saved = {}
+
+        def fake_save(issuer, config, tid):
+            saved.update({"issuer": issuer, "config": config, "tid": tid})
+            return True
+
+        monkeypatch.setattr("backend.lti.save_platform_config", fake_save)
+        monkeypatch.setattr("backend.utils.audit.audit_log", lambda *a, **kw: None)
+
+        from backend.lti import validate_launch_jwt
+        claims = validate_launch_jwt("fake.token.here", cfg)
+
+        # Launch accepted
+        assert claims["https://purl.imsglobal.org/spec/lti/claim/deployment_id"] == "first-seen"
+        # Config was persisted with the new deployment_id
+        assert saved["config"]["deployment_ids"] == ["first-seen"]
+        assert saved["issuer"] == "https://canvas.example.com"
+        assert saved["tid"] == "teacher-001"
+
+    def test_launch_tofu_skips_save_when_no_teacher_id(self, mock_jwt_decode, monkeypatch):
+        """TOFU with missing _registered_by does not attempt to save but still accepts."""
+        mock_jwt_decode(_make_claims(deployment_id="first-seen"))
+        # _registered_by absent → save guard skipped
+        cfg = _make_platform_config(deployment_ids=[])
+        cfg.pop("_registered_by", None)
+        saved = {}
+
+        def fake_save(issuer, config, tid):
+            saved["called"] = True
+
+        monkeypatch.setattr("backend.lti.save_platform_config", fake_save)
+
+        from backend.lti import validate_launch_jwt
+        # Should still accept the launch (not raise)
+        validate_launch_jwt("fake.token.here", cfg)
+        assert "called" not in saved
+
+    def test_launch_after_tofu_rejects_different_deployment(self, mock_jwt_decode):
+        """After TOFU populates allowlist, different deployment_id is rejected."""
+        mock_jwt_decode(_make_claims(deployment_id="different"))
+        cfg = _make_platform_config(deployment_ids=["first-seen"])
+        from backend.lti import validate_launch_jwt
+        with pytest.raises(ValueError, match="not in allowlist"):
+            validate_launch_jwt("fake.token.here", cfg)
+
+    def test_allowlist_none_treated_as_empty_triggers_tofu(self, mock_jwt_decode, monkeypatch):
+        """deployment_ids=None is treated like [] — triggers TOFU."""
+        mock_jwt_decode(_make_claims(deployment_id="dep-x"))
+        cfg = _make_platform_config(deployment_ids=None)
+        saved = {}
+
+        monkeypatch.setattr("backend.lti.save_platform_config",
+                            lambda issuer, c, tid: saved.update({"config": c}))
+        monkeypatch.setattr("backend.utils.audit.audit_log", lambda *a, **kw: None)
+
+        from backend.lti import validate_launch_jwt
+        validate_launch_jwt("fake.token.here", cfg)
+        assert saved["config"]["deployment_ids"] == ["dep-x"]

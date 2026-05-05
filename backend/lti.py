@@ -255,6 +255,27 @@ def validate_launch_jwt(id_token, platform_config):
     if not deployment_id:
         raise ValueError("Missing deployment_id claim")
 
+    allowlist = list(platform_config.get("deployment_ids") or [])
+    if not allowlist:
+        # TOFU — record first-seen deployment_id, accept this launch
+        new_cfg = dict(platform_config)
+        new_cfg["deployment_ids"] = [deployment_id]
+        new_cfg["_tofu_recorded_at"] = datetime.now(tz=timezone.utc).isoformat()
+        issuer = claims.get("iss")
+        teacher_id = platform_config.get("_registered_by")
+        if issuer and teacher_id:
+            save_platform_config(issuer, new_cfg, teacher_id)
+            from backend.utils.audit import audit_log
+            audit_log(
+                "LTI_DEPLOYMENT_TOFU",
+                f"first-seen deployment_id={deployment_id} for issuer={issuer}",
+                teacher_id=teacher_id,
+            )
+    elif deployment_id not in allowlist:
+        raise ValueError(
+            f"deployment_id {deployment_id!r} not in allowlist for issuer={claims.get('iss')!r}"
+        )
+
     return claims
 
 
