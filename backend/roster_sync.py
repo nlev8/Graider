@@ -9,6 +9,8 @@ import os
 
 import sentry_sdk
 
+from backend.utils.audit import audit_log
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +43,31 @@ def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="manu
     Returns:
         dict with counts: {"classes": int, "students": int, "enrollments": int}
     """
+    audit_log(
+        "ROSTER_SYNC_START",
+        f"provider={provider} classes={len(classes)} students={len(students)} enrollments={len(enrollments)}",
+        teacher_id=teacher_id,
+    )
+
+    try:
+        result = _sync_roster_to_db_impl(classes, students, enrollments, teacher_id, provider)
+        audit_log(
+            "ROSTER_SYNC_COMPLETE",
+            f"provider={provider}",
+            teacher_id=teacher_id,
+        )
+        return result
+    except Exception:
+        audit_log(
+            "ROSTER_SYNC_FAILED",
+            f"provider={provider}",
+            teacher_id=teacher_id,
+        )
+        raise
+
+
+def _sync_roster_to_db_impl(classes, students, enrollments, teacher_id, provider):
+    """Internal implementation of sync_roster_to_db (no audit boundaries)."""
     from backend.supabase_client import get_supabase as _get_supabase
 
     zero = {"classes": 0, "students": 0, "enrollments": 0}
