@@ -147,6 +147,15 @@ const baseProps = () => ({
   // Constants and refs.
   domainNameMap: {},
   getDomains: () => [],
+  // PR 8d Codex Round 1 MAJOR: PlannerTab's new subject-change effect
+  // calls getSubjectSectionDefaults(subject) and immediately Object.values()
+  // the result. The Proxy fallback's bare vi.fn() returns undefined →
+  // Object.values(undefined) throws. Provide a concrete stub.
+  getSubjectSectionDefaults: () => ({
+    multiple_choice: false, short_answer: false, math_computation: false,
+    geometry_visual: false, graphing: false, data_analysis: false,
+    extended_writing: false, vocabulary: false, true_false: false, florida_fast: false,
+  }),
   standardsScrollRef: { current: null },
   assessmentStandardsScrollRef: { current: null },
 });
