@@ -51,11 +51,24 @@ def test_discovery_cached_within_ttl():
     assert mock_get.call_count == 1
 
 
-def test_discovery_failure_raises_runtime_error():
+def test_discovery_failure_raises_classlink_oidc_error():
+    from backend.services.classlink_oidc import ClassLinkOIDCError
     with patch("backend.services.classlink_oidc.httpx.get") as mock_get:
         mock_get.return_value = MagicMock(status_code=500, text="upstream error")
-        with pytest.raises(RuntimeError, match="ClassLink OIDC discovery failed"):
+        with pytest.raises(ClassLinkOIDCError, match="ClassLink OIDC discovery failed"):
             get_classlink_oidc_config()
+
+
+def test_discovery_failure_message_includes_response_body_excerpt():
+    from backend.services.classlink_oidc import ClassLinkOIDCError
+    with patch("backend.services.classlink_oidc.httpx.get") as mock_get:
+        mock_get.return_value = MagicMock(
+            status_code=502, text="bad gateway from upstream"
+        )
+        with pytest.raises(ClassLinkOIDCError) as exc_info:
+            get_classlink_oidc_config()
+    assert "502" in str(exc_info.value)
+    assert "bad gateway" in str(exc_info.value)
 
 
 def test_jwks_client_uses_discovered_uri():

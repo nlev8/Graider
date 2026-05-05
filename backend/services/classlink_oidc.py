@@ -4,10 +4,11 @@ ClassLink OIDC discovery + JWKS client cache.
 Lazily fetches https://launchpad.classlink.com/.well-known/openid-configuration
 on first use and caches for 1 hour. JWKS client is cached alongside.
 
-Thread-safety note: Python's GIL makes single-key dict writes atomic, so the
-module-level cache dict does not need an explicit lock for correctness under
-Flask's threaded server. A brief double-fetch window under high concurrency is
-acceptable for a 1-hour TTL.
+Thread-safety: under cold-cache concurrency, two parallel callers can both
+issue the discovery GET. That brief double-fetch window is acceptable for a
+1-hour TTL endpoint. Do NOT copy this pattern to call sites where
+deduplication is load-bearing (token exchange, gradebook writes) — use a
+`threading.Lock` for those.
 """
 import logging
 import time
@@ -18,12 +19,21 @@ from jwt import PyJWKClient
 
 logger = logging.getLogger(__name__)
 
+
+class ClassLinkOIDCError(RuntimeError):
+    """ClassLink OIDC discovery or JWKS resolution failed.
+
+    Subclasses RuntimeError so existing `except RuntimeError` paths still
+    catch it, while letting callers who want to distinguish ClassLink-upstream
+    errors from genuine code bugs catch this specifically.
+    """
+
 CLASSLINK_DISCOVERY_URL = (
     "https://launchpad.classlink.com/.well-known/openid-configuration"
 )
 _DISCOVERY_TTL_SECONDS = 3600
 
-_cached_config: Optional[dict] = None
+_cached_config: Optional[dict[str, Any]] = None
 _cached_at: float = 0.0
 _cached_jwks_client: Optional[PyJWKClient] = None
 
@@ -39,16 +49,18 @@ def _reset_cache_for_tests() -> None:
 def get_classlink_oidc_config() -> dict[str, Any]:
     """Return discovered OIDC config, cached for _DISCOVERY_TTL_SECONDS.
 
-    Raises RuntimeError if the discovery endpoint returns a non-200 status.
+    Raises ClassLinkOIDCError if the discovery endpoint returns a non-200 status.
     """
     global _cached_config, _cached_at
     now = time.time()
     if _cached_config and (now - _cached_at) < _DISCOVERY_TTL_SECONDS:
         return _cached_config
+    logger.info("Refreshing ClassLink OIDC discovery cache (TTL=%ds)", _DISCOVERY_TTL_SECONDS)
     resp = httpx.get(CLASSLINK_DISCOVERY_URL, timeout=10.0)
     if resp.status_code != 200:
-        raise RuntimeError(
-            f"ClassLink OIDC discovery failed: {resp.status_code}"
+        raise ClassLinkOIDCError(
+            f"ClassLink OIDC discovery failed: status={resp.status_code} "
+            f"body={resp.text[:200]!r}"
         )
     _cached_config = resp.json()
     _cached_at = now
@@ -65,7 +77,7 @@ def _invalidate_jwks_client() -> None:
 def get_classlink_jwks_client() -> PyJWKClient:
     """Return PyJWKClient pointed at the discovered jwks_uri.
 
-    Raises RuntimeError if the OIDC config is missing jwks_uri.
+    Raises ClassLinkOIDCError if the OIDC config is missing jwks_uri.
     """
     global _cached_jwks_client
     if _cached_jwks_client is not None:
@@ -73,6 +85,6 @@ def get_classlink_jwks_client() -> PyJWKClient:
     cfg = get_classlink_oidc_config()
     jwks_uri = cfg.get("jwks_uri")
     if not jwks_uri:
-        raise RuntimeError("ClassLink OIDC config missing jwks_uri")
+        raise ClassLinkOIDCError("ClassLink OIDC config missing jwks_uri")
     _cached_jwks_client = PyJWKClient(jwks_uri)
     return _cached_jwks_client
