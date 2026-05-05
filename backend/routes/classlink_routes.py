@@ -245,11 +245,11 @@ def classlink_callback():
         return redirect("/?classlink_error=token_error")
 
     # Validate id_token: signature, iss, aud, exp
+    # client_id is bound from the token-exchange block above; reuse it for audience.
     try:
         oidc_cfg = get_classlink_oidc_config()
         jwks_client = get_classlink_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(id_token)
-        client_id, _, _ = _get_classlink_config()
         id_claims = pyjwt.decode(
             id_token,
             signing_key.key,

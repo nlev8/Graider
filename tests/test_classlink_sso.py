@@ -421,11 +421,10 @@ class TestClassLinkIdTokenValidation:
 
         assert resp.status_code == 302
         assert "classlink_login=success" in resp.headers["Location"]
-
-        with app.test_client() as client2:
-            # Verify session was populated with id_token-sourced identity
-            # (we can't read the session from the first request here; check redirect is success)
-            pass  # success redirect is sufficient for this assertion
+        # The deeper "id_claims actually populate the session" assertion lives in
+        # test_callback_uses_id_token_claims_session_contents below. This test
+        # establishes that valid id_token + divergent userinfo → success redirect
+        # (i.e., the validation block does not bail when fields disagree).
 
     def test_callback_uses_id_token_claims_session_contents(self):
         """id_token claims populate the session; sub maps to classlink_id."""
