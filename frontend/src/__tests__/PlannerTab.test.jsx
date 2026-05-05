@@ -71,15 +71,12 @@ const baseProps = () => ({
     format: 'Word',
   },
   setAssessmentConfig: vi.fn(),
-  // Planner-only state still in App for now (until PRs 4-7 move them).
-  plannerLoading: false,
+  // Planner-only state still in App for now.
+  // plannerLoading + lessonVariations + brainstormIdeas + selectedIdea +
+  // brainstormLoading + assignmentQuestionCounts moved into PlannerTab in
+  // PR 8d (lesson-gen big cluster).
   expandedStandards: {},
-  lessonVariations: [],
-  brainstormIdeas: [],
-  selectedIdea: null,
-  brainstormLoading: false,
   assignmentSectionsOpen: {},
-  assignmentQuestionCounts: {},
   previewShowAnswers: false,
   // previewResults moved into PlannerTab in PR 8c.
   // docUploading moved into PlannerTab in PR 8b.

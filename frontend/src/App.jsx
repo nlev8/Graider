@@ -1063,20 +1063,13 @@ function App() {
   const standardsScrollRef = useRef(null);
   const assessmentStandardsScrollRef = useRef(null);
   const [lessonPlan, setLessonPlan] = useState(null);
-  const [lessonVariations, setLessonVariations] = useState([]);
-  const [brainstormIdeas, setBrainstormIdeas] = useState([]);
-  const [selectedIdea, setSelectedIdea] = useState(null);
-  const [plannerLoading, setPlannerLoading] = useState(false);
-  const [brainstormLoading, setBrainstormLoading] = useState(false);
+  // lessonVariations + brainstormIdeas + selectedIdea + plannerLoading +
+  // brainstormLoading + assignmentQuestionCounts moved into PlannerTab
+  // in PR 8d (lesson-gen big cluster). assignmentLoading + assignmentType +
+  // generateAssignmentFromLessonHandler were dead code (never wired to UI)
+  // and were deleted in the same PR.
   const [generatedAssignment, setGeneratedAssignment] = useState(null);
-  const [assignmentLoading, setAssignmentLoading] = useState(false);
-  const [assignmentType, setAssignmentType] = useState("assignment");
   // assignmentSectionsOpen moved into PlannerTab in PR 6a.
-  const [assignmentQuestionCounts, setAssignmentQuestionCounts] = useState({
-    multiple_choice: 4, short_answer: 2, math_computation: 0,
-    geometry_visual: 0, graphing: 0, data_analysis: 0,
-    extended_writing: 1, vocabulary: 0, true_false: 0, florida_fast: 0,
-  });
   // previewShowAnswers moved into PlannerTab in PR 6a.
   // previewResults moved into PlannerTab in PR 8c (preview cluster).
 
@@ -1322,14 +1315,15 @@ function App() {
     };
   };
 
-  // Update section categories when subject changes (both assessment and assignment)
+  // Update assessment section categories when subject changes. The
+  // assignmentQuestionCounts portion of this effect moved into PlannerTab
+  // in PR 8d alongside the assignmentQuestionCounts state itself.
   useEffect(() => {
     if (config.subject) {
       var newCats = getSubjectSectionDefaults(config.subject);
       var total = assessmentConfig.totalQuestions || 20;
       var newTypes = distributeQuestions(total, newCats);
       var newPointsPerType = distributePoints(assessmentConfig.totalPoints || 30, newTypes);
-      // Convert booleans to numbers for assessment sectionCategories
       var numericCats = Object.fromEntries(Object.entries(newCats).map(function(e) { return [e[0], e[1] ? Math.max(1, Math.round(total / Object.values(newCats).filter(Boolean).length)) : 0]; }));
       setAssessmentConfig(prev => ({
         ...prev,
@@ -1337,11 +1331,6 @@ function App() {
         questionTypes: newTypes,
         pointsPerType: newPointsPerType,
       }));
-      // Convert booleans to counts for assignment question counts
-      var assignTotal = 10;
-      var enabledCount = Object.values(newCats).filter(Boolean).length || 1;
-      var assignNumeric = Object.fromEntries(Object.entries(newCats).map(function(e) { return [e[0], e[1] ? Math.max(1, Math.round(assignTotal / enabledCount)) : 0]; }));
-      setAssignmentQuestionCounts(assignNumeric);
     }
   }, [config.subject]);
 
@@ -1939,29 +1928,8 @@ function App() {
     setStandards([]);
   }, [config.state, config.grade_level, config.subject]);
 
-  // Load standards when planner tab is active
-  useEffect(() => {
-    if (activeTab === "planner" && config.subject) {
-      setPlannerLoading(true);
-      api
-        .getStandards({
-          state: config.state || "FL",
-          grade: config.grade_level || "7",
-          subject: config.subject,
-        })
-        .then((data) => {
-          console.log("Standards loaded:", data);
-          setStandards(data.standards || []);
-        })
-        .catch((e) => {
-          console.error("Error loading standards:", e);
-          setStandards([]);
-        })
-        .finally(() => {
-          setPlannerLoading(false);
-        });
-    }
-  }, [config.state, config.grade_level, config.subject, activeTab]);
+  // Load-standards effect moved into PlannerTab in PR 8d (lesson-gen
+  // cluster) alongside the plannerLoading state.
 
   // Planner-mode dashboard fetch + calendar fetch effect + calendar helpers
   // (loadCalendar/scheduleLesson/unscheduleLesson/addHoliday/removeHoliday/
@@ -3203,137 +3171,10 @@ ${signature}`;
     );
   };
 
-  // Brainstorm lesson ideas
-  const brainstormIdeasHandler = async () => {
-    if (!config.subject) {
-      addToast("Please select a subject in Settings before generating", "warning");
-      return;
-    }
-    if (!config.grade_level) {
-      addToast("Please select a grade level in Settings before generating", "warning");
-      return;
-    }
-    if (selectedStandards.length === 0 && uploadedDocs.length === 0) {
-      addToast("Please select at least one standard or upload reference documents", "warning");
-      return;
-    }
-    const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
-    if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
-    setBrainstormLoading(true);
-    setBrainstormIdeas([]);
-    setSelectedIdea(null);
-    setLessonPlan(null);  // Clear existing lesson plan so brainstorm results show
-    setLessonVariations([]);  // Clear variations too
-    try {
-      // Look up full standard objects — include benchmark, vocabulary, and learning targets
-      const fullStandards = selectedStandards.map((code) => {
-        const std = standards.find((s) => s.code === code);
-        if (!std) return code;
-        let text = std.code + ": " + std.benchmark;
-        if (std.vocabulary && std.vocabulary.length > 0) {
-          text += " | Key Vocabulary: " + std.vocabulary.join(", ");
-        }
-        if (std.learning_targets && std.learning_targets.length > 0) {
-          text += " | Learning Targets: " + std.learning_targets.join("; ");
-        }
-        return text;
-      });
-      const data = await api.brainstormLessonIdeas({
-        standards: fullStandards,
-        config: {
-          state: config.state || "FL",
-          grade: config.grade_level,
-          subject: config.subject,
-          availableTools: config.availableTools || [],
-          requirements: unitConfig.requirements || "",
-        },
-      });
-      if (data.error)
-        addToast("Note: Using sample ideas - " + data.error, "info");
-      setBrainstormIdeas(data.ideas || []);
-      if (data.usage) addToast("Brainstorm cost: " + data.usage.cost_display + " (" + data.usage.total_tokens.toLocaleString() + " tokens)", "info");
-    } catch (e) {
-      addToast("Error brainstorming: " + e.message, "error");
-    } finally {
-      setBrainstormLoading(false);
-    }
-  };
-
-  // Generate lesson plan (optionally from selected idea, optionally with variations)
-  const generateLessonPlan = async (generateVariations = false) => {
-    if (!config.subject) {
-      addToast("Please select a subject in Settings before generating", "warning");
-      return;
-    }
-    if (!config.grade_level) {
-      addToast("Please select a grade level in Settings before generating", "warning");
-      return;
-    }
-    if (selectedStandards.length === 0 && uploadedDocs.length === 0) {
-      addToast("Please select at least one standard or upload reference documents", "warning");
-      return;
-    }
-    const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
-    if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
-    setPlannerLoading(true);
-    setLessonVariations([]);
-    try {
-      // Look up full standard objects — include benchmark, vocabulary, and learning targets
-      const fullStandards = selectedStandards.map((code) => {
-        const std = standards.find((s) => s.code === code);
-        if (!std) return code;
-        let text = std.code + ": " + std.benchmark;
-        if (std.vocabulary && std.vocabulary.length > 0) {
-          text += " | Key Vocabulary: " + std.vocabulary.join(", ");
-        }
-        if (std.learning_targets && std.learning_targets.length > 0) {
-          text += " | Learning Targets: " + std.learning_targets.join("; ");
-        }
-        return text;
-      });
-      // Build title: use provided title, selected idea title, or let AI generate from standards
-      const standardCodes = selectedStandards.join(", ");
-      const autoTitle =
-        unitConfig.title || (selectedIdea ? selectedIdea.title : "");
-
-      // Include uploaded reference documents
-      const referenceDocs = uploadedDocs.map(doc => ({ filename: doc.filename, text: doc.text }));
-
-      const data = await api.generateLessonPlan({
-        standards: fullStandards,
-        config: {
-          state: config.state || "FL",
-          grade: config.grade_level,
-          subject: config.subject,
-          availableTools: config.availableTools || [],
-          ...unitConfig,
-          title: autoTitle,
-          standardCodes: standardCodes,
-          sectionCategories: unitConfig.type === "Assignment" ? Object.fromEntries(Object.entries(assignmentQuestionCounts).map(function(e) { return [e[0], e[1] > 0]; })) : undefined,
-          questionTypeCounts: unitConfig.type === "Assignment" ? assignmentQuestionCounts : undefined,
-          contentOnly: contentOnly,
-        },
-        selectedIdea: selectedIdea,
-        generateVariations: generateVariations,
-        referenceDocs: referenceDocs,
-      });
-      if (data.error) addToast("Error: " + data.error, "error");
-      else if (data.variations) {
-        setLessonVariations(data.variations);
-        addToast(
-          `Generated ${data.variations.length} ${(unitConfig.type || 'lesson plan').toLowerCase()} variations!`,
-          "success",
-        );
-      } else {
-        setLessonPlan(data.plan || data);
-      }
-      if (data.usage) addToast("Generation cost: " + data.usage.cost_display + " (" + data.usage.total_tokens.toLocaleString() + " tokens)", "info");
-    } catch (e) {
-      addToast("Error generating plan: " + e.message, "error");
-    } finally {
-      setPlannerLoading(false);
-    }
-  };
+  // brainstormIdeasHandler + generateLessonPlan moved into PlannerTab in
+  // PR 8d (lesson-gen big cluster). Both close over plannerLoading,
+  // brainstormLoading, brainstormIdeas, selectedIdea, lessonVariations,
+  // assignmentQuestionCounts — all of which moved with them.
 
   const exportLessonPlanHandler = async () => {
     if (!lessonPlan) return;
@@ -3787,59 +3628,10 @@ ${signature}`;
     }
   };
 
-  // Generate assignment from lesson plan
-  const generateAssignmentFromLessonHandler = async () => {
-    if (!config.subject) {
-      addToast("Please select a subject in Settings before generating", "warning");
-      return;
-    }
-    if (!config.grade_level) {
-      addToast("Please select a grade level in Settings before generating", "warning");
-      return;
-    }
-    if (!lessonPlan) {
-      addToast("Please generate a lesson plan first", "warning");
-      return;
-    }
-    if (selectedStandards.length > 0) {
-      const mismatchCheck = checkRequirementsMismatch(unitConfig.requirements, selectedStandards, standards);
-      if (mismatchCheck.mismatch) addToast(mismatchCheck.message, "warning", 6000);
-    }
-    setAssignmentLoading(true);
-    setGeneratedAssignment(null);
-    try {
-      const data = await api.generateAssignmentFromLesson(
-        lessonPlan,
-        {
-          grade: config.grade_level,
-          subject: config.subject,
-          availableTools: config.availableTools || [],
-          sectionCategories: Object.fromEntries(Object.entries(assignmentQuestionCounts).map(function(e) { return [e[0], e[1] > 0]; })),
-          questionTypeCounts: assignmentQuestionCounts,
-          totalQuestions: unitConfig.totalQuestions,
-          questionsPerSection: unitConfig.questionsPerSection,
-          requirements: unitConfig.requirements || "",
-          contentOnly: contentOnly,
-        },
-        assignmentType,
-      );
-      if (data.error) {
-        addToast("Error: " + data.error, "warning");
-      }
-      if (data.assignment) {
-        setGeneratedAssignment(data.assignment);
-        addToast(
-          `${assignmentType.charAt(0).toUpperCase() + assignmentType.slice(1)} generated from lesson!`,
-          "success",
-        );
-        if (data.usage) addToast("Generation cost: " + data.usage.cost_display + " (" + data.usage.total_tokens.toLocaleString() + " tokens)", "info");
-      }
-    } catch (e) {
-      addToast("Error generating assignment: " + e.message, "error");
-    } finally {
-      setAssignmentLoading(false);
-    }
-  };
+  // generateAssignmentFromLessonHandler deleted in PR 8d. It had no call
+  // sites anywhere in the frontend (verified via grep) — orphaned dead
+  // code. Its private states (assignmentLoading, assignmentType) were
+  // also dead and were removed alongside it.
 
   // ── Question Edit Mode Handlers ──
 
@@ -6785,18 +6577,6 @@ ${signature}`;
                   setUploadingTemplate={setUploadingTemplate}
                   plannerMode={plannerMode}
                   setPlannerMode={setPlannerMode}
-                  plannerLoading={plannerLoading}
-                  setPlannerLoading={setPlannerLoading}
-                  lessonVariations={lessonVariations}
-                  setLessonVariations={setLessonVariations}
-                  brainstormIdeas={brainstormIdeas}
-                  setBrainstormIdeas={setBrainstormIdeas}
-                  selectedIdea={selectedIdea}
-                  setSelectedIdea={setSelectedIdea}
-                  brainstormLoading={brainstormLoading}
-                  setBrainstormLoading={setBrainstormLoading}
-                  assignmentQuestionCounts={assignmentQuestionCounts}
-                  setAssignmentQuestionCounts={setAssignmentQuestionCounts}
                   assessmentLoading={assessmentLoading}
                   setAssessmentLoading={setAssessmentLoading}
                   gradingAssessment={gradingAssessment}
@@ -6871,8 +6651,7 @@ ${signature}`;
                   distributeQuestions={distributeQuestions}
                   redistributePoints={redistributePoints}
                   exportLessonPlanHandler={exportLessonPlanHandler}
-                  brainstormIdeasHandler={brainstormIdeasHandler}
-                  generateLessonPlan={generateLessonPlan}
+                  getSubjectSectionDefaults={getSubjectSectionDefaults}
                   itemMatchesTagFilter={itemMatchesTagFilter}
                   setActiveTab={setActiveTab}
                   setLoadedAssignmentName={setLoadedAssignmentName}
