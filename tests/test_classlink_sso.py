@@ -945,3 +945,60 @@ class TestClassLinkStateNonceHardening:
             payload = " ".join(str(a) for a in args) + " " + " ".join(str(v) for v in kwargs.values())
             assert secret_expected not in payload
             assert secret_attacker not in payload
+
+    def test_back_to_back_login_url_calls_invalidate_first_flow(self):
+        """Round-2 NIT (concurrent-flow safety): a second /api/classlink/login-url
+        call overwrites the first flow's state + nonce in session. The first
+        flow's callback (with stale state) MUST be rejected; the second flow's
+        callback (with fresh state + nonce) succeeds. Pins the contract that
+        the round-2 fix's marker-persistence design relies on."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            # Flow 1: /login-url stores state-A + nonce-A.
+            first = client.get("/api/classlink/login-url")
+            assert first.status_code == 200
+            with client.session_transaction() as sess:
+                first_state = sess["classlink_oauth_state"]
+                first_nonce = sess["classlink_oauth_nonce"]
+                assert sess.get("classlink_oauth_initiated_by_us") is True
+
+            # Flow 2: /login-url overwrites with state-B + nonce-B.
+            second = client.get("/api/classlink/login-url")
+            assert second.status_code == 200
+            with client.session_transaction() as sess:
+                second_state = sess["classlink_oauth_state"]
+                second_nonce = sess["classlink_oauth_nonce"]
+            # secrets.token_urlsafe(32) collision is astronomically unlikely;
+            # if these match the entropy is broken and the assertion fires.
+            assert second_state != first_state
+            assert second_nonce != first_nonce
+
+            # Flow 1's callback (stale state) → strict-mode rejection.
+            stale_callback = client.get(
+                f"/api/classlink/callback?code=abc&state={first_state}"
+            )
+            assert "classlink_error=state_mismatch" in stale_callback.location
+
+            # Flow 2's callback (fresh state + nonce in id_token) → success.
+            id_token = make_id_token(priv, aud="test-client-id", nonce=second_nonce)
+            mock_token_resp = MagicMock()
+            mock_token_resp.status_code = 200
+            mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
+            mock_user_resp = MagicMock()
+            mock_user_resp.status_code = 200
+            mock_user_resp.json.return_value = {
+                "UserId": "u1", "Email": "u@x.com", "Role": "teacher", "TenantId": "t1"
+            }
+            with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._link_classlink_account'), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                fresh_callback = client.get(
+                    f"/api/classlink/callback?code=def&state={second_state}"
+                )
+        assert "classlink_login=success" in fresh_callback.location
