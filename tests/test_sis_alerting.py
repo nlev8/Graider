@@ -55,8 +55,11 @@ SIS_CAPTURES = [
     ("backend/routes/clever_routes.py", 231),
     ("backend/routes/clever_routes.py", 254),
     ("backend/routes/clever_routes.py", 672),
-    ("backend/routes/classlink_routes.py", 92),
-    ("backend/routes/classlink_routes.py", 150),
+    # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
+    # hardening sprint, which added 6 lines of imports + the OIDC validation
+    # block. Captures themselves are unchanged — pins track the except block.
+    ("backend/routes/classlink_routes.py", 102),
+    ("backend/routes/classlink_routes.py", 161),
     ("backend/routes/oneroster_routes.py", 157),
     ("backend/routes/oneroster_routes.py", 204),
     ("backend/routes/oneroster_routes.py", 218),
