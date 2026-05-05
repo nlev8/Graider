@@ -666,13 +666,17 @@ class TestDeploymentIdAllowlist:
         mock_jwt_decode(_make_claims(deployment_id="first-seen"))
         cfg = _make_platform_config(deployment_ids=[])
         saved = {}
+        audit_calls = []
 
         def fake_save(issuer, config, tid):
             saved.update({"issuer": issuer, "config": config, "tid": tid})
             return True
 
+        def fake_audit(action, *args, **kwargs):
+            audit_calls.append({"action": action, "args": args, "kwargs": kwargs})
+
         monkeypatch.setattr("backend.lti.save_platform_config", fake_save)
-        monkeypatch.setattr("backend.utils.audit.audit_log", lambda *a, **kw: None)
+        monkeypatch.setattr("backend.utils.audit.audit_log", fake_audit)
 
         from backend.lti import validate_launch_jwt
         claims = validate_launch_jwt("fake.token.here", cfg)
@@ -683,24 +687,76 @@ class TestDeploymentIdAllowlist:
         assert saved["config"]["deployment_ids"] == ["first-seen"]
         assert saved["issuer"] == "https://canvas.example.com"
         assert saved["tid"] == "teacher-001"
+        # audit_log was called with the TOFU action
+        assert len(audit_calls) == 1
+        assert audit_calls[0]["action"] == "LTI_DEPLOYMENT_TOFU"
 
-    def test_launch_tofu_skips_save_when_no_teacher_id(self, mock_jwt_decode, monkeypatch):
-        """TOFU with missing _registered_by does not attempt to save but still accepts."""
+    def test_launch_tofu_falls_back_to_system_teacher_when_no_registered_by(self, mock_jwt_decode, monkeypatch):
+        """TOFU with missing _registered_by falls back to system teacher_id and still saves."""
         mock_jwt_decode(_make_claims(deployment_id="first-seen"))
-        # _registered_by absent → save guard skipped
+        # _registered_by absent → system-tier fallback used
         cfg = _make_platform_config(deployment_ids=[])
         cfg.pop("_registered_by", None)
         saved = {}
+        audit_calls = []
 
         def fake_save(issuer, config, tid):
-            saved["called"] = True
+            saved.update({"issuer": issuer, "config": config, "tid": tid})
+            return True
+
+        def fake_audit(action, *args, **kwargs):
+            audit_calls.append({"action": action, "args": args, "kwargs": kwargs})
 
         monkeypatch.setattr("backend.lti.save_platform_config", fake_save)
+        monkeypatch.setattr("backend.utils.audit.audit_log", fake_audit)
 
         from backend.lti import validate_launch_jwt
         # Should still accept the launch (not raise)
-        validate_launch_jwt("fake.token.here", cfg)
-        assert "called" not in saved
+        claims = validate_launch_jwt("fake.token.here", cfg)
+        assert claims["https://purl.imsglobal.org/spec/lti/claim/deployment_id"] == "first-seen"
+
+        # save_platform_config IS called, using the system teacher_id fallback
+        assert saved.get("tid") == "system"
+        assert saved["config"]["deployment_ids"] == ["first-seen"]
+
+        # audit_log IS called with the TOFU action
+        assert len(audit_calls) == 1
+        assert audit_calls[0]["action"] == "LTI_DEPLOYMENT_TOFU"
+        # Audit message marks this as system-tier
+        audit_detail = audit_calls[0]["args"][0] if audit_calls[0]["args"] else ""
+        assert "system-tier" in audit_detail
+
+    def test_launch_tofu_uses_registered_by_when_present(self, mock_jwt_decode, monkeypatch):
+        """TOFU with _registered_by present uses that teacher_id (fallback not triggered)."""
+        mock_jwt_decode(_make_claims(deployment_id="first-seen"))
+        cfg = _make_platform_config(deployment_ids=[], _registered_by="teacher-explicit")
+        saved = {}
+        audit_calls = []
+
+        def fake_save(issuer, config, tid):
+            saved.update({"issuer": issuer, "config": config, "tid": tid})
+            return True
+
+        def fake_audit(action, *args, **kwargs):
+            audit_calls.append({"action": action, "args": args, "kwargs": kwargs})
+
+        monkeypatch.setattr("backend.lti.save_platform_config", fake_save)
+        monkeypatch.setattr("backend.utils.audit.audit_log", fake_audit)
+
+        from backend.lti import validate_launch_jwt
+        claims = validate_launch_jwt("fake.token.here", cfg)
+        assert claims["https://purl.imsglobal.org/spec/lti/claim/deployment_id"] == "first-seen"
+
+        # Uses the explicit teacher, not "system"
+        assert saved.get("tid") == "teacher-explicit"
+        assert saved["config"]["deployment_ids"] == ["first-seen"]
+
+        # audit_log fired with TOFU action
+        assert len(audit_calls) == 1
+        assert audit_calls[0]["action"] == "LTI_DEPLOYMENT_TOFU"
+        # Message does NOT mention system-tier
+        audit_detail = audit_calls[0]["args"][0] if audit_calls[0]["args"] else ""
+        assert "system-tier" not in audit_detail
 
     def test_launch_after_tofu_rejects_different_deployment(self, mock_jwt_decode):
         """After TOFU populates allowlist, different deployment_id is rejected."""
