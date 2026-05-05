@@ -147,14 +147,17 @@ const baseProps = () => ({
   // Constants and refs.
   domainNameMap: {},
   getDomains: () => [],
-  // PR 8d Codex Round 1 MAJOR: PlannerTab's new subject-change effect
-  // calls getSubjectSectionDefaults(subject) and immediately Object.values()
-  // the result. The Proxy fallback's bare vi.fn() returns undefined →
-  // Object.values(undefined) throws. Provide a concrete stub.
+  // PR 8d Codex Round 1 MAJOR + Round 2 MINOR fixture fidelity fix:
+  // PlannerTab's new subject-change effect calls
+  // getSubjectSectionDefaults(subject) → Object.values() the result. The
+  // Proxy fallback's bare vi.fn() returns undefined; without this stub
+  // Object.values(undefined) throws silently inside the effect. Stub
+  // mirrors the real App.jsx getSubjectSectionDefaults("Math") return
+  // (9 keys, 6 true) since baseProps sets config.subject to 'Math'.
   getSubjectSectionDefaults: () => ({
-    multiple_choice: false, short_answer: false, math_computation: false,
-    geometry_visual: false, graphing: false, data_analysis: false,
-    extended_writing: false, vocabulary: false, true_false: false, florida_fast: false,
+    multiple_choice: true, short_answer: true, math_computation: true,
+    geometry_visual: true, graphing: true, data_analysis: true,
+    extended_writing: false, vocabulary: false, true_false: false,
   }),
   standardsScrollRef: { current: null },
   assessmentStandardsScrollRef: { current: null },
