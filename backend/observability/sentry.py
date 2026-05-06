@@ -169,45 +169,69 @@ def _redact_paths_in_string(text: Any) -> Any:
     return _LOG_PATH_PATTERN.sub("[Filtered-path]", text)
 
 
-def _scrub_logentry(event: dict) -> None:
-    """Strip identifier-bearing paths from logentry.params + logentry.formatted.
+def _scrub_event_paths(event: dict) -> None:
+    """Strip identifier-bearing paths from all string-bearing event fields.
 
-    Sentry's logging integration captures `logger.exception(msg, *args)`
-    calls as `event["logentry"]` with structure:
-      - message:   format string ("Request failed: %s")
-      - params:    list of args (the raw `request.path`)
-      - formatted: rendered string ("Request failed: /api/...")
+    Sentry events have several places that can carry raw paths:
+      - event["message"] — set by sentry_sdk.capture_message(f"... {request.path}")
+      - event["logentry"]["message"] — format string when caller uses f-string
+      - event["logentry"]["formatted"] — rendered message
+      - event["logentry"]["params"] — args to a `%`-formatted log call
+      - event["extra"][*] — kwargs from `logger.error(..., extra={"path": ...})`
+      - event["breadcrumbs"][*]["message"] / ["data"] — Flask integration crumbs
 
-    `_scrub_request()` operates on `event["request"]` and never sees
-    logentry. Codex audit MAJOR #14 round-3 CRITICAL: real Flask +
-    Sentry SDK 2.58 simulation confirmed routes that
-    `logger.exception("Request failed: %s", request.path)` leak the
-    full ID-bearing path (student/class/submission IDs) into
-    logentry.formatted and logentry.params. Two cited call sites:
-    `backend/routes/student_account_routes.py:224` and
-    `backend/routes/grading_routes.py:1260`.
+    Codex audit MAJOR #14 rounds 3+4 found leaks at multiple of these.
+    A single boundary scrubber covers all of them; future code paths
+    that route data through these fields are protected too.
 
-    Defensive at the Sentry boundary: every Sentry event passes through
-    before_send (or before_send_transaction); this scrub catches all
-    logger.exception/error/warning calls with path-like params, present
-    AND future, without requiring per-call-site fixes.
-
-    The format-string in `logentry.message` is preserved (no PII) so
-    debugging context is not fully lost.
+    BARE IDS (non-path strings like "abc123") are NOT addressed here —
+    the regex matches paths only. Call sites must hash IDs before
+    logging when those IDs leak from non-path fields. Fixed in this PR
+    for the 4 sites Codex cited (grading_tasks.py + portal_grading.py).
     """
+    # Top-level message (capture_message)
+    if isinstance(event.get("message"), str):
+        event["message"] = _redact_paths_in_string(event["message"])
+
+    # logentry sub-fields
     le = event.get("logentry")
-    if not isinstance(le, dict):
-        return
+    if isinstance(le, dict):
+        for key in ("message", "formatted"):
+            if isinstance(le.get(key), str):
+                le[key] = _redact_paths_in_string(le[key])
 
-    params = le.get("params")
-    if isinstance(params, list):
-        le["params"] = [_redact_paths_in_string(p) for p in params]
-    elif isinstance(params, tuple):
-        le["params"] = tuple(_redact_paths_in_string(p) for p in params)
+        params = le.get("params")
+        if isinstance(params, list):
+            le["params"] = [_redact_paths_in_string(p) for p in params]
+        elif isinstance(params, tuple):
+            le["params"] = tuple(_redact_paths_in_string(p) for p in params)
 
-    formatted = le.get("formatted")
-    if isinstance(formatted, str):
-        le["formatted"] = _redact_paths_in_string(formatted)
+    # event["extra"] — flat kwargs dict; redact path-shaped strings.
+    extra = event.get("extra")
+    if isinstance(extra, dict):
+        for k, v in list(extra.items()):
+            extra[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
+    # event["breadcrumbs"]["values"][*] — Flask integration may auto-crumb URLs.
+    breadcrumbs = event.get("breadcrumbs")
+    if isinstance(breadcrumbs, dict):
+        crumbs = breadcrumbs.get("values")
+    else:
+        crumbs = breadcrumbs  # SDK can also pass a bare list
+    if isinstance(crumbs, list):
+        for crumb in crumbs:
+            if not isinstance(crumb, dict):
+                continue
+            if isinstance(crumb.get("message"), str):
+                crumb["message"] = _redact_paths_in_string(crumb["message"])
+            data = crumb.get("data")
+            if isinstance(data, dict):
+                for k, v in list(data.items()):
+                    data[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
+
+# Backward-compat alias for tests written against the round-3/4 name.
+_scrub_logentry = _scrub_event_paths
 
 
 def _scrub_request(request: Optional[dict]) -> None:
@@ -288,7 +312,7 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
 
     _scrub_request(event.get("request"))
     _scrub_frame_locals(event)
-    _scrub_logentry(event)
+    _scrub_event_paths(event)
 
     user = event.setdefault("user", {})
     if isinstance(user, dict):
@@ -341,7 +365,7 @@ def before_send_transaction(event: dict, hint: dict) -> Optional[dict]:
     Always returns the event (we want APM signal); only scrubs in place.
     """
     _scrub_request(event.get("request"))
-    _scrub_logentry(event)
+    _scrub_event_paths(event)
 
     user = event.setdefault("user", {})
     if isinstance(user, dict):

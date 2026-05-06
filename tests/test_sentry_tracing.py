@@ -378,6 +378,136 @@ class TestLogentryScrubbing:
         assert sentry_mod._redact_paths_in_string(42) == 42
         assert sentry_mod._redact_paths_in_string(None) is None
 
+
+class TestEventBoundaryPathScrubbing:
+    """Round-4 Codex CRITICAL fold: paths leak through multiple Sentry event
+    surfaces beyond logentry.params/formatted. Generalized boundary scrubber
+    catches them all."""
+
+    def test_top_level_message_scrubbed(self):
+        """capture_message(f'... {request.path}') sets event['message']
+        directly, bypassing logentry. Cited site: grading_tasks.py:141."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "message": "grade_portal_submission: failed at /api/teacher/class/c123/student/s456/report-card",
+        }
+        out = sentry_mod.before_send(event, {})
+        assert "/api/teacher" not in out["message"]
+        assert "[Filtered-path]" in out["message"]
+
+    def test_logentry_message_format_string_scrubbed(self):
+        """logger.error(f'failed at {request.path}') leaves the rendered
+        path in logentry.message (the format string), with empty params."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "logentry": {
+                "message": "failed at /api/student-history/abc123",
+                "params": [],
+                "formatted": "failed at /api/student-history/abc123",
+            },
+        }
+        out = sentry_mod.before_send(event, {})
+        le = out["logentry"]
+        assert "abc123" not in le["message"]
+        assert "abc123" not in le["formatted"]
+
+    def test_extra_dict_paths_scrubbed(self):
+        """logger.error(..., extra={'path': '/api/...'}) puts raw paths in event.extra."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "extra": {
+                "request_path": "/api/student/abc/draft",
+                "count": 42,
+                "non_path_string": "hello",
+            },
+        }
+        out = sentry_mod.before_send(event, {})
+        assert out["extra"]["request_path"] == "[Filtered-path]"
+        assert out["extra"]["count"] == 42  # non-string preserved
+        assert out["extra"]["non_path_string"] == "hello"  # non-path string preserved
+
+    def test_breadcrumbs_dict_form_scrubbed(self):
+        """Sentry breadcrumbs use {'values': [...]} envelope shape."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "breadcrumbs": {
+                "values": [
+                    {"message": "GET /api/teacher/class/c1/student/s2", "category": "http"},
+                    {"data": {"url": "/api/student-history/abc123", "method": "GET"}},
+                ],
+            },
+        }
+        out = sentry_mod.before_send(event, {})
+        crumbs = out["breadcrumbs"]["values"]
+        assert "[Filtered-path]" in crumbs[0]["message"]
+        assert crumbs[1]["data"]["url"] == "[Filtered-path]"
+
+    def test_breadcrumbs_bare_list_form_scrubbed(self):
+        """Some SDK versions pass breadcrumbs as a bare list."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "breadcrumbs": [
+                {"message": "GET /api/x/y/z", "category": "http"},
+            ],
+        }
+        out = sentry_mod.before_send(event, {})
+        # Defensive: bare-list form is handled the same way
+        assert "[Filtered-path]" in out["breadcrumbs"][0]["message"]
+
+    def test_transactions_share_full_boundary_scrubber(self):
+        """before_send_transaction must use the same generalized scrubber."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "message": "transaction message with /api/x/y/z",
+            "extra": {"path": "/api/student/abc"},
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        assert "/api/x/y" not in out["message"]
+        assert out["extra"]["path"] == "[Filtered-path]"
+
+    def test_missing_fields_no_crash(self):
+        """All boundary fields are optional — scrubber must not raise on
+        any combination of missing/wrong-type fields."""
+        sentry_mod = _import_sentry_module()
+        # All missing
+        sentry_mod.before_send({}, {})
+        # Wrong types
+        out = sentry_mod.before_send(
+            {"message": 42, "extra": "not-a-dict", "breadcrumbs": "bare-string"},
+            {},
+        )
+        assert out is not None  # no crash, no client-error short-circuit
+
+
+class TestCallSiteIdHashing:
+    """Round-4 Codex CRITICAL: bare submission_id values leak through
+    capture_message and logger params. Static-source pin tests for the
+    4 cited sites — fixed to hash before logging.
+
+    Boundary scrubber alone can't catch bare IDs (they aren't paths).
+    Call-site discipline is required."""
+
+    def test_grading_tasks_no_assessment_uses_hashed_id(self):
+        from pathlib import Path
+        src = Path(__file__).resolve().parent.parent / "backend/tasks/grading_tasks.py"
+        text = src.read_text()
+        # New: hash precomputed before both logger and capture_message use it
+        assert "sub_hash = hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]" in text
+        # Old leak pattern must be gone
+        assert "no assessment for submission {submission_id}" not in text
+
+    def test_portal_grading_fetch_failures_hash_id(self):
+        from pathlib import Path
+        src = Path(__file__).resolve().parent.parent / "backend/services/portal_grading.py"
+        text = src.read_text()
+        # All 3 cited error logs in portal_grading.py must be hashed.
+        # Bare `submission_id` must not appear as a logger arg in any of them.
+        assert text.count("hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]") >= 3, (
+            "Expected ≥3 hashed-submission-id call sites in portal_grading.py "
+            "(failed fetch, full_context fetch, mark-failed) — Codex round-4 cited 3"
+        )
+
     def test_user_id_resolved_to_hash_outside_request_context(self):
         """Outside Flask request context, user.id falls back to 'anonymous'."""
         sentry_mod = _import_sentry_module()

@@ -5,6 +5,7 @@ Bridges portal student submissions to Graider's full 18-factor grading pipeline.
 Skips Pass 1 (extraction) since portal answers are already structured JSON.
 Calls grade_per_question (Pass 2) + generate_feedback (Pass 3) from assignment_grader.py.
 """
+import hashlib
 import logging
 import signal
 import sys
@@ -324,7 +325,12 @@ def _fetch_submission_row(sb, supabase_table, submission_id):
         result = sb.table(supabase_table).select('*').eq('id', submission_id).single().execute()
         return result.data
     except Exception as e:
-        logger.error("Failed to fetch submission row %s: %s", submission_id, e)
+        # FERPA: hash submission_id — see Codex audit MAJOR #14 round-4.
+        logger.error(
+            "Failed to fetch submission row %s: %s",
+            hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
+            e,
+        )
         sentry_sdk.capture_exception(e)
         return None
 
@@ -414,8 +420,9 @@ def fetch_submission_full_context(supabase_table, submission_id, teacher_id):
     try:
         row = sb.table(supabase_table).select('*').eq('id', submission_id).single().execute()
     except Exception as e:
+        # FERPA: hash submission_id — see Codex audit MAJOR #14 round-4.
         logger.error("fetch_submission_full_context: submission fetch failed %s: %s",
-                     submission_id, e)
+                     hashlib.sha256(str(submission_id).encode()).hexdigest()[:8], e)
         sentry_sdk.capture_exception(e)
         return None
     if not row or not getattr(row, 'data', None):
@@ -891,7 +898,12 @@ def grade_portal_submission_sync(
         except Exception as e:
             # Critical: if we can't mark a submission as failed, it stays in
             # 'partial' forever and never retries. Sentry must see this.
-            logger.error("Failed to mark submission %s as grading_failed: %s", submission_id, e)
+            # FERPA: hash submission_id — see Codex audit MAJOR #14 round-4.
+            logger.error(
+                "Failed to mark submission %s as grading_failed: %s",
+                hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
+                e,
+            )
             sentry_sdk.capture_exception(e)
 
 
