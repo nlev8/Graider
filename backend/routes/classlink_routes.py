@@ -99,7 +99,7 @@ def _link_classlink_account(classlink_id, email):
                         classlink_id, matches[0])
         elif len(matches) > 1:
             logger.warning("ClassLink user %s email %s matches %d teachers — skipping auto-link",
-                           classlink_id, email, len(matches))
+                           classlink_id, redact_email(email), len(matches))
         # No matches: user operates as classlink:{id} — starts fresh, no error
 
     except Exception as e:
@@ -155,10 +155,16 @@ def _trigger_roster_sync(teacher_id, tenant_id):
             finally:
                 loop.close()
 
-            normalized = normalize_roster(raw)
+            classes, students_norm, enrollments, _accommodations = normalize_roster(raw)
+
+            # sync_roster_to_db expects enrollment tuples, not dicts
+            enrollment_tuples = [
+                (e["class_external_id"], e["student_external_id"])
+                for e in enrollments
+            ]
+
             sync_roster_to_db(
-                normalized['classes'], normalized['students'],
-                normalized['enrollments'], teacher_id, provider="classlink"
+                classes, students_norm, enrollment_tuples, teacher_id, provider="classlink"
             )
             logger.info("Post-login ClassLink roster sync complete for %s", teacher_id)
         except Exception as e:

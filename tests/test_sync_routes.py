@@ -478,7 +478,7 @@ class TestSyncOneTeacherRuntime:
              patch(
                  'backend.roster_sync.sync_roster_to_db',
                  return_value=counts,
-             ), \
+             ) as mock_sync, \
              patch(
                  'backend.roster_sync.deactivate_missing_students',
                  return_value=0,
@@ -494,6 +494,18 @@ class TestSyncOneTeacherRuntime:
         assert result['classes'] == 1
         assert result['students'] == 1
         assert result['provider'] == 'oneroster'
+
+        # Verify enrollments were converted to tuples (not passed as dicts).
+        # sync_roster_to_db iterates `for class_ext, student_ext in enrollments`
+        # so dicts would unpack to keys "class_external_id"/"student_external_id"
+        # instead of the actual IDs — silent data corruption.
+        sync_args = mock_sync.call_args
+        passed_enrollments = sync_args[0][2]  # 3rd positional arg
+        assert len(passed_enrollments) == 1
+        assert isinstance(passed_enrollments[0], tuple), (
+            f"enrollments must be tuples, got {type(passed_enrollments[0]).__name__}"
+        )
+        assert passed_enrollments[0] == ('oneroster:c1', 'oneroster:s1')
 
 
 class TestSyncOneTeacherPIIRedaction:
@@ -538,3 +550,39 @@ class TestCleverArchiveLogsHashStudentId:
                or 'Archived Clever student no longer in roster: %s", hashlib.sha256(str(sid)' in text, (
             "Archived-out log must hash sid"
         )
+
+
+class TestAuditLocalFileFormatContract:
+    """PR #214: audit.py local-file format change must remain compatible
+    with the reader at backend/app.py:_get_audit_logs (PR #214 round-2
+    Codex review found the previous format `timestamp | teacher=X | user
+    | action | details` would cause the existing reader to mis-parse
+    `user` as `teacher=X`. Fixed by appending teacher_id LAST instead.)
+    """
+
+    def test_audit_log_line_parses_with_existing_reader(self, tmp_path, monkeypatch):
+        # Redirect AUDIT_LOG_FILE to a temp path for both writer and reader
+        log_path = str(tmp_path / "audit.log")
+        monkeypatch.setattr("backend.utils.audit.AUDIT_LOG_FILE", log_path)
+        monkeypatch.setattr("backend.app.AUDIT_LOG_FILE", log_path)
+
+        from backend.utils.audit import audit_log
+        from backend.app import get_audit_logs
+
+        audit_log(
+            action="PERIODIC_SYNC",
+            details="provider=clever classes=5 students=12",
+            user="system",
+            teacher_id="t-abc-123",
+        )
+
+        logs = get_audit_logs(limit=10)
+        assert len(logs) == 1
+        entry = logs[0]
+        # The first 4 fields MUST be readable in their original semantic
+        # positions (existing 4-field reader contract).
+        assert entry['user'] == 'system'
+        assert entry['action'] == 'PERIODIC_SYNC'
+        assert entry['details'] == 'provider=clever classes=5 students=12'
+        # The new 5th field carries teacher_id (added in PR #214).
+        assert entry.get('teacher_id') == 't-abc-123'

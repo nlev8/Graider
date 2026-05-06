@@ -220,8 +220,15 @@ def _sync_one_teacher(teacher):
                 loop.close()
 
             classes, students_norm, enrollments, _accommodations = normalize_roster(raw)
+
+            # sync_roster_to_db expects enrollment tuples, not dicts
+            enrollment_tuples = [
+                (e["class_external_id"], e["student_external_id"])
+                for e in enrollments
+            ]
+
             counts = sync_roster_to_db(
-                classes, students_norm, enrollments, teacher_id, provider="oneroster"
+                classes, students_norm, enrollment_tuples, teacher_id, provider="oneroster"
             )
 
             current_ids = {s['external_id'] for s in students_norm}

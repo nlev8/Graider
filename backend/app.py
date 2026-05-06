@@ -264,12 +264,17 @@ def get_audit_logs(limit: int = 100):
             for line in recent:
                 parts = line.strip().split(' | ')
                 if len(parts) >= 4:
-                    logs.append({
+                    entry = {
                         'timestamp': parts[0],
                         'user': parts[1],
                         'action': parts[2],
                         'details': parts[3] if len(parts) > 3 else ''
-                    })
+                    }
+                    # 5th field (added 2026-05-06 PR #214) carries
+                    # `teacher=<id>` for new entries; absent on legacy lines.
+                    if len(parts) >= 5 and parts[4].startswith('teacher='):
+                        entry['teacher_id'] = parts[4][len('teacher='):]
+                    logs.append(entry)
             return logs[::-1]  # Newest first
     except Exception as e:
         _logger.error("Error reading audit logs: %s", e)
