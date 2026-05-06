@@ -240,6 +240,7 @@ def lti_config_post():
         "auth_endpoint": data["auth_login_url"],
         "token_url": data["auth_token_url"],
         "jwks_uri": data["jwks_url"],
+        "deployment_ids": list(data.get("deployment_ids") or []),
         "_registered_by": g.teacher_id,
     }
 

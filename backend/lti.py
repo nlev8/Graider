@@ -255,6 +255,35 @@ def validate_launch_jwt(id_token, platform_config):
     if not deployment_id:
         raise ValueError("Missing deployment_id claim")
 
+    allowlist = list(platform_config.get("deployment_ids") or [])
+    if not allowlist:
+        # TOFU — record first-seen deployment_id, accept this launch
+        new_cfg = dict(platform_config)
+        new_cfg["deployment_ids"] = [deployment_id]
+        new_cfg["_tofu_recorded_at"] = datetime.now(tz=timezone.utc).isoformat()
+        issuer = claims.get("iss")
+        # Fall back to system teacher_id if config has no _registered_by — this happens
+        # for system-tier or legacy configs and would otherwise leave TOFU toothless
+        # (no save → empty allowlist persists → next launch also unconditionally accepted).
+        teacher_id = platform_config.get("_registered_by") or _SYSTEM_TEACHER_ID
+        if issuer:  # teacher_id is now guaranteed truthy via the or-fallback
+            save_platform_config(issuer, new_cfg, teacher_id)
+            from backend.utils.audit import audit_log
+            audit_log(
+                "LTI_DEPLOYMENT_TOFU",
+                f"first-seen deployment_id={deployment_id} for issuer={issuer}"
+                + (
+                    " (system-tier persistence — no _registered_by on config)"
+                    if not platform_config.get("_registered_by")
+                    else ""
+                ),
+                teacher_id=teacher_id,
+            )
+    elif deployment_id not in allowlist:
+        raise ValueError(
+            f"deployment_id {deployment_id!r} not in allowlist for issuer={claims.get('iss')!r}"
+        )
+
     return claims
 
 

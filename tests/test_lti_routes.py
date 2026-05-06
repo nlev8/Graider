@@ -143,3 +143,38 @@ class TestConfigPost:
         data = resp.get_json()
         assert data.get('status') == 'ok'
         assert data.get('issuer') == 'https://canvas.example.com'
+
+    @patch('backend.utils.audit.audit_log')
+    @patch('backend.storage.save', return_value=True)
+    def test_lti_config_accepts_deployment_ids(self, mock_save, mock_audit, client, teacher_headers):
+        """POST /api/lti/config persists deployment_ids list."""
+        resp = client.post('/api/lti/config', json={
+            'issuer': 'https://canvas.example.com',
+            'client_id': '10000000000001',
+            'auth_login_url': 'https://canvas.example.com/api/lti/authorize_redirect',
+            'auth_token_url': 'https://canvas.example.com/login/oauth2/token',
+            'jwks_url': 'https://canvas.example.com/api/lti/security/jwks',
+            'deployment_ids': ['d1', 'd2'],
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        assert resp.get_json().get('status') == 'ok'
+        # Verify the config passed to storage.save contains deployment_ids
+        mock_save.assert_called_once()
+        saved_config = mock_save.call_args[0][1]  # second positional arg is the config dict
+        assert saved_config.get('deployment_ids') == ['d1', 'd2']
+
+    @patch('backend.utils.audit.audit_log')
+    @patch('backend.storage.save', return_value=True)
+    def test_lti_config_omitted_deployment_ids_defaults_to_empty_list(self, mock_save, mock_audit, client, teacher_headers):
+        """POST without deployment_ids → persists empty list."""
+        resp = client.post('/api/lti/config', json={
+            'issuer': 'https://canvas.example.com',
+            'client_id': '10000000000001',
+            'auth_login_url': 'https://canvas.example.com/api/lti/authorize_redirect',
+            'auth_token_url': 'https://canvas.example.com/login/oauth2/token',
+            'jwks_url': 'https://canvas.example.com/api/lti/security/jwks',
+        }, headers=teacher_headers)
+        assert resp.status_code == 200
+        mock_save.assert_called_once()
+        saved_config = mock_save.call_args[0][1]
+        assert saved_config.get('deployment_ids') == []
