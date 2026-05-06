@@ -9,9 +9,21 @@ test.describe('Server Health', () => {
 
   test('/healthz returns ok', async ({ request }) => {
     const response = await request.get('/healthz')
-    expect(response.status()).toBe(200)
+    // Per fail-closed contract (PR #220): 503 when any required dep is in
+    // error/degraded state, 200 when all are ok or not-configured.
+    // Body shape is preserved either way.
+    expect([200, 503]).toContain(response.status())
     const data = await response.json()
     expect(data.app).toBe('ok')
+    if (response.status() === 200) {
+      // Healthy path — every reported dep should be in the healthy whitelist.
+      const healthyStates = ['ok', 'not configured']
+      for (const dep of ['supabase', 'redis']) {
+        if (data[dep] !== undefined) {
+          expect(healthyStates).toContain(data[dep])
+        }
+      }
+    }
   })
 
   test('/api/clever/health returns status', async ({ request }) => {

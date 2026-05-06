@@ -1785,8 +1785,23 @@ def get_user_manual():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/healthz')
+@limiter.exempt
 def healthz():
-    """General health check for Railway load balancer."""
+    """General health check for Railway load balancer.
+
+    Exempt from Flask-Limiter so a Redis outage that breaks the limiter's
+    before_request storage call cannot turn a dependency check into a
+    500. The route owns its own Redis check below and surfaces 503
+    fail-closed semantics — that contract must not be pre-empted.
+
+    Known defensive gap (Codex PR #220 round-2 MINOR): Flask-Session
+    (Redis-backed) can still pre-empt this route if the request carries
+    a session cookie, since the session interface loads BEFORE this
+    handler runs. Healthcheck probes (Railway, BetterStack) don't carry
+    cookies, so this is not the deploy-gate failure mode. But a
+    cookie-bearing client hitting /healthz during a Redis outage will
+    still see Flask 500. Filed as future hardening; not in scope for #220.
+    """
     # Alert-drill short-circuit — exercises the full BetterStack alert
     # pipeline without touching Supabase, so student/teacher API traffic
     # is unaffected during drills. See docs/observability.md § "Quarterly
@@ -1835,7 +1850,17 @@ def healthz():
     except Exception:
         status["redis"] = "error"
 
-    return jsonify(status)
+    # Fail-closed contract: HTTP 503 when any required dependency is not
+    # healthy, so Railway / load balancers can route around a degraded
+    # pod. "not configured" is treated as healthy (dev/test where the
+    # dep isn't wired). "ok" is healthy; everything else (including
+    # "error" and "degraded (status N)") is unhealthy.
+    healthy_states = {"ok", "not configured"}
+    is_healthy = all(
+        status.get(dep, "missing") in healthy_states
+        for dep in ("supabase", "redis")
+    )
+    return jsonify(status), 200 if is_healthy else 503
 
 
 # ══════════════════════════════════════════════════════════════
