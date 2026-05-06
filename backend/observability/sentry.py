@@ -11,6 +11,7 @@ See docs/superpowers/specs/2026-04-11-observability-sentry-betterstack-design.md
 import hashlib
 import logging
 import os
+import re
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,44 @@ logger = logging.getLogger(__name__)
 # Module-level guard to prevent sentry_sdk.init() from running twice when
 # backend.app is imported multiple times (common in test teardown/setup).
 _initialized = False
+
+# APM/tracing sample rate. 5% default — gives signal on slow routes,
+# queue latency, and LLM call timing without blowing the BetterStack
+# error-tracking quota (which is shared with traces on the free tier).
+# Closes audit MAJOR #14 (Codex full-codebase audit 2026-05-06):
+# previously hardcoded to 0.0, leaving latency regressions diagnostically
+# blind. Operators can override per-environment via SENTRY_TRACES_SAMPLE_RATE
+# (e.g., 0.0 to fully disable, 0.5 for high-fidelity tuning sprints).
+def _resolve_traces_sample_rate() -> Optional[float]:
+    """Resolve the traces_sample_rate kwarg for sentry_sdk.init().
+
+    Codex audit round-1 of PR #222 noted: per Sentry docs,
+    `traces_sample_rate=0.0` prevents NEW traces but continues incoming
+    sampled traces (relevant for distributed tracing). `None` fully
+    disables. Graider has no upstream propagator, so 0.0 is functionally
+    equivalent to None — but pass None for explicitness so an operator
+    setting `SENTRY_TRACES_SAMPLE_RATE=0.0` to "disable" actually does so
+    in the Sentry-canonical way.
+    """
+    raw = os.getenv("SENTRY_TRACES_SAMPLE_RATE")
+    if raw is None:
+        return 0.05
+    try:
+        rate = float(raw)
+    except ValueError:
+        logger.warning(
+            "SENTRY_TRACES_SAMPLE_RATE=%r is not a valid float; falling back to 0.05",
+            raw,
+        )
+        return 0.05
+    if not 0.0 <= rate <= 1.0:
+        logger.warning(
+            "SENTRY_TRACES_SAMPLE_RATE=%r out of range [0.0, 1.0]; falling back to 0.05",
+            raw,
+        )
+        return 0.05
+    # Map 0.0 → None for full disable per Sentry docs.
+    return None if rate == 0.0 else rate
 
 # PII field names scrubbed from stack frame locals.
 # Keep this list in sync with docs/observability.md § "Known noise sources".
@@ -111,6 +150,121 @@ def _resolve_user_id() -> str:
     return hashlib.sha256(str(uid).encode()).hexdigest()[:12]
 
 
+# Path pattern: 2+ url-safe segments. Conservative — redacts identifier
+# routes (`/api/student-history/<student_id>`) AND non-identifier ones
+# (`/api/healthz`) alike. The endpoint name in event["transaction"] is the
+# safe replacement signal; we lose the path information from logentry but
+# the FERPA risk of selective regex matching outweighs the diagnostic loss.
+_LOG_PATH_PATTERN = re.compile(r"/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)+")
+
+
+def _redact_paths_in_string(text: Any) -> Any:
+    """Return `text` with any path-like substrings replaced by [Filtered-path].
+
+    Non-string inputs are returned unchanged so callers can apply this to
+    arbitrary logentry param values (ints, dicts, etc.) without crashing.
+    """
+    if not isinstance(text, str):
+        return text
+    return _LOG_PATH_PATTERN.sub("[Filtered-path]", text)
+
+
+def _scrub_event_paths(event: dict) -> None:
+    """Strip identifier-bearing paths from all string-bearing event fields.
+
+    Sentry events have several places that can carry raw paths:
+      - event["message"] — set by sentry_sdk.capture_message(f"... {request.path}")
+      - event["logentry"]["message"] — format string when caller uses f-string
+      - event["logentry"]["formatted"] — rendered message
+      - event["logentry"]["params"] — args to a `%`-formatted log call
+      - event["extra"][*] — kwargs from `logger.error(..., extra={"path": ...})`
+      - event["breadcrumbs"][*]["message"] / ["data"] — Flask integration crumbs
+
+    Codex audit MAJOR #14 rounds 3+4 found leaks at multiple of these.
+    A single boundary scrubber covers all of them; future code paths
+    that route data through these fields are protected too.
+
+    BARE IDS (non-path strings like "abc123") are NOT addressed here —
+    the regex matches paths only. Call sites must hash IDs before
+    logging when those IDs leak from non-path fields. Fixed in this PR
+    for the 4 sites Codex cited (grading_tasks.py + portal_grading.py).
+    """
+    # Top-level message (capture_message)
+    if isinstance(event.get("message"), str):
+        event["message"] = _redact_paths_in_string(event["message"])
+
+    # logentry sub-fields
+    le = event.get("logentry")
+    if isinstance(le, dict):
+        for key in ("message", "formatted"):
+            if isinstance(le.get(key), str):
+                le[key] = _redact_paths_in_string(le[key])
+
+        params = le.get("params")
+        if isinstance(params, list):
+            le["params"] = [_redact_paths_in_string(p) for p in params]
+        elif isinstance(params, tuple):
+            le["params"] = tuple(_redact_paths_in_string(p) for p in params)
+
+    # event["extra"] — flat kwargs dict; redact path-shaped strings.
+    extra = event.get("extra")
+    if isinstance(extra, dict):
+        for k, v in list(extra.items()):
+            extra[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
+    # event["breadcrumbs"]["values"][*] — Flask integration may auto-crumb URLs.
+    breadcrumbs = event.get("breadcrumbs")
+    if isinstance(breadcrumbs, dict):
+        crumbs = breadcrumbs.get("values")
+    else:
+        crumbs = breadcrumbs  # SDK can also pass a bare list
+    if isinstance(crumbs, list):
+        for crumb in crumbs:
+            if not isinstance(crumb, dict):
+                continue
+            if isinstance(crumb.get("message"), str):
+                crumb["message"] = _redact_paths_in_string(crumb["message"])
+            data = crumb.get("data")
+            if isinstance(data, dict):
+                for k, v in list(data.items()):
+                    data[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
+    # event["spans"][*] — APM transaction span descriptions / data.
+    # Codex audit MAJOR #14 round-5 broader-scope: a transaction with
+    # /api/.../<id> in span description survived the round-4 scrubber.
+    spans = event.get("spans")
+    if isinstance(spans, list):
+        for span in spans:
+            if not isinstance(span, dict):
+                continue
+            if isinstance(span.get("description"), str):
+                span["description"] = _redact_paths_in_string(span["description"])
+            sdata = span.get("data")
+            if isinstance(sdata, dict):
+                for k, v in list(sdata.items()):
+                    sdata[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
+    # event["contexts"]["trace"] — APM root context. May carry op + description
+    # with URL-shaped path. Other contexts (runtime, os) are non-PII.
+    contexts = event.get("contexts")
+    if isinstance(contexts, dict):
+        trace = contexts.get("trace")
+        if isinstance(trace, dict):
+            for key in ("description", "url"):
+                if isinstance(trace.get(key), str):
+                    trace[key] = _redact_paths_in_string(trace[key])
+
+    # event["tags"][*] — user-set or integration-set tags. Flat dict of strings.
+    tags = event.get("tags")
+    if isinstance(tags, dict):
+        for k, v in list(tags.items()):
+            tags[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
+
+# Backward-compat alias for tests written against the round-3/4 name.
+_scrub_logentry = _scrub_event_paths
+
+
 def _scrub_request(request: Optional[dict]) -> None:
     """Strip PII from the request dict on a Sentry event (in place)."""
     if not request:
@@ -121,11 +275,26 @@ def _scrub_request(request: Optional[dict]) -> None:
     for key in ("data", "json", "form", "cookies"):
         request.pop(key, None)
 
-    # Redact auth-bearing headers.
+    # Drop the full URL — path params on FERPA-bearing routes
+    # (`/api/student-history/<student_id>`, `/api/teacher/class/<class_id>/student/<student_id>/report-card`,
+    # join codes, submission IDs, content IDs) leak directly into request.url
+    # even with transaction_style="endpoint" (which only sets event.transaction,
+    # not request.url). Codex audit MAJOR #14 round-2 CRITICAL: confirmed
+    # via real Flask + Sentry SDK 2.58 simulation. The endpoint name carries
+    # all routing info we need; URL adds nothing diagnostically that's worth
+    # the FERPA risk.
+    request.pop("url", None)
+
+    # Redact auth-bearing + URL-leaking headers.
     headers = request.get("headers")
     if isinstance(headers, dict):
         for header_key in list(headers.keys()):
-            if header_key.lower() in ("authorization", "cookie"):
+            lk = header_key.lower()
+            if lk in ("authorization", "cookie"):
+                headers[header_key] = "[Filtered]"
+            elif lk == "referer":
+                # Could leak prior page URL with IDs (e.g., browser navigated
+                # from /api/student/submission/<id> to current request).
                 headers[header_key] = "[Filtered]"
 
     # Strip query params whose names look like secrets.
@@ -174,6 +343,7 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
 
     _scrub_request(event.get("request"))
     _scrub_frame_locals(event)
+    _scrub_event_paths(event)
 
     user = event.setdefault("user", {})
     if isinstance(user, dict):
@@ -189,6 +359,50 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
         pre_set = user.get("id")
         if isinstance(pre_set, str) and len(pre_set) == 12 and all(c in "0123456789abcdef" for c in pre_set):
             pass  # keep the explicit hashed attribution
+        else:
+            user["id"] = _resolve_user_id()
+        user.pop("email", None)
+        user.pop("username", None)
+        user.pop("ip_address", None)
+
+    return event
+
+
+def before_send_transaction(event: dict, hint: dict) -> Optional[dict]:
+    """Sentry before_send_transaction hook — scrubs PII from APM transactions.
+
+    Codex audit round-1 of PR #222 (audit MAJOR #14) flagged a CRITICAL gap:
+    transaction events use a separate SDK pipeline that the `before_send`
+    hook does NOT see. Without this scrubber, sentry-sdk 2.x captures
+    request.url (with ID-bearing paths), query_string (potentially with
+    secrets), and request body (potentially with FERPA-sensitive student
+    data) on every sampled transaction.
+
+    `max_request_body_size="never"` in init() is defense-in-depth that
+    prevents body capture at the source. This hook is belt-and-suspenders:
+    it strips request payload + secret-looking query params + auth headers
+    + the full request.url (which carries identifier-bearing path params
+    on FERPA-sensitive routes — the endpoint name in event["transaction"]
+    is the safe replacement signal).
+
+    User attribution caveat (Codex round-2 MINOR): the SDK fires this
+    hook from a worker thread AFTER Flask request context teardown, so
+    `_resolve_user_id()` typically resolves to "anonymous" because
+    flask.g is no longer accessible. That is privacy-safe (no real
+    user.id reaches Sentry from transactions) but means transaction
+    events are NOT teacher-attributable. Error events still attribute
+    correctly via the in-context `before_send` hook.
+
+    Always returns the event (we want APM signal); only scrubs in place.
+    """
+    _scrub_request(event.get("request"))
+    _scrub_event_paths(event)
+
+    user = event.setdefault("user", {})
+    if isinstance(user, dict):
+        pre_set = user.get("id")
+        if isinstance(pre_set, str) and len(pre_set) == 12 and all(c in "0123456789abcdef" for c in pre_set):
+            pass
         else:
             user["id"] = _resolve_user_id()
         user.pop("email", None)
@@ -280,9 +494,22 @@ def init_sentry(environment: str = 'web') -> None:
       - environment="production"   — if/when staging is added, it gets
                                      its own separate DSN, not an env
                                      override here.
-      - traces_sample_rate=0.0     — APM off. Separate Sentry billing
-                                     axis, can be enabled later with no
-                                     code change needed.
+      - traces_sample_rate=0.05    — 5% APM sampling default. Closes audit
+                                     MAJOR #14 (Codex 2026-05-06). Override
+                                     via SENTRY_TRACES_SAMPLE_RATE env var
+                                     (range [0.0, 1.0]; invalid values fall
+                                     back to 0.05 with a warning). 0.0 maps
+                                     to None for full disable per Sentry
+                                     docs.
+      - before_send_transaction    — APM transaction scrubber (round-1
+                                     Codex CRITICAL fold). The error-event
+                                     before_send hook does NOT see
+                                     transactions; this hook does the same
+                                     request/user scrubbing for them.
+      - max_request_body_size="never" — defense-in-depth: prevents the
+                                     Flask integration from capturing
+                                     request bodies on transactions before
+                                     before_send_transaction sees them.
       - send_default_pii=False     — belt + suspenders with our before_send
                                      scrubber.
       - before_send=before_send    — the PII scrubber from Task 3.
@@ -339,7 +566,7 @@ def init_sentry(environment: str = 'web') -> None:
             dsn=dsn,
             environment="production",
             release=release,
-            traces_sample_rate=0.0,
+            traces_sample_rate=_resolve_traces_sample_rate(),
             send_default_pii=False,
             # FERPA: drop all stack-frame locals from events. Without this,
             # Sentry's default is to include frame `vars` at capture time,
@@ -349,6 +576,12 @@ def init_sentry(environment: str = 'web') -> None:
             include_local_variables=False,
             integrations=[integration],
             before_send=before_send,
+            before_send_transaction=before_send_transaction,
+            # FERPA defense-in-depth: prevent the Flask integration from
+            # capturing request bodies on transactions (audit MAJOR #14
+            # Codex round-1 CRITICAL). before_send_transaction is the
+            # primary scrub; this stops body capture at the source.
+            max_request_body_size="never",
             ignore_errors=[
                 wex.BadRequest,
                 wex.Unauthorized,

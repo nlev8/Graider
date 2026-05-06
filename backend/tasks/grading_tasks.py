@@ -134,12 +134,16 @@ def grade_portal_submission(
     # circuit with a clear log + Sentry signal than to silently corrupt the
     # submission status.
     if not ctx.get('assessment'):
+        # FERPA: hash submission_id before logging — Sentry's logging integration
+        # captures `params` and `event["message"]` raw, leaking the bare ID
+        # otherwise (Codex audit MAJOR #14 round-4).
+        sub_hash = hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]
         _logger.error(
             "grade_portal_submission: assessment unavailable for submission %s (published_assessments fetch likely failed). Aborting task.",
-            submission_id,
+            sub_hash,
         )
         sentry_sdk.capture_message(
-            f"grade_portal_submission: no assessment for submission {submission_id}",
+            f"grade_portal_submission: no assessment for submission {sub_hash}",
             level='error',
         )
         # Mark row as failed so ops can re-enqueue once the root cause is fixed

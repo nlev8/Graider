@@ -73,7 +73,7 @@ The `@critical_path` decorator from `backend/observability` tags any escaping ex
 
 ## Feature flags reference
 
-All four env vars are default-off or normally-set. Flip the two "debug" flags only when necessary and unset immediately after.
+All five env vars are default-off or normally-set. Flip the two "debug" flags only when necessary and unset immediately after.
 
 | Env var | Default | What it does | When to set it |
 |---|---|---|---|
@@ -81,6 +81,7 @@ All four env vars are default-off or normally-set. Flip the two "debug" flags on
 | `RAILWAY_GIT_COMMIT_SHA` | Auto-set by Railway | Used as the error-tracking release tag (short SHA form). Don't touch manually. | Never touch manually. |
 | `SENTRY_TEST_ROUTE_ENABLED` | **Unset** | When `1`, registers `/_debug/sentry-boom` at app startup. Unset, the route is 404. | Temporarily during post-deploy production verification (Task 12 step 3 of the observability v1 rollout). **Always unset immediately after.** **Do NOT confuse with `FLASK_DEBUG` / `DEBUG`** — those enable Werkzeug's interactive debugger and are a remote code execution vector. Never set them. |
 | `FORCE_HEALTHZ_FAIL` | **Unset** | When `1`, `/healthz` returns 503 without touching Supabase. Used for alert drills. Student/teacher API traffic is unaffected because they call Supabase directly, not `/healthz`. | During alert drills. Always unset immediately after the drill completes. Safe to set during business hours — does not affect customer traffic. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.05` (5% baseline; closes audit MAJOR #14, Codex 2026-05-06) | APM/tracing sample rate passed to `sentry_sdk.init`. Out-of-range or non-numeric values fall back to 0.05 with a warning. `0.0` is mapped to `None` (Sentry-canonical full disable). Transaction events are scrubbed by `before_send_transaction`; request bodies are blocked at the source via `max_request_body_size="never"`. | Override per-environment. Set to `0.0` to fully disable APM (e.g., during a quota crunch). Bump to `0.5` or `1.0` during a tuning sprint when you need high-fidelity timing on a specific path. |
 
 ---
 
