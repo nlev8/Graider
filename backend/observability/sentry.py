@@ -19,6 +19,33 @@ logger = logging.getLogger(__name__)
 # backend.app is imported multiple times (common in test teardown/setup).
 _initialized = False
 
+# APM/tracing sample rate. 5% default — gives signal on slow routes,
+# queue latency, and LLM call timing without blowing the BetterStack
+# error-tracking quota (which is shared with traces on the free tier).
+# Closes audit MAJOR #14 (Codex full-codebase audit 2026-05-06):
+# previously hardcoded to 0.0, leaving latency regressions diagnostically
+# blind. Operators can override per-environment via SENTRY_TRACES_SAMPLE_RATE
+# (e.g., 0.0 to fully disable, 0.5 for high-fidelity tuning sprints).
+def _resolve_traces_sample_rate() -> float:
+    raw = os.getenv("SENTRY_TRACES_SAMPLE_RATE")
+    if raw is None:
+        return 0.05
+    try:
+        rate = float(raw)
+    except ValueError:
+        logger.warning(
+            "SENTRY_TRACES_SAMPLE_RATE=%r is not a valid float; falling back to 0.05",
+            raw,
+        )
+        return 0.05
+    if not 0.0 <= rate <= 1.0:
+        logger.warning(
+            "SENTRY_TRACES_SAMPLE_RATE=%r out of range [0.0, 1.0]; falling back to 0.05",
+            raw,
+        )
+        return 0.05
+    return rate
+
 # PII field names scrubbed from stack frame locals.
 # Keep this list in sync with docs/observability.md § "Known noise sources".
 #
@@ -280,9 +307,11 @@ def init_sentry(environment: str = 'web') -> None:
       - environment="production"   — if/when staging is added, it gets
                                      its own separate DSN, not an env
                                      override here.
-      - traces_sample_rate=0.0     — APM off. Separate Sentry billing
-                                     axis, can be enabled later with no
-                                     code change needed.
+      - traces_sample_rate=0.05    — 5% APM sampling default. Closes audit
+                                     MAJOR #14 (Codex 2026-05-06). Override
+                                     via SENTRY_TRACES_SAMPLE_RATE env var
+                                     (clamped to [0.0, 1.0]; falls back to
+                                     0.05 on parse error).
       - send_default_pii=False     — belt + suspenders with our before_send
                                      scrubber.
       - before_send=before_send    — the PII scrubber from Task 3.
@@ -339,7 +368,7 @@ def init_sentry(environment: str = 'web') -> None:
             dsn=dsn,
             environment="production",
             release=release,
-            traces_sample_rate=0.0,
+            traces_sample_rate=_resolve_traces_sample_rate(),
             send_default_pii=False,
             # FERPA: drop all stack-frame locals from events. Without this,
             # Sentry's default is to include frame `vars` at capture time,

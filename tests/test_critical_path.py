@@ -151,6 +151,9 @@ class TestInitSentry:
         monkeypatch.setattr(mod, "_initialized", False)
         monkeypatch.setenv("SENTRY_DSN", "https://fake@fake.ingest.sentry.io/1234567")
         monkeypatch.delenv("RAILWAY_GIT_COMMIT_SHA", raising=False)
+        # Pin SENTRY_TRACES_SAMPLE_RATE to default so this test isn't
+        # coupled to whatever the operator may have set in .env.
+        monkeypatch.delenv("SENTRY_TRACES_SAMPLE_RATE", raising=False)
 
         from unittest.mock import patch
         with patch("sentry_sdk.init") as mock_init:
@@ -160,7 +163,9 @@ class TestInitSentry:
             assert kwargs["dsn"] == "https://fake@fake.ingest.sentry.io/1234567"
             assert kwargs["environment"] == "production"
             assert kwargs["release"] == "unknown"
-            assert kwargs["traces_sample_rate"] == 0.0
+            # Audit MAJOR #14 (Codex 2026-05-06) closure: tracing baseline
+            # is 5%, not 0.0. Override via SENTRY_TRACES_SAMPLE_RATE env.
+            assert kwargs["traces_sample_rate"] == 0.05
             assert kwargs["send_default_pii"] is False
             # before_send hook is our scrubber
             assert kwargs["before_send"] is mod.before_send
