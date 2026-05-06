@@ -1793,6 +1793,14 @@ def healthz():
     before_request storage call cannot turn a dependency check into a
     500. The route owns its own Redis check below and surfaces 503
     fail-closed semantics — that contract must not be pre-empted.
+
+    Known defensive gap (Codex PR #220 round-2 MINOR): Flask-Session
+    (Redis-backed) can still pre-empt this route if the request carries
+    a session cookie, since the session interface loads BEFORE this
+    handler runs. Healthcheck probes (Railway, BetterStack) don't carry
+    cookies, so this is not the deploy-gate failure mode. But a
+    cookie-bearing client hitting /healthz during a Redis outage will
+    still see Flask 500. Filed as future hardening; not in scope for #220.
     """
     # Alert-drill short-circuit — exercises the full BetterStack alert
     # pipeline without touching Supabase, so student/teacher API traffic

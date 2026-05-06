@@ -104,11 +104,13 @@ class TestHealthzHealthy:
 class TestHealthzLimiterExempt:
     """Round-2 fix for Codex MAJOR #1: /healthz must be exempt from
     Flask-Limiter so a Redis outage breaking the limiter's before_request
-    storage call cannot turn a dependency check into a 500."""
+    storage call cannot turn a dependency check into a 500.
+
+    Round-3 (Codex NIT fold): static-source pin + runtime simulation."""
 
     def test_route_decorated_with_limiter_exempt(self):
-        """The route handler must carry the @limiter.exempt decorator
-        IMMEDIATELY between @app.route and `def healthz`."""
+        """Static-source pin: the @limiter.exempt decorator must remain
+        in place between @app.route('/healthz') and `def healthz`."""
         from pathlib import Path
 
         src = Path(__file__).resolve().parent.parent / "backend/app.py"
@@ -117,6 +119,52 @@ class TestHealthzLimiterExempt:
             "/healthz must be exempt from Flask-Limiter to avoid 500s "
             "when the limiter's Redis backend is down"
         )
+
+    def test_route_returns_503_not_500_when_limiter_storage_raises(self):
+        """Runtime simulation: even if Flask-Limiter's storage raises (Redis
+        down), /healthz must still produce its own JSON 503, not a generic
+        Flask 500. The @limiter.exempt decorator gates this — without it
+        the limiter's before_request would crash before the route runs."""
+        backend_app = _import_app()
+
+        # Force the limiter's storage layer to raise on every call. If the
+        # exempt decorator is working, the route still runs because the
+        # limiter never tries to evaluate limits for /healthz.
+        from backend.extensions import limiter
+
+        # Force /healthz to take the unhealthy branch so we can verify the
+        # route's own 503 path executes (rather than just trusting that 200
+        # means the limiter was bypassed).
+        real_getenv = os.environ.get
+
+        def fake_getenv(key, default=None):
+            if key in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY"):
+                return None
+            if key == "REDIS_URL":
+                return "redis://localhost:6379/0"
+            if key == "FORCE_HEALTHZ_FAIL":
+                return None
+            return real_getenv(key, default)
+
+        with patch.object(limiter.limiter, "hit",
+                          side_effect=Exception("limiter storage down")), \
+             patch.object(limiter.limiter, "test",
+                          side_effect=Exception("limiter storage down")), \
+             patch.object(backend_app.os, "getenv", side_effect=fake_getenv), \
+             patch("redis.from_url") as mock_redis:
+            mock_redis.return_value.ping.side_effect = Exception("redis down")
+            resp = backend_app.app.test_client().get("/healthz")
+
+        # Critical contract: route-owned 503 with structured JSON body,
+        # NOT a generic Flask 500 from the limiter's failed before_request.
+        assert resp.status_code == 503, (
+            f"Expected route-owned 503, got {resp.status_code} "
+            f"(body: {resp.data!r}) — limiter exemption may be broken"
+        )
+        body = resp.get_json()
+        assert body is not None, "Response body must be valid JSON, not Flask 500 page"
+        assert body["app"] == "ok"
+        assert body["redis"] == "error"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -208,13 +256,26 @@ class TestHealthzDrill:
         body = resp.get_json()
         assert body["supabase"] == "drill_forced_failure"
 
-    def test_drill_only_triggers_on_exact_value(self, monkeypatch):
-        """FORCE_HEALTHZ_FAIL=0 / unset must NOT trigger the drill."""
-        monkeypatch.setenv("FORCE_HEALTHZ_FAIL", "0")
-        monkeypatch.delenv("SUPABASE_URL", raising=False)
-        monkeypatch.delenv("REDIS_URL", raising=False)
+    def test_drill_only_triggers_on_exact_value(self):
+        """FORCE_HEALTHZ_FAIL=0 / unset must NOT trigger the drill.
 
-        resp = _client().get("/healthz")
+        Hermetic: patches os.getenv directly so the load_dotenv(override=True)
+        on app reload cannot rehydrate SUPABASE_URL/REDIS_URL from .env
+        (round-2 Codex review caught the prior monkeypatch.delenv pattern
+        as env-dependent — this test was failing 1/9 in Codex's workspace
+        because the rehydrated SUPABASE_URL pointed at an unreachable host)."""
+        real_getenv = os.environ.get
+
+        def fake_getenv(key, default=None):
+            if key == "FORCE_HEALTHZ_FAIL":
+                return "0"
+            if key in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "REDIS_URL"):
+                return None
+            return real_getenv(key, default)
+
+        backend_app = _import_app()
+        with patch.object(backend_app.os, "getenv", side_effect=fake_getenv):
+            resp = backend_app.app.test_client().get("/healthz")
 
         assert resp.status_code == 200
         body = resp.get_json()
