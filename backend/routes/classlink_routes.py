@@ -21,6 +21,8 @@ import sentry_sdk
 from flask import Blueprint, request, redirect, jsonify, session, g
 from urllib.parse import urlencode
 
+from backend.utils.audit import audit_log
+
 from backend.services.classlink_oidc import (
     ClassLinkOIDCError,
     get_classlink_oidc_config,
@@ -170,13 +172,16 @@ def _trigger_roster_sync(teacher_id, tenant_id):
 
 @classlink_bp.route('/api/classlink/login-url', methods=['GET'])
 def classlink_login_url():
-    """Return ClassLink OAuth authorization URL with CSRF state token."""
+    """Return ClassLink OAuth authorization URL with CSRF state token and nonce."""
     client_id, _, redirect_uri = _get_classlink_config()
     if not client_id:
         return jsonify({"error": "ClassLink SSO is not configured"}), 400
 
     state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
     session['classlink_oauth_state'] = state
+    session['classlink_oauth_nonce'] = nonce
+    session['classlink_oauth_initiated_by_us'] = True
 
     params = urlencode({
         'client_id': client_id,
@@ -184,6 +189,7 @@ def classlink_login_url():
         'response_type': 'code',
         'scope': CLASSLINK_SCOPES,
         'state': state,
+        'nonce': nonce,
     })
     return jsonify({"url": f"{CLASSLINK_AUTH_URL}?{params}"})
 
@@ -201,18 +207,61 @@ def classlink_callback():
     if not code:
         return redirect("/?classlink_error=no_code")
 
-    # Validate CSRF state
-    # ClassLink-initiated flows (LaunchPad tile click) may not have a state
-    # because the login-url endpoint was never called — ClassLink redirects
-    # directly to the callback. This mirrors Clever's "Instant Login" pattern
-    # (clever_routes.py lines 297-308).
+    # PEEK at OAuth-flow session markers without popping. Markers persist
+    # until successful validation completes (cleared at the end of this
+    # function). This prevents a rejected callback (wrong state, expired
+    # token, nonce mismatch) from popping the markers and downgrading the
+    # next callback in the same session to the permissive LaunchPad path —
+    # which would otherwise allow an attacker to bypass CSRF defense by
+    # triggering one rejected callback first. Markers are overwritten by a
+    # fresh /api/classlink/login-url call or expire with the session.
     state = request.args.get('state', '')
-    expected_state = session.pop('classlink_oauth_state', '')
-    if expected_state and state and state != expected_state:
-        logger.warning("ClassLink OAuth state mismatch: got %s, expected %s", state, expected_state)
-        return redirect("/?classlink_error=state_mismatch")
-    # If no expected_state (ClassLink-initiated) or no state param, skip validation
-    # This is safe because the code exchange itself validates the OAuth flow
+    expected_state = session.get('classlink_oauth_state', '')
+    expected_nonce = session.get('classlink_oauth_nonce', '')
+    initiated_by_us = session.get('classlink_oauth_initiated_by_us', False)
+
+    # Validate CSRF state (flow-aware)
+    # Self-initiated flows (login-url was called) require strict state match.
+    # LaunchPad-initiated flows (ClassLink redirects directly, no login-url call)
+    # have no state requirement — id_token signature validation (below) is the
+    # auth proof. This mirrors Clever's "Instant Login" pattern.
+    if initiated_by_us:
+        # Strict mode: state must be present and match exactly.
+        if not state or state != expected_state:
+            # Log presence booleans only — state/nonce values are auth secrets
+            # that should not be persisted in logs even on rejected requests.
+            audit_log(
+                "CLASSLINK_OAUTH_STATE_MISMATCH",
+                "ClassLink state mismatch on self-initiated flow: "
+                f"state_present={bool(state)} expected_present={bool(expected_state)}",
+                user="anonymous",
+                teacher_id="",
+            )
+            logger.warning(
+                "ClassLink OAuth state mismatch (self-initiated): "
+                "state_present=%s expected_present=%s",
+                bool(state),
+                bool(expected_state),
+            )
+            return redirect("/?classlink_error=state_mismatch")
+    else:
+        # Permissive mode: LaunchPad-initiated — id_token signature is the auth proof.
+        # Only emit a warning + audit-log if both sides have state but they differ
+        # (session pollution or attacker probe). Do NOT reject: LaunchPad is permissive.
+        if expected_state and state and state != expected_state:
+            logger.warning(
+                "ClassLink OAuth state mismatch (LaunchPad): "
+                "state_present=%s expected_present=%s",
+                bool(state),
+                bool(expected_state),
+            )
+            audit_log(
+                "CLASSLINK_OAUTH_LAUNCHPAD_STATE_MISMATCH",
+                "unexpected state on LaunchPad-initiated flow: "
+                f"state_present={bool(state)} expected_present={bool(expected_state)}",
+                user="anonymous",
+                teacher_id="",
+            )
 
     client_id, client_secret, redirect_uri = _get_classlink_config()
 
@@ -284,6 +333,18 @@ def classlink_callback():
         logger.warning("ClassLink id_token iat is more than 24h old")
         return redirect("/?classlink_error=oidc_invalid")
 
+    # Nonce check (self-initiated flows only)
+    # initiated_by_us and expected_nonce were peeked at the top of the
+    # function; markers remain in session and are cleared on success below.
+    if initiated_by_us:
+        token_nonce = id_claims.get('nonce', '')
+        if not token_nonce or token_nonce != expected_nonce:
+            audit_log("CLASSLINK_OAUTH_NONCE_MISMATCH",
+                      "ClassLink nonce mismatch on self-initiated flow",
+                      user="anonymous", teacher_id="")
+            logger.warning("ClassLink id_token nonce mismatch (self-initiated)")
+            return redirect("/?classlink_error=nonce_mismatch")
+
     # Fetch user info (userinfo becomes fallback for non-OIDC fields like TenantId)
     try:
         user_resp = requests.get(CLASSLINK_USERINFO_URL, headers={
@@ -311,6 +372,11 @@ def classlink_callback():
 
     # Student login → redirect to student portal
     if role == 'student':
+        # Clear OAuth-flow markers (single-use enforcement on success).
+        # Teacher path uses session.clear() below; student path needs explicit pops.
+        session.pop('classlink_oauth_state', None)
+        session.pop('classlink_oauth_nonce', None)
+        session.pop('classlink_oauth_initiated_by_us', None)
         session['classlink_student'] = {
             'classlink_id': classlink_id,
             'name': f"{first_name} {last_name}",
@@ -340,7 +406,6 @@ def classlink_callback():
     # Background roster sync (if OneRoster configured)
     _trigger_roster_sync(teacher_id, tenant_id)
 
-    from backend.utils.audit import audit_log
     audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {email}",
               user="teacher", teacher_id=teacher_id)
 

@@ -184,9 +184,24 @@ These findings were filed during the audit but explicitly dropped after Codex ve
 | Frontend logout race / partial logout | Call all logout endpoints in parallel + tolerate individual failures (logout is idempotent). |
 | State/nonce sequencing breaks LaunchPad-initiated flows | PR 2 explicitly preserves LaunchPad path via the `classlink_oauth_initiated_by_us` session marker. Tested both directions. |
 
+## Pre-merge deployment smoke-test gate (PR 1 + PR 2)
+
+The OIDC-validation work in PRs 1 + 2 makes one assumption that cannot be proven from static review alone: **ClassLink's OpenID Provider must (a) return an `id_token` in the token-exchange response when scope includes `openid`, and (b) echo the `nonce` query parameter back as a `nonce` claim in self-initiated id_tokens.** Both are required by OpenID Connect Core 1.0 §3.1.3 and §15.5.2, so a compliant OP supports them. Codex high-effort review on PR 2 (2026-05-05) flagged that this is unverified empirically.
+
+Before merging PR 1 or PR 2 to `main`, run a smoke test against a real ClassLink tenant (sandbox or production):
+
+1. Initiate a self-initiated login flow via `/api/classlink/login-url`.
+2. Confirm the redirect URL includes both `state=` and `nonce=` query params.
+3. Complete the OAuth handshake.
+4. Confirm the callback succeeds (redirect to `?classlink_login=success`) — this means the id_token validated AND the nonce claim matched.
+5. Repeat with a LaunchPad-initiated flow (click a tile in the ClassLink portal): confirm callback succeeds without a state in session.
+
+If either flow fails, the assumption is wrong and the PR must NOT be merged. Diagnose by inspecting the rejected `classlink_error=...` code in the redirect URL.
+
 ## Definition of Done
 
 - 6 PRs merged to `main`; CI green on each (Backend Tests, Frontend Build, Bandit SAST, Secret Scan, Migrations Smoke, Lockfile Drift, Ruff Lint, Mypy Strict).
+- Pre-merge smoke-test gate passed on PR 1 + PR 2 (above).
 - Doc reconciliation lands in same sprint.
 - Codex high-effort post-sprint verification confirms the 2 CRITICAL + 4 MAJOR findings closed; skip-list items remain explicitly out-of-scope.
 - Memory `project_sis_compliance_hardening_2026-05-05.md` updated with completion status and PR numbers.
