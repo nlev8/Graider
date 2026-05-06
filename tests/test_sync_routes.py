@@ -372,3 +372,169 @@ class TestDiscoverTeachers:
             teachers = _discover_teachers()
 
         assert teachers == []
+
+
+# ----------------------------------------------------------------------
+# Regression tests for _sync_one_teacher runtime (PR #214 — closes Codex
+# post-sprint audit FAIL #7). The Clever path was crashing with
+# 'NoneType has no attribute get' because _sync_classes_to_db returned
+# nothing; the OneRoster path was crashing with 'tuple indices must be
+# integers' because normalize_roster() returns a 4-tuple but the
+# consumer indexed it as a dict.
+# ----------------------------------------------------------------------
+
+
+class TestSyncClassesToDbReturnsCounts:
+    """PR #214: _sync_classes_to_db must return the counts dict from
+    sync_roster_to_db so _sync_one_teacher can attribute counts to the
+    audit-log line and the response payload."""
+
+    def test_returns_counts_from_shared_sync(self):
+        from backend.routes.clever_routes import _sync_classes_to_db
+
+        counts = {"classes": 3, "students": 7, "enrollments": 12}
+        with patch(
+            'backend.routes.clever_routes._shared_sync_roster_to_db',
+            return_value=counts,
+        ):
+            result = _sync_classes_to_db([], [], "teacher_x")
+
+        assert result == counts
+
+
+class TestSyncOneTeacherRuntime:
+    """PR #214: _sync_one_teacher must not crash on either provider path."""
+
+    def test_clever_path_returns_success_with_counts(self):
+        from backend.routes.sync_routes import _sync_one_teacher
+
+        async def fake_clever_sync(token):
+            return {
+                'sections': [{'data': {'id': 's1', 'name': 'Algebra'}}],
+                'students': [{'data': {'id': 'st1', 'email': 'a@x.com'}}],
+            }
+
+        counts = {"classes": 1, "students": 1, "enrollments": 0}
+
+        with patch('backend.clever.sync_roster', fake_clever_sync), \
+             patch(
+                 'backend.routes.clever_routes._sync_classes_to_db',
+                 return_value=counts,
+             ), \
+             patch(
+                 'backend.roster_sync.deactivate_missing_students',
+                 return_value=0,
+             ), \
+             patch('backend.routes.sync_routes.audit_log'), \
+             patch.dict('os.environ', {'CLEVER_DISTRICT_TOKEN': 'x'}):
+            result = _sync_one_teacher({
+                'teacher_id': 't1',
+                'provider': 'clever',
+                'config': {},
+            })
+
+        assert result['status'] == 'success'
+        assert result['classes'] == 1
+        assert result['students'] == 1
+        assert result['provider'] == 'clever'
+
+    def test_oneroster_path_returns_success_with_counts(self):
+        from backend.routes.sync_routes import _sync_one_teacher
+
+        class FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def fetch_roster(self, **kwargs):
+                return {
+                    'classes': [],
+                    'students': [],
+                    'enrollments': [],
+                    'demographics': [],
+                }
+
+        # normalize_roster returns a 4-tuple; sync_roster_to_db returns counts
+        normalized_tuple = (
+            [{'external_id': 'oneroster:c1', 'name': 'X', 'subject': 'M', 'grade_level': '7'}],
+            [{'external_id': 'oneroster:s1', 'first_name': 'A', 'last_name': 'B', 'email': 'a@x.com'}],
+            [{'class_external_id': 'oneroster:c1', 'student_external_id': 'oneroster:s1'}],
+            [],
+        )
+        counts = {"classes": 1, "students": 1, "enrollments": 1}
+
+        with patch(
+                 'backend.oneroster.get_oneroster_config',
+                 return_value={
+                     'base_url': 'https://example.test',
+                     'client_id': 'id',
+                     'client_secret': 'secret',
+                 },
+             ), \
+             patch('backend.oneroster.OneRosterClient', FakeClient), \
+             patch(
+                 'backend.oneroster.normalize_roster',
+                 return_value=normalized_tuple,
+             ), \
+             patch(
+                 'backend.roster_sync.sync_roster_to_db',
+                 return_value=counts,
+             ), \
+             patch(
+                 'backend.roster_sync.deactivate_missing_students',
+                 return_value=0,
+             ), \
+             patch('backend.routes.sync_routes.audit_log'):
+            result = _sync_one_teacher({
+                'teacher_id': 't1',
+                'provider': 'oneroster',
+                'config': {},
+            })
+
+        assert result['status'] == 'success'
+        assert result['classes'] == 1
+        assert result['students'] == 1
+        assert result['provider'] == 'oneroster'
+
+
+class TestSyncOneTeacherPIIRedaction:
+    """PR #214: ClassLink login audit_log detail string must not contain
+    raw email — was logged as `f"ClassLink SSO login: {email}"`,
+    fixed to wrap with redact_email()."""
+
+    def test_classlink_login_audit_redacts_email(self):
+        # Static-source check that the audit detail uses redact_email().
+        # Behavioral test would require booting the full ClassLink callback
+        # mock chain; this pin keeps the redaction wrapper from drifting.
+        from pathlib import Path
+
+        src = Path(__file__).resolve().parent.parent / "backend/routes/classlink_routes.py"
+        text = src.read_text()
+        assert 'redact_email(email)' in text, (
+            "ClassLink login audit must wrap email with redact_email()"
+        )
+        assert 'f"ClassLink SSO login: {email}"' not in text, (
+            "Bare email in ClassLink SSO login audit detail string"
+        )
+
+
+class TestCleverArchiveLogsHashStudentId:
+    """PR #214: clever.py archive/restore log lines must hash the student
+    id, not log it raw — was `logger.info(..., sid)`, fixed to use
+    sha256(sid)[:8]."""
+
+    def test_archive_and_restore_logs_hash_student_id(self):
+        from pathlib import Path
+
+        src = Path(__file__).resolve().parent.parent / "backend/clever.py"
+        text = src.read_text()
+
+        # Both call sites must hash the sid — bare `, sid)` after either
+        # log message is the leaking pattern.
+        assert 'Restored previously archived Clever student: %s",\n                    hashlib.sha256(str(sid)' in text \
+               or 'Restored previously archived Clever student: %s", hashlib.sha256(str(sid)' in text, (
+            "Restored-archive log must hash sid"
+        )
+        assert 'Archived Clever student no longer in roster: %s",\n                    hashlib.sha256(str(sid)' in text \
+               or 'Archived Clever student no longer in roster: %s", hashlib.sha256(str(sid)' in text, (
+            "Archived-out log must hash sid"
+        )

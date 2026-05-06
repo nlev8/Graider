@@ -33,7 +33,7 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
 
     # Local file (immediate, always works)
     try:
-        log_entry = f"{timestamp} | {user} | {action} | {details[:500]}\n"
+        log_entry = f"{timestamp} | teacher={resolved_teacher_id} | {user} | {action} | {details[:500]}\n"
         with open(AUDIT_LOG_FILE, 'a') as f:
             f.write(log_entry)
     except Exception as e:

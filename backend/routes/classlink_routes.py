@@ -22,6 +22,7 @@ from flask import Blueprint, request, redirect, jsonify, session, g
 from urllib.parse import urlencode
 
 from backend.utils.audit import audit_log
+from backend.utils.redaction import redact_email
 
 from backend.services.classlink_oidc import (
     ClassLinkOIDCError,
@@ -406,7 +407,7 @@ def classlink_callback():
     # Background roster sync (if OneRoster configured)
     _trigger_roster_sync(teacher_id, tenant_id)
 
-    audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {email}",
+    audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {redact_email(email)}",
               user="teacher", teacher_id=teacher_id)
 
     return redirect("/?classlink_login=success")

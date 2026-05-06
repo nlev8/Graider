@@ -219,13 +219,12 @@ def _sync_one_teacher(teacher):
             finally:
                 loop.close()
 
-            normalized = normalize_roster(raw)
+            classes, students_norm, enrollments, _accommodations = normalize_roster(raw)
             counts = sync_roster_to_db(
-                normalized['classes'], normalized['students'],
-                normalized['enrollments'], teacher_id, provider="oneroster"
+                classes, students_norm, enrollments, teacher_id, provider="oneroster"
             )
 
-            current_ids = {s['external_id'] for s in normalized['students']}
+            current_ids = {s['external_id'] for s in students_norm}
             deactivated = deactivate_missing_students(teacher_id, current_ids, "oneroster")
 
         else:

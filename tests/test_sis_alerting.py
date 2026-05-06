@@ -55,8 +55,11 @@ SIS_CAPTURES = [
     ("backend/clever.py", 240),
     ("backend/clever.py", 255),
     ("backend/routes/clever_routes.py", 54),
-    ("backend/routes/clever_routes.py", 231),
-    ("backend/routes/clever_routes.py", 254),
+    # 2026-05-06: shifted 231/254 -> 238/262 by PR 7 (post-sprint follow-up)
+    # adding Returns docstring + `return` keyword in _sync_classes_to_db
+    # (~7 lines below the function header). Captures themselves are unchanged.
+    ("backend/routes/clever_routes.py", 238),
+    ("backend/routes/clever_routes.py", 262),
     # 2026-05-06: shifted 672 -> 692 by PR 3 of SIS compliance hardening sprint
     # (PII redaction in Clever logs added ~20 lines of helper code earlier in
     # the file). Capture site is unchanged — pin tracks the except block.

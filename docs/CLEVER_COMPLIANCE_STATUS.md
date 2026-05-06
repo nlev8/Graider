@@ -64,8 +64,8 @@
 |---|---|---|
 | Data stored only for educational purpose | ✅ | Roster data used for grading + accommodations only |
 | Data deletion on district disconnect | ✅ | Full cascade: local files + Supabase (classes, students, enrollments, submissions, sessions) |
-| Audit trail for data access | ✅ | `_clever_audit()` logs all sync, delete, accommodation, and key operations. `audit_log("CLEVER_USER_READ")` covers `/me` + `/users/{id}` PII reads (PR #213). `audit_log("ROSTER_SYNC_*")` covers entry/exit on every Clever/ClassLink/OneRoster sync (PR #213). All to Supabase `audit_log`. |
-| PII redaction in operational logs | ✅ | `redact_email()` + 8-char SHA256 hash for IDs across 8 OAuth log sites (PR #210). `_clever_audit` audit-log payloads scrubbed. AST-based test pins regression. |
+| Audit trail for data access | ✅ | `_clever_audit()` logs all sync, delete, accommodation, and key operations. `audit_log("CLEVER_USER_READ")` covers `/me` + `/users/{id}` PII reads (PR #213). `audit_log("ROSTER_SYNC_*")` covers entry/exit on every Clever/ClassLink/OneRoster sync (PR #213, runtime fixed PR #214). All to Supabase `audit_log`. |
+| PII redaction in operational logs | ✅ | `redact_email()` + 8-char SHA256 hash for IDs across 12 OAuth log sites (PR #210 + 4 follow-up sites in PR #214: ClassLink login audit detail, Clever district-keys log, Clever student archive/restore logs). `_clever_audit` audit-log payloads scrubbed. AST-based test pins regression. |
 | ClassLink OIDC id_token validation | ✅ | RS256 signature, iss/aud/exp validation against discovered JWKS, identity from id_token claims, alg=none rejection (PR #208). |
 | ClassLink CSRF state + nonce hardening | ✅ | Self-initiated flows require strict state + nonce match; LaunchPad-initiated permissive on state, id_token signature is auth proof (PR #209). |
 | LTI 1.3 deployment_id allowlist | ✅ | `validate_launch_jwt` enforces deployment_ids list per platform; TOFU migration for legacy registrations with audit-log visibility (PR #212). |

@@ -96,6 +96,9 @@ def _sync_classes_to_db(sections, students, teacher_id):
         sections: List of Clever section dicts (with 'data' wrapper).
         students: List of Clever student dicts (with 'data' wrapper).
         teacher_id: Graider teacher ID (may be 'clever:xxx' format).
+
+    Returns:
+        Counts dict from sync_roster_to_db: {"classes": int, "students": int, "enrollments": int}.
     """
     # Build a lookup from clever student id -> unwrapped student record
     student_map = {}
@@ -141,7 +144,7 @@ def _sync_classes_to_db(sections, students, teacher_id):
                     "email": sd.get("email", ""),
                 })
 
-    _shared_sync_roster_to_db(norm_classes, norm_students, enrollment_pairs, teacher_id, provider="clever")
+    return _shared_sync_roster_to_db(norm_classes, norm_students, enrollment_pairs, teacher_id, provider="clever")
 
 
 def _create_clever_student_session(clever_id, email):
@@ -755,7 +758,7 @@ def clever_save_district_keys():
                       "District API keys updated",
                       teacher_id)
         logger.info("District API keys updated by %s for district %s",
-                     clever_user.get("email"), district_id)
+                     redact_email(clever_user.get("email", "")), district_id)
         return jsonify({"status": "saved", "district_id": district_id})
     else:
         return jsonify({"error": "Failed to save district keys"}), 500
