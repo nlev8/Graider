@@ -1785,8 +1785,15 @@ def get_user_manual():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/healthz')
+@limiter.exempt
 def healthz():
-    """General health check for Railway load balancer."""
+    """General health check for Railway load balancer.
+
+    Exempt from Flask-Limiter so a Redis outage that breaks the limiter's
+    before_request storage call cannot turn a dependency check into a
+    500. The route owns its own Redis check below and surfaces 503
+    fail-closed semantics — that contract must not be pre-empted.
+    """
     # Alert-drill short-circuit — exercises the full BetterStack alert
     # pipeline without touching Supabase, so student/teacher API traffic
     # is unaffected during drills. See docs/observability.md § "Quarterly

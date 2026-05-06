@@ -18,7 +18,9 @@ import { AUTH_HEADERS } from './helpers.js'
 test.describe('Health Endpoints', () => {
   test('GET /healthz returns ok', async ({ request }) => {
     const response = await request.get('/healthz')
-    expect(response.status()).toBe(200)
+    // Per fail-closed contract (PR #220): 503 when any required dep is in
+    // error/degraded state, 200 when all healthy. Body shape is preserved.
+    expect([200, 503]).toContain(response.status())
     const data = await response.json()
     expect(data.app).toBe('ok')
   })

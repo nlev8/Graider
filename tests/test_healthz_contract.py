@@ -11,6 +11,7 @@ the dep isn't wired). Anything else — "error", "degraded (status N)",
 "drill_forced_failure" — must produce 503.
 """
 import importlib
+import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -68,28 +69,54 @@ class TestHealthzHealthy:
         assert body["supabase"] == "ok"
         assert body["redis"] == "ok"
 
-    def test_supabase_not_configured_redis_ok_returns_200(self, monkeypatch):
+    def test_not_configured_returns_200_hermetic(self):
         """`not configured` (dev/test where the dep isn't wired) is treated
-        as healthy alongside `ok`. monkeypatch.delenv on REDIS_URL is
-        unreliable here because backend/app.py:30 calls load_dotenv with
-        override=True on reload, so we test the SUPABASE side which the
-        route guards before httpx — the env-load doesn't shortcut the
-        early `if not supabase_url` check."""
-        monkeypatch.delenv("SUPABASE_URL", raising=False)
-        monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
-        monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
-        monkeypatch.delenv("FORCE_HEALTHZ_FAIL", raising=False)
+        as healthy alongside `ok`. Hermetic: patches os.getenv directly
+        so backend/app.py:30 load_dotenv(override=True) on reload cannot
+        rehydrate stale .env values during the test (the round-1 review
+        flagged the prior monkeypatch.setenv approach as env-dependent)."""
+        # Drive os.getenv deterministically for the keys /healthz reads.
+        # Other os.getenv calls still delegate to real env via the default.
+        real_getenv = os.environ.get
 
-        with patch("redis.from_url") as mock_redis:
-            mock_redis.return_value.ping.return_value = True
-            resp = _client().get("/healthz")
+        def fake_getenv(key, default=None):
+            if key in (
+                "SUPABASE_URL",
+                "SUPABASE_SERVICE_KEY",
+                "REDIS_URL",
+                "FORCE_HEALTHZ_FAIL",
+            ):
+                return None
+            return real_getenv(key, default)
+
+        # Import freshly so the route binding is live; then patch os.getenv
+        # in the backend.app module namespace (where the route reads it).
+        backend_app = _import_app()
+        with patch.object(backend_app.os, "getenv", side_effect=fake_getenv):
+            resp = backend_app.app.test_client().get("/healthz")
 
         assert resp.status_code == 200
         body = resp.get_json()
-        # supabase env may be re-loaded from .env via override=True; the
-        # important contract is that 'not configured' OR 'ok' both → 200.
-        assert body["supabase"] in ("not configured", "ok")
-        assert body["redis"] == "ok"
+        assert body["supabase"] == "not configured"
+        assert body["redis"] == "not configured"
+
+
+class TestHealthzLimiterExempt:
+    """Round-2 fix for Codex MAJOR #1: /healthz must be exempt from
+    Flask-Limiter so a Redis outage breaking the limiter's before_request
+    storage call cannot turn a dependency check into a 500."""
+
+    def test_route_decorated_with_limiter_exempt(self):
+        """The route handler must carry the @limiter.exempt decorator
+        IMMEDIATELY between @app.route and `def healthz`."""
+        from pathlib import Path
+
+        src = Path(__file__).resolve().parent.parent / "backend/app.py"
+        text = src.read_text()
+        assert "@app.route('/healthz')\n@limiter.exempt\ndef healthz" in text, (
+            "/healthz must be exempt from Flask-Limiter to avoid 500s "
+            "when the limiter's Redis backend is down"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
