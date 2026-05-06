@@ -26,7 +26,17 @@ _initialized = False
 # previously hardcoded to 0.0, leaving latency regressions diagnostically
 # blind. Operators can override per-environment via SENTRY_TRACES_SAMPLE_RATE
 # (e.g., 0.0 to fully disable, 0.5 for high-fidelity tuning sprints).
-def _resolve_traces_sample_rate() -> float:
+def _resolve_traces_sample_rate() -> Optional[float]:
+    """Resolve the traces_sample_rate kwarg for sentry_sdk.init().
+
+    Codex audit round-1 of PR #222 noted: per Sentry docs,
+    `traces_sample_rate=0.0` prevents NEW traces but continues incoming
+    sampled traces (relevant for distributed tracing). `None` fully
+    disables. Graider has no upstream propagator, so 0.0 is functionally
+    equivalent to None — but pass None for explicitness so an operator
+    setting `SENTRY_TRACES_SAMPLE_RATE=0.0` to "disable" actually does so
+    in the Sentry-canonical way.
+    """
     raw = os.getenv("SENTRY_TRACES_SAMPLE_RATE")
     if raw is None:
         return 0.05
@@ -44,7 +54,8 @@ def _resolve_traces_sample_rate() -> float:
             raw,
         )
         return 0.05
-    return rate
+    # Map 0.0 → None for full disable per Sentry docs.
+    return None if rate == 0.0 else rate
 
 # PII field names scrubbed from stack frame locals.
 # Keep this list in sync with docs/observability.md § "Known noise sources".
@@ -225,6 +236,40 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
     return event
 
 
+def before_send_transaction(event: dict, hint: dict) -> Optional[dict]:
+    """Sentry before_send_transaction hook — scrubs PII from APM transactions.
+
+    Codex audit round-1 of PR #222 (audit MAJOR #14) flagged a CRITICAL gap:
+    transaction events use a separate SDK pipeline that the `before_send`
+    hook does NOT see. Without this scrubber, sentry-sdk 2.x captures
+    request.url (with ID-bearing paths), query_string (potentially with
+    secrets), and request body (potentially with FERPA-sensitive student
+    data) on every sampled transaction.
+
+    `max_request_body_size="never"` in init() is defense-in-depth that
+    prevents body capture at the source. This hook is belt-and-suspenders:
+    it strips request payload + secret-looking query params + auth headers
+    AFTER the integration's middleware. Identical scrubbing as
+    before_send for the request dict and user attribution.
+
+    Always returns the event (we want APM signal); only scrubs in place.
+    """
+    _scrub_request(event.get("request"))
+
+    user = event.setdefault("user", {})
+    if isinstance(user, dict):
+        pre_set = user.get("id")
+        if isinstance(pre_set, str) and len(pre_set) == 12 and all(c in "0123456789abcdef" for c in pre_set):
+            pass
+        else:
+            user["id"] = _resolve_user_id()
+        user.pop("email", None)
+        user.pop("username", None)
+        user.pop("ip_address", None)
+
+    return event
+
+
 def critical_path(fn):
     """Decorator — tag escaping exceptions with severity=critical.
 
@@ -310,8 +355,19 @@ def init_sentry(environment: str = 'web') -> None:
       - traces_sample_rate=0.05    — 5% APM sampling default. Closes audit
                                      MAJOR #14 (Codex 2026-05-06). Override
                                      via SENTRY_TRACES_SAMPLE_RATE env var
-                                     (clamped to [0.0, 1.0]; falls back to
-                                     0.05 on parse error).
+                                     (range [0.0, 1.0]; invalid values fall
+                                     back to 0.05 with a warning). 0.0 maps
+                                     to None for full disable per Sentry
+                                     docs.
+      - before_send_transaction    — APM transaction scrubber (round-1
+                                     Codex CRITICAL fold). The error-event
+                                     before_send hook does NOT see
+                                     transactions; this hook does the same
+                                     request/user scrubbing for them.
+      - max_request_body_size="never" — defense-in-depth: prevents the
+                                     Flask integration from capturing
+                                     request bodies on transactions before
+                                     before_send_transaction sees them.
       - send_default_pii=False     — belt + suspenders with our before_send
                                      scrubber.
       - before_send=before_send    — the PII scrubber from Task 3.
@@ -378,6 +434,12 @@ def init_sentry(environment: str = 'web') -> None:
             include_local_variables=False,
             integrations=[integration],
             before_send=before_send,
+            before_send_transaction=before_send_transaction,
+            # FERPA defense-in-depth: prevent the Flask integration from
+            # capturing request bodies on transactions (audit MAJOR #14
+            # Codex round-1 CRITICAL). before_send_transaction is the
+            # primary scrub; this stops body capture at the source.
+            max_request_body_size="never",
             ignore_errors=[
                 wex.BadRequest,
                 wex.Unauthorized,
