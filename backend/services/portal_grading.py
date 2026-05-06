@@ -297,8 +297,12 @@ def _safe_update_submission(sb, submission_id, update_fields,
     if not submission_id:
         return  # Intentional skip: join-code path has no submission row
     if not sb:
+        # FERPA: hash submission_id — see Codex audit MAJOR #14 round-5.
+        # Same leak class as round-4's 4 cited sites (capture_message + logger
+        # both receive the bare ID), reachable when Supabase config is broken.
+        sub_hash = hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]
         msg = ("Cannot update submission %s: Supabase client unavailable"
-               % submission_id)
+               % sub_hash)
         logger.error(msg)
         sentry_sdk.capture_message(msg, level="error")
         return

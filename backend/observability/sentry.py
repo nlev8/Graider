@@ -229,6 +229,37 @@ def _scrub_event_paths(event: dict) -> None:
                 for k, v in list(data.items()):
                     data[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
 
+    # event["spans"][*] — APM transaction span descriptions / data.
+    # Codex audit MAJOR #14 round-5 broader-scope: a transaction with
+    # /api/.../<id> in span description survived the round-4 scrubber.
+    spans = event.get("spans")
+    if isinstance(spans, list):
+        for span in spans:
+            if not isinstance(span, dict):
+                continue
+            if isinstance(span.get("description"), str):
+                span["description"] = _redact_paths_in_string(span["description"])
+            sdata = span.get("data")
+            if isinstance(sdata, dict):
+                for k, v in list(sdata.items()):
+                    sdata[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
+    # event["contexts"]["trace"] — APM root context. May carry op + description
+    # with URL-shaped path. Other contexts (runtime, os) are non-PII.
+    contexts = event.get("contexts")
+    if isinstance(contexts, dict):
+        trace = contexts.get("trace")
+        if isinstance(trace, dict):
+            for key in ("description", "url"):
+                if isinstance(trace.get(key), str):
+                    trace[key] = _redact_paths_in_string(trace[key])
+
+    # event["tags"][*] — user-set or integration-set tags. Flat dict of strings.
+    tags = event.get("tags")
+    if isinstance(tags, dict):
+        for k, v in list(tags.items()):
+            tags[k] = _redact_paths_in_string(v) if isinstance(v, str) else v
+
 
 # Backward-compat alias for tests written against the round-3/4 name.
 _scrub_logentry = _scrub_event_paths

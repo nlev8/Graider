@@ -501,12 +501,129 @@ class TestCallSiteIdHashing:
         from pathlib import Path
         src = Path(__file__).resolve().parent.parent / "backend/services/portal_grading.py"
         text = src.read_text()
-        # All 3 cited error logs in portal_grading.py must be hashed.
-        # Bare `submission_id` must not appear as a logger arg in any of them.
-        assert text.count("hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]") >= 3, (
-            "Expected ≥3 hashed-submission-id call sites in portal_grading.py "
-            "(failed fetch, full_context fetch, mark-failed) — Codex round-4 cited 3"
+        # 3 round-4 sites + 1 round-5 site (_safe_update_submission) must hash.
+        assert text.count("hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]") >= 4, (
+            "Expected ≥4 hashed-submission-id call sites in portal_grading.py "
+            "(round-4: 3 sites + round-5: _safe_update_submission)"
         )
+
+    def test_safe_update_submission_runtime_no_raw_id(self, capsys):
+        """Round-5 Codex CRITICAL fold: _safe_update_submission with sb=None
+        previously formatted raw submission_id into both logger.error and
+        capture_message. Now the format string receives only the hash."""
+        from unittest.mock import patch
+
+        # Import via the project path to match how the module is normally used.
+        import sys
+        if "backend" in sys.path:
+            sys.path.remove("backend")  # ensure consistent import
+        from backend.services import portal_grading
+
+        captured = {}
+
+        def fake_capture(msg, level=None):
+            captured["msg"] = msg
+            captured["level"] = level
+
+        with patch("backend.services.portal_grading.sentry_sdk.capture_message",
+                   side_effect=fake_capture):
+            portal_grading._safe_update_submission(
+                sb=None,
+                submission_id="test-raw-id-abc123-XYZ",
+                update_fields={"status": "failed"},
+            )
+
+        # Raw submission_id must not appear in either the captured Sentry
+        # message or, by extension, the logger.error formatted output.
+        assert "msg" in captured, "capture_message should have been called"
+        assert "test-raw-id-abc123-XYZ" not in captured["msg"], (
+            f"Raw submission_id leaked into Sentry: {captured['msg']!r}"
+        )
+        # The hash should be present (8 hex chars) so debugging is still possible.
+        import re
+        assert re.search(r"\b[0-9a-f]{8}\b", captured["msg"]), (
+            f"Expected an 8-hex-char hash in the message; got: {captured['msg']!r}"
+        )
+
+
+class TestEventBoundaryAPMSurfaces:
+    """Round-5 Codex MAJOR fold: spans/contexts/tags weren't scrubbed.
+    A transaction event with /api/.../<id> in those fields survived
+    before_send_transaction. Now they're walked too."""
+
+    def test_spans_description_scrubbed(self):
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "spans": [
+                {"description": "GET /api/student-history/abc123", "op": "http.client"},
+                {"description": "psql SELECT * FROM students"},  # no path → preserved
+            ],
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        assert "abc123" not in out["spans"][0]["description"]
+        assert "[Filtered-path]" in out["spans"][0]["description"]
+        # Non-path span description preserved
+        assert out["spans"][1]["description"] == "psql SELECT * FROM students"
+
+    def test_spans_data_scrubbed(self):
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "spans": [
+                {"data": {"http.url": "/api/teacher/class/c1/student/s2", "method": "GET"}},
+            ],
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        assert out["spans"][0]["data"]["http.url"] == "[Filtered-path]"
+        assert out["spans"][0]["data"]["method"] == "GET"
+
+    def test_contexts_trace_scrubbed(self):
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "contexts": {
+                "trace": {
+                    "op": "http.server",
+                    "description": "/api/student-history/abc123",
+                    "url": "https://app.graider.live/api/teacher/class/c1/student/s2",
+                },
+                "runtime": {"name": "Python", "version": "3.12"},  # untouched
+            },
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        trace = out["contexts"]["trace"]
+        assert "abc123" not in trace["description"]
+        assert "/api/teacher" not in trace["url"]
+        # Non-PII context preserved
+        assert out["contexts"]["runtime"]["name"] == "Python"
+
+    def test_tags_scrubbed(self):
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "tags": {
+                "route": "/api/student-history/abc123",
+                "method": "GET",
+                "status": "500",
+            },
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        assert out["tags"]["route"] == "[Filtered-path]"
+        assert out["tags"]["method"] == "GET"
+        assert out["tags"]["status"] == "500"
+
+    def test_apm_surfaces_also_scrubbed_on_errors(self):
+        """Same boundary scrubber runs on errors via before_send. Verify
+        spans/contexts/tags are scrubbed there too even though spans are
+        unusual on error events."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "exception": {"values": [{"type": "RuntimeError", "value": "boom"}]},
+            "tags": {"route": "/api/student-history/abc123"},
+        }
+        out = sentry_mod.before_send(event, {})
+        assert out["tags"]["route"] == "[Filtered-path]"
 
     def test_user_id_resolved_to_hash_outside_request_context(self):
         """Outside Flask request context, user.id falls back to 'anonymous'."""
