@@ -4,7 +4,9 @@
   "description": "**AI-Powered Grading Assistant for Educators**",
   "main": "focus-automation.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm test",
+    "test:backend": "pytest tests/ --ignore=tests/load --ignore=tests/stress --ignore=tests/e2e -m 'not live'",
     "generate-sitemap": "node landing/scripts/generate-sitemap.js",
     "seo-check": "node landing/scripts/seo-health-check.js",
     "lighthouse": "bash landing/scripts/lighthouse-check.sh"
