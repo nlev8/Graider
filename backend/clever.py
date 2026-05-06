@@ -3,6 +3,7 @@ Clever OAuth + API client for Graider.
 Handles SSO authentication and Secure Sync roster/IEP data.
 """
 import csv
+import hashlib
 import io
 import json
 import os
@@ -381,7 +382,8 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
     # Restore any previously archived students who reappeared
     restored = [sid for sid in list(archived.keys()) if sid in current_ids]
     for sid in restored:
-        logger.info("Restored previously archived Clever student: %s", sid)
+        logger.info("Restored previously archived Clever student: %s",
+                    hashlib.sha256(str(sid).encode()).hexdigest()[:8])
         del archived[sid]
 
     # Load previous roster IDs to detect removals
@@ -396,7 +398,8 @@ def persist_roster_as_csv(students, teacher_id="local-dev"):
     newly_archived = prev_ids - current_ids - {""}
     for sid in newly_archived:
         archived[sid] = {"archived_at": datetime.now().isoformat(), "reason": "removed_from_clever"}
-        logger.info("Archived Clever student no longer in roster: %s", sid)
+        logger.info("Archived Clever student no longer in roster: %s",
+                    hashlib.sha256(str(sid).encode()).hexdigest()[:8])
 
     # Save archive file
     if archived:

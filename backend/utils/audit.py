@@ -33,7 +33,12 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
 
     # Local file (immediate, always works)
     try:
-        log_entry = f"{timestamp} | {user} | {action} | {details[:500]}\n"
+        # Format: timestamp | user | action | details | teacher={teacher_id}
+        # teacher_id appended LAST so existing 4-field readers (e.g., the
+        # /api/ferpa/audit-log endpoint at backend/app.py:265) still parse
+        # the first four fields correctly. New 5-field readers can pick up
+        # teacher_id from parts[4].
+        log_entry = f"{timestamp} | {user} | {action} | {details[:500]} | teacher={resolved_teacher_id}\n"
         with open(AUDIT_LOG_FILE, 'a') as f:
             f.write(log_entry)
     except Exception as e:
