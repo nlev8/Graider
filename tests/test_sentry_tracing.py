@@ -217,6 +217,67 @@ class TestBeforeSendTransactionScrubbing:
         # User-Agent preserved (not auth)
         assert req["headers"]["User-Agent"] == "x"
 
+    def test_request_url_dropped(self):
+        """Round-2 Codex CRITICAL fold: request.url leaks identifier-bearing
+        path params on FERPA-sensitive routes. transaction_style='endpoint'
+        only sets event.transaction, NOT request.url — so routes like
+        /api/student-history/<student_id> would otherwise leak the literal
+        student_id value. The endpoint name carries the diagnostic signal."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "transaction": "student_portal_routes.report_card",
+            "request": {
+                "url": "https://app.graider.live/api/teacher/class/c123/student/s456/report-card",
+                "method": "GET",
+                "headers": {},
+            },
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        req = out["request"]
+        assert "url" not in req, (
+            "request.url must be dropped — path params leak student/class/"
+            "submission identifiers on FERPA-sensitive routes"
+        )
+        # Endpoint name (the safe replacement signal) is preserved.
+        assert out["transaction"] == "student_portal_routes.report_card"
+
+    def test_referer_header_filtered(self):
+        """Round-2 Codex CRITICAL fold: Referer header could leak the
+        previous page URL (which itself carries identifier path params)."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "request": {
+                "headers": {
+                    "Referer": "https://app.graider.live/api/student/submission/abc123",
+                    "User-Agent": "Mozilla/5.0",
+                },
+            },
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        headers = out["request"]["headers"]
+        assert headers["Referer"] == "[Filtered]"
+        # Other safe headers preserved
+        assert headers["User-Agent"] == "Mozilla/5.0"
+
+    def test_request_url_scrubbed_on_error_events_too(self):
+        """Same _scrub_request helper runs on error events via before_send.
+        Verify URL scrubbing applies there too — error events also leak
+        path params on the same FERPA-sensitive routes."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "exception": {"values": [{"type": "RuntimeError", "value": "boom"}]},
+            "request": {
+                "url": "https://app.graider.live/api/student-history/abc123",
+                "method": "GET",
+                "headers": {},
+            },
+        }
+        out = sentry_mod.before_send(event, {})
+        assert out is not None
+        assert "url" not in out["request"]
+
     def test_user_id_resolved_to_hash_outside_request_context(self):
         """Outside Flask request context, user.id falls back to 'anonymous'."""
         sentry_mod = _import_sentry_module()

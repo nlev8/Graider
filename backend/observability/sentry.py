@@ -159,11 +159,26 @@ def _scrub_request(request: Optional[dict]) -> None:
     for key in ("data", "json", "form", "cookies"):
         request.pop(key, None)
 
-    # Redact auth-bearing headers.
+    # Drop the full URL — path params on FERPA-bearing routes
+    # (`/api/student-history/<student_id>`, `/api/teacher/class/<class_id>/student/<student_id>/report-card`,
+    # join codes, submission IDs, content IDs) leak directly into request.url
+    # even with transaction_style="endpoint" (which only sets event.transaction,
+    # not request.url). Codex audit MAJOR #14 round-2 CRITICAL: confirmed
+    # via real Flask + Sentry SDK 2.58 simulation. The endpoint name carries
+    # all routing info we need; URL adds nothing diagnostically that's worth
+    # the FERPA risk.
+    request.pop("url", None)
+
+    # Redact auth-bearing + URL-leaking headers.
     headers = request.get("headers")
     if isinstance(headers, dict):
         for header_key in list(headers.keys()):
-            if header_key.lower() in ("authorization", "cookie"):
+            lk = header_key.lower()
+            if lk in ("authorization", "cookie"):
+                headers[header_key] = "[Filtered]"
+            elif lk == "referer":
+                # Could leak prior page URL with IDs (e.g., browser navigated
+                # from /api/student/submission/<id> to current request).
                 headers[header_key] = "[Filtered]"
 
     # Strip query params whose names look like secrets.
@@ -249,8 +264,17 @@ def before_send_transaction(event: dict, hint: dict) -> Optional[dict]:
     `max_request_body_size="never"` in init() is defense-in-depth that
     prevents body capture at the source. This hook is belt-and-suspenders:
     it strips request payload + secret-looking query params + auth headers
-    AFTER the integration's middleware. Identical scrubbing as
-    before_send for the request dict and user attribution.
+    + the full request.url (which carries identifier-bearing path params
+    on FERPA-sensitive routes — the endpoint name in event["transaction"]
+    is the safe replacement signal).
+
+    User attribution caveat (Codex round-2 MINOR): the SDK fires this
+    hook from a worker thread AFTER Flask request context teardown, so
+    `_resolve_user_id()` typically resolves to "anonymous" because
+    flask.g is no longer accessible. That is privacy-safe (no real
+    user.id reaches Sentry from transactions) but means transaction
+    events are NOT teacher-attributable. Error events still attribute
+    correctly via the in-context `before_send` hook.
 
     Always returns the event (we want APM signal); only scrubs in place.
     """
