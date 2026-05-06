@@ -1,6 +1,7 @@
 """
 Clever SSO and Secure Sync routes.
 """
+import hashlib
 import os
 import asyncio
 import logging
@@ -31,6 +32,7 @@ from backend.roster_sync import sync_roster_to_db as _shared_sync_roster_to_db
 from backend.supabase_client import get_supabase as _get_supabase_safe
 from backend.utils.errors import handle_route_errors
 from backend.utils.auth_decorators import require_clever_session
+from backend.utils.redaction import redact_email
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +156,6 @@ def _create_clever_student_session(clever_id, email):
         dict with keys 'token', 'student', 'class', or None if not found.
     """
     import secrets as _secrets
-    import hashlib
     from datetime import datetime, timezone, timedelta
 
     sb = _get_supabase_safe()
@@ -181,7 +182,9 @@ def _create_clever_student_session(clever_id, email):
             student_row = res2.data[0] if res2 and res2.data else None
 
         if student_row is None:
-            logger.info("Clever student not found: clever_id=%s email=%s", clever_id, email)
+            logger.info("Clever student not found: email=%s clever_id_hash=%s",
+                        redact_email(email),
+                        hashlib.sha256(str(clever_id).encode()).hexdigest()[:8])
             return None
 
         student_db_id = student_row["id"]
@@ -335,12 +338,14 @@ def clever_callback():
                 "clever": "1",
                 "code": auth_code,
             })
-            logger.info("AUDIT: Clever student login: clever_id=%s email=%s",
-                        clever_user["clever_id"], clever_user.get("email", ""))
+            logger.info("AUDIT: Clever student login: email=%s clever_id_hash=%s",
+                        redact_email(clever_user.get("email", "")),
+                        hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8])
             return redirect("/student?" + params)
         else:
-            logger.info("AUDIT: Clever student login failed (not enrolled): clever_id=%s email=%s",
-                        clever_user["clever_id"], clever_user.get("email", ""))
+            logger.info("AUDIT: Clever student login failed (not enrolled): email=%s clever_id_hash=%s",
+                        redact_email(clever_user.get("email", "")),
+                        hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8])
             return redirect("/?clever_error=student_not_enrolled")
 
     # Any non-student Clever user can access the teacher dashboard
@@ -348,8 +353,10 @@ def clever_callback():
     if clever_user["type"] == "student":
         # Already handled above — this is a safety net
         return redirect("/?clever_error=students_use_portal")
-    logger.info("AUDIT: Clever login accepted: type=%s email=%s clever_id=%s",
-                clever_user["type"], clever_user.get("email", ""), clever_user.get("clever_id", ""))
+    logger.info("AUDIT: Clever login accepted: type=%s email=%s clever_id_hash=%s",
+                clever_user["type"],
+                redact_email(clever_user.get("email", "")),
+                hashlib.sha256(str(clever_user.get("clever_id", "")).encode()).hexdigest()[:8])
 
     # Clear any existing session (shared device support — Clever requirement)
     session.clear()
@@ -385,12 +392,16 @@ def clever_callback():
                 ]
                 if len(matches) == 1:
                     save_clever_link(clever_id, matches[0].id)
-                    logger.info("Merged Clever user %s with existing account %s (%s)",
-                                clever_id, matches[0].id, clever_email)
+                    logger.info(
+                        "Merged Clever user clever_id_hash=%s with existing account user_hash=%s email=%s",
+                        hashlib.sha256(str(clever_id).encode()).hexdigest()[:8],
+                        hashlib.sha256(str(matches[0].id).encode()).hexdigest()[:8],
+                        redact_email(clever_email),
+                    )
                 elif len(matches) > 1:
                     logger.warning(
-                        "Multiple Supabase users match email %s — skipping merge to avoid data conflict",
-                        clever_email,
+                        "Multiple Supabase users match email=%s — skipping merge to avoid data conflict",
+                        redact_email(clever_email),
                     )
         except Exception as e:
             logger.warning("Clever account merge check failed (non-fatal): %s", str(e))
@@ -408,9 +419,11 @@ def clever_callback():
         )
         thread.start()
 
-    logger.info("AUDIT: Clever teacher login: email=%s type=%s district=%s clever_id=%s",
-                clever_user.get("email"), clever_user["type"],
-                clever_user.get("district", ""), clever_user["clever_id"])
+    logger.info("AUDIT: Clever teacher login: email=%s type=%s district=%s clever_id_hash=%s",
+                redact_email(clever_user.get("email")),
+                clever_user["type"],
+                clever_user.get("district", ""),
+                hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8])
     return redirect("/?clever_login=success")
 
 
@@ -492,8 +505,12 @@ def clever_sync_roster():
             if teacher_clever_id in teacher_ids:
                 own_sections.append(sec)
         roster["sections"] = own_sections
-        logger.info("Filtered sections for teacher %s: %d of %d",
-                     teacher_clever_id, len(own_sections), len(all_sections))
+        logger.info(
+            "Filtered sections for teacher_hash=%s: %d of %d",
+            hashlib.sha256(str(teacher_clever_id).encode()).hexdigest()[:8],
+            len(own_sections),
+            len(all_sections),
+        )
 
     # Filter sections if teacher selected specific ones
     sections = roster.get("sections", [])

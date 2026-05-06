@@ -54,7 +54,10 @@ SIS_CAPTURES = [
     ("backend/routes/clever_routes.py", 54),
     ("backend/routes/clever_routes.py", 231),
     ("backend/routes/clever_routes.py", 254),
-    ("backend/routes/clever_routes.py", 672),
+    # 2026-05-06: shifted 672 -> 692 by PR 3 of SIS compliance hardening sprint
+    # (PII redaction in Clever logs added ~20 lines of helper code earlier in
+    # the file). Capture site is unchanged — pin tracks the except block.
+    ("backend/routes/clever_routes.py", 692),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
