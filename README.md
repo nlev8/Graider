@@ -448,10 +448,18 @@ This project uses GitHub Actions for continuous integration. Branch protection o
 
 **Running tests locally:**
 ```bash
+# Frontend tests (Vitest, ~3s)
+npm run test:frontend
+
+# Backend tests (pytest; activate venv first)
 source venv/bin/activate
-python -m pytest tests/ -q --ignore=tests/load --ignore=tests/stress --ignore=tests/e2e -m "not live"
-cd frontend && npm run build
+npm run test:backend
+
+# Or run both via the root alias
+npm test
 ```
+
+The npm aliases delegate to the canonical pytest / Vitest commands; running pytest or vitest directly works the same way. CI uses the same exclusions plus a `--cov-fail-under=32` gate that the local alias deliberately skips for speed.
 
 **Note:** Do not push directly to `main`. Direct pushes are blocked by branch protection.
 
