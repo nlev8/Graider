@@ -11,13 +11,21 @@ Endpoints:
 """
 
 import os
+import time
 import logging
 import secrets
 
+import jwt as pyjwt
 import requests
 import sentry_sdk
 from flask import Blueprint, request, redirect, jsonify, session, g
 from urllib.parse import urlencode
+
+from backend.services.classlink_oidc import (
+    ClassLinkOIDCError,
+    get_classlink_oidc_config,
+    get_classlink_jwks_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -223,15 +231,60 @@ def classlink_callback():
                          token_resp.status_code, token_resp.text[:200])
             return redirect("/?classlink_error=token_failed")
 
-        access_token = token_resp.json().get('access_token')
+        token_data = token_resp.json()
+        access_token = token_data.get('access_token')
         if not access_token:
             return redirect("/?classlink_error=no_token")
+
+        id_token = token_data.get('id_token')
+        if not id_token:
+            logger.warning("ClassLink token response missing id_token")
+            return redirect("/?classlink_error=no_id_token")
 
     except Exception as e:
         logger.exception("ClassLink token exchange error: %s", e)
         return redirect("/?classlink_error=token_error")
 
-    # Fetch user info
+    # Validate id_token: signature, iss, aud, exp
+    # client_id is bound from the token-exchange block above; reuse it for audience.
+    try:
+        oidc_cfg = get_classlink_oidc_config()
+        jwks_client = get_classlink_jwks_client()
+        signing_key = jwks_client.get_signing_key_from_jwt(id_token)
+        id_claims = pyjwt.decode(
+            id_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=client_id,
+            issuer=oidc_cfg.get("issuer"),
+            leeway=10,
+            options={
+                "require": ["iat", "nbf", "exp", "iss", "aud", "sub"],
+                "verify_iat": True,
+            },
+        )
+    except pyjwt.ExpiredSignatureError:
+        logger.warning("ClassLink id_token expired")
+        return redirect("/?classlink_error=oidc_expired")
+    except (pyjwt.InvalidAudienceError, pyjwt.InvalidIssuerError) as e:
+        logger.warning("ClassLink id_token claim mismatch: %s", e.__class__.__name__)
+        return redirect("/?classlink_error=oidc_claim_mismatch")
+    except (pyjwt.PyJWTError, ClassLinkOIDCError) as e:
+        logger.warning("ClassLink id_token validation failed: %s", e.__class__.__name__)
+        return redirect("/?classlink_error=oidc_invalid")
+
+    # iat sanity window: reject tokens minted >5 min in the future or >1 day stale.
+    # Defense-in-depth against misconfigured ClassLink tenants issuing long-lived tokens.
+    now_ts = time.time()
+    iat = id_claims.get("iat", 0)
+    if iat > now_ts + 300:
+        logger.warning("ClassLink id_token iat is in the future")
+        return redirect("/?classlink_error=oidc_invalid")
+    if iat < now_ts - 86400:
+        logger.warning("ClassLink id_token iat is more than 24h old")
+        return redirect("/?classlink_error=oidc_invalid")
+
+    # Fetch user info (userinfo becomes fallback for non-OIDC fields like TenantId)
     try:
         user_resp = requests.get(CLASSLINK_USERINFO_URL, headers={
             'Authorization': f'Bearer {access_token}',
@@ -246,12 +299,15 @@ def classlink_callback():
         logger.exception("ClassLink user info error: %s", e)
         return redirect("/?classlink_error=userinfo_error")
 
-    classlink_id = str(user_data.get('UserId', ''))
-    first_name = user_data.get('FirstName', '')
-    last_name = user_data.get('LastName', '')
-    email = user_data.get('Email', '')
-    role = (user_data.get('Role') or '').lower()
-    tenant_id = str(user_data.get('TenantId', ''))
+    # Prefer id_token claims as source of truth for standard OIDC fields;
+    # fall back to userinfo only for ClassLink-specific fields (TenantId, Role)
+    # that are not guaranteed OIDC claims.
+    classlink_id = str(id_claims.get('sub') or user_data.get('UserId', ''))
+    first_name = id_claims.get('given_name') or user_data.get('FirstName', '')
+    last_name = id_claims.get('family_name') or user_data.get('LastName', '')
+    email = id_claims.get('email') or user_data.get('Email', '')
+    role = (id_claims.get('Role') or user_data.get('Role') or '').lower()
+    tenant_id = str(user_data.get('TenantId', ''))  # ClassLink-specific; not in id_token
 
     # Student login → redirect to student portal
     if role == 'student':
