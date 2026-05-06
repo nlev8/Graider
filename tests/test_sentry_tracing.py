@@ -501,10 +501,74 @@ class TestCallSiteIdHashing:
         from pathlib import Path
         src = Path(__file__).resolve().parent.parent / "backend/services/portal_grading.py"
         text = src.read_text()
-        # 3 round-4 sites + 1 round-5 site (_safe_update_submission) must hash.
-        assert text.count("hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]") >= 4, (
-            "Expected ≥4 hashed-submission-id call sites in portal_grading.py "
-            "(round-4: 3 sites + round-5: _safe_update_submission)"
+        # Round-4: 3 sites (327, 417, 894) — fetch failed, full_context, mark-failed
+        # Round-5: 1 site — _safe_update_submission
+        # Round-6: 3 sites + 1 sub_hash precompute — Portal grading started (567),
+        #         Marked grading_failed (901), Shutdown in progress (936),
+        #         shutdown-defer mark error (946) — last two share `sub_hash` precomputed.
+        # The shutdown branch precomputes sub_hash once and uses it twice;
+        # so the literal hashlib.sha256(...) appears only ~6 times even though
+        # 7 logical sites use the hashed value.
+        count = text.count("hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]")
+        assert count >= 6, (
+            f"Expected ≥6 hashed-submission-id call sites in portal_grading.py, "
+            f"got {count}. Round-6 added Portal-grading-started, Marked-failed, "
+            f"and Shutdown-in-progress / mark-deferred (last two share a sub_hash)."
+        )
+
+    def test_no_raw_submission_id_in_portal_grading_logger_calls(self):
+        """Strong static check: no `logger.*("...%s...", submission_id, ...)`
+        pattern remains in portal_grading.py.
+
+        submission_id may only flow into a logger call via:
+          - hashlib.sha256(str(submission_id)...)
+          - a sub_hash local variable derived from that hash
+
+        We walk the AST so we can inspect each `logger.X(...)` call's actual
+        argument expressions, not regex-fish over comments / nearby code."""
+        import ast
+        from pathlib import Path
+
+        src = Path(__file__).resolve().parent.parent / "backend/services/portal_grading.py"
+        tree = ast.parse(src.read_text())
+
+        offenders = []
+
+        def is_logger_call(node: ast.Call) -> bool:
+            f = node.func
+            return (
+                isinstance(f, ast.Attribute)
+                and isinstance(f.value, ast.Name)
+                and f.value.id == "logger"
+                and f.attr in {"debug", "info", "warning", "error", "exception", "critical"}
+            )
+
+        def arg_is_safe(arg: ast.AST) -> bool:
+            """An arg is safe if it is NOT a bare `submission_id` Name node.
+            Names like `sub_hash` or `submission_id_for_logs` are fine; only
+            the literal `submission_id` Name is banned. Hashed forms are
+            ast.Call nodes (sha256...), not Name."""
+            return not (isinstance(arg, ast.Name) and arg.id == "submission_id")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and is_logger_call(node):
+                # Scan positional args (skip the first — that's the format string)
+                for arg in node.args[1:]:
+                    if not arg_is_safe(arg):
+                        offenders.append(f"line {node.lineno}: bare submission_id in logger.{node.func.attr}()")
+                        break  # one report per call is enough
+                # Also scan keyword args (logger.error(..., extra={...}) — `extra` value is a dict node)
+                for kw in node.keywords:
+                    if isinstance(kw.value, ast.Dict):
+                        for v in kw.value.values:
+                            if not arg_is_safe(v):
+                                offenders.append(
+                                    f"line {node.lineno}: bare submission_id in logger.{node.func.attr}() kwarg"
+                                )
+
+        assert not offenders, (
+            "Bare submission_id leaked into logger calls (Codex audit MAJOR #14):\n"
+            + "\n".join(offenders)
         )
 
     def test_safe_update_submission_runtime_no_raw_id(self, capsys):

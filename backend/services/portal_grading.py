@@ -557,15 +557,22 @@ def grade_portal_submission_sync(
             elif not _is_stale_claim(current.get('grading_started_at')):
                 logger.info(
                     "Submission %s already being graded by task %s — skipping",
-                    submission_id, current_task,
+                    hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
+                    current_task,
                 )
                 return  # another live worker owns it — skip
             # else: stale → fall through to reclaim
         _claim_submission_for_grading(sb, supabase_table, submission_id, task_id)
 
     try:
-        logger.info("Portal grading started: submission=%s student=%s",
-                    submission_id, student_info.get("student_name", ""))
+        # FERPA: hash submission_id — see Codex audit MAJOR #14 round-6.
+        # An info-level log can ride a later capture_exception via Sentry's
+        # logging integration (breadcrumbs), so even non-error logs leak.
+        # student_name is also redacted — set_user upstream uses a hash.
+        logger.info(
+            "Portal grading started: submission=%s",
+            hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
+        )
 
         # Build AI instruction string with all grading factors
         accommodation_prompt = ""
@@ -882,8 +889,16 @@ def grade_portal_submission_sync(
         except Exception as e:
             logger.error("Failed to update student history: %s", str(e))
 
-        logger.info("AUDIT: Portal grading complete: submission=%s student=%s score=%d/%d",
-                    submission_id, student_info.get("student_name", ""), total_score, total_possible)
+        # FERPA: hash both submission_id and student_name (Codex MAJOR #14
+        # round-6). AUDIT-tier log so it's prominent in BetterStack; raw IDs
+        # would leak via Sentry breadcrumbs on any subsequent capture.
+        logger.info(
+            "AUDIT: Portal grading complete: submission=%s student=%s score=%d/%d",
+            hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
+            hashlib.sha256(str(student_info.get("student_name", "")).encode()).hexdigest()[:8],
+            total_score,
+            total_possible,
+        )
 
     except Exception as e:
         logger.error("Portal grading failed: %s", str(e))
@@ -898,7 +913,11 @@ def grade_portal_submission_sync(
                 sb.table(supabase_table).update({
                     "status": "grading_failed",
                 }).eq("id", submission_id).execute()
-                logger.info("Marked submission %s as grading_failed", submission_id)
+                # FERPA: hash submission_id — Codex audit MAJOR #14 round-6.
+                logger.info(
+                    "Marked submission %s as grading_failed",
+                    hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
+                )
         except Exception as e:
             # Critical: if we can't mark a submission as failed, it stays in
             # 'partial' forever and never retries. Sentry must see this.
@@ -933,7 +952,10 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
     _active_threads.add(current_thread)
     try:
         if _shutdown_event.is_set():
-            logger.info("Shutdown in progress — skipping grading for submission %s", submission_id)
+            # FERPA: hash submission_id — Codex audit MAJOR #14 round-6.
+            # logger.info also rides Sentry capture_exception breadcrumbs.
+            sub_hash = hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]
+            logger.info("Shutdown in progress — skipping grading for submission %s", sub_hash)
             try:
                 from backend.supabase_client import get_supabase
                 sb = get_supabase()
@@ -944,7 +966,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                 # the submission stays in 'partial' through the redeploy and
                 # may not auto-retry on the new instance.
                 logger.error("Failed to mark submission %s as grading_deferred during shutdown: %s",
-                             submission_id, e)
+                             sub_hash, e)
                 sentry_sdk.capture_exception(e)
             return
 
