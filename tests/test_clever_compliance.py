@@ -385,3 +385,196 @@ class TestNoBarePIIInLoggerCalls:
             "Bare PII names found in logger calls — wrap with redact_email() or sha256():\n"
             + "\n".join(violations)
         )
+
+
+
+class TestSISAuditCoverage:
+    """Verify audit_log is called for PII reads and roster sync boundaries."""
+
+    def test_get_clever_user_emits_audit_event(self, monkeypatch):
+        """backend/clever.py get_clever_user must call audit_log after /me + /users/{id}."""
+        import asyncio
+        from unittest.mock import MagicMock, AsyncMock
+
+        audit_calls = []
+        monkeypatch.setattr(
+            "backend.clever.audit_log",
+            lambda *args, **kwargs: audit_calls.append((args, kwargs)),
+        )
+
+        async def fake_get(url, **kwargs):
+            m = MagicMock()
+            if "/me" in url:
+                m.status_code = 200
+                m.json.return_value = {"data": {"id": "u123", "type": "teacher"}}
+            else:
+                m.status_code = 200
+                m.json.return_value = {"data": {"name": {"first": "T"}, "email": "t@x.com"}}
+            return m
+
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = fake_get
+
+        monkeypatch.setattr("backend.clever.httpx.AsyncClient", lambda **kwargs: mock_client)
+
+        from backend.clever import get_clever_user
+        result = asyncio.run(get_clever_user("test-token"))
+
+        assert result is not None
+        assert result["clever_id"] == "u123"
+        event_types = [c[0][0] for c in audit_calls]
+        assert "CLEVER_USER_READ" in event_types
+        # PII safety: email must not appear in any audit detail string
+        for call in audit_calls:
+            details = call[0][1] if len(call[0]) > 1 else ""
+            assert "t@x.com" not in details
+
+    def test_get_clever_user_audit_contains_type_not_email(self, monkeypatch):
+        """CLEVER_USER_READ detail must contain user type, not the user's email."""
+        import asyncio
+        from unittest.mock import MagicMock, AsyncMock
+
+        audit_calls = []
+        monkeypatch.setattr(
+            "backend.clever.audit_log",
+            lambda *args, **kwargs: audit_calls.append((args, kwargs)),
+        )
+
+        async def fake_get(url, **kwargs):
+            m = MagicMock()
+            if "/me" in url:
+                m.status_code = 200
+                m.json.return_value = {"data": {"id": "s999", "type": "student"}}
+            else:
+                m.status_code = 200
+                m.json.return_value = {"data": {"name": {"first": "S"}, "email": "student@school.edu"}}
+            return m
+
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = fake_get
+
+        monkeypatch.setattr("backend.clever.httpx.AsyncClient", lambda **kwargs: mock_client)
+
+        from backend.clever import get_clever_user
+        asyncio.run(get_clever_user("student-token"))
+
+        read_calls = [c for c in audit_calls if c[0][0] == "CLEVER_USER_READ"]
+        assert len(read_calls) == 1
+        details = read_calls[0][0][1]
+        assert "student" in details        # user type present
+        assert "student@school.edu" not in details  # email absent
+
+    def test_get_clever_user_no_audit_on_me_failure(self, monkeypatch):
+        """No CLEVER_USER_READ event when /me returns non-200 (no successful read)."""
+        import asyncio
+        from unittest.mock import MagicMock, AsyncMock
+
+        audit_calls = []
+        monkeypatch.setattr(
+            "backend.clever.audit_log",
+            lambda *args, **kwargs: audit_calls.append((args, kwargs)),
+        )
+
+        async def fake_get(url, **kwargs):
+            m = MagicMock()
+            m.status_code = 401
+            m.json.return_value = {}
+            return m
+
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = fake_get
+
+        monkeypatch.setattr("backend.clever.httpx.AsyncClient", lambda **kwargs: mock_client)
+
+        from backend.clever import get_clever_user
+        result = asyncio.run(get_clever_user("bad-token"))
+
+        assert result is None
+        event_types = [c[0][0] for c in audit_calls]
+        assert "CLEVER_USER_READ" not in event_types
+
+    def test_roster_sync_emits_start_and_complete_events(self, monkeypatch):
+        """sync_roster_to_db must emit ROSTER_SYNC_START + ROSTER_SYNC_COMPLETE."""
+        audit_calls = []
+        monkeypatch.setattr(
+            "backend.roster_sync.audit_log",
+            lambda *args, **kwargs: audit_calls.append((args, kwargs)),
+        )
+        # With empty classes, _sync_roster_to_db_impl returns zero without Supabase calls.
+        # Patch _get_supabase to return None to ensure no real DB access.
+        monkeypatch.setattr("backend.roster_sync._get_supabase", lambda: None)
+
+        from backend import roster_sync as rs
+        # Force the local import inside _sync_roster_to_db_impl to also return None
+        monkeypatch.setattr(
+            "backend.supabase_client.get_supabase",
+            lambda: None,
+            raising=False,
+        )
+
+        result = rs.sync_roster_to_db([], [], [], "test-teacher", provider="clever")
+
+        assert result == {"classes": 0, "students": 0, "enrollments": 0}
+        event_types = [c[0][0] for c in audit_calls]
+        assert "ROSTER_SYNC_START" in event_types
+        assert "ROSTER_SYNC_COMPLETE" in event_types
+        assert "ROSTER_SYNC_FAILED" not in event_types
+
+    def test_roster_sync_start_detail_includes_provider_and_counts(self, monkeypatch):
+        """ROSTER_SYNC_START detail must include provider name and input counts."""
+        audit_calls = []
+        monkeypatch.setattr(
+            "backend.roster_sync.audit_log",
+            lambda *args, **kwargs: audit_calls.append((args, kwargs)),
+        )
+        monkeypatch.setattr("backend.roster_sync._get_supabase", lambda: None)
+        monkeypatch.setattr(
+            "backend.supabase_client.get_supabase",
+            lambda: None,
+            raising=False,
+        )
+
+        from backend import roster_sync as rs
+        rs.sync_roster_to_db(
+            [{"external_id": "c1", "name": "Math"}],
+            [{"external_id": "s1", "first_name": "Alice", "last_name": "B", "email": ""}],
+            [("c1", "s1")],
+            "teacher-99",
+            provider="oneroster",
+        )
+
+        start_calls = [c for c in audit_calls if c[0][0] == "ROSTER_SYNC_START"]
+        assert len(start_calls) == 1
+        detail = start_calls[0][0][1]
+        assert "oneroster" in detail
+        assert "classes=1" in detail
+        assert "students=1" in detail
+        assert "enrollments=1" in detail
+
+    def test_roster_sync_emits_failed_event_on_exception(self, monkeypatch):
+        """sync_roster_to_db must emit ROSTER_SYNC_FAILED + re-raise on exception."""
+        audit_calls = []
+        monkeypatch.setattr(
+            "backend.roster_sync.audit_log",
+            lambda *args, **kwargs: audit_calls.append((args, kwargs)),
+        )
+
+        def exploding_impl(*args, **kwargs):
+            raise RuntimeError("Supabase exploded")
+
+        monkeypatch.setattr("backend.roster_sync._sync_roster_to_db_impl", exploding_impl)
+
+        from backend import roster_sync as rs
+        with pytest.raises(RuntimeError, match="Supabase exploded"):
+            rs.sync_roster_to_db([], [], [], "teacher-fail", provider="clever")
+
+        event_types = [c[0][0] for c in audit_calls]
+        assert "ROSTER_SYNC_START" in event_types
+        assert "ROSTER_SYNC_FAILED" in event_types
+        assert "ROSTER_SYNC_COMPLETE" not in event_types

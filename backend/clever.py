@@ -16,6 +16,8 @@ import asyncio
 import httpx
 import sentry_sdk
 
+from backend.utils.audit import audit_log
+
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 5
@@ -142,6 +144,11 @@ async def get_clever_user(access_token):
                 return None
             user_data = resp2.json().get("data", {})
 
+            audit_log(
+                "CLEVER_USER_READ",
+                f"clever_user_type={user_type}",
+                teacher_id=str(user_id),
+            )
             return {
                 "clever_id": user_id,
                 "type": user_type,

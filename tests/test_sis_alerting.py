@@ -48,9 +48,12 @@ def _imports_sentry(source: str) -> bool:
 # Every (file, flagged_line) pair that PR-0 patched.
 SIS_CAPTURES = [
     ("backend/clever.py", 46),
-    ("backend/clever.py", 217),
-    ("backend/clever.py", 231),
-    ("backend/clever.py", 245),
+    # 2026-05-06: shifted 217/231/245 -> 225/240/255 by PR 6 of SIS compliance
+    # hardening sprint (audit_log calls added in get_clever_user). Captures
+    # themselves are unchanged — pins track the except blocks.
+    ("backend/clever.py", 225),
+    ("backend/clever.py", 240),
+    ("backend/clever.py", 255),
     ("backend/routes/clever_routes.py", 54),
     ("backend/routes/clever_routes.py", 231),
     ("backend/routes/clever_routes.py", 254),
@@ -73,11 +76,15 @@ SIS_CAPTURES = [
     ("backend/routes/oneroster_routes.py", 157),
     ("backend/routes/oneroster_routes.py", 204),
     ("backend/routes/oneroster_routes.py", 218),
-    ("backend/roster_sync.py", 76),
-    ("backend/roster_sync.py", 135),
-    ("backend/roster_sync.py", 168),
-    ("backend/roster_sync.py", 270),
-    ("backend/roster_sync.py", 288),
+    # 2026-05-06: shifted 76/135/168/270/288 -> 105/165/199/302/321 by PR 6 of
+    # SIS compliance hardening sprint (ROSTER_SYNC_START / ROSTER_SYNC_COMPLETE
+    # / ROSTER_SYNC_FAILED audit_log boundary instrumentation added). Captures
+    # themselves are unchanged — pins track the except blocks.
+    ("backend/roster_sync.py", 105),
+    ("backend/roster_sync.py", 165),
+    ("backend/roster_sync.py", 199),
+    ("backend/roster_sync.py", 302),
+    ("backend/roster_sync.py", 321),
     # 2026-05-02: shifted 145 -> 159 by the schema-audit fix that added a
     # two-step query in _discover_teachers (~14 lines). Pin tracks the
     # _save_cursor try-block.

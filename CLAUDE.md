@@ -32,7 +32,7 @@ All changes go through Pull Requests:
 5. Merge when CI passes → Railway auto-deploys
 
 **Branch protection on `main` requires:**
-- `Backend Tests` job passes (pytest with 40% coverage floor)
+- `Backend Tests` job passes (pytest with `--cov-fail-under=32`; raise this floor as coverage grows)
 - `Frontend Build` job passes (Vite build succeeds)
 
 **Emergency bypass:** Repo admins can merge without CI if `enforce_admins` is false. Use only for critical hotfixes — fix CI immediately after.
