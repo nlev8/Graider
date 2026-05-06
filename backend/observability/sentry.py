@@ -11,6 +11,7 @@ See docs/superpowers/specs/2026-04-11-observability-sentry-betterstack-design.md
 import hashlib
 import logging
 import os
+import re
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,66 @@ def _resolve_user_id() -> str:
     return hashlib.sha256(str(uid).encode()).hexdigest()[:12]
 
 
+# Path pattern: 2+ url-safe segments. Conservative — redacts identifier
+# routes (`/api/student-history/<student_id>`) AND non-identifier ones
+# (`/api/healthz`) alike. The endpoint name in event["transaction"] is the
+# safe replacement signal; we lose the path information from logentry but
+# the FERPA risk of selective regex matching outweighs the diagnostic loss.
+_LOG_PATH_PATTERN = re.compile(r"/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-]+)+")
+
+
+def _redact_paths_in_string(text: Any) -> Any:
+    """Return `text` with any path-like substrings replaced by [Filtered-path].
+
+    Non-string inputs are returned unchanged so callers can apply this to
+    arbitrary logentry param values (ints, dicts, etc.) without crashing.
+    """
+    if not isinstance(text, str):
+        return text
+    return _LOG_PATH_PATTERN.sub("[Filtered-path]", text)
+
+
+def _scrub_logentry(event: dict) -> None:
+    """Strip identifier-bearing paths from logentry.params + logentry.formatted.
+
+    Sentry's logging integration captures `logger.exception(msg, *args)`
+    calls as `event["logentry"]` with structure:
+      - message:   format string ("Request failed: %s")
+      - params:    list of args (the raw `request.path`)
+      - formatted: rendered string ("Request failed: /api/...")
+
+    `_scrub_request()` operates on `event["request"]` and never sees
+    logentry. Codex audit MAJOR #14 round-3 CRITICAL: real Flask +
+    Sentry SDK 2.58 simulation confirmed routes that
+    `logger.exception("Request failed: %s", request.path)` leak the
+    full ID-bearing path (student/class/submission IDs) into
+    logentry.formatted and logentry.params. Two cited call sites:
+    `backend/routes/student_account_routes.py:224` and
+    `backend/routes/grading_routes.py:1260`.
+
+    Defensive at the Sentry boundary: every Sentry event passes through
+    before_send (or before_send_transaction); this scrub catches all
+    logger.exception/error/warning calls with path-like params, present
+    AND future, without requiring per-call-site fixes.
+
+    The format-string in `logentry.message` is preserved (no PII) so
+    debugging context is not fully lost.
+    """
+    le = event.get("logentry")
+    if not isinstance(le, dict):
+        return
+
+    params = le.get("params")
+    if isinstance(params, list):
+        le["params"] = [_redact_paths_in_string(p) for p in params]
+    elif isinstance(params, tuple):
+        le["params"] = tuple(_redact_paths_in_string(p) for p in params)
+
+    formatted = le.get("formatted")
+    if isinstance(formatted, str):
+        le["formatted"] = _redact_paths_in_string(formatted)
+
+
 def _scrub_request(request: Optional[dict]) -> None:
     """Strip PII from the request dict on a Sentry event (in place)."""
     if not request:
@@ -227,6 +288,7 @@ def before_send(event: dict, hint: dict) -> Optional[dict]:
 
     _scrub_request(event.get("request"))
     _scrub_frame_locals(event)
+    _scrub_logentry(event)
 
     user = event.setdefault("user", {})
     if isinstance(user, dict):
@@ -279,6 +341,7 @@ def before_send_transaction(event: dict, hint: dict) -> Optional[dict]:
     Always returns the event (we want APM signal); only scrubs in place.
     """
     _scrub_request(event.get("request"))
+    _scrub_logentry(event)
 
     user = event.setdefault("user", {})
     if isinstance(user, dict):

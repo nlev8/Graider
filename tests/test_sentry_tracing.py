@@ -278,6 +278,106 @@ class TestBeforeSendTransactionScrubbing:
         assert out is not None
         assert "url" not in out["request"]
 
+
+class TestLogentryScrubbing:
+    """Round-3 Codex CRITICAL fold: Sentry logging integration captures
+    `logger.exception(msg, *args)` calls as event['logentry']. The args
+    (params) and rendered string (formatted) carry raw request.path
+    values from real call sites. _scrub_logentry redacts path-like
+    substrings at the Sentry boundary."""
+
+    def test_logentry_params_with_path_redacted(self):
+        sentry_mod = _import_sentry_module()
+        event = {
+            "exception": {"values": [{"type": "RuntimeError", "value": "boom"}]},
+            "logentry": {
+                "message": "Request failed: %s",
+                "params": ["/api/student-history/abc123"],
+                "formatted": "Request failed: /api/student-history/abc123",
+            },
+        }
+        out = sentry_mod.before_send(event, {})
+        le = out["logentry"]
+        assert le["params"] == ["[Filtered-path]"]
+        assert "/api/student-history/abc123" not in le["formatted"]
+        assert "[Filtered-path]" in le["formatted"]
+        # Format string preserved — non-PII, useful for debugging.
+        assert le["message"] == "Request failed: %s"
+
+    def test_logentry_non_path_params_preserved(self):
+        """Counts, error codes, and other non-path values must survive."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "exception": {"values": [{"type": "RuntimeError", "value": "boom"}]},
+            "logentry": {
+                "message": "Synced %d records in %.2fs",
+                "params": [42, 3.14],
+                "formatted": "Synced 42 records in 3.14s",
+            },
+        }
+        out = sentry_mod.before_send(event, {})
+        le = out["logentry"]
+        assert le["params"] == [42, 3.14]
+        assert le["formatted"] == "Synced 42 records in 3.14s"
+
+    def test_logentry_mixed_params_only_paths_redacted(self):
+        sentry_mod = _import_sentry_module()
+        event = {
+            "exception": {"values": [{"type": "RuntimeError", "value": "boom"}]},
+            "logentry": {
+                "message": "GET %s returned %d in %dms",
+                "params": ["/api/teacher/class/c123/student/s456/report-card", 500, 1234],
+                "formatted": "GET /api/teacher/class/c123/student/s456/report-card returned 500 in 1234ms",
+            },
+        }
+        out = sentry_mod.before_send(event, {})
+        le = out["logentry"]
+        assert le["params"][0] == "[Filtered-path]"
+        assert le["params"][1] == 500
+        assert le["params"][2] == 1234
+        # Path string itself replaced in the formatted output
+        assert "c123" not in le["formatted"]
+        assert "s456" not in le["formatted"]
+        # Non-path numeric content preserved in the formatted output
+        assert "500" in le["formatted"]
+        assert "1234ms" in le["formatted"]
+
+    def test_logentry_scrubbed_on_transactions_too(self):
+        """before_send_transaction shares the same logentry scrubber."""
+        sentry_mod = _import_sentry_module()
+        event = {
+            "type": "transaction",
+            "logentry": {
+                "message": "slow %s",
+                "params": ["/api/student-history/abc123"],
+                "formatted": "slow /api/student-history/abc123",
+            },
+        }
+        out = sentry_mod.before_send_transaction(event, {})
+        le = out["logentry"]
+        assert le["params"] == ["[Filtered-path]"]
+        assert "abc123" not in le["formatted"]
+
+    def test_logentry_missing_field_no_op(self):
+        """Most events don't have logentry — scrubber must not crash."""
+        sentry_mod = _import_sentry_module()
+        event = {"exception": {"values": [{"type": "RuntimeError", "value": "boom"}]}}
+        out = sentry_mod.before_send(event, {})
+        assert out is not None
+        assert "logentry" not in out
+
+    def test_redact_paths_in_string_helper(self):
+        """Direct unit test of the regex redactor."""
+        sentry_mod = _import_sentry_module()
+        # 2+ segments redacted
+        assert sentry_mod._redact_paths_in_string("/api/student/abc") == "[Filtered-path]"
+        assert sentry_mod._redact_paths_in_string("hit /api/x/y/z then more") == "hit [Filtered-path] then more"
+        # Single-segment paths NOT redacted (no clear PII surface)
+        assert sentry_mod._redact_paths_in_string("/healthz") == "/healthz"
+        # Non-string passthrough
+        assert sentry_mod._redact_paths_in_string(42) == 42
+        assert sentry_mod._redact_paths_in_string(None) is None
+
     def test_user_id_resolved_to_hash_outside_request_context(self):
         """Outside Flask request context, user.id falls back to 'anonymous'."""
         sentry_mod = _import_sentry_module()
