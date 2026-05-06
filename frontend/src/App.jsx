@@ -464,10 +464,11 @@ function App() {
   }, [user]);
 
   async function handleLogout() {
-    // Clear Clever session if present
-    if (user && user.id && user.id.startsWith('clever:')) {
-      fetch('/api/clever/logout', { method: 'POST' }).catch(function() {});
-    }
+    // Clear SSO sessions for all providers (idempotent — no-op when not authenticated)
+    await Promise.allSettled([
+      fetch('/api/clever/logout', { method: 'POST', credentials: 'include' }),
+      fetch('/api/classlink/logout', { method: 'POST', credentials: 'include' }),
+    ]);
     logoutIntentRef.current = true;
     approvalConfirmedRef.current = false;
     resetUser();
