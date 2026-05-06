@@ -1835,7 +1835,17 @@ def healthz():
     except Exception:
         status["redis"] = "error"
 
-    return jsonify(status)
+    # Fail-closed contract: HTTP 503 when any required dependency is not
+    # healthy, so Railway / load balancers can route around a degraded
+    # pod. "not configured" is treated as healthy (dev/test where the
+    # dep isn't wired). "ok" is healthy; everything else (including
+    # "error" and "degraded (status N)") is unhealthy.
+    healthy_states = {"ok", "not configured"}
+    is_healthy = all(
+        status.get(dep, "missing") in healthy_states
+        for dep in ("supabase", "redis")
+    )
+    return jsonify(status), 200 if is_healthy else 503
 
 
 # ══════════════════════════════════════════════════════════════
