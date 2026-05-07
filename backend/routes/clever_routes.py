@@ -46,9 +46,18 @@ def _clever_audit(action, details="", teacher_id=""):
     `backend.utils.audit.audit_log` so the redaction helper is applied
     uniformly. Previously this function wrote a Supabase row directly,
     bypassing `_redact_for_audit()`.
+
+    Round-3 Codex HIGH fold (PR #227): the operations debug logger.info
+    line previously emitted RAW `details` BEFORE central redaction ran.
+    With Sentry's default logging breadcrumbs, raw audit details could
+    reach Sentry exception capture even though `audit_log()` itself is
+    redaction-safe. Now we redact via `_redact_for_audit` BEFORE the
+    logger.info so the logger / breadcrumb path can never see raw PII.
     """
-    logger.info("AUDIT: %s | teacher=%s | %s", action, teacher_id, details)
     from backend.utils.audit import audit_log as _central_audit_log
+    from backend.utils.audit import _redact_for_audit
+    safe_details = _redact_for_audit(details)
+    logger.info("AUDIT: %s | teacher=%s | %s", action, teacher_id, safe_details)
     _central_audit_log(action, details, user="teacher", teacher_id=teacher_id)
 
 # Short-lived auth codes for student Clever SSO (code → {token, expires})

@@ -26,19 +26,28 @@ logger = logging.getLogger(__name__)
 # `details` string + `action` string before it reaches either the local
 # file or Supabase.
 #
-# CONTRACT SCOPE (round-2 Codex HIGH fold — narrowed from PR #227 round 1):
-#   - DEDUCTIVELY redacted: emails (a***@example.com), UUIDs (id=<sha:8>),
-#     long opaque hex tokens 32+ chars (hex=<sha:8>).
-#   - NOT REDACTED (caller responsibility): student/teacher names, school
-#     names, free-form filenames/assignment labels (e.g. "Alice_Smith.docx"),
-#     phone numbers, addresses. Regex-based redaction cannot infer name
-#     boundaries without surrounding context. Callers passing these in
-#     `details` MUST self-redact (e.g. use `student_id_hash` instead of
-#     `student_name`, or use sanitized filename slugs).
+# CONTRACT SCOPE (round-3 Codex MEDIUM fold — expanded from PR #227 round 2):
+#   - DEDUCTIVELY redacted: emails (a***@example.com), canonical UUIDs
+#     (id=<sha:8>), long opaque hex tokens 32+ chars (hex=<sha:8>).
+#   - NOT REDACTED (caller responsibility — MUST sanitize at the call site):
+#     - Student / teacher / school names
+#     - Free-form filenames or assignment labels (e.g. "Alice_Smith.docx")
+#     - Phone numbers, postal addresses, dates of birth, SSNs
+#     - Raw IP addresses (use the geolocated source token if you must)
+#     - Short identifiers <32 chars: `student_id[:6]`, custom preset IDs,
+#       6-char join codes. These are intentionally untouched because the
+#       SIS sprint emits sha256[:8] short hashes that look identical to
+#       short hex IDs and must not be re-redacted.
+#   - Regex-based redaction cannot infer name boundaries without context.
+#     Callers passing PII outside the deductively-redacted set MUST
+#     self-redact (e.g. use `student_id_hash` instead of `student_name`,
+#     hash filenames, geolocate IP -> region token).
 #   - The 3 historical bypass writers (`_audit_log` in assistant_routes,
 #     `audit_log_accommodation` in accommodations, `_clever_audit` in
 #     clever_routes) now delegate to this function so they get the same
-#     pattern coverage.
+#     pattern coverage. `_clever_audit` additionally pre-redacts before
+#     emitting its `logger.info` debug line so Sentry breadcrumbs cannot
+#     observe raw PII even if a downstream call later raises.
 
 # Email pattern — replaces full address with redact_email() form.
 # Conservative: requires `@` plus a domain with at least one dot.
@@ -97,11 +106,28 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
     FERPA Compliance: Log all data access and modifications.
     Writes to both local file AND Supabase for persistence across deploys.
 
-    Audit MAJOR #10 closure (Codex 2026-05-06): the `details` and `action`
-    strings are passed through `_redact_for_audit()` before any write, so
-    callers no longer need to self-redact. Emails get the `redact_email()`
-    treatment ("a***@example.com"); UUIDs and long hex tokens get
-    sha256[:8]-hashed.
+    Audit MAJOR #10 closure (Codex 2026-05-06; round-2 narrowed PR #227):
+    the `details` and `action` strings are passed through
+    `_redact_for_audit()` before any write. The helper REDUCES — but does
+    not eliminate — caller responsibility for PII hygiene.
+
+    Coverage (deductive regex):
+      - Emails -> "a***@example.com"
+      - Canonical UUIDs (8-4-4-4-12 hex) -> "id=<sha256[:8]>"
+      - Long opaque hex tokens 32+ chars -> "hex=<sha256[:8]>"
+
+    NOT covered (caller MUST sanitize at the call site):
+      - Student / teacher / school names
+      - Free-form filenames or assignment labels (e.g. "Alice_Smith.docx")
+      - Phone numbers, postal addresses, dates of birth, SSNs
+      - Raw IP addresses
+      - Short identifiers <32 chars (e.g. `student_id[:6]` prefixes —
+        intentionally not double-hashed because the SIS sprint emits its
+        own sha256[:8] short hashes that look identical and must not be
+        re-redacted)
+
+    See `tests/test_audit_redaction.py::test_names_remain_caller_responsibility_documented_gap`
+    for the pinned acknowledged-gap contract.
     """
     timestamp = datetime.now().isoformat()
 

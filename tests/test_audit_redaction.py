@@ -324,6 +324,53 @@ class TestAuditLogEndToEnd:
         assert "Bob's_Quiz" in details
         assert "Mr. Johnson" in details
 
+    def test_clever_audit_logger_info_is_redacted(
+        self, monkeypatch, tmp_path, caplog,
+    ):
+        """Round-3 Codex HIGH fold (PR #227): `_clever_audit` previously
+        called `logger.info('AUDIT: ... | %s', details)` BEFORE the
+        central redaction. With Sentry's default logging breadcrumbs
+        capture, raw PII could reach Sentry exception capture even
+        though the central `audit_log()` itself was redaction-safe.
+
+        Now `_clever_audit` redacts via `_redact_for_audit` BEFORE
+        emitting the logger.info, so logger / breadcrumb consumers
+        never observe raw PII regardless of what fires later.
+        """
+        from backend.routes.clever_routes import _clever_audit
+        import logging
+
+        monkeypatch.setattr(
+            'backend.supabase_client.get_supabase',
+            lambda: None,  # noop — only the logger.info matters here
+        )
+        monkeypatch.setattr(
+            'backend.utils.audit.AUDIT_LOG_FILE',
+            str(tmp_path / "audit.log"),
+        )
+
+        with caplog.at_level(logging.INFO, logger="backend.routes.clever_routes"):
+            _clever_audit(
+                "clever_login",
+                "user alice@example.com from id=01234567-89ab-cdef-0123-456789abcdef",
+                teacher_id="t-99",
+            )
+
+        # Find the AUDIT log record. Assert raw PII is NOT in the message.
+        audit_records = [r for r in caplog.records if r.message.startswith("AUDIT:")]
+        assert audit_records, "Expected at least one AUDIT logger.info"
+        for record in audit_records:
+            full_msg = record.getMessage()
+            assert "alice@example.com" not in full_msg, (
+                f"Raw email leaked to logger: {full_msg!r}"
+            )
+            assert "01234567-89ab-cdef-0123-456789abcdef" not in full_msg, (
+                f"Raw UUID leaked to logger: {full_msg!r}"
+            )
+            assert "a***@example.com" in full_msg, (
+                f"Redacted form should appear: {full_msg!r}"
+            )
+
     def test_bypass_writers_now_delegate_to_central_audit_log(
         self, monkeypatch, tmp_path,
     ):
