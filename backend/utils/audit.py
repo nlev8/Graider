@@ -25,6 +25,20 @@ logger = logging.getLogger(__name__)
 # email addresses into details. Now `_redact_for_audit()` runs on every
 # `details` string + `action` string before it reaches either the local
 # file or Supabase.
+#
+# CONTRACT SCOPE (round-2 Codex HIGH fold — narrowed from PR #227 round 1):
+#   - DEDUCTIVELY redacted: emails (a***@example.com), UUIDs (id=<sha:8>),
+#     long opaque hex tokens 32+ chars (hex=<sha:8>).
+#   - NOT REDACTED (caller responsibility): student/teacher names, school
+#     names, free-form filenames/assignment labels (e.g. "Alice_Smith.docx"),
+#     phone numbers, addresses. Regex-based redaction cannot infer name
+#     boundaries without surrounding context. Callers passing these in
+#     `details` MUST self-redact (e.g. use `student_id_hash` instead of
+#     `student_name`, or use sanitized filename slugs).
+#   - The 3 historical bypass writers (`_audit_log` in assistant_routes,
+#     `audit_log_accommodation` in accommodations, `_clever_audit` in
+#     clever_routes) now delegate to this function so they get the same
+#     pattern coverage.
 
 # Email pattern — replaces full address with redact_email() form.
 # Conservative: requires `@` plus a domain with at least one dot.

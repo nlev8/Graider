@@ -213,9 +213,11 @@ class TestAuditLogEndToEnd:
         assert "a***@example.com" in payload['action']
 
     def test_truncation_after_redaction(self, monkeypatch, tmp_path):
-        # Very long details with PII — confirm redaction runs BEFORE the
-        # 500-char truncation so no half-redacted email leaks past the
-        # boundary.
+        # Round-2 Codex MEDIUM fold: position the email so a truncate-first
+        # implementation would leak a recognizable PARTIAL email like
+        # "alice@examp" — the original test only checked for the FULL
+        # email and would have falsely passed under truncation-first.
+        # Now we assert against partials too.
         captured = {}
 
         def fake_insert(payload):
@@ -237,9 +239,15 @@ class TestAuditLogEndToEnd:
             str(tmp_path / "audit.log"),
         )
 
-        # 480 char filler + email pushed past 500 char raw boundary
-        filler = "x" * 480
-        long_details = filler + " contact: alice@example.com"
+        # Position the email so under truncate-first the output[480..500]
+        # would be " contact: alice@exam" — a partial leak. Under redact-
+        # first the email becomes "a***@example.com" (16 chars) BEFORE
+        # truncation, so no "alice" substring survives.
+        # Filler sized so the FULL redacted form fits within the 500-char
+        # cap — that lets the sanity assertion below verify which order
+        # actually ran.
+        filler = "x" * 470
+        long_details = filler + " contact: alice@example.com extra"
 
         audit_log(
             action="X",
@@ -249,7 +257,128 @@ class TestAuditLogEndToEnd:
         )
 
         payload = captured['payload']
-        # The raw email must NOT appear regardless of truncation.
-        assert "alice@example.com" not in payload['details']
+        # Strong assertion: no recognizable email-shaped fragment ever
+        # makes it past the boundary, full OR partial.
+        assert "alice@example.com" not in payload['details'], "Full email leaked"
+        assert "alice@" not in payload['details'], "Partial email leaked (truncate-first?)"
+        assert "alice" not in payload['details'], "Local-part leaked (truncate-first?)"
         # The 500-char Supabase column cap must still hold.
         assert len(payload['details']) <= 500
+        # Sanity: the redacted form should be present at the boundary.
+        assert "a***@example.com" in payload['details'], (
+            "Redacted form should survive truncation since it's shorter than raw"
+        )
+
+    def test_names_remain_caller_responsibility_documented_gap(
+        self, monkeypatch, tmp_path,
+    ):
+        """Round-2 Codex HIGH fold #2 (acknowledged gap test):
+
+        The redaction helper does NOT and CANNOT redact arbitrary student
+        or teacher names from audit details. Names lack the regex shape
+        emails/UUIDs/tokens have. Callers passing name-bearing strings
+        (filenames like "Alice_Smith_Math.docx", assignment labels like
+        "Bob's Quiz") MUST self-redact.
+
+        This test pins that boundary so a future maintainer who tightens
+        the regexes (e.g. with an NLP pass that catches names) doesn't
+        accidentally regress something downstream that depends on names
+        passing through, AND so the contract scope stays explicit.
+        """
+        captured = {}
+
+        def fake_insert(payload):
+            captured['payload'] = payload
+            chain = MagicMock()
+            chain.execute.return_value = MagicMock()
+            return chain
+
+        mock_table = MagicMock()
+        mock_table.insert.side_effect = fake_insert
+        mock_sb = MagicMock()
+        mock_sb.table.return_value = mock_table
+        monkeypatch.setattr(
+            'backend.supabase_client.get_supabase',
+            lambda: mock_sb,
+        )
+        monkeypatch.setattr(
+            'backend.utils.audit.AUDIT_LOG_FILE',
+            str(tmp_path / "audit.log"),
+        )
+
+        audit_log(
+            action="GRADE_EDIT",
+            details="file=Alice_Smith_Math.docx assignment=Bob's_Quiz teacher=Mr. Johnson",
+            user="teacher",
+            teacher_id="t-99",
+        )
+
+        # ACKNOWLEDGED GAP: names pass through unchanged. Callers passing
+        # these MUST sanitize at the call site. If a future PR centralizes
+        # name redaction, update this test + the contract comment in
+        # backend/utils/audit.py.
+        details = captured['payload']['details']
+        assert "Alice_Smith_Math.docx" in details, (
+            "Names are caller-side responsibility — current contract scope"
+        )
+        assert "Bob's_Quiz" in details
+        assert "Mr. Johnson" in details
+
+    def test_bypass_writers_now_delegate_to_central_audit_log(
+        self, monkeypatch, tmp_path,
+    ):
+        """Round-2 Codex HIGH fold #1: the 3 historical bypass writers
+        (`_audit_log` in assistant_routes, `audit_log_accommodation` in
+        accommodations, `_clever_audit` in clever_routes) used to write
+        to audit sinks WITHOUT going through `_redact_for_audit()`. They
+        now delegate to the central `audit_log()`. This test confirms
+        each delegating wrapper actually invokes redaction by passing PII
+        through and verifying the persisted form is redacted.
+        """
+        from backend.routes.assistant_routes import _audit_log as assistant_audit
+        from backend.accommodations import audit_log_accommodation
+        from backend.routes.clever_routes import _clever_audit
+
+        captured_payloads = []
+
+        def fake_insert(payload):
+            captured_payloads.append(payload)
+            chain = MagicMock()
+            chain.execute.return_value = MagicMock()
+            return chain
+
+        mock_table = MagicMock()
+        mock_table.insert.side_effect = fake_insert
+        mock_sb = MagicMock()
+        mock_sb.table.return_value = mock_table
+        monkeypatch.setattr(
+            'backend.supabase_client.get_supabase',
+            lambda: mock_sb,
+        )
+        monkeypatch.setattr(
+            'backend.utils.audit.AUDIT_LOG_FILE',
+            str(tmp_path / "audit.log"),
+        )
+
+        # Each wrapper passes raw PII; central audit_log must redact.
+        assistant_audit("ASSISTANT_QUERY", "session for alice@example.com")
+        audit_log_accommodation("LOAD_PRESETS", "loaded for teacher.smith@school.edu")
+        _clever_audit(
+            "clever_roster_sync",
+            "synced 5 students for class id=01234567-89ab-cdef-0123-456789abcdef",
+            teacher_id="t-clever",
+        )
+
+        # All 3 should have flushed to Supabase via the central path.
+        assert len(captured_payloads) == 3, (
+            f"Expected 3 audit_log inserts; got {len(captured_payloads)}"
+        )
+        # No raw PII in any of the 3 payloads.
+        for payload in captured_payloads:
+            assert "alice@example.com" not in payload['details']
+            assert "teacher.smith@school.edu" not in payload['details']
+            assert "01234567-89ab-cdef-0123-456789abcdef" not in payload['details']
+        # Action labels preserved (no PII in them).
+        assert captured_payloads[0]['action'] == "ASSISTANT_QUERY"
+        assert captured_payloads[1]['action'] == "ACCOMMODATION_LOAD_PRESETS"
+        assert captured_payloads[2]['action'] == "clever_roster_sync"

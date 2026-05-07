@@ -1120,14 +1120,15 @@ CRITICAL: If behavior tools return errors about missing data, call debug_behavio
 
 
 def _audit_log(action, details=""):
-    """Write to the FERPA audit log."""
-    try:
-        timestamp = datetime.now().isoformat()
-        entry = f"{timestamp} | teacher | {action} | {details}\n"
-        with open(AUDIT_LOG_FILE, 'a') as f:
-            f.write(entry)
-    except Exception as e:
-        sentry_sdk.capture_exception(e)
+    """Write to the FERPA audit log.
+
+    Round-2 Codex HIGH fold (PR #227): delegates to the central
+    `backend.utils.audit.audit_log` so the redaction helper is applied
+    uniformly. Previously this function wrote to AUDIT_LOG_FILE directly,
+    bypassing `_redact_for_audit()`.
+    """
+    from backend.utils.audit import audit_log as _central_audit_log
+    _central_audit_log(action, details, user="teacher")
 
 
 logger = logging.getLogger(__name__)

@@ -40,22 +40,16 @@ clever_bp = Blueprint("clever", __name__)
 
 
 def _clever_audit(action, details="", teacher_id=""):
-    """FERPA audit log for Clever operations."""
+    """FERPA audit log for Clever operations.
+
+    Round-2 Codex HIGH fold (PR #227): delegates to the central
+    `backend.utils.audit.audit_log` so the redaction helper is applied
+    uniformly. Previously this function wrote a Supabase row directly,
+    bypassing `_redact_for_audit()`.
+    """
     logger.info("AUDIT: %s | teacher=%s | %s", action, teacher_id, details)
-    try:
-        from backend.supabase_client import get_supabase
-        sb = get_supabase()
-        if sb:
-            from datetime import datetime
-            sb.table('audit_log').insert({
-                'timestamp': datetime.now().isoformat(),
-                'teacher_id': teacher_id,
-                'action': action,
-                'details': details[:500],
-                'user_type': 'teacher',
-            }).execute()
-    except Exception as e:
-        sentry_sdk.capture_exception(e)
+    from backend.utils.audit import audit_log as _central_audit_log
+    _central_audit_log(action, details, user="teacher", teacher_id=teacher_id)
 
 # Short-lived auth codes for student Clever SSO (code → {token, expires})
 _pending_student_auth_codes = {}
