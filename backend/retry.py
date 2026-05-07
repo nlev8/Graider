@@ -20,10 +20,50 @@ MAX_RETRIES = 5
 JITTER_FACTOR = 0.25
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504, 529}
 
+# LLM SDK exception classes whose names indicate transient failures.
+# Matched by class name only — avoids hard imports of optional deps so
+# the classifier works whether or not openai/anthropic/google-genai are
+# installed in the venv. Codex audit MAJOR #7 round-2: APIConnectionError
+# in openai/anthropic doesn't subclass builtin ConnectionError and
+# stringifies as "Connection error." which is too short for the keyword
+# loop below — needs an explicit class-name check.
+_TRANSIENT_CLASS_NAMES = frozenset({
+    # openai>=1.0
+    "APIConnectionError",   # also matches anthropic.APIConnectionError
+    "APITimeoutError",
+    "RateLimitError",
+    "InternalServerError",
+    "APIStatusError",       # generic status wrapper; will fall through
+                            # to _get_status_code if it has .status_code
+    # google.api_core
+    "ServiceUnavailable",
+    "DeadlineExceeded",
+    "ResourceExhausted",
+    # google.genai
+    "ServerError",
+    # urllib3 / requests
+    "MaxRetryError",
+    "ProtocolError",
+    "RemoteDisconnected",
+    "IncompleteRead",
+    # httpx
+    "TimeoutException",
+    "ConnectTimeout",
+    "ReadTimeout",
+    "WriteTimeout",
+    "PoolTimeout",
+    "ConnectError",
+    "ReadError",
+    "WriteError",
+    "RemoteProtocolError",
+    "NetworkError",
+})
+
 _TRANSIENT_KEYWORDS = [
     "connection reset",
     "connection refused",
     "connection aborted",
+    "connection error",         # openai.APIConnectionError stringifies as this
     "temporary failure",
     "timed out",
     "timeout",
@@ -113,12 +153,23 @@ def is_retryable_error(error: BaseException) -> bool:
     """Determine whether *error* is transient and worth retrying.
 
     Returns True for HTTP 408/429/5xx/529, ConnectionError, TimeoutError,
-    OSError, and exceptions whose string representation contains transient
-    keywords.  Returns False for client errors (400, 401, 403, 404) and
-    ordinary programming errors (ValueError, TypeError, etc.).
+    OSError, exception class names that match known LLM SDK transient
+    types (e.g., openai.APIConnectionError, anthropic.APIConnectionError),
+    and exceptions whose string representation contains transient keywords.
+    Returns False for client errors (400, 401, 403, 404) and ordinary
+    programming errors (ValueError, TypeError, etc.).
     """
     # Network / OS-level errors are always retryable.
     if isinstance(error, (ConnectionError, TimeoutError, OSError)):
+        return True
+
+    # LLM SDK class-name match (Codex audit MAJOR #7 round-2).
+    # openai.APIConnectionError + anthropic.APIConnectionError do NOT
+    # subclass builtin ConnectionError, stringify as "Connection error."
+    # (too short for the keyword loop), and don't expose .status_code.
+    # Match by class name to avoid hard imports of optional deps.
+    cls_name = type(error).__name__
+    if cls_name in _TRANSIENT_CLASS_NAMES:
         return True
 
     status = _get_status_code(error)

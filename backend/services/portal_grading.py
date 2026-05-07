@@ -428,6 +428,14 @@ def fetch_submission_full_context(supabase_table, submission_id, teacher_id):
         logger.error("fetch_submission_full_context: submission fetch failed %s: %s",
                      hashlib.sha256(str(submission_id).encode()).hexdigest()[:8], e)
         sentry_sdk.capture_exception(e)
+        # Closes audit MAJOR #7 round-1 finding 3 (Codex 2026-05-06):
+        # transient supabase 5xx during context fetch must propagate so
+        # Celery's autoretry catches them. Permanent errors (schema mismatch,
+        # auth failure) still return None so the caller's existing
+        # "no row → mark failed" flow handles them.
+        from backend.retry import is_retryable_error
+        if is_retryable_error(e):
+            raise
         return None
     if not row or not getattr(row, 'data', None):
         return None

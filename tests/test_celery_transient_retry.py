@@ -197,3 +197,124 @@ class TestCeleryBodyOptsIntoTransientReraise:
             "grading_tasks.py must call grade_portal_submission_sync with "
             "raise_transient=True so transient errors bubble to Celery"
         )
+
+
+class TestRetryClassifierCoverage:
+    """Round-2 Codex MAJOR fold: openai/anthropic APIConnectionError don't
+    subclass builtin ConnectionError, stringify as 'Connection error.', and
+    don't expose .status_code. The classifier needs class-name + keyword
+    coverage."""
+
+    def test_class_name_match_for_openai_apiconnectionerror(self):
+        """Synthetic class with the openai SDK class name should classify
+        as transient. Mirrors openai.APIConnectionError's signature: no
+        ConnectionError ancestry, no .status_code."""
+        from backend.retry import is_retryable_error
+
+        class APIConnectionError(Exception):
+            pass
+
+        assert is_retryable_error(APIConnectionError("Connection error.")) is True
+
+    def test_class_name_match_for_anthropic(self):
+        from backend.retry import is_retryable_error
+
+        # anthropic.APIConnectionError is the same class name; same dispatch.
+        class APIConnectionError(Exception):
+            pass
+
+        assert is_retryable_error(APIConnectionError("network blip")) is True
+
+    def test_class_name_match_for_apitimeout(self):
+        from backend.retry import is_retryable_error
+
+        class APITimeoutError(Exception):
+            pass
+
+        assert is_retryable_error(APITimeoutError("request timed out")) is True
+
+    def test_class_name_match_for_rate_limit(self):
+        from backend.retry import is_retryable_error
+
+        class RateLimitError(Exception):
+            pass
+
+        assert is_retryable_error(RateLimitError("429 too many requests")) is True
+
+    def test_class_name_match_for_google_serviceunavailable(self):
+        from backend.retry import is_retryable_error
+
+        class ServiceUnavailable(Exception):
+            pass
+
+        assert is_retryable_error(ServiceUnavailable("backend overloaded")) is True
+
+    def test_keyword_connection_error_now_matches(self):
+        """openai.APIConnectionError stringifies as 'Connection error.'
+        Round-2 added 'connection error' to the keyword list as fallback
+        when the class name is unfamiliar."""
+        from backend.retry import is_retryable_error
+
+        # NOT one of the known class names AND short string — only the
+        # 'connection error' keyword can save it.
+        class SomeNewSDKError(Exception):
+            pass
+
+        assert is_retryable_error(SomeNewSDKError("Connection error.")) is True
+
+    def test_permanent_classes_still_false(self):
+        """ValueError, TypeError, KeyError must remain non-retryable."""
+        from backend.retry import is_retryable_error
+
+        assert is_retryable_error(ValueError("bad input")) is False
+        assert is_retryable_error(TypeError("wrong type")) is False
+        assert is_retryable_error(KeyError("missing field")) is False
+
+
+class TestContextFetchPropagatesTransient:
+    """Round-2 Codex MAJOR fold: fetch_submission_full_context previously
+    returned None on ALL exceptions (incl. supabase 5xx), so the Celery
+    body never saw retryable failures during context fetch. Now it
+    re-raises retryable exceptions; permanent ones still return None."""
+
+    def test_fetch_helper_reraises_transient(self):
+        """ConnectionError during sb.table().select() bubbles up."""
+        from backend.services import portal_grading
+
+        mock_sb = MagicMock()
+        mock_sb.table.return_value.select.return_value.eq.return_value.single.return_value.execute.side_effect = ConnectionError("network blip")
+
+        with patch("backend.supabase_client.get_supabase", return_value=mock_sb):
+            with pytest.raises(ConnectionError):
+                portal_grading.fetch_submission_full_context(
+                    "student_submissions", "test-sub", "teacher-1"
+                )
+
+    def test_fetch_helper_returns_none_on_permanent(self):
+        """KeyError (programming error) → returns None per existing flow."""
+        from backend.services import portal_grading
+
+        mock_sb = MagicMock()
+        mock_sb.table.return_value.select.return_value.eq.return_value.single.return_value.execute.side_effect = KeyError("missing column")
+
+        with patch("backend.supabase_client.get_supabase", return_value=mock_sb):
+            result = portal_grading.fetch_submission_full_context(
+                "student_submissions", "test-sub", "teacher-1"
+            )
+            assert result is None
+
+    def test_celery_body_converts_transient_fetch_error_to_TransientError(self):
+        """Static-source pin: grading_tasks.py wraps the fetch_submission_full_context
+        call with try/except and converts retryable exceptions into TransientError
+        so Celery's autoretry catches them."""
+        from pathlib import Path
+
+        src = Path(__file__).resolve().parent.parent / "backend/tasks/grading_tasks.py"
+        text = src.read_text()
+        # The wrapping pattern must exist
+        assert "ctx = fetch_submission_full_context(" in text
+        # And there must be a TransientError raise tied to the fetch path
+        assert "raise TransientError(str(e)" in text, (
+            "grading_tasks.py must convert retryable fetch-context errors "
+            "into TransientError so Celery's autoretry kicks in"
+        )

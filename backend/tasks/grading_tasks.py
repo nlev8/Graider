@@ -74,9 +74,13 @@ class PortalGradingTask(Task):
 #   408/429/5xx, retryable string keywords) and re-raises as TransientError.
 #   Celery's autoretry_for=(TransientError,) catches it.
 #
-#   Backoff: exponential with jitter, capped at 10 min. 3 retries (4 attempts
-#   total). Worst case: ~1 + ~2 + ~4 + ~8 = ~15 min spread before the failure
-#   bubbles to PortalGradingTask.on_failure (which marks the row 'failed').
+#   Backoff: Celery's `retry_backoff=True` schedules delays at 2**(attempt-1)
+#   seconds: attempt 1 retry waits 1s, attempt 2 retry waits 2s, attempt 3
+#   retry waits 4s. With `retry_backoff_max=600` the cap matters only for
+#   higher max_retries; current 3-retry setup tops out at 4s. `retry_jitter=True`
+#   randomizes the actual delay uniformly in [0, scheduled), so 0-7s spread
+#   before terminal failure. After retry exhaustion, PortalGradingTask.on_failure
+#   marks the row 'failed'.
 #
 #   Permanent errors (KeyError, ValueError, etc.) are NOT classified as
 #   transient — the sync function's blanket catch swallows them as before
@@ -132,7 +136,19 @@ def grade_portal_submission(
         fetch_submission_full_context,
     )
 
-    ctx = fetch_submission_full_context(supabase_table, submission_id, teacher_id)
+    # Closes audit MAJOR #7 round-1 finding 3 (Codex 2026-05-06): if the
+    # context fetch raises a transient supabase error, surface it to
+    # Celery's autoretry by re-raising as TransientError. The fetch helper
+    # only re-raises retryable exceptions (per backend.retry.is_retryable_error);
+    # permanent errors return None and fall through to the existing
+    # "no ctx → mark failed" path below.
+    try:
+        ctx = fetch_submission_full_context(supabase_table, submission_id, teacher_id)
+    except Exception as e:
+        from backend.retry import is_retryable_error
+        if is_retryable_error(e):
+            raise TransientError(str(e)[:500]) from e
+        raise  # permanent — let it propagate to PortalGradingTask.on_failure
     if not ctx:
         _logger.warning("Submission not found for grading: %s", submission_id)
         return
