@@ -1888,6 +1888,11 @@ function App() {
           currentDelay = Math.min(currentDelay * 2, MAX_DELAY);
         }
       } catch (error) {
+        // Round-3 Codex LOW fold: stale rejected polls (myGen !==
+        // generation) must NOT mutate the shared currentDelay or they
+        // would partially undo the visibility-driven snap-back from
+        // the new chain.
+        if (cancelled || myGen !== generation) return;
         console.error("Status poll error:", error);
         // Network errors → also back off so we don't hammer a flaky API.
         currentDelay = Math.min(currentDelay * 2, MAX_DELAY);
