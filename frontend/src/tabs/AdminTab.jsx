@@ -121,9 +121,15 @@ export default React.memo(function AdminTab({ school }) {
                       isUnregistered ? React.createElement("span", { style: { marginLeft: "8px", background: "var(--glass-border)", color: "var(--text-secondary)", borderRadius: "8px", padding: "2px 8px", fontSize: "0.7rem", fontWeight: 600 } }, "Not registered") : null
                     ),
                     React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)", color: "var(--text-secondary)" } }, t.email || "—"),
-                    React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)" } }, t.class_count != null ? t.class_count : "—"),
-                    React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)" } }, t.student_count != null ? t.student_count : "—"),
-                    React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)" } }, t.assessment_count != null ? t.assessment_count : "—"),
+                    // Closes GH #234 (Codex review of PR #233): backend
+                    // `_enrich_teachers` writes plural keys (`classes_count`,
+                    // `students_count`, `assessments_count`); the singular
+                    // form previously used here always missed and rendered
+                    // "—" regardless of how many classes/students/assessments
+                    // each teacher actually had.
+                    React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)" } }, t.classes_count != null ? t.classes_count : "—"),
+                    React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)" } }, t.students_count != null ? t.students_count : "—"),
+                    React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)" } }, t.assessments_count != null ? t.assessments_count : "—"),
                     React.createElement("td", { style: { padding: "12px 14px", borderBottom: "1px solid var(--border)", color: "var(--text-secondary)", fontSize: "0.85rem" } }, t.last_activity ? timeAgo(t.last_activity) : "—")
                   );
                 })
