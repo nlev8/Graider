@@ -156,10 +156,13 @@ vi.mock('recharts', () => ({
   ReferenceLine: () => null,
 }))
 
-// Mock DOMPurify
-vi.mock('dompurify', () => ({
-  default: { sanitize: (s) => s },
-}))
+// DOMPurify intentionally NOT mocked — running the real sanitizer in
+// smoke tests catches XSS regressions that an identity mock would
+// silently allow. See Codex audit 2026-05-06 issue #217 (MINOR finding):
+// `vi.mock('dompurify', () => ({ default: { sanitize: (s) => s } }))`
+// turned every render path that accepts user-controlled HTML into a
+// false-positive smoke pass. jsdom provides the DOM the real sanitizer
+// needs, and the cost is negligible (<1ms per call).
 
 // ══════════════════════════════════════════
 // TESTS
@@ -321,3 +324,58 @@ describe('Smoke Tests — Components Render Without Crashing', () => {
 // prop mocking due to deep App.jsx state dependencies. These tests will be
 // enabled after App.jsx refactoring extracts state into context providers.
 // For now, the 11 component tests above verify the core rendering paths.
+
+// ══════════════════════════════════════════
+// DOMPurify XSS contract tests
+// ══════════════════════════════════════════
+// Pin the contract that DOMPurify is NOT mocked as identity. If a future
+// refactor accidentally re-introduces `vi.mock('dompurify', ...)`, these
+// assertions will fail loudly instead of letting XSS regressions slip
+// through smoke tests. See Codex audit 2026-05-06 issue #217 (MINOR).
+
+describe('XSS sanitization contract — DOMPurify is real', () => {
+  it('strips <script> tags from sanitized HTML', async () => {
+    var DOMPurify = (await import('dompurify')).default
+    var dirty = '<p>hello</p><script>window.__pwn = 1</script>'
+    var clean = DOMPurify.sanitize(dirty)
+    expect(clean).toContain('<p>hello</p>')
+    expect(clean).not.toContain('<script>')
+    expect(clean).not.toContain('window.__pwn')
+  })
+
+  it('strips inline event handlers (onerror, onclick)', async () => {
+    var DOMPurify = (await import('dompurify')).default
+    var dirty = '<img src=x onerror="alert(1)"><a href="#" onclick="alert(2)">link</a>'
+    var clean = DOMPurify.sanitize(dirty)
+    expect(clean).not.toMatch(/onerror/i)
+    expect(clean).not.toMatch(/onclick/i)
+    expect(clean).not.toContain('alert(1)')
+    expect(clean).not.toContain('alert(2)')
+  })
+
+  it('strips javascript: URIs from href attributes', async () => {
+    var DOMPurify = (await import('dompurify')).default
+    var dirty = '<a href="javascript:alert(1)">click me</a>'
+    var clean = DOMPurify.sanitize(dirty)
+    expect(clean).not.toContain('javascript:')
+  })
+
+  it('preserves benign markdown-like HTML', async () => {
+    var DOMPurify = (await import('dompurify')).default
+    var safe = '<p><strong>bold</strong> and <em>italic</em> with <code>code</code></p>'
+    var clean = DOMPurify.sanitize(safe)
+    expect(clean).toContain('<strong>bold</strong>')
+    expect(clean).toContain('<em>italic</em>')
+    expect(clean).toContain('<code>code</code>')
+  })
+
+  it('mock detection: DOMPurify.sanitize MUST modify a known-bad payload', async () => {
+    // Belt-and-suspenders. If somehow the mock returned identity, this
+    // assertion catches it because the input AND output cannot be equal
+    // for any payload that contains a <script> tag.
+    var DOMPurify = (await import('dompurify')).default
+    var dirty = '<script>1</script>'
+    var clean = DOMPurify.sanitize(dirty)
+    expect(clean).not.toEqual(dirty)
+  })
+})
