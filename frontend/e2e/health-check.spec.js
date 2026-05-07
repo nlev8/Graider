@@ -28,7 +28,12 @@ test.describe('Server Health', () => {
 
   test('/api/clever/health returns status', async ({ request }) => {
     const response = await request.get('/api/clever/health')
-    expect(response.status()).toBe(200)
+    // 200 when Clever creds are configured; 503 when they aren't
+    // (clever_routes.py:806). Both shapes still expose the same
+    // contract fields so downstream callers can distinguish
+    // configured-but-unhealthy from not-configured. Accepted here so
+    // the CI smoke gate doesn't require Clever creds to pass.
+    expect([200, 503]).toContain(response.status())
     const data = await response.json()
     expect(data).toHaveProperty('configured')
     expect(data).toHaveProperty('supabase_available')
