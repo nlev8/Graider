@@ -631,3 +631,105 @@ class TestEnrichTeachersBatched:
             assert t['students_count'] == 0
             assert t['assessments_count'] == 0
             assert t['last_activity'] is None
+
+    def test_mid_pipeline_failure_zeroes_partial_state(self):
+        """Round-2 Codex MEDIUM fold: when the FIRST query succeeds
+        but a LATER query raises, the PR contract says all teachers
+        get zeros — not a mix of partial earlier counts + zero later
+        counts. Pin the contract."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        teachers = [{"user_id": "alice"}, {"user_id": "bob"}]
+        # The classes query succeeds with data; class_students raises.
+        call_n = {'count': 0}
+
+        def _table_factory(name):
+            chain = MagicMock()
+            result = MagicMock()
+            for m in ('select', 'eq', 'in_', 'order', 'limit'):
+                getattr(chain, m).return_value = chain
+            if name == 'classes':
+                result.data = [
+                    {"id": "c-1", "teacher_id": "alice"},
+                    {"id": "c-2", "teacher_id": "bob"},
+                ]
+                chain.execute.return_value = result
+            elif name == 'class_students':
+                # Mid-pipeline failure
+                chain.execute.side_effect = Exception("simulated mid-failure")
+            else:
+                result.data = []
+                chain.execute.return_value = result
+            return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = _table_factory
+
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        # Even though `classes` succeeded with data, the partial state
+        # is reset on exception and every teacher gets zeros.
+        for t in teachers:
+            assert t['classes_count'] == 0, (
+                f"Mid-pipeline failure must zero partial classes_count; "
+                f"got {t['classes_count']}"
+            )
+            assert t['students_count'] == 0
+            assert t['assessments_count'] == 0
+            assert t['last_activity'] is None
+
+    def test_in_query_chunked_for_large_teacher_list(self):
+        """Round-2 Codex HIGH fold: PostgREST `.in_()` URL-encodes the
+        value list. Long lists could exceed the URL limit. Pin the
+        contract that values are chunked at _IN_CHUNK_SIZE so a
+        large district doesn't fail."""
+        from backend.routes.admin_routes import (
+            _enrich_teachers, _IN_CHUNK_SIZE,
+        )
+
+        # 250 teachers — exceeds the 200-id chunk size, so the
+        # classes/published_assessments/audit_log queries should each
+        # be split into 2 chunks (200 + 50).
+        teachers = [{"user_id": f"t-{i:04d}"} for i in range(250)]
+
+        recorded = {'in__calls': []}
+
+        def _table_factory(name):
+            chain = MagicMock()
+            result = MagicMock()
+            result.data = []
+            for m in ('select', 'eq', 'order', 'limit'):
+                getattr(chain, m).return_value = chain
+
+            def in_(col, vals):
+                recorded['in__calls'].append((name, col, len(vals)))
+                return chain
+
+            chain.in_.side_effect = in_
+            chain.execute.return_value = result
+            return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = _table_factory
+
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        # Filter to .in_() calls on teacher_id (skip class_students which
+        # uses class_id and is empty here).
+        teacher_in_calls = [c for c in recorded['in__calls'] if c[1] == 'teacher_id']
+        # 3 entities × 2 chunks each = 6 calls
+        assert len(teacher_in_calls) == 6, (
+            f"Expected 6 chunked .in_(teacher_id, ...) calls "
+            f"(3 entities × 2 chunks of {_IN_CHUNK_SIZE}); got "
+            f"{len(teacher_in_calls)}: {teacher_in_calls}"
+        )
+        # Every chunk must be <= _IN_CHUNK_SIZE
+        for table, col, n in teacher_in_calls:
+            assert n <= _IN_CHUNK_SIZE, (
+                f"{table}.in_({col}, ...) had {n} values > limit "
+                f"{_IN_CHUNK_SIZE} — would exceed PostgREST URL cap"
+            )
