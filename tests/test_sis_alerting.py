@@ -54,16 +54,27 @@ SIS_CAPTURES = [
     ("backend/clever.py", 225),
     ("backend/clever.py", 240),
     ("backend/clever.py", 255),
-    ("backend/routes/clever_routes.py", 54),
+    # 2026-05-07: original pin at line 54 was the `_clever_audit` except
+    # block. PR #227 (audit MAJOR #10 close) made `_clever_audit` delegate
+    # to `backend.utils.audit.audit_log` whose own try/except + Sentry
+    # capture covers the same failure surface. The pin is removed because
+    # the capture moved into central code (still reachable by any caller
+    # path), not because Sentry coverage was lost.
     # 2026-05-06: shifted 231/254 -> 238/262 by PR 7 (post-sprint follow-up)
-    # adding Returns docstring + `return` keyword in _sync_classes_to_db
-    # (~7 lines below the function header). Captures themselves are unchanged.
-    ("backend/routes/clever_routes.py", 238),
-    ("backend/routes/clever_routes.py", 262),
+    # adding Returns docstring + `return` keyword in _sync_classes_to_db.
+    # 2026-05-07: shifted 238 -> 241 and 262 -> 265 by PR #227 final commit
+    # (the round-3 fold added ~9 lines to `_clever_audit`: pre-redaction
+    # logger.info hardening + extended docstring). Captures themselves
+    # unchanged. Net effect of PR #227 across rounds: -5 lines round-2
+    # delegation + +9 lines round-3 redaction = net +3 vs pre-PR. The
+    # test allows a window=8 search so this is comfortably within margin.
+    ("backend/routes/clever_routes.py", 241),
+    ("backend/routes/clever_routes.py", 265),
     # 2026-05-06: shifted 672 -> 692 by PR 3 of SIS compliance hardening sprint
     # (PII redaction in Clever logs added ~20 lines of helper code earlier in
-    # the file). Capture site is unchanged — pin tracks the except block.
-    ("backend/routes/clever_routes.py", 692),
+    # the file). 2026-05-07: shifted 692 -> 699 by PR #227 same-as-above net
+    # ~+9 line addition in _clever_audit. Capture site itself is unchanged.
+    ("backend/routes/clever_routes.py", 699),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
@@ -152,7 +163,12 @@ PR_A_EXPECTED_CAPTURES = {
 
 
 PR_B_EXPECTED_CAPTURES = {
-    "backend/accommodations.py": 8,
+    # 2026-05-07: lowered 8 -> 7 by PR #227 (audit MAJOR #10 close) which
+    # made `audit_log_accommodation` a delegating wrapper. The capture
+    # moved into the central `backend.utils.audit.audit_log` (counted in
+    # PR_A_EXPECTED_CAPTURES["backend/utils/audit.py"]: 2). Net Sentry
+    # coverage unchanged.
+    "backend/accommodations.py": 7,
     "backend/app.py": 12,  # 3 moved to backend/grading/pipeline.py in Phase 3a PR3 (was 15, -2 to state in PR2, -3 here)
     "backend/grading/state.py": 2,
     "backend/grading/pipeline.py": 3,  # Phase 3a PR3: 3 captures moved from app.py

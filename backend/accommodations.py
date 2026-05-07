@@ -49,15 +49,15 @@ def audit_log_accommodation(action: str, details: str = ""):
     """
     FERPA Compliance: Log all accommodation data access.
     Details are anonymized - no student names in logs.
+
+    Round-2 Codex HIGH fold (PR #227): delegates to the central
+    `backend.utils.audit.audit_log` so the redaction helper is applied
+    uniformly. Previously this function wrote to AUDIT_LOG_FILE directly,
+    bypassing `_redact_for_audit()`. Action gets the historical
+    `ACCOMMODATION_` prefix preserved.
     """
-    try:
-        timestamp = datetime.now().isoformat()
-        log_entry = f"{timestamp} | teacher | ACCOMMODATION_{action} | {details}\n"
-        with open(AUDIT_LOG_FILE, 'a') as f:
-            f.write(log_entry)
-    except Exception as e:
-        _logger.error("Audit log error: %s", e)
-        sentry_sdk.capture_exception(e)
+    from backend.utils.audit import audit_log as _central_audit_log
+    _central_audit_log(f"ACCOMMODATION_{action}", details, user="teacher")
 
 
 # ══════════════════════════════════════════════════════════════
