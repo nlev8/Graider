@@ -21,6 +21,16 @@ def app():
     os.environ['DEV_USER_ID'] = 'test-teacher-001'
     from backend.app import app as flask_app
     flask_app.config['TESTING'] = True
+    # Reset Flask-Limiter's in-memory storage between tests. The module-level
+    # `limiter` (backend/extensions.py) caches per-IP hit counts across test
+    # runs; without this reset, TestStudentLogin's ~12 sequential calls
+    # blow through the route-level @limiter.limit("10/minute") budget, and
+    # later tests see 429 instead of the expected 401/200. The
+    # application-level _check_rate_limit unit tests at line ~1126 use the
+    # `_login_attempts` dict directly (not Flask-Limiter), so they are
+    # unaffected.
+    from backend.extensions import limiter
+    limiter.reset()
     return flask_app
 
 
@@ -681,29 +691,33 @@ class TestStudentLogin:
 
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_login_malformed_json_returns_generic_401(self, mock_get_sb, client):
-        """Round-2 Codex MINOR fold: malformed JSON body / non-dict shape
-        used to raise inside `data.get(...)` and surface as 500. Now
-        normalized to the same generic 401 + identical body."""
+        """Round-2 Codex MINOR fold + round-3 follow-up: every malformed /
+        non-dict body shape must normalize to the same generic 401, never
+        leak as 500. Covers JSON null, JSON number, JSON array, JSON
+        string, text/plain, missing Content-Type — exhaustive shape sweep."""
         mock_sb = MagicMock()
         mock_sb.table.side_effect = lambda name: _make_chain([])
         mock_get_sb.return_value = mock_sb
 
-        # Non-JSON body
-        resp = client.post(
-            '/api/student/login',
-            headers={'Content-Type': 'text/plain'},
-            data='not-json',
-        )
-        assert resp.status_code == 401
-        assert "Login failed" in resp.get_json()["error"]
-
-        # JSON array (valid JSON, wrong shape)
-        resp2 = client.post(
-            '/api/student/login',
-            headers={'Content-Type': 'application/json'},
-            json=['x', 'y'],
-        )
-        assert resp2.status_code == 401
+        cases = [
+            # (label, headers, kwargs)
+            ("text/plain body",
+             {'Content-Type': 'text/plain'}, {'data': 'not-json'}),
+            ("JSON array",
+             {'Content-Type': 'application/json'}, {'json': ['x', 'y']}),
+            ("JSON null",
+             {'Content-Type': 'application/json'}, {'json': None}),
+            ("JSON number",
+             {'Content-Type': 'application/json'}, {'json': 42}),
+            ("JSON string",
+             {'Content-Type': 'application/json'}, {'json': 'a-bare-string'}),
+            ("missing Content-Type",
+             {}, {'data': '{"email":"a@x.com","class_code":"X"}'}),
+        ]
+        for label, headers, kwargs in cases:
+            resp = client.post('/api/student/login', headers=headers, **kwargs)
+            assert resp.status_code == 401, f"{label}: got {resp.status_code}"
+            assert "Login failed" in resp.get_json()["error"], f"{label}: body={resp.get_json()}"
 
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_login_runs_uniform_lookups_per_failure_mode(self, mock_get_sb, client):
@@ -751,6 +765,26 @@ class TestStudentLogin:
         assert all(c == 3 for c in call_counts.values()), (
             f"Expected 3 lookups per path; got {call_counts}"
         )
+
+        # Round-3 Codex follow-up: assert the sequence + table identity
+        # (classes → students → class_students), not just the raw count.
+        # Catches a future "swapped one of the 3 calls for an unrelated
+        # table" regression that would still pass call_count==3 but
+        # change the timing profile.
+        for label, side_effect in scenarios:
+            _login_attempts.clear()
+            mock_sb = MagicMock()
+            mock_sb.table.side_effect = side_effect
+            mock_get_sb.return_value = mock_sb
+            client.post(
+                '/api/student/login',
+                headers={'Content-Type': 'application/json'},
+                json={'email': f'{label}-seq@x.com', 'class_code': 'CODE'},
+            )
+            tables_called = [c.args[0] for c in mock_sb.table.call_args_list]
+            assert tables_called == ['classes', 'students', 'class_students'], (
+                f"{label}: lookup sequence drift — got {tables_called}"
+            )
 
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_login_failure_shapes_are_indistinguishable(self, mock_get_sb, client):
@@ -814,16 +848,45 @@ class TestStudentLogin:
                                      headers={'Content-Type': 'application/json'},
                                      json={'email': 'real@x.com', 'class_code': 'VALID1'})
 
-        # All 3 must return IDENTICAL 401 + body — no enumeration signal.
-        statuses = (r_invalid_code.status_code, r_email_missing.status_code, r_not_enrolled.status_code)
-        bodies = (r_invalid_code.get_json(), r_email_missing.get_json(), r_not_enrolled.get_json())
-        assert statuses == (401, 401, 401), (
-            f"All 3 failure modes must return 401; got {statuses}"
+        # Mode D (round-3 follow-up): missing fields — pulled into this
+        # test so the indistinguishability assertion covers all 4 well-
+        # formed failure paths in one place, not split across tests.
+        _login_attempts.clear()
+        mock_sb_d = MagicMock()
+        mock_sb_d.table.side_effect = lambda name: _make_chain([])
+        mock_get_sb.return_value = mock_sb_d
+        r_missing_fields = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'application/json'},
+            json={'email': '', 'class_code': ''},
         )
-        unique_bodies = {tuple(sorted(b.items())) for b in bodies}
-        assert len(unique_bodies) == 1, (
-            f"All 3 failure modes must return byte-identical bodies to "
-            f"prevent enumeration; got {len(unique_bodies)} distinct: {bodies}"
+
+        # All 4 must return IDENTICAL 401 + raw body bytes — no enumeration
+        # signal. Raw-body equality (not just JSON dict equality) catches a
+        # future regression where one path returns identical-looking JSON
+        # with different whitespace / key ordering / trailing newline.
+        responses = [
+            ('invalid_code', r_invalid_code),
+            ('email_missing', r_email_missing),
+            ('not_enrolled', r_not_enrolled),
+            ('missing_fields', r_missing_fields),
+        ]
+        statuses = {label: r.status_code for label, r in responses}
+        raw_bodies = {label: r.data for label, r in responses}
+        json_bodies = {label: r.get_json() for label, r in responses}
+
+        assert all(s == 401 for s in statuses.values()), (
+            f"All 4 failure modes must return 401; got {statuses}"
+        )
+        unique_raw = set(raw_bodies.values())
+        assert len(unique_raw) == 1, (
+            f"All 4 failure modes must return byte-identical raw bodies to "
+            f"prevent enumeration; got {len(unique_raw)} distinct: {raw_bodies}"
+        )
+        unique_json = {tuple(sorted(b.items())) for b in json_bodies.values()}
+        assert len(unique_json) == 1, (
+            f"All 4 failure modes must return identical JSON dicts; "
+            f"got {json_bodies}"
         )
 
 
