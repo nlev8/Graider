@@ -62,20 +62,29 @@ class PortalGradingTask(Task):
             pass
 
 
-# Retry semantics (Phase 4.1 PR2):
+# Retry semantics:
 #   Durability — acks_late=True ensures the broker redelivers the message if
 #   the worker dies mid-task. That's the primary defense against Railway
 #   deploys and worker crashes.
 #
-#   Transient retry (e.g., OpenAI 5xx) is NOT wired up in this PR. The pure
-#   function grade_portal_submission_sync has a blanket `except Exception`
-#   that captures to Sentry and returns normally — nothing bubbles to Celery's
-#   retry classifier. Adding `autoretry_for=...` here would be dead config.
+#   Transient retry — wired up by closing audit MAJOR #7 (Codex 2026-05-06).
+#   The Celery body calls grade_portal_submission_sync with raise_transient=True;
+#   the sync function's blanket catch classifies via backend.retry.is_retryable_error
+#   (httpx timeout, OpenAI 5xx, supabase 503, ConnectionError, OSError, status
+#   408/429/5xx, retryable string keywords) and re-raises as TransientError.
+#   Celery's autoretry_for=(TransientError,) catches it.
 #
-#   If future work wants auto-retry on transient AI failures, hoist transient
-#   classification inside grade_portal_submission_sync and re-raise a
-#   TransientError above the blanket catch. Then add autoretry_for,
-#   retry_backoff, max_retries, retry_backoff_max to this decorator.
+#   Backoff: Celery's `retry_backoff=True` schedules delays at 2**(attempt-1)
+#   seconds: attempt 1 retry waits 1s, attempt 2 retry waits 2s, attempt 3
+#   retry waits 4s. With `retry_backoff_max=600` the cap matters only for
+#   higher max_retries; current 3-retry setup tops out at 4s. `retry_jitter=True`
+#   randomizes the actual delay uniformly in [0, scheduled), so 0-7s spread
+#   before terminal failure. After retry exhaustion, PortalGradingTask.on_failure
+#   marks the row 'failed'.
+#
+#   Permanent errors (KeyError, ValueError, etc.) are NOT classified as
+#   transient — the sync function's blanket catch swallows them as before
+#   and marks the row 'grading_failed' synchronously.
 @celery_app.task(
     base=PortalGradingTask,
     name='grading.portal_submission',
@@ -83,6 +92,11 @@ class PortalGradingTask(Task):
     acks_late=True,
     time_limit=900,
     soft_time_limit=840,
+    autoretry_for=(TransientError,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    max_retries=3,
 )
 def grade_portal_submission(
     self,
@@ -122,7 +136,19 @@ def grade_portal_submission(
         fetch_submission_full_context,
     )
 
-    ctx = fetch_submission_full_context(supabase_table, submission_id, teacher_id)
+    # Closes audit MAJOR #7 round-1 finding 3 (Codex 2026-05-06): if the
+    # context fetch raises a transient supabase error, surface it to
+    # Celery's autoretry by re-raising as TransientError. The fetch helper
+    # only re-raises retryable exceptions (per backend.retry.is_retryable_error);
+    # permanent errors return None and fall through to the existing
+    # "no ctx → mark failed" path below.
+    try:
+        ctx = fetch_submission_full_context(supabase_table, submission_id, teacher_id)
+    except Exception as e:
+        from backend.retry import is_retryable_error
+        if is_retryable_error(e):
+            raise TransientError(str(e)[:500]) from e
+        raise  # permanent — let it propagate to PortalGradingTask.on_failure
     if not ctx:
         _logger.warning("Submission not found for grading: %s", submission_id)
         return
@@ -177,4 +203,10 @@ def grade_portal_submission(
         task_id=self.request.id,
         district_id=district_id,
         user_id=user_id,
+        # Closes audit MAJOR #7 (Codex 2026-05-06): transient failures
+        # (httpx timeout, OpenAI 5xx, supabase 503, etc.) bubble up as
+        # TransientError so Celery's autoretry_for kicks in. The thread-
+        # path callers leave this default False to preserve their swallow-
+        # and-mark-failed behavior.
+        raise_transient=True,
     )

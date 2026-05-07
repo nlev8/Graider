@@ -20,10 +20,57 @@ MAX_RETRIES = 5
 JITTER_FACTOR = 0.25
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504, 529}
 
+# LLM SDK exception classes whose names indicate transient failures.
+# Matched by class name only — avoids hard imports of optional deps so
+# the classifier works whether or not openai/anthropic/google-genai are
+# installed in the venv. Codex audit MAJOR #7 round-2: APIConnectionError
+# in openai/anthropic doesn't subclass builtin ConnectionError and
+# stringifies as "Connection error." which is too short for the keyword
+# loop below — needs an explicit class-name check.
+_TRANSIENT_CLASS_NAMES = frozenset({
+    # openai>=1.0 — also matches anthropic.APIConnectionError /
+    # anthropic.APITimeoutError / anthropic.RateLimitError /
+    # anthropic.InternalServerError (same class names).
+    "APIConnectionError",
+    "APITimeoutError",
+    "RateLimitError",
+    "InternalServerError",
+    # NOTE: APIStatusError deliberately NOT in this set (Codex round-2 round-2).
+    # It's a generic wrapper covering ALL HTTP statuses including 400/401, so
+    # class-name match would cause 4xx false positives. It falls through to
+    # _get_status_code below, which correctly classifies by status code.
+    # google.api_core
+    "ServiceUnavailable",
+    "DeadlineExceeded",
+    "ResourceExhausted",
+    # google.genai
+    "ServerError",
+    # urllib3 / requests low-level (subclasses of OSError sometimes; sometimes not)
+    "MaxRetryError",
+    "ProtocolError",
+    "RemoteDisconnected",
+    "IncompleteRead",
+    # NOTE: httpx-specific class names (ConnectError / ReadError / WriteError /
+    # TimeoutException / etc.) are deliberately NOT in this set (Codex round-3
+    # round-3 / CI investigation 2026-05-07). Adding them caused the
+    # supabase_resilient client to retry 5× with backoff on every DNS
+    # failure in CI, exploding test wall time from ~3min to ~17min when
+    # the runner's Supabase URL was unreachable. The httpx classes that
+    # fire on a real production blip are already classified retryable
+    # via either:
+    #   - the keyword loop ("timed out" matches httpx.TimeoutException,
+    #     "connection error" matches httpx.ConnectError str repr)
+    #   - status-code classification for httpx.HTTPStatusError
+    # If a future CI flake reveals a transient httpx pattern that none of
+    # the existing rules catch, prefer adding to _TRANSIENT_KEYWORDS over
+    # this set so the cost is bounded by string scanning.
+})
+
 _TRANSIENT_KEYWORDS = [
     "connection reset",
     "connection refused",
     "connection aborted",
+    "connection error",         # openai.APIConnectionError stringifies as this
     "temporary failure",
     "timed out",
     "timeout",
@@ -113,12 +160,23 @@ def is_retryable_error(error: BaseException) -> bool:
     """Determine whether *error* is transient and worth retrying.
 
     Returns True for HTTP 408/429/5xx/529, ConnectionError, TimeoutError,
-    OSError, and exceptions whose string representation contains transient
-    keywords.  Returns False for client errors (400, 401, 403, 404) and
-    ordinary programming errors (ValueError, TypeError, etc.).
+    OSError, exception class names that match known LLM SDK transient
+    types (e.g., openai.APIConnectionError, anthropic.APIConnectionError),
+    and exceptions whose string representation contains transient keywords.
+    Returns False for client errors (400, 401, 403, 404) and ordinary
+    programming errors (ValueError, TypeError, etc.).
     """
     # Network / OS-level errors are always retryable.
     if isinstance(error, (ConnectionError, TimeoutError, OSError)):
+        return True
+
+    # LLM SDK class-name match (Codex audit MAJOR #7 round-2).
+    # openai.APIConnectionError + anthropic.APIConnectionError do NOT
+    # subclass builtin ConnectionError, stringify as "Connection error."
+    # (too short for the keyword loop), and don't expose .status_code.
+    # Match by class name to avoid hard imports of optional deps.
+    cls_name = type(error).__name__
+    if cls_name in _TRANSIENT_CLASS_NAMES:
         return True
 
     status = _get_status_code(error)
