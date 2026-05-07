@@ -16,22 +16,35 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 @pytest.fixture
 def app():
-    """Create Flask app in test mode."""
+    """Create Flask app in test mode.
+
+    Disables Flask-Limiter for the duration of each test, then restores it,
+    so cross-file CI runs are not affected.
+
+    Why direct attribute override + not just app.config['RATELIMIT_ENABLED']:
+    Flask-Limiter caches `self.enabled` at init_app() time
+    (flask_limiter/_extension.py:331). Setting the config flag AFTER init
+    has no effect on the already-bound module-level singleton. We have to
+    override the attribute. The 9 other test files that use
+    config['RATELIMIT_ENABLED'] all create a fresh Flask app per test and
+    re-call limiter.init_app(app) — that path re-reads the config flag.
+    We use the production app fixture here, so attribute override is the
+    correct lever.
+
+    The application-level _check_rate_limit unit tests at line ~1126 hit
+    `_login_attempts` directly (not Flask-Limiter), so they are unaffected.
+    """
     os.environ['FLASK_ENV'] = 'development'
     os.environ['DEV_USER_ID'] = 'test-teacher-001'
     from backend.app import app as flask_app
     flask_app.config['TESTING'] = True
-    # Reset Flask-Limiter's in-memory storage between tests. The module-level
-    # `limiter` (backend/extensions.py) caches per-IP hit counts across test
-    # runs; without this reset, TestStudentLogin's ~12 sequential calls
-    # blow through the route-level @limiter.limit("10/minute") budget, and
-    # later tests see 429 instead of the expected 401/200. The
-    # application-level _check_rate_limit unit tests at line ~1126 use the
-    # `_login_attempts` dict directly (not Flask-Limiter), so they are
-    # unaffected.
     from backend.extensions import limiter
-    limiter.reset()
-    return flask_app
+    prior_enabled = limiter.enabled
+    limiter.enabled = False
+    try:
+        yield flask_app
+    finally:
+        limiter.enabled = prior_enabled
 
 
 @pytest.fixture
