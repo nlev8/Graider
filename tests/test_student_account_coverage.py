@@ -666,15 +666,92 @@ class TestStudentLogin:
         assert data['student']['first_name'] == 'Jo'
 
     @patch('backend.routes.student_account_routes._get_supabase')
-    def test_login_missing_fields_returns_400(self, mock_get_sb, client):
-        # The route calls _get_supabase() before validating inputs (line 558),
-        # so CI needs the mock even though the 400 branch never touches the
-        # returned client. MagicMock's default return is fine.
+    def test_login_missing_fields_returns_401_generic(self, mock_get_sb, client):
+        """Audit MAJOR #9 (Codex 2026-05-06): missing fields used to return
+        a distinct 400 + 'Email and class code are required' message.
+        That distinguishability let attackers identify field-shape errors
+        from authentication-validity errors. Now ALL failure modes return
+        the same generic 401 + identical body."""
         mock_get_sb.return_value = MagicMock()
         resp = client.post('/api/student/login',
                            headers={'Content-Type': 'application/json'},
                            json={'email': '', 'class_code': ''})
-        assert resp.status_code == 400
+        assert resp.status_code == 401
+        assert "Login failed" in resp.get_json()["error"]
+
+    @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_failure_shapes_are_indistinguishable(self, mock_get_sb, client):
+        """Audit MAJOR #9: invalid class code, email-not-found, and
+        not-enrolled used to return distinct status codes (404/404/403)
+        + distinct messages, letting an attacker enumerate:
+          - which class codes are valid (any 404 vs 200)
+          - which emails are on a teacher's roster (after a valid code,
+            email-not-found 404 vs not-enrolled 403)
+        All 3 must now return byte-identical 401 + identical body so
+        the response carries zero validity signal."""
+        # Class code matches a valid class but email isn't enrolled
+        class_row = [{'id': 'cls-1', 'teacher_id': 't1', 'name': 'P1', 'subject': 'Math'}]
+        student_row = [{'id': 'stu-1', 'email': 'real@x.com'}]
+        enrollment_empty = []  # student exists for teacher, NOT enrolled
+
+        # Mode A: invalid class code (no class found)
+        from backend.routes.student_account_routes import _login_attempts
+        _login_attempts.clear()
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = lambda name: _make_chain([])  # everything empty
+        mock_get_sb.return_value = mock_sb
+        r_invalid_code = client.post('/api/student/login',
+                                     headers={'Content-Type': 'application/json'},
+                                     json={'email': 'a@x.com', 'class_code': 'NOPE'})
+
+        # Mode B: valid class, email not on teacher's roster
+        _login_attempts.clear()
+
+        def table_b(name):
+            if name == 'classes':
+                return _make_chain(class_row)
+            if name == 'students':
+                return _make_chain([])  # email not on roster
+            return _make_chain([])
+
+        mock_sb_b = MagicMock()
+        mock_sb_b.table.side_effect = table_b
+        mock_get_sb.return_value = mock_sb_b
+        r_email_missing = client.post('/api/student/login',
+                                      headers={'Content-Type': 'application/json'},
+                                      json={'email': 'b@x.com', 'class_code': 'VALID1'})
+
+        # Mode C: valid class, valid student email, NOT enrolled in class
+        _login_attempts.clear()
+
+        def table_c(name):
+            if name == 'classes':
+                return _make_chain(class_row)
+            if name == 'students':
+                return _make_chain(student_row)
+            if name == 'class_students':
+                return _make_chain(enrollment_empty)
+            return _make_chain([])
+
+        mock_sb_c = MagicMock()
+        mock_sb_c.table.side_effect = table_c
+        mock_get_sb.return_value = mock_sb_c
+        r_not_enrolled = client.post('/api/student/login',
+                                     headers={'Content-Type': 'application/json'},
+                                     json={'email': 'real@x.com', 'class_code': 'VALID1'})
+
+        # All 3 must return IDENTICAL 401 + body — no enumeration signal.
+        statuses = (r_invalid_code.status_code, r_email_missing.status_code, r_not_enrolled.status_code)
+        bodies = (r_invalid_code.get_json(), r_email_missing.get_json(), r_not_enrolled.get_json())
+        assert statuses == (401, 401, 401), (
+            f"All 3 failure modes must return 401; got {statuses}"
+        )
+        unique_bodies = {tuple(sorted(b.items())) for b in bodies}
+        assert len(unique_bodies) == 1, (
+            f"All 3 failure modes must return byte-identical bodies to "
+            f"prevent enumeration; got {len(unique_bodies)} distinct: {bodies}"
+        )
 
 
 # ============ TEACHER ENDPOINTS ============

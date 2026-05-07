@@ -866,10 +866,30 @@ def student_login():
         email = data.get('email', '').strip().lower()
         class_code = data.get('class_code', '').strip().upper()
 
-        if not email or not class_code:
-            return jsonify({"error": "Email and class code are required"}), 400
+        # Closes audit MAJOR #9 (Codex 2026-05-06): the original 4 distinct
+        # failure responses (400 missing fields / 404 invalid class code /
+        # 404 email not found / 403 not enrolled) leaked enumeration signal:
+        # an attacker could distinguish "valid class code" from "invalid"
+        # by status differential, then enumerate registered student emails
+        # within a class by the email-not-found vs not-enrolled distinction.
+        # All 4 failure modes now return the same 401 + identical body so
+        # the response carries zero validity signal. Internal logger.info
+        # captures the precise reason for ops debugging (no PII — email is
+        # already lowered and present in the request log; reason is a fixed
+        # label).
+        _GENERIC_AUTH_FAIL = (
+            jsonify({"error": "Login failed. Verify your email and class code."}),
+            401,
+        )
 
-        # Rate limit check
+        if not email or not class_code:
+            _logger.info("student_login: rejected — missing email or class_code")
+            return _GENERIC_AUTH_FAIL
+
+        # Rate limit check — kept as a distinct 429 because it's a legitimate
+        # observability signal (external monitoring expects 429 for rate-limit
+        # backoff), and 429 doesn't itself leak email validity (it only tells
+        # the attacker their own prior requests are throttled).
         if not _check_rate_limit(email):
             return jsonify({"error": "Too many login attempts. Try again in 10 minutes."}), 429
 
@@ -879,7 +899,8 @@ def student_login():
         ).eq('is_active', True).execute()
 
         if not cls.data:
-            return jsonify({"error": "Invalid class code"}), 404
+            _logger.info("student_login: rejected — invalid class code")
+            return _GENERIC_AUTH_FAIL
 
         class_data = cls.data[0]
 
@@ -891,7 +912,8 @@ def student_login():
         ).execute()
 
         if not student.data:
-            return jsonify({"error": "Email not found. Ask your teacher for help."}), 404
+            _logger.info("student_login: rejected — email not found in teacher roster")
+            return _GENERIC_AUTH_FAIL
 
         student_data = student.data[0]
 
@@ -901,7 +923,8 @@ def student_login():
         ).eq('student_id', student_data['id']).execute()
 
         if not enrollment.data:
-            return jsonify({"error": "You are not enrolled in this class"}), 403
+            _logger.info("student_login: rejected — student exists but not enrolled in class")
+            return _GENERIC_AUTH_FAIL
 
         # Create session: store hash, return raw token
         raw_token = secrets.token_urlsafe(48)
