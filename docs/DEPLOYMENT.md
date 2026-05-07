@@ -89,9 +89,15 @@ CLEVER_API_VERSION=v3.0
 # AI Grading (at least one required)
 OPENAI_API_KEY=sk-...
 
-# Optional
+# REQUIRED for production
+# Backs Flask-Limiter rate-limit counters AND Flask-Session storage.
+# `backend/extensions.py` raises at startup if Redis is unreachable
+# under FLASK_ENV=production. Provision via Railway Add-on → Redis
+# (or any managed Redis 6+; Upstash, Render, etc.).
+REDIS_URL=redis://default:<password>@<host>:<port>
+
+# Optional (development convenience)
 FLASK_ENV=production
-REDIS_URL=<if using Redis for rate limiting>
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 

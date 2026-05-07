@@ -94,7 +94,7 @@ curl -v https://app.graider.live/api/student/join/TESTCODE 2>&1 | grep -E "429|X
 # @limiter.limit("30/minute") → @limiter.limit("60/minute")
 ```
 
-**If Redis is configured** (`REDIS_URL`), rate limit state is shared across workers. Without Redis, each gunicorn worker tracks limits independently (less accurate but still functional).
+**Redis is REQUIRED in production.** `backend/extensions.py:19` hard-fails the boot if `FLASK_ENV=production` and Redis is unreachable, because Flask-Limiter's per-worker fallback would let attackers bypass rate limits by routing requests across workers. The earlier "Redis-less is functional" note in this runbook was incorrect for production deployments — only local dev runs without Redis. See `docs/DEPLOYMENT.md` for Railway provisioning.
 
 ---
 
