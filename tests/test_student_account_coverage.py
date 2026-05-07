@@ -16,12 +16,35 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 @pytest.fixture
 def app():
-    """Create Flask app in test mode."""
+    """Create Flask app in test mode.
+
+    Disables Flask-Limiter for the duration of each test, then restores it,
+    so cross-file CI runs are not affected.
+
+    Why direct attribute override + not just app.config['RATELIMIT_ENABLED']:
+    Flask-Limiter caches `self.enabled` at init_app() time
+    (flask_limiter/_extension.py:331). Setting the config flag AFTER init
+    has no effect on the already-bound module-level singleton. We have to
+    override the attribute. The 9 other test files that use
+    config['RATELIMIT_ENABLED'] all create a fresh Flask app per test and
+    re-call limiter.init_app(app) — that path re-reads the config flag.
+    We use the production app fixture here, so attribute override is the
+    correct lever.
+
+    The application-level _check_rate_limit unit tests at line ~1126 hit
+    `_login_attempts` directly (not Flask-Limiter), so they are unaffected.
+    """
     os.environ['FLASK_ENV'] = 'development'
     os.environ['DEV_USER_ID'] = 'test-teacher-001'
     from backend.app import app as flask_app
     flask_app.config['TESTING'] = True
-    return flask_app
+    from backend.extensions import limiter
+    prior_enabled = limiter.enabled
+    limiter.enabled = False
+    try:
+        yield flask_app
+    finally:
+        limiter.enabled = prior_enabled
 
 
 @pytest.fixture
@@ -666,15 +689,350 @@ class TestStudentLogin:
         assert data['student']['first_name'] == 'Jo'
 
     @patch('backend.routes.student_account_routes._get_supabase')
-    def test_login_missing_fields_returns_400(self, mock_get_sb, client):
-        # The route calls _get_supabase() before validating inputs (line 558),
-        # so CI needs the mock even though the 400 branch never touches the
-        # returned client. MagicMock's default return is fine.
+    def test_login_missing_fields_returns_401_generic(self, mock_get_sb, client):
+        """Audit MAJOR #9 (Codex 2026-05-06): missing fields used to return
+        a distinct 400 + 'Email and class code are required' message.
+        That distinguishability let attackers identify field-shape errors
+        from authentication-validity errors. Now ALL failure modes return
+        the same generic 401 + identical body."""
         mock_get_sb.return_value = MagicMock()
         resp = client.post('/api/student/login',
                            headers={'Content-Type': 'application/json'},
                            json={'email': '', 'class_code': ''})
-        assert resp.status_code == 400
+        assert resp.status_code == 401
+        assert "Login failed" in resp.get_json()["error"]
+
+    @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_malformed_json_returns_generic_401(self, mock_get_sb, client):
+        """Round-2 Codex MINOR fold + round-3 follow-up: every malformed /
+        non-dict body shape must normalize to the same generic 401, never
+        leak as 500. Covers JSON null, JSON number, JSON array, JSON
+        string, text/plain, missing Content-Type, AND truly malformed
+        application/json bytes (round-2 Codex follow-up: prior coverage
+        skipped the actual JSON parse-failure path)."""
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = lambda name: _make_chain([])
+        mock_get_sb.return_value = mock_sb
+
+        cases = [
+            # (label, headers, kwargs)
+            ("text/plain body",
+             {'Content-Type': 'text/plain'}, {'data': 'not-json'}),
+            ("JSON array",
+             {'Content-Type': 'application/json'}, {'json': ['x', 'y']}),
+            ("JSON null",
+             {'Content-Type': 'application/json'}, {'json': None}),
+            ("JSON number",
+             {'Content-Type': 'application/json'}, {'json': 42}),
+            ("JSON string",
+             {'Content-Type': 'application/json'}, {'json': 'a-bare-string'}),
+            ("missing Content-Type",
+             {}, {'data': '{"email":"a@x.com","class_code":"X"}'}),
+            # Round-2 Codex follow-up: malformed JSON bytes WITH the correct
+            # Content-Type header. This is the actual `json.loads()` parse-
+            # failure path; `request.get_json(silent=True)` must return None
+            # and the route must still hit the generic 401.
+            ("malformed JSON, application/json header — unclosed brace",
+             {'Content-Type': 'application/json'},
+             {'data': b'{"email":"a@x.com","class_code":'}),
+            ("malformed JSON, application/json header — bad escape",
+             {'Content-Type': 'application/json'},
+             {'data': b'{"email":"a\\xq","class_code":"X"}'}),
+            ("malformed JSON, application/json header — empty body",
+             {'Content-Type': 'application/json'},
+             {'data': b''}),
+        ]
+        for label, headers, kwargs in cases:
+            resp = client.post('/api/student/login', headers=headers, **kwargs)
+            assert resp.status_code == 401, f"{label}: got {resp.status_code}"
+            assert "Login failed" in resp.get_json()["error"], f"{label}: body={resp.get_json()}"
+
+    @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_rate_limit_does_not_signal_email_validity(self, mock_get_sb, client):
+        """Round-2 Codex MAJOR fold: when the per-email 5/10min limiter
+        fires, the 429 response itself must not reveal whether the email
+        is on a teacher's roster. Same status, same body, same headers
+        regardless of email validity — only the attacker's own prior
+        request budget matters.
+
+        Rationale: an attacker who can pre-burn a target email's budget
+        and then observe a 429 must not learn anything new from the 429
+        beyond what they could already infer from rate-limit observation.
+        The 429 is keyed by email, so probing distinct emails always
+        starts with a fresh budget — but the SHAPE of the 429 must be
+        constant across known-valid and known-invalid emails."""
+        from backend.routes.student_account_routes import _login_attempts
+        from datetime import datetime as _dt, timezone as _tz
+
+        # Pre-burn the per-email budget for both a valid and an invalid
+        # email so the very NEXT login attempt for each gets 429 without
+        # any DB query running. _login_attempts stores Unix timestamps
+        # (floats), not datetime objects — must match _check_rate_limit's
+        # internal contract.
+        now_ts = _dt.now(tz=_tz.utc).timestamp()
+        for email in ('valid@x.com', 'invalid@x.com'):
+            _login_attempts[email] = [now_ts] * 10  # well over the 5-attempt budget
+
+        # Mode V: existing student email + valid class code (would succeed
+        # if not rate-limited). Set up a happy-path supabase mock so any
+        # DB query that DID fire would return rows — proves the 429 fires
+        # before the DB.
+        class_row = [{'id': 'cls-1', 'teacher_id': 't1', 'name': 'P1', 'subject': 'Math'}]
+        student_row = [{'id': 'stu-1', 'email': 'valid@x.com',
+                        'first_name': 'V', 'last_name': 'V', 'student_id_number': 'S1'}]
+
+        def table_v(name):
+            if name == 'classes':
+                return _make_chain(class_row)
+            if name == 'students':
+                return _make_chain(student_row)
+            if name == 'class_students':
+                return _make_chain([{'id': 'enr-1'}])
+            return _make_chain([])
+
+        mock_sb_v = MagicMock()
+        mock_sb_v.table.side_effect = table_v
+        mock_get_sb.return_value = mock_sb_v
+        r_valid = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'application/json'},
+            json={'email': 'valid@x.com', 'class_code': 'VALID1'},
+        )
+
+        # Mode I: never-seen-before email — would 401 if not rate-limited.
+        mock_sb_i = MagicMock()
+        mock_sb_i.table.side_effect = lambda name: _make_chain([])
+        mock_get_sb.return_value = mock_sb_i
+        r_invalid = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'application/json'},
+            json={'email': 'invalid@x.com', 'class_code': 'NOPE'},
+        )
+
+        # Both must be 429. Body must be byte-identical. Crucially, the
+        # rate-limit short-circuit means NO DB query ran for either.
+        assert r_valid.status_code == 429, (
+            f"valid email rate-limit must 429; got {r_valid.status_code}"
+        )
+        assert r_invalid.status_code == 429, (
+            f"invalid email rate-limit must 429; got {r_invalid.status_code}"
+        )
+        assert r_valid.data == r_invalid.data, (
+            f"429 body must not differ by email validity; "
+            f"valid={r_valid.data!r} invalid={r_invalid.data!r}"
+        )
+        # No DB query should have fired — 429 short-circuits before
+        # any supabase.table() call.
+        assert mock_sb_v.table.call_count == 0, (
+            f"valid-email 429 path must not query DB; "
+            f"got {mock_sb_v.table.call_count} table() calls"
+        )
+        assert mock_sb_i.table.call_count == 0, (
+            f"invalid-email 429 path must not query DB; "
+            f"got {mock_sb_i.table.call_count} table() calls"
+        )
+
+    @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_runs_uniform_lookups_per_failure_mode(self, mock_get_sb, client):
+        """Round-2 Codex MAJOR fold: all well-formed failure paths must
+        execute the SAME number of Supabase round-trips so wall-clock
+        timing is dominated by network jitter, not branch depth.
+
+        Pre-fix: 1 query for invalid-class, 2 for email-missing, 3 for
+        not-enrolled. Codex flagged this as a timing side-channel.
+
+        Round-2 Codex round-2 follow-up: assert against the actual
+        ``chain.execute()`` round-trips, not just ``table()`` builder
+        construction. The ``table()`` count proves the route allocated
+        query builders; only ``execute()`` proves the wire round-trips
+        actually happened."""
+        from backend.routes.student_account_routes import _login_attempts
+
+        # Each scenario provides a side_effect that returns a fresh
+        # _make_chain() per table() call, so we can capture every chain
+        # the route actually used and assert .execute() was invoked.
+        scenarios = [
+            ("invalid_class", lambda name: _make_chain([])),
+            ("email_missing", lambda name: (
+                _make_chain([{'id': 'cls', 'teacher_id': 't', 'name': 'P', 'subject': 'M'}])
+                if name == 'classes' else _make_chain([])
+            )),
+            ("not_enrolled", lambda name: (
+                _make_chain([{'id': 'cls', 'teacher_id': 't', 'name': 'P', 'subject': 'M'}])
+                if name == 'classes'
+                else (_make_chain([{'id': 'stu', 'email': 'x@x.com'}])
+                      if name == 'students' else _make_chain([]))
+            )),
+        ]
+
+        execute_counts = {}
+        table_counts = {}
+        for label, side_effect in scenarios:
+            _login_attempts.clear()
+            chains_created: list = []
+
+            def capturing_side_effect(name, _se=side_effect, _store=chains_created):
+                chain = _se(name)
+                _store.append((name, chain))
+                return chain
+
+            mock_sb = MagicMock()
+            mock_sb.table.side_effect = capturing_side_effect
+            mock_get_sb.return_value = mock_sb
+
+            client.post(
+                '/api/student/login',
+                headers={'Content-Type': 'application/json'},
+                json={'email': f'{label}@x.com', 'class_code': 'CODE'},
+            )
+
+            table_counts[label] = mock_sb.table.call_count
+            # The CRITICAL assertion: every chain returned to the route
+            # must have had .execute() invoked exactly once. Counting
+            # execute() (not table()) is the actual wire round-trip
+            # equivalence the timing-side-channel close depends on.
+            execute_counts[label] = sum(c.execute.call_count for _, c in chains_created)
+            assert all(c.execute.call_count == 1 for _, c in chains_created), (
+                f"{label}: every chain must execute exactly once; "
+                f"got {[(n, c.execute.call_count) for n, c in chains_created]}"
+            )
+
+        # All 3 failure paths must run the same number of execute() calls.
+        unique_execute = set(execute_counts.values())
+        assert len(unique_execute) == 1, (
+            f"All failure paths must run the same number of DB execute() "
+            f"round-trips; got {execute_counts}"
+        )
+        assert all(c == 3 for c in execute_counts.values()), (
+            f"Expected 3 execute() round-trips per path; got {execute_counts}"
+        )
+        # Sanity: table() count should match execute() count (1:1 chain use).
+        assert table_counts == execute_counts, (
+            f"table() vs execute() drift: {table_counts} vs {execute_counts}"
+        )
+
+        # Round-3 Codex follow-up: assert the sequence + table identity
+        # (classes → students → class_students), not just the raw count.
+        # Catches a future "swapped one of the 3 calls for an unrelated
+        # table" regression that would still pass call_count==3 but
+        # change the timing profile.
+        for label, side_effect in scenarios:
+            _login_attempts.clear()
+            mock_sb = MagicMock()
+            mock_sb.table.side_effect = side_effect
+            mock_get_sb.return_value = mock_sb
+            client.post(
+                '/api/student/login',
+                headers={'Content-Type': 'application/json'},
+                json={'email': f'{label}-seq@x.com', 'class_code': 'CODE'},
+            )
+            tables_called = [c.args[0] for c in mock_sb.table.call_args_list]
+            assert tables_called == ['classes', 'students', 'class_students'], (
+                f"{label}: lookup sequence drift — got {tables_called}"
+            )
+
+    @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_failure_shapes_are_indistinguishable(self, mock_get_sb, client):
+        """Audit MAJOR #9: invalid class code, email-not-found, and
+        not-enrolled used to return distinct status codes (404/404/403)
+        + distinct messages, letting an attacker enumerate:
+          - which class codes are valid (any 404 vs 200)
+          - which emails are on a teacher's roster (after a valid code,
+            email-not-found 404 vs not-enrolled 403)
+        All 3 must now return byte-identical 401 + identical body so
+        the response carries zero validity signal."""
+        # Class code matches a valid class but email isn't enrolled
+        class_row = [{'id': 'cls-1', 'teacher_id': 't1', 'name': 'P1', 'subject': 'Math'}]
+        student_row = [{'id': 'stu-1', 'email': 'real@x.com'}]
+        enrollment_empty = []  # student exists for teacher, NOT enrolled
+
+        # Mode A: invalid class code (no class found)
+        from backend.routes.student_account_routes import _login_attempts
+        _login_attempts.clear()
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = lambda name: _make_chain([])  # everything empty
+        mock_get_sb.return_value = mock_sb
+        r_invalid_code = client.post('/api/student/login',
+                                     headers={'Content-Type': 'application/json'},
+                                     json={'email': 'a@x.com', 'class_code': 'NOPE'})
+
+        # Mode B: valid class, email not on teacher's roster
+        _login_attempts.clear()
+
+        def table_b(name):
+            if name == 'classes':
+                return _make_chain(class_row)
+            if name == 'students':
+                return _make_chain([])  # email not on roster
+            return _make_chain([])
+
+        mock_sb_b = MagicMock()
+        mock_sb_b.table.side_effect = table_b
+        mock_get_sb.return_value = mock_sb_b
+        r_email_missing = client.post('/api/student/login',
+                                      headers={'Content-Type': 'application/json'},
+                                      json={'email': 'b@x.com', 'class_code': 'VALID1'})
+
+        # Mode C: valid class, valid student email, NOT enrolled in class
+        _login_attempts.clear()
+
+        def table_c(name):
+            if name == 'classes':
+                return _make_chain(class_row)
+            if name == 'students':
+                return _make_chain(student_row)
+            if name == 'class_students':
+                return _make_chain(enrollment_empty)
+            return _make_chain([])
+
+        mock_sb_c = MagicMock()
+        mock_sb_c.table.side_effect = table_c
+        mock_get_sb.return_value = mock_sb_c
+        r_not_enrolled = client.post('/api/student/login',
+                                     headers={'Content-Type': 'application/json'},
+                                     json={'email': 'real@x.com', 'class_code': 'VALID1'})
+
+        # Mode D (round-3 follow-up): missing fields — pulled into this
+        # test so the indistinguishability assertion covers all 4 well-
+        # formed failure paths in one place, not split across tests.
+        _login_attempts.clear()
+        mock_sb_d = MagicMock()
+        mock_sb_d.table.side_effect = lambda name: _make_chain([])
+        mock_get_sb.return_value = mock_sb_d
+        r_missing_fields = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'application/json'},
+            json={'email': '', 'class_code': ''},
+        )
+
+        # All 4 must return IDENTICAL 401 + raw body bytes — no enumeration
+        # signal. Raw-body equality (not just JSON dict equality) catches a
+        # future regression where one path returns identical-looking JSON
+        # with different whitespace / key ordering / trailing newline.
+        responses = [
+            ('invalid_code', r_invalid_code),
+            ('email_missing', r_email_missing),
+            ('not_enrolled', r_not_enrolled),
+            ('missing_fields', r_missing_fields),
+        ]
+        statuses = {label: r.status_code for label, r in responses}
+        raw_bodies = {label: r.data for label, r in responses}
+        json_bodies = {label: r.get_json() for label, r in responses}
+
+        assert all(s == 401 for s in statuses.values()), (
+            f"All 4 failure modes must return 401; got {statuses}"
+        )
+        unique_raw = set(raw_bodies.values())
+        assert len(unique_raw) == 1, (
+            f"All 4 failure modes must return byte-identical raw bodies to "
+            f"prevent enumeration; got {len(unique_raw)} distinct: {raw_bodies}"
+        )
+        unique_json = {tuple(sorted(b.items())) for b in json_bodies.values()}
+        assert len(unique_json) == 1, (
+            f"All 4 failure modes must return identical JSON dicts; "
+            f"got {json_bodies}"
+        )
 
 
 # ============ TEACHER ENDPOINTS ============
