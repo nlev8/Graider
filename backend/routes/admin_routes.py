@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, request, jsonify, g
 
+from backend.extensions import limiter
 from backend.storage import load as storage_load, save as storage_save, list_keys
 from backend.supabase_client import get_supabase as _get_supabase
 from backend.utils.auth_decorators import require_teacher, require_admin
@@ -44,18 +45,36 @@ def admin_status():
 # ── POST /api/admin/claim ─────────────────────────────────────────────────
 
 @admin_bp.route("/api/admin/claim", methods=["POST"])
+# Rate limit closes audit MAJOR #8 (Codex 2026-05-06): without a limit
+# the route was brute-forceable by any authenticated teacher (invite
+# codes are short and storage_load reveals validity via 404 vs 200).
+# Per-IP+per-user budget tuned for the actual usage pattern: a teacher
+# claims an invite once. 5/minute and 10/hour give legitimate users
+# headroom for typos while choking enumeration attacks.
+@limiter.limit("10 per hour;5 per minute")
 @require_teacher
 @handle_route_errors
 def admin_claim():
     """Claim an admin invite code to become a school admin."""
     data = request.get_json(silent=True) or {}
     code = data.get("code", "").strip()
+    # Closes audit MAJOR #8: previously distinguished missing/invalid/expired
+    # via different status codes (400/404/410), letting an attacker
+    # enumerate valid-but-expired codes from valid-now codes from
+    # invalid-format codes. Now ALL failure modes return a single
+    # generic 400 + same error string so the response shape carries
+    # zero validity signal. Internal log captures the precise reason
+    # for ops debugging.
+    _GENERIC_FAILURE = (jsonify({"error": "Unable to claim invite. Verify the code and try again."}), 400)
+
     if not code:
-        return jsonify({"error": "Invite code is required"}), 400
+        logger.info("admin_claim: rejected — empty code")
+        return _GENERIC_FAILURE
 
     invite = storage_load(f"admin_invite:{code}", "system")
     if not invite or not isinstance(invite, dict):
-        return jsonify({"error": "Invalid invite code"}), 404
+        logger.info("admin_claim: rejected — code not found or malformed shape")
+        return _GENERIC_FAILURE
 
     # Check 7-day TTL
     created_at = invite.get("created_at", "")
@@ -65,9 +84,11 @@ def admin_claim():
             if created_dt.tzinfo is None:
                 created_dt = created_dt.replace(tzinfo=timezone.utc)
             if datetime.now(tz=timezone.utc) - created_dt > timedelta(days=7):
-                return jsonify({"error": "Invite code has expired"}), 410
+                logger.info("admin_claim: rejected — code expired")
+                return _GENERIC_FAILURE
         except (ValueError, TypeError):
-            pass
+            logger.info("admin_claim: rejected — created_at parse failure")
+            return _GENERIC_FAILURE
 
     school = invite.get("school", "")
     admin_role = {

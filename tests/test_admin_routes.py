@@ -91,17 +91,20 @@ class TestAdminClaim:
         assert resp.status_code == 401
 
     def test_claim_requires_code(self, authed_client):
-        """Claim without code returns 400."""
+        """Claim without code returns 400 (generic failure shape)."""
         resp = authed_client.post("/api/admin/claim", json={},
                                   headers={"X-Test-Teacher-Id": "teacher-123"})
         assert resp.status_code == 400
 
-    def test_claim_invalid_code_returns_404(self, authed_client):
-        """Claim with non-existent code returns 404."""
+    def test_claim_invalid_code_returns_generic_400(self, authed_client):
+        """Audit MAJOR #8 (Codex 2026-05-06): non-existent code returns
+        the SAME generic 400 + error body as missing/expired/malformed,
+        so the response shape carries zero validity signal."""
         with patch("backend.routes.admin_routes.storage_load", return_value=None):
             resp = authed_client.post("/api/admin/claim", json={"code": "BADCODE"},
                                       headers={"X-Test-Teacher-Id": "teacher-123"})
-            assert resp.status_code == 404
+            assert resp.status_code == 400
+            assert "Unable to claim invite" in resp.get_json()["error"]
 
     def test_claim_valid_code_succeeds(self, authed_client):
         """Claim with valid invite code creates admin role."""
@@ -132,8 +135,9 @@ class TestAdminClaim:
             save_args = mock_save.call_args[0]
             assert save_args[0] == "admin_role:teacher-123"
 
-    def test_claim_expired_code_returns_410(self, authed_client):
-        """Claim with expired invite (>7 days) returns 410."""
+    def test_claim_expired_code_returns_generic_400(self, authed_client):
+        """Audit MAJOR #8: expired invite returns the same generic 400 +
+        error shape as invalid/missing — no enumeration signal."""
         invite = {
             "school": "Lincoln High",
             "created_at": "2026-03-01T00:00:00+00:00",  # well past 7 days
@@ -147,7 +151,75 @@ class TestAdminClaim:
         with patch("backend.routes.admin_routes.storage_load", side_effect=mock_load):
             resp = authed_client.post("/api/admin/claim", json={"code": "EXPIRED"},
                                       headers={"X-Test-Teacher-Id": "teacher-123"})
-            assert resp.status_code == 410
+            assert resp.status_code == 400
+            assert "Unable to claim invite" in resp.get_json()["error"]
+
+    def test_claim_failure_shapes_are_indistinguishable(self, authed_client):
+        """Audit MAJOR #8: missing code, invalid code, malformed invite,
+        expired invite must ALL return byte-identical responses (same
+        status code, same body) so an attacker can't distinguish them."""
+        responses = []
+
+        # 1. Empty code
+        r1 = authed_client.post("/api/admin/claim", json={"code": ""},
+                                headers={"X-Test-Teacher-Id": "t"})
+        responses.append(("empty", r1.status_code, r1.get_json()))
+
+        # 2. Non-existent code (storage_load returns None)
+        with patch("backend.routes.admin_routes.storage_load", return_value=None):
+            r2 = authed_client.post("/api/admin/claim", json={"code": "MISSING"},
+                                    headers={"X-Test-Teacher-Id": "t"})
+            responses.append(("missing", r2.status_code, r2.get_json()))
+
+        # 3. Malformed invite shape (string instead of dict)
+        with patch("backend.routes.admin_routes.storage_load", return_value="garbage"):
+            r3 = authed_client.post("/api/admin/claim", json={"code": "MALFORMED"},
+                                    headers={"X-Test-Teacher-Id": "t"})
+            responses.append(("malformed", r3.status_code, r3.get_json()))
+
+        # 4. Expired invite
+        with patch("backend.routes.admin_routes.storage_load",
+                   return_value={"school": "X", "created_at": "2026-03-01T00:00:00+00:00"}):
+            r4 = authed_client.post("/api/admin/claim", json={"code": "EXPIRED"},
+                                    headers={"X-Test-Teacher-Id": "t"})
+            responses.append(("expired", r4.status_code, r4.get_json()))
+
+        # 5. Bad created_at format (parse failure)
+        with patch("backend.routes.admin_routes.storage_load",
+                   return_value={"school": "X", "created_at": "garbage-date"}):
+            r5 = authed_client.post("/api/admin/claim", json={"code": "BADDATE"},
+                                    headers={"X-Test-Teacher-Id": "t"})
+            responses.append(("bad-date", r5.status_code, r5.get_json()))
+
+        # All 5 failure modes → IDENTICAL status code + body.
+        statuses = {label: status for label, status, _ in responses}
+        bodies = {label: body for label, _, body in responses}
+
+        assert all(s == 400 for s in statuses.values()), (
+            f"All admin-claim failures must return 400; got {statuses}"
+        )
+        unique_bodies = {tuple(sorted(b.items())) for b in bodies.values()}
+        assert len(unique_bodies) == 1, (
+            f"All admin-claim failure bodies must be byte-identical to "
+            f"prevent enumeration; got {len(unique_bodies)} distinct shapes: {bodies}"
+        )
+
+    def test_claim_has_rate_limit_decorator(self):
+        """Static-source pin (Audit MAJOR #8): the @limiter.limit decorator
+        must remain on the admin_claim route. Without it, the route is
+        brute-forceable by any authenticated teacher."""
+        from pathlib import Path
+
+        src = Path(__file__).resolve().parent.parent / "backend/routes/admin_routes.py"
+        text = src.read_text()
+        # Decorator order: @admin_bp.route + @limiter.limit + @require_teacher + ...
+        # before def admin_claim. Limiter MUST be present and reasonable.
+        assert "@limiter.limit(" in text, "admin_claim must carry @limiter.limit"
+        # The exact budget shape — strict enough to choke enumeration
+        assert '"10 per hour;5 per minute"' in text, (
+            "admin_claim rate-limit budget must remain '10 per hour;5 per minute' "
+            "(loosen only with a security review)."
+        )
 
 
 # ── Admin-Only Endpoint Tests ────────────────────────────────────────────
