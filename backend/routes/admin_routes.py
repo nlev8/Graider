@@ -344,53 +344,180 @@ def _build_email_map():
     return email_map
 
 
+# Round-2 Codex HIGH fold: PostgREST `.in_()` lists are URL-encoded into
+# the query string. With UUID values (~36 chars each + comma) and a
+# typical PostgREST URL limit around 8 KB, 200 ids per chunk stays
+# safely under the limit (~7.4 KB). Lists below this are sent as one
+# query; longer lists chunk and aggregate.
+_IN_CHUNK_SIZE = 200
+
+# Round-3 Codex HIGH fold: Supabase imposes a default 1,000-row return
+# cap on `select()` queries. `_chunked_in_rows` MUST paginate within
+# each filter-value chunk via `.range(offset, offset+page_size-1)` or
+# total_students / total_assessments / score aggregates would silently
+# undercount on districts with > 1,000 matching rows in a single chunk.
+_PAGE_SIZE = 1000
+
+# Absolute ceiling per chunk-batch to prevent runaway memory in the
+# pathological case (e.g., a single misconfigured admin scope with
+# millions of audit rows). 100K rows × ~200B/row = ~20 MB peak.
+_HARD_CAP = 100_000
+
+
+def _chunked_in_rows(sb, table, column, values, select_cols,
+                      order=None, limit=None):
+    """Run `select_cols` from `table` filtered by `column .in_ values`,
+    chunking `values` into `_IN_CHUNK_SIZE` slices AND paginating result
+    rows within each chunk to defeat Supabase's default 1,000-row return
+    cap. Returns a list of row dicts (possibly empty).
+
+    `order` is an optional `(col, desc=True/False)` tuple. `limit` is
+    a per-chunk ceiling (NOT global): each chunk fetches up to `limit`
+    rows. If `limit` is None, defaults to `_HARD_CAP=100,000` per chunk.
+    Callers needing a global cap MUST truncate the merged result
+    themselves (see audit_log usage in `_enrich_teachers`).
+    """
+    if not values:
+        return []
+    out: list = []
+    target = limit if limit is not None else _HARD_CAP
+    for i in range(0, len(values), _IN_CHUNK_SIZE):
+        chunk = values[i:i + _IN_CHUNK_SIZE]
+        offset = 0
+        while offset < target:
+            page_size = min(_PAGE_SIZE, target - offset)
+            q = sb.table(table).select(select_cols).in_(column, chunk)
+            if order is not None:
+                col, desc = order
+                q = q.order(col, desc=desc)
+            q = q.range(offset, offset + page_size - 1)
+            rows = q.execute().data or []
+            out.extend(rows)
+            if len(rows) < page_size:
+                break  # end of result set for this chunk
+            offset += page_size
+    return out
+
+
 def _enrich_teachers(teachers):
-    """Add classes_count, students_count, assessments_count, last_activity."""
+    """Add classes_count, students_count, assessments_count, last_activity.
+
+    Closes audit MAJOR #11 (Codex full-codebase audit 2026-05-06): the
+    pre-fix implementation made 4 Supabase queries PER teacher (N+1
+    pattern). For a 50-teacher district that meant 200 round trips on
+    every dashboard load; for 500 teachers it was 2,000. Now uses 4
+    batched queries via `_chunked_in_rows` (chunked at
+    _IN_CHUNK_SIZE=200 to stay under PostgREST URL limits) and
+    aggregates counts in Python.
+
+    Pagination cap on the audit_log query (`AUDIT_TOP_N`) bounds memory
+    if a hot teacher dominates recent activity. Quiet teachers whose
+    last activity falls outside that window will report
+    `last_activity=None` rather than triggering an unbounded fetch.
+
+    Round-2 Codex MEDIUM fold: any exception inside the batched
+    pipeline now resets ALL accumulated dicts so the apply loop
+    delivers a uniform "all zeros" fallback rather than partial
+    earlier counts + zero later counts. Matches the PR description.
+    """
     sb = _get_supabase()
     if not sb:
         return
 
-    for t in teachers:
-        uid = t.get("user_id", "")
-        if not uid:
+    teacher_ids = [t.get("user_id") for t in teachers if t.get("user_id")]
+    if not teacher_ids:
+        for t in teachers:
             t.update({"classes_count": 0, "students_count": 0,
                        "assessments_count": 0, "last_activity": None})
-            continue
+        return
 
-        try:
-            # Classes count
-            classes_res = sb.table("classes").select("id", count="exact") \
-                .eq("teacher_id", uid).execute()
-            t["classes_count"] = classes_res.count if classes_res.count is not None else len(classes_res.data or [])
+    classes_count: dict = {}
+    students_count: dict = {}
+    assessments_count: dict = {}
+    last_activity: dict = {}
+    class_ids_by_teacher: dict = {}
 
-            # Students count (via class_students for teacher's classes)
-            class_ids = [c["id"] for c in (classes_res.data or [])]
-            if class_ids:
-                students_res = sb.table("class_students").select("student_id", count="exact") \
-                    .in_("class_id", class_ids).execute()
-                t["students_count"] = students_res.count if students_res.count is not None else len(students_res.data or [])
-            else:
-                t["students_count"] = 0
+    try:
+        # 1. Classes per teacher — chunked .in_() over teacher_ids
+        classes_rows = _chunked_in_rows(
+            sb, "classes", "teacher_id", teacher_ids, "id, teacher_id",
+        )
+        for row in classes_rows:
+            tid = row.get("teacher_id")
+            cid = row.get("id")
+            if not tid or not cid:
+                continue
+            classes_count[tid] = classes_count.get(tid, 0) + 1
+            class_ids_by_teacher.setdefault(tid, []).append(cid)
 
-            # Assessments count
-            assessments_res = sb.table("published_assessments").select("id", count="exact") \
-                .eq("teacher_id", uid).execute()
-            t["assessments_count"] = assessments_res.count if assessments_res.count is not None else len(assessments_res.data or [])
+        # 2. Students per teacher — chunked .in_() over all_class_ids
+        all_class_ids = [cid for cids in class_ids_by_teacher.values() for cid in cids]
+        if all_class_ids:
+            class_to_teacher = {
+                cid: tid
+                for tid, cids in class_ids_by_teacher.items()
+                for cid in cids
+            }
+            cs_rows = _chunked_in_rows(
+                sb, "class_students", "class_id", all_class_ids,
+                "class_id, student_id",
+            )
+            for row in cs_rows:
+                tid = class_to_teacher.get(row.get("class_id"))
+                if tid:
+                    students_count[tid] = students_count.get(tid, 0) + 1
 
-            # Last activity from audit_log
-            audit_res = sb.table("audit_log").select("timestamp") \
-                .eq("teacher_id", uid) \
-                .order("timestamp", desc=True) \
-                .limit(1).execute()
-            t["last_activity"] = audit_res.data[0]["timestamp"] if audit_res.data else None
+        # 3. Assessments per teacher — chunked .in_() over teacher_ids
+        ass_rows = _chunked_in_rows(
+            sb, "published_assessments", "teacher_id", teacher_ids,
+            "id, teacher_id",
+        )
+        for row in ass_rows:
+            tid = row.get("teacher_id")
+            if tid:
+                assessments_count[tid] = assessments_count.get(tid, 0) + 1
 
-        except Exception as e:
-            logger.warning("Failed to enrich teacher %s: %s", uid, e)
-            sentry_sdk.capture_exception(e)
-            t.setdefault("classes_count", 0)
-            t.setdefault("students_count", 0)
-            t.setdefault("assessments_count", 0)
-            t.setdefault("last_activity", None)
+        # 4. Last activity per teacher — chunked .in_(), sorted desc PER
+        # CHUNK then merged. Bounded by a global cap. For each teacher
+        # we take the FIRST occurrence in descending timestamp order
+        # AFTER sorting the merged result. A teacher with no activity
+        # in the window reports None.
+        AUDIT_TOP_N = max(500, len(teacher_ids) * 5)
+        # Per-chunk limit ensures we don't pull a hot teacher's
+        # entire history when a chunk happens to align with their ids.
+        per_chunk_limit = AUDIT_TOP_N
+        audit_rows = _chunked_in_rows(
+            sb, "audit_log", "teacher_id", teacher_ids,
+            "teacher_id, timestamp",
+            order=("timestamp", True),
+            limit=per_chunk_limit,
+        )
+        # Merge sort by timestamp desc, then take first per teacher.
+        audit_rows.sort(key=lambda r: r.get("timestamp") or "", reverse=True)
+        for row in audit_rows[:AUDIT_TOP_N]:
+            tid = row.get("teacher_id")
+            ts = row.get("timestamp")
+            if tid and ts and tid not in last_activity:
+                last_activity[tid] = ts
+    except Exception as e:
+        logger.warning("Failed to enrich teachers (batched): %s", e)
+        sentry_sdk.capture_exception(e)
+        # Round-2 Codex MEDIUM fold: partial-failure path used to leave
+        # earlier successful counts in place. The PR description says
+        # "all zeros" on failure — match that contract exactly so the
+        # dashboard never shows a misleading mix of stale + zero data.
+        classes_count.clear()
+        students_count.clear()
+        assessments_count.clear()
+        last_activity.clear()
+
+    # Apply (defaults for teachers without any matching rows)
+    for t in teachers:
+        uid = t.get("user_id", "")
+        t["classes_count"] = classes_count.get(uid, 0)
+        t["students_count"] = students_count.get(uid, 0)
+        t["assessments_count"] = assessments_count.get(uid, 0)
+        t["last_activity"] = last_activity.get(uid, None)
 
 
 # ── GET /api/admin/overview ───────────────────────────────────────────────
@@ -417,20 +544,69 @@ def admin_overview():
                   user="admin", teacher_id=g.teacher_id)
         return jsonify(overview)
 
-    all_scores = []
+    all_scores: list = []
 
-    for tid in teacher_ids:
-        try:
-            # Join-code path: published_assessments + submissions
-            pa_res = sb.table("published_assessments").select("join_code") \
-                .eq("teacher_id", tid).execute()
-            join_codes = [r["join_code"] for r in (pa_res.data or []) if r.get("join_code")]
-            overview["total_assessments"] += len(join_codes)
+    # Round-2 Codex HIGH fold: this route was N+1+M across teachers/
+    # assessments/classes/contents. For 50 teachers with ~5 assessments
+    # + 3 classes × 5 published content each, that was ~1,300 queries
+    # per dashboard load. Now batched into ≤6 chunked queries total
+    # (`_chunked_in_rows` chunks at _IN_CHUNK_SIZE to stay under
+    # PostgREST URL limits) regardless of teacher count.
+    try:
+        # 1. published_assessments (join-code path) for these teachers
+        pa_rows = _chunked_in_rows(
+            sb, "published_assessments", "teacher_id", teacher_ids,
+            "join_code, teacher_id",
+        )
+        join_codes = [r["join_code"] for r in pa_rows if r.get("join_code")]
+        overview["total_assessments"] += len(join_codes)
 
-            for code in join_codes:
-                sub_res = sb.table("submissions").select("score") \
-                    .eq("join_code", code).execute()
-                for s in (sub_res.data or []):
+        # 2. submissions for those join_codes (chunked)
+        if join_codes:
+            sub_rows = _chunked_in_rows(
+                sb, "submissions", "join_code", join_codes, "score",
+            )
+            for s in sub_rows:
+                score = s.get("score")
+                if score is not None:
+                    try:
+                        all_scores.append(float(score))
+                    except (ValueError, TypeError):
+                        pass
+
+        # 3. classes (class-based path) for these teachers
+        classes_rows = _chunked_in_rows(
+            sb, "classes", "teacher_id", teacher_ids, "id, teacher_id",
+        )
+        class_ids = [c["id"] for c in classes_rows if c.get("id")]
+
+        # 4. class_students count for total_students. Pre-fix used
+        # Supabase count='exact' header per teacher; here we count rows
+        # client-side to preserve the row-count semantic and avoid the
+        # extra HEAD requests. Bounded by total enrollments in scope.
+        if class_ids:
+            cs_rows = _chunked_in_rows(
+                sb, "class_students", "class_id", class_ids,
+                "class_id, student_id",
+            )
+            overview["total_students"] = len(cs_rows)
+
+            # 5. published_content for those class_ids (chunked)
+            pc_rows = _chunked_in_rows(
+                sb, "published_content", "class_id", class_ids,
+                "id, class_id",
+            )
+            overview["total_assessments"] += len(pc_rows)
+
+            content_ids = [c["id"] for c in pc_rows if c.get("id")]
+
+            # 6. student_submissions for those content_ids (chunked)
+            if content_ids:
+                ss_rows = _chunked_in_rows(
+                    sb, "student_submissions", "content_id", content_ids,
+                    "score",
+                )
+                for s in ss_rows:
                     score = s.get("score")
                     if score is not None:
                         try:
@@ -438,36 +614,9 @@ def admin_overview():
                         except (ValueError, TypeError):
                             pass
 
-            # Class-based path: published_content + student_submissions
-            classes_res = sb.table("classes").select("id") \
-                .eq("teacher_id", tid).execute()
-            class_ids = [c["id"] for c in (classes_res.data or [])]
-
-            # Count students
-            if class_ids:
-                cs_res = sb.table("class_students").select("student_id", count="exact") \
-                    .in_("class_id", class_ids).execute()
-                overview["total_students"] += cs_res.count if cs_res.count is not None else len(cs_res.data or [])
-
-            for cid in class_ids:
-                pc_res = sb.table("published_content").select("id") \
-                    .eq("class_id", cid).execute()
-                overview["total_assessments"] += len(pc_res.data or [])
-
-                for pc in (pc_res.data or []):
-                    ss_res = sb.table("student_submissions").select("score") \
-                        .eq("content_id", pc["id"]).execute()
-                    for s in (ss_res.data or []):
-                        score = s.get("score")
-                        if score is not None:
-                            try:
-                                all_scores.append(float(score))
-                            except (ValueError, TypeError):
-                                pass
-
-        except Exception as e:
-            logger.warning("Overview aggregation error for teacher %s: %s", tid, e)
-            sentry_sdk.capture_exception(e)
+    except Exception as e:
+        logger.warning("Overview aggregation error (batched): %s", e)
+        sentry_sdk.capture_exception(e)
 
     # Compute average and distribution
     if all_scores:
