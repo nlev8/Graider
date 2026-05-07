@@ -1893,10 +1893,29 @@ function App() {
       timeoutId = setTimeout(tick, nextDelay);
     };
 
+    // Codex round-1 LOW fold: when the tab becomes visible again,
+    // pull the next tick forward so the user doesn't see stale
+    // status for up to 15s. Snap currentDelay back to MIN_DELAY too
+    // so the first post-return tick is responsive.
+    const onVisibilityChange = () => {
+      if (cancelled) return;
+      if (typeof document !== 'undefined' && !document.hidden) {
+        currentDelay = MIN_DELAY;
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = setTimeout(tick, 0);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
     timeoutId = setTimeout(tick, currentDelay);
     return () => {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
     };
   }, [status.is_running]);
 
