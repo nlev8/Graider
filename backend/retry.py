@@ -28,8 +28,10 @@ RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504, 529}
 # stringifies as "Connection error." which is too short for the keyword
 # loop below — needs an explicit class-name check.
 _TRANSIENT_CLASS_NAMES = frozenset({
-    # openai>=1.0
-    "APIConnectionError",   # also matches anthropic.APIConnectionError
+    # openai>=1.0 — also matches anthropic.APIConnectionError /
+    # anthropic.APITimeoutError / anthropic.RateLimitError /
+    # anthropic.InternalServerError (same class names).
+    "APIConnectionError",
     "APITimeoutError",
     "RateLimitError",
     "InternalServerError",
@@ -43,22 +45,25 @@ _TRANSIENT_CLASS_NAMES = frozenset({
     "ResourceExhausted",
     # google.genai
     "ServerError",
-    # urllib3 / requests
+    # urllib3 / requests low-level (subclasses of OSError sometimes; sometimes not)
     "MaxRetryError",
     "ProtocolError",
     "RemoteDisconnected",
     "IncompleteRead",
-    # httpx
-    "TimeoutException",
-    "ConnectTimeout",
-    "ReadTimeout",
-    "WriteTimeout",
-    "PoolTimeout",
-    "ConnectError",
-    "ReadError",
-    "WriteError",
-    "RemoteProtocolError",
-    "NetworkError",
+    # NOTE: httpx-specific class names (ConnectError / ReadError / WriteError /
+    # TimeoutException / etc.) are deliberately NOT in this set (Codex round-3
+    # round-3 / CI investigation 2026-05-07). Adding them caused the
+    # supabase_resilient client to retry 5× with backoff on every DNS
+    # failure in CI, exploding test wall time from ~3min to ~17min when
+    # the runner's Supabase URL was unreachable. The httpx classes that
+    # fire on a real production blip are already classified retryable
+    # via either:
+    #   - the keyword loop ("timed out" matches httpx.TimeoutException,
+    #     "connection error" matches httpx.ConnectError str repr)
+    #   - status-code classification for httpx.HTTPStatusError
+    # If a future CI flake reveals a transient httpx pattern that none of
+    # the existing rules catch, prefer adding to _TRANSIENT_KEYWORDS over
+    # this set so the cost is bounded by string scanning.
 })
 
 _TRANSIENT_KEYWORDS = [
