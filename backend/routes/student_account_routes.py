@@ -892,7 +892,29 @@ def student_login():
         # missing, 3 for not-enrolled), creating a wall-clock timing
         # side-channel that survived the body-shape collapse. Now ALL well-
         # formed failure paths run the SAME 3 lookups before deciding, so
-        # timing is dominated by network jitter rather than branch depth.
+        # the dominant branch-depth oracle is closed and an attacker can no
+        # longer use a single-request response time to distinguish failure
+        # modes by counting round-trips.
+        #
+        # RESIDUAL RISK (Codex round-2 MAJOR — accepted): equal call count
+        # is not equal latency. A row-hit query (e.g. valid class on the
+        # classes table) returns serialized columns; a row-miss query
+        # returns an empty result set. Per-row hydration cost is small
+        # (microseconds) but persistent and statistically observable in
+        # aggregate. Mitigations layered to keep this within accepted risk:
+        #   1. Per-email rate limit (`_check_rate_limit`, 5/10min) — caps
+        #      sample size per known-valid email at ~30/hour.
+        #   2. Route-level Flask-Limiter (10/minute IP) — caps sample size
+        #      per source IP regardless of email distribution.
+        #   3. Body/header indistinguishability — the only signal left is
+        #      timing, not status/body. Most real attackers won't have the
+        #      tooling/budget to exploit row-hit-vs-miss latency at this
+        #      scale.
+        # Closing the residue fully would require either constant-time
+        # padding (complex, brittle) or always hydrating identical-shaped
+        # rows on all paths (DB schema work). Tracked as future hardening
+        # if observed exploitation emerges.
+        #
         # Sentinel UUIDs are used when an upstream lookup fails so the
         # downstream query still executes (against a row that can never
         # match — no spurious row leaks).

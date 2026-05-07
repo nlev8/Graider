@@ -707,7 +707,9 @@ class TestStudentLogin:
         """Round-2 Codex MINOR fold + round-3 follow-up: every malformed /
         non-dict body shape must normalize to the same generic 401, never
         leak as 500. Covers JSON null, JSON number, JSON array, JSON
-        string, text/plain, missing Content-Type — exhaustive shape sweep."""
+        string, text/plain, missing Content-Type, AND truly malformed
+        application/json bytes (round-2 Codex follow-up: prior coverage
+        skipped the actual JSON parse-failure path)."""
         mock_sb = MagicMock()
         mock_sb.table.side_effect = lambda name: _make_chain([])
         mock_get_sb.return_value = mock_sb
@@ -726,11 +728,109 @@ class TestStudentLogin:
              {'Content-Type': 'application/json'}, {'json': 'a-bare-string'}),
             ("missing Content-Type",
              {}, {'data': '{"email":"a@x.com","class_code":"X"}'}),
+            # Round-2 Codex follow-up: malformed JSON bytes WITH the correct
+            # Content-Type header. This is the actual `json.loads()` parse-
+            # failure path; `request.get_json(silent=True)` must return None
+            # and the route must still hit the generic 401.
+            ("malformed JSON, application/json header — unclosed brace",
+             {'Content-Type': 'application/json'},
+             {'data': b'{"email":"a@x.com","class_code":'}),
+            ("malformed JSON, application/json header — bad escape",
+             {'Content-Type': 'application/json'},
+             {'data': b'{"email":"a\\xq","class_code":"X"}'}),
+            ("malformed JSON, application/json header — empty body",
+             {'Content-Type': 'application/json'},
+             {'data': b''}),
         ]
         for label, headers, kwargs in cases:
             resp = client.post('/api/student/login', headers=headers, **kwargs)
             assert resp.status_code == 401, f"{label}: got {resp.status_code}"
             assert "Login failed" in resp.get_json()["error"], f"{label}: body={resp.get_json()}"
+
+    @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_rate_limit_does_not_signal_email_validity(self, mock_get_sb, client):
+        """Round-2 Codex MAJOR fold: when the per-email 5/10min limiter
+        fires, the 429 response itself must not reveal whether the email
+        is on a teacher's roster. Same status, same body, same headers
+        regardless of email validity — only the attacker's own prior
+        request budget matters.
+
+        Rationale: an attacker who can pre-burn a target email's budget
+        and then observe a 429 must not learn anything new from the 429
+        beyond what they could already infer from rate-limit observation.
+        The 429 is keyed by email, so probing distinct emails always
+        starts with a fresh budget — but the SHAPE of the 429 must be
+        constant across known-valid and known-invalid emails."""
+        from backend.routes.student_account_routes import _login_attempts
+        from datetime import datetime as _dt, timezone as _tz
+
+        # Pre-burn the per-email budget for both a valid and an invalid
+        # email so the very NEXT login attempt for each gets 429 without
+        # any DB query running. _login_attempts stores Unix timestamps
+        # (floats), not datetime objects — must match _check_rate_limit's
+        # internal contract.
+        now_ts = _dt.now(tz=_tz.utc).timestamp()
+        for email in ('valid@x.com', 'invalid@x.com'):
+            _login_attempts[email] = [now_ts] * 10  # well over the 5-attempt budget
+
+        # Mode V: existing student email + valid class code (would succeed
+        # if not rate-limited). Set up a happy-path supabase mock so any
+        # DB query that DID fire would return rows — proves the 429 fires
+        # before the DB.
+        class_row = [{'id': 'cls-1', 'teacher_id': 't1', 'name': 'P1', 'subject': 'Math'}]
+        student_row = [{'id': 'stu-1', 'email': 'valid@x.com',
+                        'first_name': 'V', 'last_name': 'V', 'student_id_number': 'S1'}]
+
+        def table_v(name):
+            if name == 'classes':
+                return _make_chain(class_row)
+            if name == 'students':
+                return _make_chain(student_row)
+            if name == 'class_students':
+                return _make_chain([{'id': 'enr-1'}])
+            return _make_chain([])
+
+        mock_sb_v = MagicMock()
+        mock_sb_v.table.side_effect = table_v
+        mock_get_sb.return_value = mock_sb_v
+        r_valid = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'application/json'},
+            json={'email': 'valid@x.com', 'class_code': 'VALID1'},
+        )
+
+        # Mode I: never-seen-before email — would 401 if not rate-limited.
+        mock_sb_i = MagicMock()
+        mock_sb_i.table.side_effect = lambda name: _make_chain([])
+        mock_get_sb.return_value = mock_sb_i
+        r_invalid = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'application/json'},
+            json={'email': 'invalid@x.com', 'class_code': 'NOPE'},
+        )
+
+        # Both must be 429. Body must be byte-identical. Crucially, the
+        # rate-limit short-circuit means NO DB query ran for either.
+        assert r_valid.status_code == 429, (
+            f"valid email rate-limit must 429; got {r_valid.status_code}"
+        )
+        assert r_invalid.status_code == 429, (
+            f"invalid email rate-limit must 429; got {r_invalid.status_code}"
+        )
+        assert r_valid.data == r_invalid.data, (
+            f"429 body must not differ by email validity; "
+            f"valid={r_valid.data!r} invalid={r_invalid.data!r}"
+        )
+        # No DB query should have fired — 429 short-circuits before
+        # any supabase.table() call.
+        assert mock_sb_v.table.call_count == 0, (
+            f"valid-email 429 path must not query DB; "
+            f"got {mock_sb_v.table.call_count} table() calls"
+        )
+        assert mock_sb_i.table.call_count == 0, (
+            f"invalid-email 429 path must not query DB; "
+            f"got {mock_sb_i.table.call_count} table() calls"
+        )
 
     @patch('backend.routes.student_account_routes._get_supabase')
     def test_login_runs_uniform_lookups_per_failure_mode(self, mock_get_sb, client):
@@ -739,9 +839,18 @@ class TestStudentLogin:
         timing is dominated by network jitter, not branch depth.
 
         Pre-fix: 1 query for invalid-class, 2 for email-missing, 3 for
-        not-enrolled. Codex flagged this as a timing side-channel."""
+        not-enrolled. Codex flagged this as a timing side-channel.
+
+        Round-2 Codex round-2 follow-up: assert against the actual
+        ``chain.execute()`` round-trips, not just ``table()`` builder
+        construction. The ``table()`` count proves the route allocated
+        query builders; only ``execute()`` proves the wire round-trips
+        actually happened."""
         from backend.routes.student_account_routes import _login_attempts
 
+        # Each scenario provides a side_effect that returns a fresh
+        # _make_chain() per table() call, so we can capture every chain
+        # the route actually used and assert .execute() was invoked.
         scenarios = [
             ("invalid_class", lambda name: _make_chain([])),
             ("email_missing", lambda name: (
@@ -756,11 +865,19 @@ class TestStudentLogin:
             )),
         ]
 
-        call_counts = {}
+        execute_counts = {}
+        table_counts = {}
         for label, side_effect in scenarios:
             _login_attempts.clear()
+            chains_created: list = []
+
+            def capturing_side_effect(name, _se=side_effect, _store=chains_created):
+                chain = _se(name)
+                _store.append((name, chain))
+                return chain
+
             mock_sb = MagicMock()
-            mock_sb.table.side_effect = side_effect
+            mock_sb.table.side_effect = capturing_side_effect
             mock_get_sb.return_value = mock_sb
 
             client.post(
@@ -768,15 +885,30 @@ class TestStudentLogin:
                 headers={'Content-Type': 'application/json'},
                 json={'email': f'{label}@x.com', 'class_code': 'CODE'},
             )
-            call_counts[label] = mock_sb.table.call_count
 
-        unique = set(call_counts.values())
-        assert len(unique) == 1, (
-            f"All failure paths must run the same number of DB lookups; "
-            f"got {call_counts}"
+            table_counts[label] = mock_sb.table.call_count
+            # The CRITICAL assertion: every chain returned to the route
+            # must have had .execute() invoked exactly once. Counting
+            # execute() (not table()) is the actual wire round-trip
+            # equivalence the timing-side-channel close depends on.
+            execute_counts[label] = sum(c.execute.call_count for _, c in chains_created)
+            assert all(c.execute.call_count == 1 for _, c in chains_created), (
+                f"{label}: every chain must execute exactly once; "
+                f"got {[(n, c.execute.call_count) for n, c in chains_created]}"
+            )
+
+        # All 3 failure paths must run the same number of execute() calls.
+        unique_execute = set(execute_counts.values())
+        assert len(unique_execute) == 1, (
+            f"All failure paths must run the same number of DB execute() "
+            f"round-trips; got {execute_counts}"
         )
-        assert all(c == 3 for c in call_counts.values()), (
-            f"Expected 3 lookups per path; got {call_counts}"
+        assert all(c == 3 for c in execute_counts.values()), (
+            f"Expected 3 execute() round-trips per path; got {execute_counts}"
+        )
+        # Sanity: table() count should match execute() count (1:1 chain use).
+        assert table_counts == execute_counts, (
+            f"table() vs execute() drift: {table_counts} vs {execute_counts}"
         )
 
         # Round-3 Codex follow-up: assert the sequence + table identity
