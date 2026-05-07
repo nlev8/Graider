@@ -92,9 +92,10 @@ OPENAI_API_KEY=sk-...
 # REQUIRED for production
 # Backs Flask-Limiter rate-limit counters AND Flask-Session storage.
 # `backend/extensions.py` raises at startup if REDIS_URL is unset
-# under FLASK_ENV=production. (Note: a malformed/unreachable URL
-# is detected later when the limiter or session backend first
-# connects; the boot check only enforces presence.) Provision via
+# under FLASK_ENV=production. (Note: the explicit boot check only
+# enforces presence. Unreachable URLs surface at first connection;
+# some URL-format errors are rejected immediately by `redis.from_url`
+# or Flask-Limiter storage parsing during initialization.) Provision via
 # Railway Add-on → Redis (or any managed Redis 6+; Upstash, Render,
 # etc.).
 REDIS_URL=redis://default:<password>@<host>:<port>
