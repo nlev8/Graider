@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, request, jsonify, g
 
+from backend.extensions import limiter
 from backend.storage import load as storage_load, save as storage_save, list_keys
 from backend.supabase_client import get_supabase as _get_supabase
 from backend.utils.auth_decorators import require_teacher, require_admin
@@ -43,31 +44,104 @@ def admin_status():
 
 # ── POST /api/admin/claim ─────────────────────────────────────────────────
 
+def _admin_claim_rate_limit_key():
+    """Rate-limit key combining IP + authenticated user_id when present.
+
+    A pure per-IP key lets one authenticated teacher distribute attempts
+    across multiple IPs (mobile + WiFi + VPN) and multiply the budget.
+    A pure per-user key lets one IP host many fake users at full budget.
+    Combining both caps each (IP, user) pair independently.
+
+    Falls back to bare IP when the auth context isn't yet attached
+    (require_teacher hasn't run or the request is anonymous).
+    """
+    from flask_limiter.util import get_remote_address
+    ip = get_remote_address()
+    try:
+        uid = getattr(g, "teacher_id", None) or getattr(g, "user_id", None)
+    except Exception:
+        uid = None
+    return f"{ip}|{uid or 'anon'}"
+
+
 @admin_bp.route("/api/admin/claim", methods=["POST"])
+# Rate limit closes audit MAJOR #8 (Codex 2026-05-06): without a limit
+# the route was brute-forceable by any authenticated teacher (invite
+# codes are 6 hex chars = 16.7M keyspace; storage_load reveals validity
+# via 404 vs 200). Two layers:
+#   - Per-IP+user combo: caps a single attacker tuple. 10/hour + 5/min
+#   - Per-user only:     caps a teacher who roams across IPs at 20/hour
+# A teacher claiming a single invite never hits either. Brute-force at
+# 10/hour vs 16.7M keyspace = ~190 years to enumerate.
+@limiter.limit("10 per hour;5 per minute", key_func=_admin_claim_rate_limit_key)
+@limiter.limit(
+    "20 per hour",
+    key_func=lambda: getattr(g, "teacher_id", None) or getattr(g, "user_id", None) or "anon",
+)
 @require_teacher
 @handle_route_errors
 def admin_claim():
     """Claim an admin invite code to become a school admin."""
     data = request.get_json(silent=True) or {}
     code = data.get("code", "").strip()
+    # Closes audit MAJOR #8: previously distinguished missing/invalid/expired
+    # via different status codes (400/404/410), letting an attacker
+    # enumerate valid-but-expired codes from valid-now codes from
+    # invalid-format codes. Now ALL failure modes return a single
+    # generic 400 + same error string so the response shape carries
+    # zero validity signal. Internal log captures the precise reason
+    # for ops debugging.
+    _GENERIC_FAILURE = (jsonify({"error": "Unable to claim invite. Verify the code and try again."}), 400)
+
+    # Codex round-2 MINOR fold: the empty-code path used to early-return
+    # before any storage call, leaving a measurable timing differential
+    # (~10ms) vs the valid-shape paths. Probe storage even on empty
+    # codes (with a sentinel that can never collide with a real key) so
+    # all 5 failure modes share a similar wall-clock profile.
+    _ = storage_load(f"admin_invite:__timing_anchor_{code or '_empty_'}__", "system")
+
     if not code:
-        return jsonify({"error": "Invite code is required"}), 400
+        logger.info("admin_claim: rejected — empty code")
+        return _GENERIC_FAILURE
 
     invite = storage_load(f"admin_invite:{code}", "system")
     if not invite or not isinstance(invite, dict):
-        return jsonify({"error": "Invalid invite code"}), 404
+        logger.info("admin_claim: rejected — code not found or malformed shape")
+        return _GENERIC_FAILURE
 
-    # Check 7-day TTL
+    # Closes Codex round-1 MAJOR (2026-05-07): producer/consumer schema
+    # mismatch. district_routes.py:444 writes `expires_at`; this route
+    # previously only checked `created_at`, so production invites
+    # NEVER expired — a leaked invite stayed claimable indefinitely.
+    # Now reads BOTH fields (expires_at preferred — it's the production
+    # path; created_at preserved for any legacy invites that exist).
+    expires_at = invite.get("expires_at", "")
     created_at = invite.get("created_at", "")
-    if created_at:
+    if expires_at:
+        try:
+            expires_dt = datetime.fromisoformat(expires_at)
+            if expires_dt.tzinfo is None:
+                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+            if datetime.now(tz=timezone.utc) > expires_dt:
+                logger.info("admin_claim: rejected — code expired (expires_at)")
+                return _GENERIC_FAILURE
+        except (ValueError, TypeError):
+            logger.info("admin_claim: rejected — expires_at parse failure")
+            return _GENERIC_FAILURE
+    elif created_at:
+        # Legacy fallback: older invites that predate the expires_at
+        # producer used a created_at + 7-day TTL pattern. Preserve so
+        # those don't spuriously fail.
         try:
             created_dt = datetime.fromisoformat(created_at)
             if created_dt.tzinfo is None:
                 created_dt = created_dt.replace(tzinfo=timezone.utc)
             if datetime.now(tz=timezone.utc) - created_dt > timedelta(days=7):
-                return jsonify({"error": "Invite code has expired"}), 410
+                logger.info("admin_claim: rejected — code expired (created_at + 7d)")
+                return _GENERIC_FAILURE
         except (ValueError, TypeError):
-            pass
+            logger.info("admin_claim: rejected — created_at parse failure")
+            return _GENERIC_FAILURE
 
     school = invite.get("school", "")
     admin_role = {
