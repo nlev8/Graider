@@ -3,13 +3,18 @@ import json
 import logging
 import os
 import time
+from typing import TYPE_CHECKING
+
 from flask import g
+
+if TYPE_CHECKING:
+    from flask import Flask, Response
 
 
 class SafeRequestIdFormatter(logging.Formatter):
     """Formatter that safely includes request_id even if not set on the record."""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         if not hasattr(record, 'request_id'):
             try:
                 record.request_id = getattr(g, 'request_id', '-')
@@ -25,17 +30,20 @@ class JsonFormatter(logging.Formatter):
     request_id, message, and optional exception info.
     """
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         if not hasattr(record, 'request_id'):
             try:
                 record.request_id = getattr(g, 'request_id', '-')
             except RuntimeError:
                 record.request_id = '-'
-        log_obj = {
+        log_obj: dict[str, str] = {
             "timestamp": self.formatTime(record),
             "level": record.levelname,
             "logger": record.name,
-            "request_id": record.request_id,
+            # request_id is set above on the record; mypy can't see the
+            # dynamic attribute add, so use getattr with the fallback
+            # the formatter already established.
+            "request_id": getattr(record, 'request_id', '-'),
             "message": record.getMessage(),
         }
         if record.exc_info and record.exc_info[0]:
@@ -43,7 +51,7 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(log_obj)
 
 
-def configure_logging(app):
+def configure_logging(app: "Flask") -> None:
     """Set up logging with request_id correlation.
 
     In production (FLASK_ENV != development), uses JSON structured logging.
@@ -55,6 +63,7 @@ def configure_logging(app):
 
     root = logging.getLogger()
 
+    formatter: logging.Formatter
     if is_prod:
         # Production: JSON structured logging
         formatter = JsonFormatter()
@@ -77,15 +86,15 @@ def configure_logging(app):
         root.setLevel(logging.INFO)
 
 
-def log_request_timing(app):
+def log_request_timing(app: "Flask") -> None:
     """Add before/after request hooks to log API response times."""
 
     @app.before_request
-    def start_timer():
+    def start_timer() -> None:
         g._request_start_time = time.time()
 
     @app.after_request
-    def log_response(response):
+    def log_response(response: "Response") -> "Response":
         if hasattr(g, '_request_start_time'):
             from flask import request
             duration_ms = round((time.time() - g._request_start_time) * 1000)

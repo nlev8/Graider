@@ -204,4 +204,4 @@ jobs:
           pip install --require-hashes -r requirements-dev.txt
       - name: Run mypy on critical modules
         run: |
-          mypy backend/utils/auth_decorators.py backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/retry.py backend/grading/
+          mypy backend/utils/auth_decorators.py backend/utils/redaction.py backend/utils/errors.py backend/utils/ttl_cache.py backend/utils/logging_utils.py backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/retry.py backend/grading/
