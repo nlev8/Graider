@@ -862,66 +862,75 @@ def student_login():
     """
     try:
         db = _get_supabase()
-        data = request.json
-        email = data.get('email', '').strip().lower()
-        class_code = data.get('class_code', '').strip().upper()
+        # Round-2 Codex MINOR fold: malformed JSON / non-dict body used to
+        # raise inside `data.get(...)` and bubble up as a 500. Now treated
+        # as the generic 401 — same shape as every other failure mode.
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
+        email = data.get('email', '').strip().lower() if isinstance(data.get('email'), str) else ''
+        class_code = data.get('class_code', '').strip().upper() if isinstance(data.get('class_code'), str) else ''
 
         # Closes audit MAJOR #9 (Codex 2026-05-06): the original 4 distinct
         # failure responses (400 missing fields / 404 invalid class code /
-        # 404 email not found / 403 not enrolled) leaked enumeration signal:
-        # an attacker could distinguish "valid class code" from "invalid"
-        # by status differential, then enumerate registered student emails
-        # within a class by the email-not-found vs not-enrolled distinction.
-        # All 4 failure modes now return the same 401 + identical body so
-        # the response carries zero validity signal. Internal logger.info
-        # captures the precise reason for ops debugging (no PII — email is
-        # already lowered and present in the request log; reason is a fixed
-        # label).
+        # 404 email not found / 403 not enrolled) leaked enumeration signal.
+        # All 4 failure modes now return the same 401 + identical body.
         _GENERIC_AUTH_FAIL = (
             jsonify({"error": "Login failed. Verify your email and class code."}),
             401,
         )
 
+        # Rate limit check — kept as a distinct 429 because it's a legitimate
+        # observability signal. 429 doesn't itself leak email validity.
+        # NB: rate limit fires BEFORE any DB query so an attacker cannot use
+        # rate-limit overhead as a side channel.
+        if email and not _check_rate_limit(email):
+            return jsonify({"error": "Too many login attempts. Try again in 10 minutes."}), 429
+
+        # Round-2 Codex MAJOR fold: the original implementation short-circuited
+        # after each failed lookup (1 query for invalid class, 2 for email
+        # missing, 3 for not-enrolled), creating a wall-clock timing
+        # side-channel that survived the body-shape collapse. Now ALL well-
+        # formed failure paths run the SAME 3 lookups before deciding, so
+        # timing is dominated by network jitter rather than branch depth.
+        # Sentinel UUIDs are used when an upstream lookup fails so the
+        # downstream query still executes (against a row that can never
+        # match — no spurious row leaks).
+        SENTINEL_UUID = '00000000-0000-0000-0000-000000000000'
+
+        # Lookup 1: class by join_code (always runs)
+        cls = db.table('classes').select('id, teacher_id, name, subject').eq(
+            'join_code', class_code or '__nonmatching_class_code__'
+        ).eq('is_active', True).execute()
+        class_data = cls.data[0] if cls.data else None
+        teacher_id_for_lookup = class_data['teacher_id'] if class_data else SENTINEL_UUID
+        class_id_for_lookup = class_data['id'] if class_data else SENTINEL_UUID
+
+        # Lookup 2: student by email + teacher (always runs, even if class missing)
+        student = db.table('students').select('*').eq(
+            'email', email or '__nonmatching_email__'
+        ).eq('teacher_id', teacher_id_for_lookup).eq(
+            'is_active', True
+        ).execute()
+        student_data = student.data[0] if student.data else None
+        student_id_for_lookup = student_data['id'] if student_data else SENTINEL_UUID
+
+        # Lookup 3: enrollment (always runs)
+        enrollment = db.table('class_students').select('id').eq(
+            'class_id', class_id_for_lookup
+        ).eq('student_id', student_id_for_lookup).execute()
+
+        # NOW classify the failure (if any). Wall-clock arrival to here is
+        # uniform across all well-formed failure modes.
         if not email or not class_code:
             _logger.info("student_login: rejected — missing email or class_code")
             return _GENERIC_AUTH_FAIL
-
-        # Rate limit check — kept as a distinct 429 because it's a legitimate
-        # observability signal (external monitoring expects 429 for rate-limit
-        # backoff), and 429 doesn't itself leak email validity (it only tells
-        # the attacker their own prior requests are throttled).
-        if not _check_rate_limit(email):
-            return jsonify({"error": "Too many login attempts. Try again in 10 minutes."}), 429
-
-        # Find the class by join code
-        cls = db.table('classes').select('id, teacher_id, name, subject').eq(
-            'join_code', class_code
-        ).eq('is_active', True).execute()
-
-        if not cls.data:
+        if not class_data:
             _logger.info("student_login: rejected — invalid class code")
             return _GENERIC_AUTH_FAIL
-
-        class_data = cls.data[0]
-
-        # Find the student by email
-        student = db.table('students').select('*').eq(
-            'email', email
-        ).eq('teacher_id', class_data['teacher_id']).eq(
-            'is_active', True
-        ).execute()
-
-        if not student.data:
+        if not student_data:
             _logger.info("student_login: rejected — email not found in teacher roster")
             return _GENERIC_AUTH_FAIL
-
-        student_data = student.data[0]
-
-        # Verify enrollment
-        enrollment = db.table('class_students').select('id').eq(
-            'class_id', class_data['id']
-        ).eq('student_id', student_data['id']).execute()
-
         if not enrollment.data:
             _logger.info("student_login: rejected — student exists but not enrolled in class")
             return _GENERIC_AUTH_FAIL

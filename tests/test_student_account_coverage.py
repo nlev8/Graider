@@ -680,6 +680,79 @@ class TestStudentLogin:
         assert "Login failed" in resp.get_json()["error"]
 
     @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_malformed_json_returns_generic_401(self, mock_get_sb, client):
+        """Round-2 Codex MINOR fold: malformed JSON body / non-dict shape
+        used to raise inside `data.get(...)` and surface as 500. Now
+        normalized to the same generic 401 + identical body."""
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = lambda name: _make_chain([])
+        mock_get_sb.return_value = mock_sb
+
+        # Non-JSON body
+        resp = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'text/plain'},
+            data='not-json',
+        )
+        assert resp.status_code == 401
+        assert "Login failed" in resp.get_json()["error"]
+
+        # JSON array (valid JSON, wrong shape)
+        resp2 = client.post(
+            '/api/student/login',
+            headers={'Content-Type': 'application/json'},
+            json=['x', 'y'],
+        )
+        assert resp2.status_code == 401
+
+    @patch('backend.routes.student_account_routes._get_supabase')
+    def test_login_runs_uniform_lookups_per_failure_mode(self, mock_get_sb, client):
+        """Round-2 Codex MAJOR fold: all well-formed failure paths must
+        execute the SAME number of Supabase round-trips so wall-clock
+        timing is dominated by network jitter, not branch depth.
+
+        Pre-fix: 1 query for invalid-class, 2 for email-missing, 3 for
+        not-enrolled. Codex flagged this as a timing side-channel."""
+        from backend.routes.student_account_routes import _login_attempts
+
+        scenarios = [
+            ("invalid_class", lambda name: _make_chain([])),
+            ("email_missing", lambda name: (
+                _make_chain([{'id': 'cls', 'teacher_id': 't', 'name': 'P', 'subject': 'M'}])
+                if name == 'classes' else _make_chain([])
+            )),
+            ("not_enrolled", lambda name: (
+                _make_chain([{'id': 'cls', 'teacher_id': 't', 'name': 'P', 'subject': 'M'}])
+                if name == 'classes'
+                else (_make_chain([{'id': 'stu', 'email': 'x@x.com'}])
+                      if name == 'students' else _make_chain([]))
+            )),
+        ]
+
+        call_counts = {}
+        for label, side_effect in scenarios:
+            _login_attempts.clear()
+            mock_sb = MagicMock()
+            mock_sb.table.side_effect = side_effect
+            mock_get_sb.return_value = mock_sb
+
+            client.post(
+                '/api/student/login',
+                headers={'Content-Type': 'application/json'},
+                json={'email': f'{label}@x.com', 'class_code': 'CODE'},
+            )
+            call_counts[label] = mock_sb.table.call_count
+
+        unique = set(call_counts.values())
+        assert len(unique) == 1, (
+            f"All failure paths must run the same number of DB lookups; "
+            f"got {call_counts}"
+        )
+        assert all(c == 3 for c in call_counts.values()), (
+            f"Expected 3 lookups per path; got {call_counts}"
+        )
+
+    @patch('backend.routes.student_account_routes._get_supabase')
     def test_login_failure_shapes_are_indistinguishable(self, mock_get_sb, client):
         """Audit MAJOR #9: invalid class code, email-not-found, and
         not-enrolled used to return distinct status codes (404/404/403)
