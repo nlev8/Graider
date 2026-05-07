@@ -462,6 +462,16 @@ def fetch_submission_full_context(supabase_table, submission_id, teacher_id):
             logger.error("Failed to fetch published_assessments %s: %s",
                          data.get('assessment_id'), str(e))
             sentry_sdk.capture_exception(e)
+            # Closes audit MAJOR #7 round-2 (Codex 2026-05-06): transient
+            # supabase 5xx fetching the published_assessments row must
+            # propagate so Celery autoretries — otherwise this is the
+            # "ctx with assessment=None → mark failed" silent-loss path
+            # that Codex round-2 caught. Permanent errors (schema/auth)
+            # continue to the existing fall-through below where assessment
+            # may resolve from the inline data field.
+            from backend.retry import is_retryable_error
+            if is_retryable_error(e):
+                raise
     if assessment is None:
         assessment = data.get('assessment') or data.get('content')
 

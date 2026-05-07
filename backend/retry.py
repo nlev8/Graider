@@ -33,8 +33,10 @@ _TRANSIENT_CLASS_NAMES = frozenset({
     "APITimeoutError",
     "RateLimitError",
     "InternalServerError",
-    "APIStatusError",       # generic status wrapper; will fall through
-                            # to _get_status_code if it has .status_code
+    # NOTE: APIStatusError deliberately NOT in this set (Codex round-2 round-2).
+    # It's a generic wrapper covering ALL HTTP statuses including 400/401, so
+    # class-name match would cause 4xx false positives. It falls through to
+    # _get_status_code below, which correctly classifies by status code.
     # google.api_core
     "ServiceUnavailable",
     "DeadlineExceeded",

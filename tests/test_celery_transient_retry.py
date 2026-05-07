@@ -318,3 +318,113 @@ class TestContextFetchPropagatesTransient:
             "grading_tasks.py must convert retryable fetch-context errors "
             "into TransientError so Celery's autoretry kicks in"
         )
+
+    def test_published_assessments_fetch_propagates_transient(self):
+        """Round-2 round-2 Codex MAJOR fold: transient ConnectionError during
+        published_assessments fetch (the SECOND try/catch inside
+        fetch_submission_full_context) must propagate, not silently leave
+        ctx['assessment']=None."""
+        from backend.services import portal_grading
+
+        submission_row = MagicMock()
+        submission_row.data = {
+            'id': 'sub-1',
+            'assessment_id': 'pa-1',
+            'student_name': 'S',
+            'email': 's@x.com',
+        }
+
+        def table_side_effect(name):
+            chain = MagicMock(name=f'table({name})')
+            if name == 'published_assessments':
+                # Transient failure on the second fetch
+                chain.select.return_value.eq.return_value.single.return_value.execute.side_effect = (
+                    ConnectionError("assessment fetch network blip")
+                )
+            else:
+                chain.select.return_value.eq.return_value.single.return_value.execute.return_value = submission_row
+            return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = table_side_effect
+
+        with patch("backend.supabase_client.get_supabase", return_value=mock_sb), \
+             patch("backend.services.grading_service.load_teacher_config", return_value={}):
+            with pytest.raises(ConnectionError):
+                portal_grading.fetch_submission_full_context(
+                    "student_submissions", "sub-1", "teacher-1"
+                )
+
+    def test_published_assessments_fetch_returns_partial_on_permanent_error(self):
+        """Permanent (non-retryable) errors during published_assessments fetch
+        should NOT propagate — fall through to inline `data.get('assessment')`
+        path so existing flow preserved."""
+        from backend.services import portal_grading
+
+        submission_row = MagicMock()
+        # Submission has inline `assessment` field as fallback path
+        submission_row.data = {
+            'id': 'sub-1',
+            'assessment_id': 'pa-1',
+            'assessment': {'title': 'inline-fallback', 'questions': []},
+            'student_name': 'S',
+            'email': 's@x.com',
+        }
+
+        def table_side_effect(name):
+            chain = MagicMock(name=f'table({name})')
+            if name == 'published_assessments':
+                chain.select.return_value.eq.return_value.single.return_value.execute.side_effect = (
+                    KeyError("schema mismatch")  # permanent
+                )
+            else:
+                chain.select.return_value.eq.return_value.single.return_value.execute.return_value = submission_row
+            return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = table_side_effect
+
+        with patch("backend.supabase_client.get_supabase", return_value=mock_sb), \
+             patch("backend.services.grading_service.load_teacher_config", return_value={}):
+            result = portal_grading.fetch_submission_full_context(
+                "student_submissions", "sub-1", "teacher-1"
+            )
+            # Should return ctx with the inline assessment (fall-through path)
+            assert result is not None
+            assert result["assessment"]["title"] == "inline-fallback"
+
+
+class TestClassifierApiStatusErrorFalsePositive:
+    """Round-2 round-2 Codex MAJOR fold: APIStatusError was added to the
+    class-name allowlist in error, causing 4xx (400/401) to retry. Removed
+    so it falls through to status-code classification."""
+
+    def test_apistatuserror_with_4xx_does_not_retry(self):
+        from backend.retry import is_retryable_error
+
+        class APIStatusError(Exception):
+            def __init__(self, msg, status_code):
+                super().__init__(msg)
+                self.status_code = status_code
+
+        # 400 / 401 / 403 / 404 must NOT retry
+        for status in (400, 401, 403, 404):
+            err = APIStatusError(f"client error {status}", status)
+            assert is_retryable_error(err) is False, (
+                f"APIStatusError with status={status} must NOT retry"
+            )
+
+    def test_apistatuserror_with_5xx_does_retry(self):
+        from backend.retry import is_retryable_error
+
+        class APIStatusError(Exception):
+            def __init__(self, msg, status_code):
+                super().__init__(msg)
+                self.status_code = status_code
+
+        # 500 / 502 / 503 / 504 / 408 / 429 / 529 → retry via _get_status_code
+        for status in (408, 429, 500, 502, 503, 504, 529):
+            err = APIStatusError(f"server error {status}", status)
+            assert is_retryable_error(err) is True, (
+                f"APIStatusError with status={status} must retry"
+            )
