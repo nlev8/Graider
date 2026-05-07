@@ -347,3 +347,287 @@ class TestAdminOnlyEndpoints:
         """GET /api/admin/activity without any auth returns 401."""
         resp = client.get("/api/admin/activity")
         assert resp.status_code == 401
+
+
+# ── _enrich_teachers Batched Query Tests ─────────────────────────────────
+
+
+class TestEnrichTeachersBatched:
+    """Closes audit MAJOR #11 (Codex 2026-05-06 / GH issue #218):
+    `_enrich_teachers` used to make 4 Supabase queries PER teacher
+    (N+1). With 50 teachers that's 200 round trips per dashboard load.
+
+    Now it uses 4 batched .in_() queries TOTAL — independent of teacher
+    count. These tests pin both the query-count contract AND the
+    correctness of the per-teacher count aggregation.
+    """
+
+    def _spy_supabase(self, classes_rows, class_students_rows,
+                      assessments_rows, audit_rows):
+        """Create a Supabase mock that returns scripted data per table
+        and records `.table(name)` calls so we can assert query count.
+        """
+        recorded = {
+            'tables_called': [],  # list of table names in order
+            'in__calls': [],      # (table, column, values_count) tuples
+            'order_args': [],
+            'limit_args': [],
+        }
+        responses = {
+            'classes': classes_rows,
+            'class_students': class_students_rows,
+            'published_assessments': assessments_rows,
+            'audit_log': audit_rows,
+        }
+
+        def table_factory(name):
+            recorded['tables_called'].append(name)
+            current_table = name
+            chain = MagicMock()
+            result = MagicMock()
+            result.data = responses.get(name, [])
+            for m in ('select', 'eq', 'order'):
+                getattr(chain, m).return_value = chain
+
+            def in_(col, vals):
+                recorded['in__calls'].append((current_table, col, len(vals)))
+                return chain
+
+            def order(col, desc=False):
+                recorded['order_args'].append((current_table, col, desc))
+                return chain
+
+            def limit(n):
+                recorded['limit_args'].append((current_table, n))
+                return chain
+
+            chain.in_.side_effect = in_
+            chain.order.side_effect = order
+            chain.limit.side_effect = limit
+            chain.execute.return_value = result
+            return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = table_factory
+        return mock_sb, recorded
+
+    def test_query_count_independent_of_teacher_count(self):
+        """No matter how many teachers, each entity table is queried
+        EXACTLY ONCE. Pre-fix this was 4 queries per teacher."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        # 10 teachers
+        teachers = [{"user_id": f"t-{i}"} for i in range(10)]
+
+        mock_sb, recorded = self._spy_supabase(
+            classes_rows=[], class_students_rows=[],
+            assessments_rows=[], audit_rows=[],
+        )
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        # Should call: classes, published_assessments, audit_log.
+        # class_students is conditionally skipped when no class_ids.
+        # All teachers default to 0/None in this empty case.
+        from collections import Counter
+        counts = Counter(recorded['tables_called'])
+        assert counts['classes'] == 1, (
+            f"classes table queried {counts['classes']}× (expected 1, "
+            f"N+1 regression?)"
+        )
+        assert counts['published_assessments'] == 1
+        assert counts['audit_log'] == 1
+        assert counts['class_students'] == 0  # skipped when no classes
+        # All teachers default to 0/None
+        for t in teachers:
+            assert t['classes_count'] == 0
+            assert t['students_count'] == 0
+            assert t['assessments_count'] == 0
+            assert t['last_activity'] is None
+
+    def test_query_count_with_classes(self):
+        """When there ARE class_ids, class_students adds one MORE query
+        (4 total), still independent of teacher count."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        teachers = [{"user_id": f"t-{i}"} for i in range(50)]
+
+        mock_sb, recorded = self._spy_supabase(
+            classes_rows=[
+                {"id": "c-1", "teacher_id": "t-0"},
+                {"id": "c-2", "teacher_id": "t-1"},
+            ],
+            class_students_rows=[],
+            assessments_rows=[],
+            audit_rows=[],
+        )
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        from collections import Counter
+        counts = Counter(recorded['tables_called'])
+        assert counts['classes'] == 1
+        assert counts['class_students'] == 1
+        assert counts['published_assessments'] == 1
+        assert counts['audit_log'] == 1
+        # CRUCIAL: 50 teachers + 4 entity queries = 4 queries TOTAL.
+        # Pre-fix would have been 50 × 4 = 200.
+        assert sum(counts.values()) == 4, (
+            f"Expected exactly 4 queries; got {dict(counts)}"
+        )
+
+    def test_count_aggregation_per_teacher(self):
+        """Each teacher gets the count of THEIR rows, not the total."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        teachers = [
+            {"user_id": "alice"},
+            {"user_id": "bob"},
+            {"user_id": "carol"},
+        ]
+        mock_sb, _ = self._spy_supabase(
+            classes_rows=[
+                {"id": "c-a1", "teacher_id": "alice"},
+                {"id": "c-a2", "teacher_id": "alice"},
+                {"id": "c-b1", "teacher_id": "bob"},
+                # carol has no classes
+            ],
+            class_students_rows=[
+                {"class_id": "c-a1", "student_id": "s-1"},
+                {"class_id": "c-a1", "student_id": "s-2"},
+                {"class_id": "c-a2", "student_id": "s-3"},
+                {"class_id": "c-b1", "student_id": "s-4"},
+            ],
+            assessments_rows=[
+                {"id": "ass-1", "teacher_id": "alice"},
+                {"id": "ass-2", "teacher_id": "bob"},
+                {"id": "ass-3", "teacher_id": "bob"},
+                {"id": "ass-4", "teacher_id": "bob"},
+            ],
+            audit_rows=[
+                {"teacher_id": "bob", "timestamp": "2026-05-07T10:00:00Z"},
+                {"teacher_id": "alice", "timestamp": "2026-05-07T09:00:00Z"},
+                {"teacher_id": "alice", "timestamp": "2026-05-06T22:00:00Z"},
+            ],
+        )
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        by_id = {t['user_id']: t for t in teachers}
+        # Alice
+        assert by_id['alice']['classes_count'] == 2
+        assert by_id['alice']['students_count'] == 3
+        assert by_id['alice']['assessments_count'] == 1
+        # Last activity is the FIRST occurrence in desc order — for
+        # Alice, that's the 09:00:00 row (more recent of her two).
+        assert by_id['alice']['last_activity'] == "2026-05-07T09:00:00Z"
+        # Bob
+        assert by_id['bob']['classes_count'] == 1
+        assert by_id['bob']['students_count'] == 1
+        assert by_id['bob']['assessments_count'] == 3
+        assert by_id['bob']['last_activity'] == "2026-05-07T10:00:00Z"
+        # Carol — empty across all entities
+        assert by_id['carol']['classes_count'] == 0
+        assert by_id['carol']['students_count'] == 0
+        assert by_id['carol']['assessments_count'] == 0
+        assert by_id['carol']['last_activity'] is None
+
+    def test_audit_query_uses_order_desc_and_limit(self):
+        """The audit_log query MUST be ordered desc + bounded by a
+        limit so it can never explode for a hot district."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        teachers = [{"user_id": f"t-{i}"} for i in range(20)]
+
+        mock_sb, recorded = self._spy_supabase(
+            classes_rows=[], class_students_rows=[],
+            assessments_rows=[], audit_rows=[],
+        )
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        # Order applied to audit_log in desc direction
+        order_targets = [args for args in recorded['order_args']
+                         if args[0] == 'audit_log']
+        assert order_targets, "Expected order() call on audit_log"
+        assert order_targets[0][1] == 'timestamp'
+        assert order_targets[0][2] is True  # desc=True
+
+        # Limit applied — at least 500, scales with teacher count
+        audit_limits = [args for args in recorded['limit_args']
+                        if args[0] == 'audit_log']
+        assert audit_limits, "Expected limit() call on audit_log"
+        assert audit_limits[0][1] >= 500
+        assert audit_limits[0][1] >= 20 * 5  # 100 (5× teacher count)
+
+    def test_handles_no_teachers_gracefully(self):
+        """Empty teacher list does NOT issue any Supabase queries."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        teachers = []
+        mock_sb, recorded = self._spy_supabase(
+            classes_rows=[], class_students_rows=[],
+            assessments_rows=[], audit_rows=[],
+        )
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        assert recorded['tables_called'] == [], (
+            f"Empty teacher list must short-circuit; got "
+            f"{recorded['tables_called']}"
+        )
+
+    def test_handles_teachers_without_user_id(self):
+        """Teachers missing user_id default to zero counts and don't
+        contaminate the batched queries."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        teachers = [
+            {"user_id": "alice"},
+            {"name": "stub-no-uid"},  # no user_id
+            {"user_id": "bob"},
+        ]
+        mock_sb, _ = self._spy_supabase(
+            classes_rows=[
+                {"id": "c-1", "teacher_id": "alice"},
+            ],
+            class_students_rows=[
+                {"class_id": "c-1", "student_id": "s-1"},
+            ],
+            assessments_rows=[],
+            audit_rows=[],
+        )
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        # The user_id-less teacher gets zeros without raising.
+        no_uid = teachers[1]
+        assert no_uid['classes_count'] == 0
+        assert no_uid['students_count'] == 0
+        assert no_uid['assessments_count'] == 0
+        assert no_uid['last_activity'] is None
+
+    def test_supabase_failure_falls_back_to_zeros(self):
+        """If the batched query path raises, every teacher still gets
+        zeroed defaults — the dashboard never returns malformed JSON."""
+        from backend.routes.admin_routes import _enrich_teachers
+
+        teachers = [{"user_id": "alice"}, {"user_id": "bob"}]
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = Exception("simulated supabase failure")
+
+        with patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb):
+            _enrich_teachers(teachers)
+
+        for t in teachers:
+            assert t['classes_count'] == 0
+            assert t['students_count'] == 0
+            assert t['assessments_count'] == 0
+            assert t['last_activity'] is None

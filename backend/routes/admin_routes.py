@@ -345,52 +345,101 @@ def _build_email_map():
 
 
 def _enrich_teachers(teachers):
-    """Add classes_count, students_count, assessments_count, last_activity."""
+    """Add classes_count, students_count, assessments_count, last_activity.
+
+    Closes audit MAJOR #11 (Codex full-codebase audit 2026-05-06): the
+    pre-fix implementation made 4 Supabase queries PER teacher (N+1
+    pattern). For a 50-teacher district that meant 200 round trips on
+    every dashboard load; for 500 teachers it was 2,000. Now uses 4
+    batched `.in_('teacher_id', [...])` queries total — one per
+    entity — and aggregates counts in Python.
+
+    Pagination cap on the audit_log query (`AUDIT_TOP_N`) bounds memory
+    if a hot teacher dominates recent activity. Quiet teachers whose
+    last activity falls outside that window will report
+    `last_activity=None` rather than triggering an unbounded fetch.
+    """
     sb = _get_supabase()
     if not sb:
         return
 
-    for t in teachers:
-        uid = t.get("user_id", "")
-        if not uid:
+    teacher_ids = [t.get("user_id") for t in teachers if t.get("user_id")]
+    if not teacher_ids:
+        for t in teachers:
             t.update({"classes_count": 0, "students_count": 0,
                        "assessments_count": 0, "last_activity": None})
-            continue
+        return
 
-        try:
-            # Classes count
-            classes_res = sb.table("classes").select("id", count="exact") \
-                .eq("teacher_id", uid).execute()
-            t["classes_count"] = classes_res.count if classes_res.count is not None else len(classes_res.data or [])
+    classes_count: dict = {}
+    students_count: dict = {}
+    assessments_count: dict = {}
+    last_activity: dict = {}
+    class_ids_by_teacher: dict = {}
 
-            # Students count (via class_students for teacher's classes)
-            class_ids = [c["id"] for c in (classes_res.data or [])]
-            if class_ids:
-                students_res = sb.table("class_students").select("student_id", count="exact") \
-                    .in_("class_id", class_ids).execute()
-                t["students_count"] = students_res.count if students_res.count is not None else len(students_res.data or [])
-            else:
-                t["students_count"] = 0
+    try:
+        # 1. Classes per teacher — one batched query
+        classes_rows = sb.table("classes").select("id, teacher_id") \
+            .in_("teacher_id", teacher_ids).execute().data or []
+        for row in classes_rows:
+            tid = row.get("teacher_id")
+            cid = row.get("id")
+            if not tid or not cid:
+                continue
+            classes_count[tid] = classes_count.get(tid, 0) + 1
+            class_ids_by_teacher.setdefault(tid, []).append(cid)
 
-            # Assessments count
-            assessments_res = sb.table("published_assessments").select("id", count="exact") \
-                .eq("teacher_id", uid).execute()
-            t["assessments_count"] = assessments_res.count if assessments_res.count is not None else len(assessments_res.data or [])
+        # 2. Students per teacher — one batched query over the union
+        # of all class_ids belonging to all teachers in scope
+        all_class_ids = [cid for cids in class_ids_by_teacher.values() for cid in cids]
+        if all_class_ids:
+            class_to_teacher = {
+                cid: tid
+                for tid, cids in class_ids_by_teacher.items()
+                for cid in cids
+            }
+            cs_rows = sb.table("class_students").select("class_id, student_id") \
+                .in_("class_id", all_class_ids).execute().data or []
+            for row in cs_rows:
+                tid = class_to_teacher.get(row.get("class_id"))
+                if tid:
+                    students_count[tid] = students_count.get(tid, 0) + 1
 
-            # Last activity from audit_log
-            audit_res = sb.table("audit_log").select("timestamp") \
-                .eq("teacher_id", uid) \
-                .order("timestamp", desc=True) \
-                .limit(1).execute()
-            t["last_activity"] = audit_res.data[0]["timestamp"] if audit_res.data else None
+        # 3. Assessments per teacher — one batched query
+        ass_rows = sb.table("published_assessments").select("id, teacher_id") \
+            .in_("teacher_id", teacher_ids).execute().data or []
+        for row in ass_rows:
+            tid = row.get("teacher_id")
+            if tid:
+                assessments_count[tid] = assessments_count.get(tid, 0) + 1
 
-        except Exception as e:
-            logger.warning("Failed to enrich teacher %s: %s", uid, e)
-            sentry_sdk.capture_exception(e)
-            t.setdefault("classes_count", 0)
-            t.setdefault("students_count", 0)
-            t.setdefault("assessments_count", 0)
-            t.setdefault("last_activity", None)
+        # 4. Last activity per teacher — one batched query, sorted desc,
+        # bounded by a cap. For each teacher we take the FIRST occurrence
+        # in descending timestamp order. Cap is generous enough that a
+        # district-scale dashboard has good odds of finding every
+        # teacher's last activity; a teacher with no activity in the
+        # window reports None.
+        AUDIT_TOP_N = max(500, len(teacher_ids) * 5)
+        audit_rows = sb.table("audit_log").select("teacher_id, timestamp") \
+            .in_("teacher_id", teacher_ids) \
+            .order("timestamp", desc=True) \
+            .limit(AUDIT_TOP_N) \
+            .execute().data or []
+        for row in audit_rows:
+            tid = row.get("teacher_id")
+            ts = row.get("timestamp")
+            if tid and ts and tid not in last_activity:
+                last_activity[tid] = ts
+    except Exception as e:
+        logger.warning("Failed to enrich teachers (batched): %s", e)
+        sentry_sdk.capture_exception(e)
+
+    # Apply (defaults for teachers without any matching rows)
+    for t in teachers:
+        uid = t.get("user_id", "")
+        t["classes_count"] = classes_count.get(uid, 0)
+        t["students_count"] = students_count.get(uid, 0)
+        t["assessments_count"] = assessments_count.get(uid, 0)
+        t["last_activity"] = last_activity.get(uid, None)
 
 
 # ── GET /api/admin/overview ───────────────────────────────────────────────
