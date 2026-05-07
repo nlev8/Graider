@@ -351,30 +351,51 @@ def _build_email_map():
 # query; longer lists chunk and aggregate.
 _IN_CHUNK_SIZE = 200
 
+# Round-3 Codex HIGH fold: Supabase imposes a default 1,000-row return
+# cap on `select()` queries. `_chunked_in_rows` MUST paginate within
+# each filter-value chunk via `.range(offset, offset+page_size-1)` or
+# total_students / total_assessments / score aggregates would silently
+# undercount on districts with > 1,000 matching rows in a single chunk.
+_PAGE_SIZE = 1000
+
+# Absolute ceiling per chunk-batch to prevent runaway memory in the
+# pathological case (e.g., a single misconfigured admin scope with
+# millions of audit rows). 100K rows × ~200B/row = ~20 MB peak.
+_HARD_CAP = 100_000
+
 
 def _chunked_in_rows(sb, table, column, values, select_cols,
                       order=None, limit=None):
     """Run `select_cols` from `table` filtered by `column .in_ values`,
-    chunking `values` into `_IN_CHUNK_SIZE` slices and concatenating
-    results. Returns a list of row dicts (possibly empty).
+    chunking `values` into `_IN_CHUNK_SIZE` slices AND paginating result
+    rows within each chunk to defeat Supabase's default 1,000-row return
+    cap. Returns a list of row dicts (possibly empty).
 
     `order` is an optional `(col, desc=True/False)` tuple. `limit` is
-    applied PER CHUNK (not globally — caller is responsible for any
-    post-merge truncation if a global cap is desired).
+    a per-chunk ceiling (NOT global): each chunk fetches up to `limit`
+    rows. If `limit` is None, defaults to `_HARD_CAP=100,000` per chunk.
+    Callers needing a global cap MUST truncate the merged result
+    themselves (see audit_log usage in `_enrich_teachers`).
     """
     if not values:
         return []
     out: list = []
+    target = limit if limit is not None else _HARD_CAP
     for i in range(0, len(values), _IN_CHUNK_SIZE):
         chunk = values[i:i + _IN_CHUNK_SIZE]
-        q = sb.table(table).select(select_cols).in_(column, chunk)
-        if order is not None:
-            col, desc = order
-            q = q.order(col, desc=desc)
-        if limit is not None:
-            q = q.limit(limit)
-        rows = q.execute().data or []
-        out.extend(rows)
+        offset = 0
+        while offset < target:
+            page_size = min(_PAGE_SIZE, target - offset)
+            q = sb.table(table).select(select_cols).in_(column, chunk)
+            if order is not None:
+                col, desc = order
+                q = q.order(col, desc=desc)
+            q = q.range(offset, offset + page_size - 1)
+            rows = q.execute().data or []
+            out.extend(rows)
+            if len(rows) < page_size:
+                break  # end of result set for this chunk
+            offset += page_size
     return out
 
 

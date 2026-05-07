@@ -386,7 +386,7 @@ class TestEnrichTeachersBatched:
             chain = MagicMock()
             result = MagicMock()
             result.data = responses.get(name, [])
-            for m in ('select', 'eq', 'order'):
+            for m in ('select', 'eq', 'order', 'range'):
                 getattr(chain, m).return_value = chain
 
             def in_(col, vals):
@@ -535,34 +535,63 @@ class TestEnrichTeachersBatched:
         assert by_id['carol']['assessments_count'] == 0
         assert by_id['carol']['last_activity'] is None
 
-    def test_audit_query_uses_order_desc_and_limit(self):
+    def test_audit_query_uses_order_desc_and_bounded_range(self):
         """The audit_log query MUST be ordered desc + bounded by a
-        limit so it can never explode for a hot district."""
+        range so it can never explode for a hot district. Round-3
+        Codex HIGH fold: bounded via .range() (not .limit()) because
+        the helper now paginates result rows internally."""
         from backend.routes.admin_routes import _enrich_teachers
 
+        # Capture the range() args via a custom spy so we can assert
+        # the ceiling is at least max(500, teacher_count * 5).
         teachers = [{"user_id": f"t-{i}"} for i in range(20)]
 
-        mock_sb, recorded = self._spy_supabase(
-            classes_rows=[], class_students_rows=[],
-            assessments_rows=[], audit_rows=[],
-        )
+        recorded_range = []
+        recorded_order = []
+
+        def _table_factory(name):
+            chain = MagicMock()
+            result = MagicMock()
+            result.data = []
+            for m in ('select', 'eq', 'in_'):
+                getattr(chain, m).return_value = chain
+
+            def order(col, desc=False):
+                recorded_order.append((name, col, desc))
+                return chain
+
+            def range_(start, end):
+                recorded_range.append((name, start, end))
+                return chain
+
+            chain.order.side_effect = order
+            chain.range.side_effect = range_
+            chain.execute.return_value = result
+            return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = _table_factory
+
         with patch("backend.routes.admin_routes._get_supabase",
                    return_value=mock_sb):
             _enrich_teachers(teachers)
 
         # Order applied to audit_log in desc direction
-        order_targets = [args for args in recorded['order_args']
-                         if args[0] == 'audit_log']
-        assert order_targets, "Expected order() call on audit_log"
-        assert order_targets[0][1] == 'timestamp'
-        assert order_targets[0][2] is True  # desc=True
+        audit_order = [r for r in recorded_order if r[0] == 'audit_log']
+        assert audit_order, "Expected order() call on audit_log"
+        assert audit_order[0][1] == 'timestamp'
+        assert audit_order[0][2] is True  # desc=True
 
-        # Limit applied — at least 500, scales with teacher count
-        audit_limits = [args for args in recorded['limit_args']
-                        if args[0] == 'audit_log']
-        assert audit_limits, "Expected limit() call on audit_log"
-        assert audit_limits[0][1] >= 500
-        assert audit_limits[0][1] >= 20 * 5  # 100 (5× teacher count)
+        # Range applied — the audit_log path passes limit=AUDIT_TOP_N
+        # to _chunked_in_rows. AUDIT_TOP_N = max(500, teacher_count*5)
+        # so for 20 teachers AUDIT_TOP_N = 500. The helper requests
+        # range(0, page_size-1) where page_size = min(1000, 500) = 500.
+        audit_ranges = [r for r in recorded_range if r[0] == 'audit_log']
+        assert audit_ranges, "Expected range() call on audit_log"
+        # The first call's end-index must be at least 499 (500 rows).
+        # 5*20=100, max(500, 100)=500, so end >= 499.
+        assert audit_ranges[0][1] == 0
+        assert audit_ranges[0][2] >= 499
 
     def test_handles_no_teachers_gracefully(self):
         """Empty teacher list does NOT issue any Supabase queries."""
@@ -680,6 +709,68 @@ class TestEnrichTeachersBatched:
             assert t['assessments_count'] == 0
             assert t['last_activity'] is None
 
+    def test_result_rows_paginated_past_supabase_1000_row_cap(self):
+        """Round-3 Codex HIGH fold: Supabase imposes a default 1,000-row
+        return cap on `select()`. _chunked_in_rows MUST paginate within
+        each chunk via `.range(offset, offset+page_size-1)` or large
+        result sets silently truncate.
+
+        Simulate: classes table returns 2,500 rows in 3 pages (1000 +
+        1000 + 500). Helper must fetch all 3 pages."""
+        from backend.routes.admin_routes import (
+            _chunked_in_rows, _PAGE_SIZE,
+        )
+
+        # Pre-build 3 page responses
+        page_a = [{'id': f'r-{i}', 'teacher_id': 't-x'} for i in range(1000)]
+        page_b = [{'id': f'r-{i}', 'teacher_id': 't-x'} for i in range(1000, 2000)]
+        page_c = [{'id': f'r-{i}', 'teacher_id': 't-x'} for i in range(2000, 2500)]
+
+        recorded_ranges = []
+        page_n = {'count': 0}
+
+        def _execute_pages(*_args, **_kwargs):
+            page_n['count'] += 1
+            result = MagicMock()
+            if page_n['count'] == 1:
+                result.data = page_a
+            elif page_n['count'] == 2:
+                result.data = page_b
+            elif page_n['count'] == 3:
+                result.data = page_c
+            else:
+                result.data = []
+            return result
+
+        chain = MagicMock()
+        for m in ('select', 'eq', 'in_', 'order'):
+            getattr(chain, m).return_value = chain
+
+        def range_(start, end):
+            recorded_ranges.append((start, end))
+            return chain
+
+        chain.range.side_effect = range_
+        chain.execute.side_effect = _execute_pages
+
+        mock_sb = MagicMock()
+        mock_sb.table.return_value = chain
+
+        # Single chunk of 1 value, no caller-supplied limit → uses
+        # _HARD_CAP (100K) target. Should paginate until response
+        # < page_size.
+        rows = _chunked_in_rows(
+            mock_sb, 'classes', 'teacher_id', ['t-x'], 'id, teacher_id',
+        )
+
+        assert len(rows) == 2500, (
+            f"Expected all 2500 rows; got {len(rows)} (silent truncation?)"
+        )
+        # Ranges should be [0..999, 1000..1999, 2000..2999]
+        assert recorded_ranges == [(0, 999), (1000, 1999), (2000, 2999)], (
+            f"Expected paginated ranges; got {recorded_ranges}"
+        )
+
     def test_in_query_chunked_for_large_teacher_list(self):
         """Round-2 Codex HIGH fold: PostgREST `.in_()` URL-encodes the
         value list. Long lists could exceed the URL limit. Pin the
@@ -733,3 +824,170 @@ class TestEnrichTeachersBatched:
                 f"{table}.in_({col}, ...) had {n} values > limit "
                 f"{_IN_CHUNK_SIZE} — would exceed PostgREST URL cap"
             )
+
+
+# ── admin_overview Route Integration Tests (Round-3 Codex MEDIUM fold) ───
+
+
+class TestAdminOverviewBatched:
+    """Round-3 Codex MEDIUM fold: pin the admin_overview route's
+    batched data flow. Pre-fix the route was N+1+M; post-fix it's
+    ≤6 chunked .in_() queries. These tests verify both the query
+    count contract AND the aggregate correctness end-to-end."""
+
+    def _scripted_supabase(self, table_responses):
+        """Mock Supabase that returns per-table response data and
+        records each .table() call. Supports the new range-paginated
+        result fetch loop by always returning the configured rows
+        as a single page (response < _PAGE_SIZE so loop breaks)."""
+        recorded = {'tables_called': []}
+
+        def table_factory(name):
+            recorded['tables_called'].append(name)
+            chain = MagicMock()
+            result = MagicMock()
+            result.data = table_responses.get(name, [])
+            for m in ('select', 'eq', 'in_', 'order', 'range', 'limit'):
+                getattr(chain, m).return_value = chain
+            chain.execute.return_value = result
+            return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = table_factory
+        return mock_sb, recorded
+
+    def test_overview_aggregates_across_both_publish_paths(
+        self, authed_client,
+    ):
+        """admin_overview must sum total_assessments across BOTH the
+        join-code (published_assessments) AND class-based
+        (published_content) paths, plus aggregate scores from BOTH
+        submissions tables."""
+        # 3 teachers under admin scope
+        teachers = [
+            {"user_id": "alice"},
+            {"user_id": "bob"},
+            {"user_id": "carol"},
+        ]
+        admin_role = {"school": "Test High", "claimed_at": "2026-03-20T00:00:00"}
+
+        table_responses = {
+            'classes': [
+                {"id": "cls-a", "teacher_id": "alice"},
+                {"id": "cls-b", "teacher_id": "bob"},
+            ],
+            'class_students': [
+                {"class_id": "cls-a", "student_id": "s-1"},
+                {"class_id": "cls-a", "student_id": "s-2"},
+                {"class_id": "cls-b", "student_id": "s-3"},
+            ],
+            'published_assessments': [
+                {"id": "pa-1", "join_code": "AAA111", "teacher_id": "alice"},
+                {"id": "pa-2", "join_code": "BBB222", "teacher_id": "bob"},
+            ],
+            'submissions': [
+                {"score": 85},
+                {"score": 90},
+            ],
+            'published_content': [
+                {"id": "pc-1", "class_id": "cls-a"},
+                {"id": "pc-2", "class_id": "cls-b"},
+            ],
+            'student_submissions': [
+                {"score": 75},
+                {"score": 95},
+            ],
+            'audit_log': [],
+        }
+
+        mock_sb, recorded = self._scripted_supabase(table_responses)
+
+        def mock_load(key, teacher_id):
+            if key.startswith("admin_role:"):
+                return admin_role
+            return None
+
+        # Prime the _discover_teachers path: admin_overview reads admin
+        # scope from g.admin_role, which is the dict returned by
+        # storage_load("admin_role:<teacher_id>"). _discover_teachers
+        # calls storage_load("teachers_index") via a hardcoded key.
+        # We mock _discover_teachers directly to return the test list.
+        with patch("backend.storage.load",
+                   side_effect=lambda k, ns: admin_role if k.startswith("admin_role:") else None), \
+             patch("backend.routes.admin_routes._discover_teachers",
+                   return_value=teachers), \
+             patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb), \
+             patch("backend.routes.admin_routes.audit_log"):
+            resp = authed_client.get(
+                "/api/admin/overview",
+                headers={"X-Test-Teacher-Id": "admin-x"},
+            )
+
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        data = resp.get_json()
+        # 3 teachers in scope
+        assert data["total_teachers"] == 3
+        # Both publish paths counted: 2 published_assessments + 2
+        # published_content = 4 total assessments
+        assert data["total_assessments"] == 4
+        # Students = enrollment row count (3 rows in fixture)
+        assert data["total_students"] == 3
+        # average_score = (85 + 90 + 75 + 95) / 4 = 86.25 → 86.2 via
+        # Python's banker's rounding (round-half-to-even)
+        assert data["average_score"] == 86.2
+        # Grade distribution: 85=B, 90=A, 75=C, 95=A
+        gd = data["grade_distribution"]
+        assert gd["A"] == 2
+        assert gd["B"] == 1
+        assert gd["C"] == 1
+        assert gd["D"] == 0
+        assert gd["F"] == 0
+
+    def test_overview_uses_batched_queries_not_per_teacher(
+        self, authed_client,
+    ):
+        """50 teachers should yield ≤6 distinct table.()-name calls
+        (each table queried once or zero times), NOT 50× anything."""
+        teachers = [{"user_id": f"t-{i}"} for i in range(50)]
+        admin_role = {"school": "S", "claimed_at": "2026-03-20T00:00:00"}
+
+        # Empty rows everywhere — we only care about query count.
+        mock_sb, recorded = self._scripted_supabase({})
+
+        def mock_load(key, teacher_id):
+            if key.startswith("admin_role:"):
+                return admin_role
+            return None
+
+        with patch("backend.storage.load",
+                   side_effect=lambda k, ns: admin_role if k.startswith("admin_role:") else None), \
+             patch("backend.routes.admin_routes._discover_teachers",
+                   return_value=teachers), \
+             patch("backend.routes.admin_routes._get_supabase",
+                   return_value=mock_sb), \
+             patch("backend.routes.admin_routes.audit_log"):
+            resp = authed_client.get(
+                "/api/admin/overview",
+                headers={"X-Test-Teacher-Id": "admin-x"},
+            )
+
+        assert resp.status_code == 200
+        from collections import Counter
+        counts = Counter(recorded['tables_called'])
+        # With empty results, the route only queries:
+        # - published_assessments (1 chunk of 50 ids)
+        # - classes (1 chunk of 50 ids)
+        # submissions, class_students, published_content,
+        # student_submissions all skipped because the prior result is
+        # empty (no join_codes, no class_ids).
+        # CRUCIAL: no table queried more than 1 time despite 50 teachers.
+        for table, count in counts.items():
+            assert count <= 1, (
+                f"{table} queried {count}× — should be ≤1 (50 teachers, "
+                f"batched queries should be independent of teacher count)"
+            )
+        # Total queries should be small — much less than 50.
+        assert sum(counts.values()) <= 6, (
+            f"Total queries {sum(counts.values())} > 6; got {dict(counts)}"
+        )
