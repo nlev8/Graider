@@ -137,22 +137,81 @@ class TestAdminClaim:
 
     def test_claim_expired_code_returns_generic_400(self, authed_client):
         """Audit MAJOR #8: expired invite returns the same generic 400 +
-        error shape as invalid/missing — no enumeration signal."""
-        invite = {
+        error shape as invalid/missing — no enumeration signal.
+
+        Round-2 fold (Codex 2026-05-07): production invites use
+        `expires_at`, not `created_at`. Test both fields."""
+        # Production schema (expires_at) — past expiry
+        invite_expired_new = {
             "school": "Lincoln High",
-            "created_at": "2026-03-01T00:00:00+00:00",  # well past 7 days
+            "expires_at": "2026-03-01T00:00:00+00:00",  # past
         }
-
-        def mock_load(key, teacher_id):
-            if key == "admin_invite:EXPIRED":
-                return invite
-            return None
-
-        with patch("backend.routes.admin_routes.storage_load", side_effect=mock_load):
-            resp = authed_client.post("/api/admin/claim", json={"code": "EXPIRED"},
+        with patch("backend.routes.admin_routes.storage_load",
+                   side_effect=lambda key, teacher_id: invite_expired_new if "EXPNEW" in key else None):
+            resp = authed_client.post("/api/admin/claim", json={"code": "EXPNEW"},
                                       headers={"X-Test-Teacher-Id": "teacher-123"})
             assert resp.status_code == 400
             assert "Unable to claim invite" in resp.get_json()["error"]
+
+        # Legacy schema (created_at + 7-day TTL) — still rejected
+        invite_expired_legacy = {
+            "school": "Lincoln High",
+            "created_at": "2026-03-01T00:00:00+00:00",  # past 7 days ago
+        }
+        with patch("backend.routes.admin_routes.storage_load",
+                   side_effect=lambda key, teacher_id: invite_expired_legacy if "EXPLEG" in key else None):
+            resp = authed_client.post("/api/admin/claim", json={"code": "EXPLEG"},
+                                      headers={"X-Test-Teacher-Id": "teacher-123"})
+            assert resp.status_code == 400
+            assert "Unable to claim invite" in resp.get_json()["error"]
+
+    def test_claim_with_production_schema_expires_at_field(self, authed_client):
+        """Round-2 Codex MAJOR fold: producer (district_routes.py:450)
+        writes `expires_at`. Pre-fix, admin_claim only read `created_at`,
+        so production invites NEVER expired — Codex verified an invite
+        with past expires_at returned 200 and granted admin role.
+
+        This test reproduces the exact production data shape and
+        asserts rejection (NOT 200). Expired-by-expires_at is the
+        load-bearing assertion for closing the security hole."""
+        from datetime import datetime, timezone, timedelta
+        past = (datetime.now(tz=timezone.utc) - timedelta(days=1)).isoformat()
+        invite = {
+            "school": "Lincoln High",
+            "manual_teachers": [],
+            "expires_at": past,  # production producer's field
+        }
+        with patch("backend.routes.admin_routes.storage_load",
+                   return_value=invite), \
+             patch("backend.routes.admin_routes.storage_save") as save:
+            resp = authed_client.post("/api/admin/claim", json={"code": "PROD-LEAKED"},
+                                      headers={"X-Test-Teacher-Id": "teacher-123"})
+            assert resp.status_code == 400, (
+                f"Production-schema expired invite must be REJECTED. "
+                f"Got status {resp.status_code}; admin role saved: {save.called}"
+            )
+            assert not save.called, "Admin role MUST NOT be saved for expired invite"
+
+    def test_claim_with_future_expires_at_succeeds(self, authed_client):
+        """Counterpart to the above: a non-expired production-schema
+        invite (expires_at in future) must succeed."""
+        from datetime import datetime, timezone, timedelta
+        future = (datetime.now(tz=timezone.utc) + timedelta(days=1)).isoformat()
+        invite = {
+            "school": "Lincoln High",
+            "manual_teachers": [],
+            "expires_at": future,
+        }
+        with patch("backend.routes.admin_routes.storage_load",
+                   return_value=invite), \
+             patch("backend.routes.admin_routes.storage_save") as mock_save, \
+             patch("backend.storage.delete"), \
+             patch("backend.routes.admin_routes.audit_log"):
+            resp = authed_client.post("/api/admin/claim", json={"code": "VALIDFUT"},
+                                      headers={"X-Test-Teacher-Id": "teacher-123"})
+            assert resp.status_code == 200
+            assert resp.get_json()["status"] == "claimed"
+            assert mock_save.called
 
     def test_claim_failure_shapes_are_indistinguishable(self, authed_client):
         """Audit MAJOR #8: missing code, invalid code, malformed invite,
@@ -206,19 +265,38 @@ class TestAdminClaim:
 
     def test_claim_has_rate_limit_decorator(self):
         """Static-source pin (Audit MAJOR #8): the @limiter.limit decorator
-        must remain on the admin_claim route. Without it, the route is
-        brute-forceable by any authenticated teacher."""
+        must remain on the admin_claim route with both per-(IP+user) and
+        per-user-only keys (round-2 Codex MAJOR fold)."""
         from pathlib import Path
 
         src = Path(__file__).resolve().parent.parent / "backend/routes/admin_routes.py"
         text = src.read_text()
-        # Decorator order: @admin_bp.route + @limiter.limit + @require_teacher + ...
-        # before def admin_claim. Limiter MUST be present and reasonable.
         assert "@limiter.limit(" in text, "admin_claim must carry @limiter.limit"
-        # The exact budget shape — strict enough to choke enumeration
         assert '"10 per hour;5 per minute"' in text, (
-            "admin_claim rate-limit budget must remain '10 per hour;5 per minute' "
-            "(loosen only with a security review)."
+            "admin_claim per-(IP+user) budget must remain '10 per hour;5 per minute'"
+        )
+        assert '"20 per hour"' in text, (
+            "admin_claim per-user-only budget must remain '20 per hour' to cap "
+            "a roaming-IP attacker. Round-2 Codex MAJOR fold (2026-05-07)."
+        )
+        # Custom key_func must hash IP+user together (not bare IP)
+        assert "_admin_claim_rate_limit_key" in text, (
+            "admin_claim must use _admin_claim_rate_limit_key (combines IP+user) "
+            "instead of the default get_remote_address (IP-only)."
+        )
+
+    def test_claim_does_storage_call_even_for_empty_code(self):
+        """Round-2 Codex MINOR fold: empty-code path must do a storage
+        probe (with a sentinel that can never collide with a real key)
+        so its wall-clock profile matches the valid-shape paths,
+        eliminating timing-side-channel for the empty-vs-shaped
+        code distinction."""
+        from pathlib import Path
+        src = Path(__file__).resolve().parent.parent / "backend/routes/admin_routes.py"
+        text = src.read_text()
+        assert "__timing_anchor_" in text, (
+            "admin_claim must probe storage on the empty-code path to flatten "
+            "the timing differential between empty and present-shape codes."
         )
 
 
