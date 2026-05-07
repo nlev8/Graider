@@ -13,6 +13,22 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
   ],
-  // Don't start server — assume it's already running
-  // Run: cd backend && python app.py (in another terminal)
+  // Closes audit MINOR (Codex full-codebase audit 2026-05-06, GH #219):
+  // Playwright now boots the backend automatically. Locally we reuse a
+  // running server if one is already on port 3000 (preserves the dev
+  // workflow where you have `python backend/app.py` running in another
+  // terminal); CI always spawns a fresh process.
+  //
+  // The backend serves the Vite-built frontend from backend/static/, so
+  // `npm run build` runs first to populate that directory. The Python
+  // binary is taken from `PYTHON` env var when set (CI), otherwise the
+  // local venv at ../venv/bin/python (matches CLAUDE.md venv path).
+  webServer: {
+    command: 'npm run build && (cd .. && ${PYTHON:-./venv/bin/python} backend/app.py)',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
 })
