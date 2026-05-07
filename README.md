@@ -4,7 +4,7 @@
 
 Graider automates the grading process using AI, saving teachers hours of work while providing detailed, personalized feedback to students. Generate standards-aligned assessments, publish them to a student portal, and grade submissions automatically.
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-2.0+-green.svg)
 ![React](https://img.shields.io/badge/React-18-61dafb.svg)
 ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-purple.svg)
@@ -86,10 +86,11 @@ Graider automates the grading process using AI, saving teachers hours of work wh
 ## Quick Start
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.12+ (CI uses 3.12; Ruff and Mypy target py312)
 - Node.js 18+ (for frontend development)
 - OpenAI API key
 - Supabase account (for Student Portal)
+- Redis 6+ for production (rate-limiter and Flask-Session backend; see `docs/DEPLOYMENT.md`)
 
 ### Installation
 
@@ -101,15 +102,12 @@ cd Graider
 # Install backend dependencies
 pip install -r requirements.txt
 
-# Create .env file in backend folder
-cat > backend/.env << EOF
-OPENAI_API_KEY=your-openai-key
-ANTHROPIC_API_KEY=your-anthropic-key  # Optional, for Claude
-RESEND_API_KEY=your-resend-key        # For email
-SUPABASE_URL=your-supabase-url
-SUPABASE_ANON_KEY=your-supabase-anon-key
-SUPABASE_SERVICE_KEY=your-supabase-service-key
-EOF
+# Create .env from the canonical template (covers all runtime vars:
+# AI providers, Supabase, Redis, Sentry, Stripe, ClassLink/OneRoster/LTI,
+# Mathpix, ElevenLabs, periodic-sync secret, etc).
+cp .env.example .env
+# Then edit .env and fill in your values for the keys you need —
+# OPENAI_API_KEY and SUPABASE_* are required to boot.
 
 # Run the app
 cd backend
@@ -241,7 +239,7 @@ web: cd backend && gunicorn app:app --bind 0.0.0.0:$PORT
 ### Docker
 
 ```dockerfile
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -421,7 +419,7 @@ Final result with score, feedback, detection flags, audit trail
 
 | Deployment | Requirements |
 |------------|--------------|
-| **Local** | Python 3.9+, internet for API calls |
+| **Local** | Python 3.12+, internet for API calls |
 | **Cloud** | Modern browser, Supabase account |
 | **Enterprise** | SSO provider, DPA, security review |
 

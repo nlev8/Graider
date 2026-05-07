@@ -1,3 +1,13 @@
+[project]
+# Closes audit MAJOR #16 (Codex 2026-05-06 / issue #219): align
+# Python version guidance with what tooling actually targets. Ruff
+# targets py312 below; CI uses 3.12; production runtime is 3.12.
+# Pinning here so `pip install` / `uv` setup tooling validates the
+# interpreter at install time rather than failing later at runtime.
+name = "graider"
+version = "0.1.0"
+requires-python = ">=3.12"
+
 [tool.alembic-destructive-ops]
 allowlist = []
 
