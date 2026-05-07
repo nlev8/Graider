@@ -1832,18 +1832,72 @@ function App() {
     api.getStatus().then(setStatus).catch(() => {});
   }, []);
 
-  // Poll status while grading (only when grading is active)
+  // Poll status while grading. Closes audit MINOR (Codex full-codebase
+  // audit 2026-05-06): the previous fixed-500ms interval amplified
+  // multi-tab load (~2 req/sec/tab × N tabs) and server cost grew
+  // linearly with idle teachers staring at the grading screen. Now
+  // the cadence backs off exponentially (500ms → 1s → 2s → 4s → 8s)
+  // while grading is steady, and snaps back to 500ms whenever the
+  // server reports activity (log line, result, or progress tick) so
+  // the UI stays responsive when work IS happening. Tab visibility
+  // throttling further reduces traffic when the tab is hidden.
   useEffect(() => {
     if (!status.is_running) return;
-    const interval = setInterval(async () => {
+    let cancelled = false;
+    let timeoutId = null;
+    let currentDelay = 500;
+    const MIN_DELAY = 500;
+    const MAX_DELAY = 8000;
+    const HIDDEN_DELAY = 15000;
+    let lastLogLen = (status.log && status.log.length) || 0;
+    let lastResultsLen = (status.results && status.results.length) || 0;
+    let lastProgress = status.progress || 0;
+
+    const tick = async () => {
+      if (cancelled) return;
       try {
         const data = await api.getStatus();
+        if (cancelled) return;
         setStatus(data);
+        const newLogLen = (data.log && data.log.length) || 0;
+        const newResultsLen = (data.results && data.results.length) || 0;
+        const newProgress = data.progress || 0;
+        const sawActivity = (
+          newLogLen > lastLogLen ||
+          newResultsLen > lastResultsLen ||
+          newProgress > lastProgress
+        );
+        lastLogLen = newLogLen;
+        lastResultsLen = newResultsLen;
+        lastProgress = newProgress;
+        if (!data.is_running) {
+          // Grading finished — let the effect cleanup re-trigger via
+          // the `is_running` dep change.
+          return;
+        }
+        // Activity → snap to MIN_DELAY. Idle → exponential backoff.
+        if (sawActivity) {
+          currentDelay = MIN_DELAY;
+        } else {
+          currentDelay = Math.min(currentDelay * 2, MAX_DELAY);
+        }
       } catch (error) {
         console.error("Status poll error:", error);
+        // Network errors → also back off so we don't hammer a flaky API.
+        currentDelay = Math.min(currentDelay * 2, MAX_DELAY);
       }
-    }, 500);
-    return () => clearInterval(interval);
+      if (cancelled) return;
+      const nextDelay = (typeof document !== 'undefined' && document.hidden)
+        ? Math.max(currentDelay, HIDDEN_DELAY)
+        : currentDelay;
+      timeoutId = setTimeout(tick, nextDelay);
+    };
+
+    timeoutId = setTimeout(tick, currentDelay);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [status.is_running]);
 
   // Fetch pending confirmation count and student list (scans assignments folder + roster)
