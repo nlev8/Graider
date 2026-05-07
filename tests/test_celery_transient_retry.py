@@ -1,0 +1,199 @@
+"""Celery transient-retry classification contract tests.
+
+Closes audit MAJOR #7 (Codex full-codebase audit 2026-05-06): transient
+retry was documented as inactive because grade_portal_submission_sync
+swallowed exceptions before Celery's classifier could see them.
+
+Pins:
+- The sync function re-raises TransientError when called with
+  raise_transient=True AND the exception is classified retryable
+  (via backend.retry.is_retryable_error).
+- The sync function still swallows-and-marks-failed when called with
+  raise_transient=False (default — preserves thread-path behavior).
+- Permanent exceptions (KeyError, etc.) are never re-raised regardless
+  of raise_transient.
+- The Celery task decorator includes autoretry_for=(TransientError,)
+  with sane backoff parameters.
+"""
+import pytest
+from unittest.mock import MagicMock, patch
+
+
+# Mirror the autouse fixture from tests/test_grading_tasks.py — Celery refuses
+# to import without CELERY_BROKER_URL set, and module reload is required so the
+# decorator config is re-evaluated.
+@pytest.fixture(autouse=True)
+def _celery_env(monkeypatch):
+    monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/15")
+    import sys
+    sys.modules.pop("backend.celery_app", None)
+    sys.modules.pop("backend.tasks", None)
+    sys.modules.pop("backend.tasks.grading_tasks", None)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Direct re-raise contract on grade_portal_submission_sync
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestSyncReRaiseOnTransient:
+    """When called with raise_transient=True (Celery path), the blanket
+    catch must classify retryable exceptions and re-raise as TransientError."""
+
+    def _invoke_sync_with_exception(self, exc, raise_transient):
+        """Helper: invoke grade_portal_submission_sync with the inner pipeline
+        forced to raise `exc`. Returns (result, raised_exc) tuple.
+
+        Injection point: patch `hashlib.sha256` in the portal_grading module
+        namespace. It's used on the FIRST line inside the function's outer
+        try block (the FERPA-hashed "Portal grading started" log). Patching
+        it raises before any real pipeline call, so we exercise the blanket
+        catch without booting Supabase or the AI pipeline."""
+        from backend.services import portal_grading
+
+        # task_id=None disables the dedup branch (which is OUTSIDE the try).
+        with patch.object(portal_grading.hashlib, "sha256",
+                          side_effect=exc), \
+             patch("backend.supabase_client.get_supabase", return_value=None):
+            try:
+                portal_grading.grade_portal_submission_sync(
+                    submission_id="test-sub-1",
+                    assessment={"title": "t", "questions": []},
+                    answers={},
+                    student_info={"student_name": "x"},
+                    teacher_config={},
+                    teacher_id="t1",
+                    raise_transient=raise_transient,
+                )
+                return ("returned", None)
+            except Exception as raised:
+                return ("raised", raised)
+
+    def test_celery_path_reraises_transient_as_TransientError(self):
+        from backend.tasks.grading_tasks import TransientError
+
+        # ConnectionError is classified as transient by backend.retry.is_retryable_error.
+        result, raised = self._invoke_sync_with_exception(
+            ConnectionError("network blip"),
+            raise_transient=True,
+        )
+        assert result == "raised"
+        assert isinstance(raised, TransientError), (
+            f"Expected TransientError, got {type(raised).__name__}"
+        )
+
+    def test_celery_path_reraises_timeout_as_TransientError(self):
+        from backend.tasks.grading_tasks import TransientError
+
+        # TimeoutError is also classified transient.
+        result, raised = self._invoke_sync_with_exception(
+            TimeoutError("request timed out"),
+            raise_transient=True,
+        )
+        assert result == "raised"
+        assert isinstance(raised, TransientError)
+
+    def test_celery_path_reraises_keyword_match_as_TransientError(self):
+        """is_retryable_error scans the exception string for transient
+        keywords (e.g., 'connection reset')."""
+        from backend.tasks.grading_tasks import TransientError
+
+        # Generic Exception with retryable-keyword string: "connection reset"
+        result, raised = self._invoke_sync_with_exception(
+            Exception("connection reset by peer"),
+            raise_transient=True,
+        )
+        assert result == "raised"
+        assert isinstance(raised, TransientError)
+
+    def test_celery_path_swallows_permanent_errors(self):
+        """KeyError / ValueError / TypeError are programming errors, not
+        transient. Even with raise_transient=True, the blanket catch
+        must NOT re-raise these."""
+        # KeyError → swallowed by existing flow → returns normally.
+        result, raised = self._invoke_sync_with_exception(
+            KeyError("missing config field"),
+            raise_transient=True,
+        )
+        assert result == "returned", (
+            f"Permanent KeyError must be swallowed (existing flow), "
+            f"not re-raised. Got: result={result}, raised={raised!r}"
+        )
+
+    def test_thread_path_swallows_transient_errors(self):
+        """raise_transient=False (default; thread-path callers) must
+        preserve the existing swallow-and-mark-failed flow EVEN for
+        transient exceptions. Only the Celery path opts into retry."""
+        # ConnectionError IS classified transient — but raise_transient=False
+        # means the sync function never re-raises.
+        result, raised = self._invoke_sync_with_exception(
+            ConnectionError("network blip"),
+            raise_transient=False,
+        )
+        assert result == "returned", (
+            "Thread path (raise_transient=False) must swallow transient "
+            "errors per existing contract, not re-raise"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Celery task decorator config
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestCeleryTaskAutoretryConfig:
+    """The @celery_app.task decorator on grade_portal_submission must
+    include autoretry_for=(TransientError,) plus sane backoff config."""
+
+    def test_decorator_has_autoretry_for_TransientError(self):
+        from backend.tasks.grading_tasks import grade_portal_submission, TransientError
+
+        # Celery exposes the decorator config as task attributes.
+        assert TransientError in grade_portal_submission.autoretry_for, (
+            f"autoretry_for must include TransientError; got "
+            f"{grade_portal_submission.autoretry_for!r}"
+        )
+
+    def test_decorator_has_retry_backoff_capped(self):
+        from backend.tasks.grading_tasks import grade_portal_submission
+
+        # retry_backoff=True → exponential. retry_backoff_max=600 → 10 min cap.
+        assert grade_portal_submission.retry_backoff is True
+        assert grade_portal_submission.retry_backoff_max == 600
+        assert grade_portal_submission.retry_jitter is True
+
+    def test_decorator_has_max_retries_set(self):
+        from backend.tasks.grading_tasks import grade_portal_submission
+
+        # 3 retries = 4 total attempts. Reasonable for transient AI failures
+        # without burning hours on a hopeless retry loop.
+        assert grade_portal_submission.max_retries == 3
+
+    def test_decorator_preserves_durability_settings(self):
+        """Round-7 must NOT regress the durability / time-limit posture."""
+        from backend.tasks.grading_tasks import grade_portal_submission
+
+        assert grade_portal_submission.acks_late is True, "acks_late must remain True"
+        # time_limit / soft_time_limit are stored on .time_limit / .soft_time_limit
+        assert grade_portal_submission.time_limit == 900
+        assert grade_portal_submission.soft_time_limit == 840
+
+
+# ──────────────────────────────────────────────────────────────────
+# Body wires raise_transient=True
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestCeleryBodyOptsIntoTransientReraise:
+    """Static-source pin: the Celery task body must call
+    grade_portal_submission_sync with raise_transient=True so the
+    blanket catch's transient-classifier branch fires."""
+
+    def test_body_passes_raise_transient_true(self):
+        from pathlib import Path
+        src = Path(__file__).resolve().parent.parent / "backend/tasks/grading_tasks.py"
+        text = src.read_text()
+        assert "raise_transient=True" in text, (
+            "grading_tasks.py must call grade_portal_submission_sync with "
+            "raise_transient=True so transient errors bubble to Celery"
+        )

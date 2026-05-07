@@ -520,6 +520,7 @@ def grade_portal_submission_sync(
     task_id=None,
     district_id=None,
     user_id=None,
+    raise_transient=False,
 ):
     """Pure grading function — no Flask context required.
 
@@ -907,6 +908,22 @@ def grade_portal_submission_sync(
         # cleanup. (Celery callers re-raise after their own capture; this keeps
         # thread-path parity.)
         sentry_sdk.capture_exception(e)
+
+        # Closes audit MAJOR #7 (Codex 2026-05-06): when called from Celery
+        # (raise_transient=True) AND the exception is classified transient
+        # (httpx timeout, OpenAI 5xx, supabase 503, etc.), re-raise as
+        # TransientError so Celery's autoretry_for kicks in. Skip the
+        # "mark as grading_failed" step — the row stays in its current
+        # claim state so the retry's _claim_submission_for_grading sees
+        # `current_task == task_id` and proceeds idempotently. After
+        # retry exhaustion, PortalGradingTask.on_failure marks the row
+        # 'failed'.
+        if raise_transient:
+            from backend.retry import is_retryable_error
+            if is_retryable_error(e):
+                from backend.tasks.grading_tasks import TransientError
+                raise TransientError(str(e)[:500]) from e
+
         # Update submission status to grading_failed so it doesn't stay in 'partial' forever
         try:
             if sb and submission_id:
