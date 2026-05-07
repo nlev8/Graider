@@ -34,7 +34,7 @@ def _mock_supabase_with_submissions(assessments_data, submissions_data):
             result.data = []
         for method in ('select', 'eq', 'neq', 'ilike', 'like', 'order',
                        'limit', 'offset', 'gt', 'gte', 'lt', 'lte', 'in_',
-                       'range'):
+                       'range', 'or_'):
             getattr(mock_table, method).return_value = mock_table
         mock_table.execute.return_value = result
         return mock_table
@@ -193,7 +193,7 @@ class TestQueryFilterPushdown:
         recorded = {
             'select_args': [], 'eq_args': [], 'gte_args': [],
             'lte_args': [], 'ilike_args': [], 'range_args': [],
-            'order_args': [], 'execute_count': 0,
+            'order_args': [], 'or__args': [], 'execute_count': 0,
             'submissions_execute_n': 0,
         }
         # Stats response should reflect all matching (count); page returns the page slice.
@@ -230,7 +230,7 @@ class TestQueryFilterPushdown:
                     return _called
 
                 for m in ('select', 'eq', 'gte', 'lte', 'ilike',
-                          'range', 'order'):
+                          'range', 'order', 'or_'):
                     getattr(chain, m).side_effect = mk(m)
 
                 def execute(*_args, **_kwargs):
@@ -267,7 +267,11 @@ class TestQueryFilterPushdown:
             f"Expected gte('percentage', 70) call; got {recorded['gte_args']}"
         )
 
-    def test_max_score_pushed_to_supabase_lte(self):
+    def test_max_score_pushed_to_supabase_or_lte_or_null(self):
+        # Round-2 Codex MAJOR fold: max_score uses .or_() so rows with
+        # percentage=NULL (pending grading) are still surfaced under a
+        # "show me low scorers" filter. The pre-fix Python code treated
+        # NULL as 0, which passed `<= max_score` for any positive max.
         from backend.services.assistant_tools_assessments import query_assessment_results
         assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
         page = [{"id": "s1", "student_name": "Bob", "score": 60, "total_points": 100,
@@ -276,7 +280,15 @@ class TestQueryFilterPushdown:
             mock_sb, recorded = self._spy_supabase(assessments, page)
             mock_get.return_value = mock_sb
             query_assessment_results(assessment_name="T", max_score=70, teacher_id="t-1")
-        assert ('percentage', 70) in recorded['lte_args']
+        # Should call .or_('percentage.lte.70,percentage.is.null') NOT .lte()
+        assert ('percentage.lte.70,percentage.is.null',) in recorded['or__args'], (
+            f"Expected or_('percentage.lte.70,percentage.is.null'); "
+            f"got or__args={recorded['or__args']}, lte_args={recorded['lte_args']}"
+        )
+        # And explicitly NOT a bare .lte() — that would silently exclude NULL rows.
+        assert ('percentage', 70) not in recorded['lte_args'], (
+            "max_score must NOT use bare .lte() — NULL pending submissions would leak away"
+        )
 
     def test_student_name_pushed_to_supabase_ilike(self):
         from backend.services.assistant_tools_assessments import query_assessment_results
@@ -360,6 +372,155 @@ class TestQueryFilterPushdown:
         assert result["pagination"]["offset"] == 10
         assert result["pagination"]["returned"] == 1
         assert "has_more" in result["pagination"]
+
+    def test_student_name_with_wildcards_escaped(self):
+        # Round-2 Codex LOW fold: % and _ in user input must be escaped
+        # so they're treated as literal characters, not ILIKE patterns.
+        # E.g., a student named "100%" should not match every other
+        # student via the wildcard.
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = []
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(
+                assessment_name="T", student_name="100%", teacher_id="t-1",
+            )
+        # Wildcard `%` in input must become literal `\%`
+        ilike_calls_for_subs = [
+            args for args in recorded['ilike_args']
+            if args and len(args) == 2 and args[0] == 'student_name'
+        ]
+        assert ilike_calls_for_subs, (
+            f"Expected ilike call on student_name; got {recorded['ilike_args']}"
+        )
+        pattern = ilike_calls_for_subs[0][1]
+        assert '\\%' in pattern, (
+            f"Wildcard % must be escaped to \\%% in pattern; got {pattern!r}"
+        )
+
+    def test_underscore_in_student_name_escaped(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = []
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(
+                assessment_name="T", student_name="a_b", teacher_id="t-1",
+            )
+        ilike_calls_for_subs = [
+            args for args in recorded['ilike_args']
+            if args and len(args) == 2 and args[0] == 'student_name'
+        ]
+        pattern = ilike_calls_for_subs[0][1]
+        assert '\\_' in pattern, (
+            f"Wildcard _ must be escaped to \\_; got {pattern!r}"
+        )
+
+    def test_truncated_stats_flag_when_cap_hit(self):
+        # Round-2 Codex MAJOR fold #1: stats query is now CHUNKED with a
+        # hard cap (100 chunks × 1000 rows = 100K). Beyond that, the
+        # response sets `summary.truncated_stats: true` so the LLM and
+        # any downstream consumer know the aggregates may understate.
+        from backend.services.assistant_tools_assessments import (
+            query_assessment_results, _STATS_CHUNK_SIZE, _STATS_MAX_CHUNKS,
+        )
+
+        # Simulate a query that always returns a full chunk — the loop
+        # will hit the cap and set truncated_stats=true.
+        full_chunk = [
+            {'percentage': 75.0} for _ in range(_STATS_CHUNK_SIZE)
+        ]
+
+        def table_factory(name):
+            chain = MagicMock()
+            if name == 'published_assessments':
+                pa_result = MagicMock()
+                pa_result.data = [{
+                    'id': 'u1', 'join_code': 'ABC123',
+                    'title': 'T', 'settings': {},
+                }]
+                for m in ('select', 'eq', 'ilike'):
+                    getattr(chain, m).return_value = chain
+                chain.execute.return_value = pa_result
+                return chain
+            elif name == 'submissions':
+                state = {'execute_n': 0}
+                for m in ('select', 'eq', 'gte', 'lte', 'ilike',
+                          'range', 'order', 'or_'):
+                    getattr(chain, m).return_value = chain
+
+                def execute(*_args, **_kwargs):
+                    state['execute_n'] += 1
+                    result = MagicMock()
+                    if state['execute_n'] <= _STATS_MAX_CHUNKS:
+                        result.data = full_chunk
+                    else:
+                        result.data = []  # page query
+                    return result
+
+                chain.execute.side_effect = execute
+                return chain
+            else:
+                empty = MagicMock()
+                empty.data = []
+                for m in ('select', 'eq'):
+                    getattr(chain, m).return_value = chain
+                chain.execute.return_value = empty
+                return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = table_factory
+
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = mock_sb
+            result = query_assessment_results(assessment_name="T", teacher_id="t-1")
+
+        assert result["summary"]["truncated_stats"] is True
+        # Total matching reflects what was actually counted (cap × chunk).
+        assert result["summary"]["total_submissions"] == _STATS_CHUNK_SIZE * _STATS_MAX_CHUNKS
+
+    def test_truncated_stats_false_when_under_cap(self):
+        # Sanity: small assessments report truncated_stats: false.
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = [{"id": "s1", "student_name": "A", "score": 90, "total_points": 100,
+                 "percentage": 90.0, "submitted_at": "x", "results": None}]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            result = query_assessment_results(assessment_name="T", teacher_id="t-1")
+        assert result["summary"]["truncated_stats"] is False
+
+    def test_max_score_includes_null_percentage_rows(self):
+        # End-to-end behavior assertion: the .or_() predicate must
+        # round-trip so that pending (NULL percentage) submissions
+        # show up in `submissions` when filtered by max_score. We
+        # simulate Supabase returning the union (matching + NULL rows).
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        # What Postgres would return under .or_(percentage.lte.70,
+        # percentage.is.null): graded low-scorers + ungraded pending.
+        submissions = [
+            {"id": "s1", "student_name": "GradedLow", "score": 60,
+             "total_points": 100, "percentage": 60.0, "submitted_at": "x", "results": None},
+            {"id": "s2", "student_name": "UngradedPending", "score": None,
+             "total_points": 100, "percentage": None, "submitted_at": "x", "results": None},
+        ]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_get.return_value = _mock_supabase_with_submissions(assessments, submissions)
+            result = query_assessment_results(
+                assessment_name="T", max_score=70, teacher_id="t-1",
+            )
+        names_returned = [s["student_name"] for s in result["submissions"]]
+        # Both rows should be in the response — NULL percentage ones too.
+        assert "GradedLow" in names_returned
+        assert "UngradedPending" in names_returned
+        # Graded low-scorer counted in stats; pending excluded from
+        # numerical aggregates because percentage is None.
+        assert result["summary"]["lowest_score"] == 60.0
 
     def test_summary_uses_stats_query_not_paginated_page(self):
         # If stats are computed over the page only, paginating loses
