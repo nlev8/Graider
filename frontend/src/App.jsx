@@ -1845,6 +1845,7 @@ function App() {
     if (!status.is_running) return;
     let cancelled = false;
     let timeoutId = null;
+    let generation = 0;          // monotonic; bumped by visibilitychange to invalidate stale ticks
     let currentDelay = 500;
     const MIN_DELAY = 500;
     const MAX_DELAY = 8000;
@@ -1853,11 +1854,16 @@ function App() {
     let lastResultsLen = (status.results && status.results.length) || 0;
     let lastProgress = status.progress || 0;
 
-    const tick = async () => {
+    const tick = async (myGen) => {
       if (cancelled) return;
+      // Round-2 Codex LOW fold: if a visibility event bumped the
+      // generation while this tick was queued OR awaiting, this stale
+      // chain MUST NOT schedule its own next tick. The fresh chain
+      // started by the visibility handler owns scheduling now.
+      if (myGen !== generation) return;
       try {
         const data = await api.getStatus();
-        if (cancelled) return;
+        if (cancelled || myGen !== generation) return;
         setStatus(data);
         const newLogLen = (data.log && data.log.length) || 0;
         const newResultsLen = (data.results && data.results.length) || 0;
@@ -1886,30 +1892,38 @@ function App() {
         // Network errors → also back off so we don't hammer a flaky API.
         currentDelay = Math.min(currentDelay * 2, MAX_DELAY);
       }
-      if (cancelled) return;
+      if (cancelled || myGen !== generation) return;
       const nextDelay = (typeof document !== 'undefined' && document.hidden)
         ? Math.max(currentDelay, HIDDEN_DELAY)
         : currentDelay;
-      timeoutId = setTimeout(tick, nextDelay);
+      timeoutId = setTimeout(() => tick(myGen), nextDelay);
     };
 
-    // Codex round-1 LOW fold: when the tab becomes visible again,
-    // pull the next tick forward so the user doesn't see stale
-    // status for up to 15s. Snap currentDelay back to MIN_DELAY too
-    // so the first post-return tick is responsive.
+    // Round-1 Codex LOW fold (revised in round-2): when the tab becomes
+    // visible again, pull the next tick forward so the user doesn't
+    // see stale status for up to 15s. We bump `generation` so any
+    // in-flight or queued tick from the prior chain self-cancels its
+    // re-scheduling — preventing duplicate parallel polling chains.
     const onVisibilityChange = () => {
       if (cancelled) return;
       if (typeof document !== 'undefined' && !document.hidden) {
         currentDelay = MIN_DELAY;
         if (timeoutId) clearTimeout(timeoutId);
-        timeoutId = setTimeout(tick, 0);
+        // If a tick is in-flight, it'll see myGen !== generation and
+        // bail out of re-scheduling. We schedule the new chain now;
+        // even if both fire `getStatus` once, the stale chain stops
+        // after its current tick instead of forking a parallel loop.
+        generation += 1;
+        const myGen = generation;
+        timeoutId = setTimeout(() => tick(myGen), 0);
       }
     };
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisibilityChange);
     }
 
-    timeoutId = setTimeout(tick, currentDelay);
+    const initialGen = generation;
+    timeoutId = setTimeout(() => tick(initialGen), currentDelay);
     return () => {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
