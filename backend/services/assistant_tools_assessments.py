@@ -76,11 +76,30 @@ def _pct_to_letter(pct):
     return "F"
 
 
+_DEFAULT_PAGE_SIZE = 100
+_MAX_PAGE_SIZE = 500
+
+
 def query_assessment_results(assessment_name=None, join_code=None,
                               min_score=None, max_score=None,
                               student_name=None,
+                              limit=None, offset=0,
                               teacher_id='local-dev'):
-    """Query results for a published assessment/assignment."""
+    """Query results for a published assessment/assignment.
+
+    Closes audit MAJOR #12 (Codex full-codebase audit 2026-05-06): the
+    previous implementation fetched ALL submissions for the join_code
+    then filtered in Python — unbounded memory growth on assessments
+    with many submissions. Filters now push to Supabase; the submission
+    list is paginated; summary stats are computed in a separate light
+    `percentage`-only query (bounded by the assessment's total
+    submission count regardless of page size).
+
+    Args:
+        limit: Page size for the `submissions` list (default 100, cap 500).
+            Summary stats always reflect ALL matching submissions.
+        offset: Page offset for `submissions`.
+    """
     require_teacher_id(teacher_id)
     sb = _get_supabase()
     if not sb:
@@ -88,6 +107,18 @@ def query_assessment_results(assessment_name=None, join_code=None,
 
     if not assessment_name and not join_code:
         return {"error": "Provide either assessment_name or join_code to look up results."}
+
+    # Validate pagination args defensively — assistant LLM tool calls can
+    # pass arbitrary values.
+    try:
+        page_size = int(limit) if limit is not None else _DEFAULT_PAGE_SIZE
+    except (TypeError, ValueError):
+        page_size = _DEFAULT_PAGE_SIZE
+    page_size = max(1, min(page_size, _MAX_PAGE_SIZE))
+    try:
+        page_offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        page_offset = 0
 
     try:
         if join_code:
@@ -108,23 +139,35 @@ def query_assessment_results(assessment_name=None, join_code=None,
         assessment = assessment_result.data[0]
         code = assessment['join_code']
 
-        subs_result = sb.table('submissions').select(
+        # Helper: build a Supabase submissions query filtered by all the
+        # caller's predicates EXCEPT pagination. Reused for both the
+        # stats query (selects only `percentage`) and the paginated
+        # listing (selects the full row shape).
+        def _filtered_subs(select_cols):
+            q = sb.table('submissions').select(select_cols).eq('join_code', code)
+            if student_name:
+                # Case-insensitive partial match — pushed to Postgres.
+                q = q.ilike('student_name', f'%{student_name}%')
+            if min_score is not None:
+                q = q.gte('percentage', min_score)
+            if max_score is not None:
+                q = q.lte('percentage', max_score)
+            return q
+
+        # 1) Stats query: percentage-only over ALL matching rows. Even
+        # 100K rows × 8 bytes = 800KB — fine over the wire. Bounded by
+        # the assessment's total submission count rather than by an
+        # unbounded full-row fetch.
+        stats_result = _filtered_subs('percentage').execute()
+        stats_rows = stats_result.data or []
+        percentages = [r['percentage'] for r in stats_rows if r.get('percentage') is not None]
+
+        # 2) Paginated listing query: full row shape, ordered + limited.
+        page_query = _filtered_subs(
             'id, student_name, score, total_points, percentage, submitted_at, results'
-        ).eq('join_code', code).order('submitted_at', desc=True).execute()
-
-        submissions = subs_result.data or []
-
-        if student_name:
-            student_lower = student_name.lower()
-            submissions = [s for s in submissions if student_lower in (s.get('student_name') or '').lower()]
-
-        if min_score is not None:
-            submissions = [s for s in submissions if (s.get('percentage') or 0) >= min_score]
-
-        if max_score is not None:
-            submissions = [s for s in submissions if (s.get('percentage') or 0) <= max_score]
-
-        percentages = [s['percentage'] for s in submissions if s.get('percentage') is not None]
+        ).order('submitted_at', desc=True).range(page_offset, page_offset + page_size - 1)
+        page_result = page_query.execute()
+        submissions = page_result.data or []
 
         if percentages:
             avg = round(sum(percentages) / len(percentages), 1)
@@ -151,6 +194,7 @@ def query_assessment_results(assessment_name=None, join_code=None,
             })
 
         settings = assessment.get('settings') or {}
+        total_matching = len(stats_rows)
 
         return {
             "assessment": {
@@ -160,11 +204,17 @@ def query_assessment_results(assessment_name=None, join_code=None,
                 "period": settings.get('period', ''),
             },
             "summary": {
-                "total_submissions": len(submissions),
+                "total_submissions": total_matching,
                 "average_score": avg,
                 "highest_score": highest,
                 "lowest_score": lowest,
                 "grade_distribution": grade_dist,
+            },
+            "pagination": {
+                "limit": page_size,
+                "offset": page_offset,
+                "returned": len(submissions),
+                "has_more": (page_offset + len(submissions)) < total_matching,
             },
             "submissions": formatted,
         }
@@ -217,6 +267,14 @@ ASSESSMENT_TOOL_DEFINITIONS = [
                 "student_name": {
                     "type": "string",
                     "description": "Filter to a specific student (partial match)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Page size for the submission list (default 100, max 500). Summary stats always reflect ALL matching submissions, not just this page."
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Page offset for the submission list (default 0). Use with `limit` to page through large assessments."
                 }
             }
         }

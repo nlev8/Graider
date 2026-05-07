@@ -33,7 +33,8 @@ def _mock_supabase_with_submissions(assessments_data, submissions_data):
         else:
             result.data = []
         for method in ('select', 'eq', 'neq', 'ilike', 'like', 'order',
-                       'limit', 'offset', 'gt', 'gte', 'lt', 'lte', 'in_'):
+                       'limit', 'offset', 'gt', 'gte', 'lt', 'lte', 'in_',
+                       'range'):
             getattr(mock_table, method).return_value = mock_table
         mock_table.execute.return_value = result
         return mock_table
@@ -129,11 +130,14 @@ class TestQueryAssessmentResults:
         assert result["summary"]["total_submissions"] == 1
 
     def test_filters_by_min_score(self):
+        # PR #229: filtering now happens on Supabase via .gte('percentage', N).
+        # Test fixture provides only the matching rows (what Postgres would
+        # return). The unit-tests for the Supabase chain construction itself
+        # are below in TestQueryFilterPushdown.
         from backend.services.assistant_tools_assessments import query_assessment_results
         assessments = [{"id": "uuid-1", "join_code": "ABC123", "title": "Test", "settings": {}}]
         submissions = [
             {"id": "s1", "student_name": "Alice", "score": 90, "total_points": 100, "percentage": 90.0, "submitted_at": "2026-03-20T10:00:00", "results": None},
-            {"id": "s2", "student_name": "Bob", "score": 60, "total_points": 100, "percentage": 60.0, "submitted_at": "2026-03-20T10:00:00", "results": None},
         ]
         with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
             mock_get.return_value = _mock_supabase_with_submissions(assessments, submissions)
@@ -167,6 +171,219 @@ class TestQueryAssessmentResults:
         assert dist["B"] == 1
         assert dist["C"] == 1
         assert dist["F"] == 1
+
+
+class TestQueryFilterPushdown:
+    """Closes audit MAJOR #12 (Codex 2026-05-06): filters that used to run in
+    Python after an unbounded fetch are now pushed to Supabase.
+
+    These tests pin the contract by recording every method call on the
+    submissions chain and asserting the expected `.gte`/`.lte`/`.ilike`/
+    `.range` calls were made before `.execute()`.
+    """
+
+    def _spy_supabase(self, assessments_data, submissions_page, stats_count=None):
+        """Create a Supabase mock that records calls per submissions chain.
+
+        Returns (mock_sb, recorded_calls) where `recorded_calls` is a
+        dict { 'select_args': [...], 'eq_args': [...], 'gte_args': [...],
+        'lte_args': [...], 'ilike_args': [...], 'range_args': [...],
+        'order_args': [...] } accumulated across all submissions chains.
+        """
+        recorded = {
+            'select_args': [], 'eq_args': [], 'gte_args': [],
+            'lte_args': [], 'ilike_args': [], 'range_args': [],
+            'order_args': [], 'execute_count': 0,
+            'submissions_execute_n': 0,
+        }
+        # Stats response should reflect all matching (count); page returns the page slice.
+        stats_result = MagicMock()
+        stats_result.data = (
+            [{'percentage': r.get('percentage')} for r in (submissions_page or [])]
+            if stats_count is None else
+            [{'percentage': r.get('percentage')} for r in (submissions_page or [])]
+            + [{'percentage': 50.0}] * max(0, stats_count - len(submissions_page or []))
+        )
+        page_result = MagicMock()
+        page_result.data = submissions_page
+
+        def table_factory(name):
+            chain = MagicMock()
+            if name == 'published_assessments':
+                # Simple chain: returns assessments
+                pa_result = MagicMock()
+                pa_result.data = assessments_data
+                for m in ('select', 'eq', 'ilike'):
+                    getattr(chain, m).return_value = chain
+                chain.execute.return_value = pa_result
+                return chain
+            elif name == 'submissions':
+                # Record everything across ALL submissions chains. Use
+                # the closure-scoped `submissions_execute_n` counter so
+                # the 1st submissions.execute() returns stats and the
+                # 2nd returns the paginated page — even though each
+                # chain is a fresh MagicMock instance.
+                def mk(method_name):
+                    def _called(*args, **kwargs):
+                        recorded[f'{method_name}_args'].append(args)
+                        return chain
+                    return _called
+
+                for m in ('select', 'eq', 'gte', 'lte', 'ilike',
+                          'range', 'order'):
+                    getattr(chain, m).side_effect = mk(m)
+
+                def execute(*_args, **_kwargs):
+                    recorded['execute_count'] += 1
+                    recorded['submissions_execute_n'] += 1
+                    # 1st execute = stats, 2nd execute = paginated list
+                    return stats_result if recorded['submissions_execute_n'] == 1 else page_result
+
+                chain.execute.side_effect = execute
+                return chain
+            else:
+                # Default empty chain
+                empty = MagicMock()
+                empty.data = []
+                for m in ('select', 'eq', 'ilike', 'order'):
+                    getattr(chain, m).return_value = chain
+                chain.execute.return_value = empty
+                return chain
+
+        mock_sb = MagicMock()
+        mock_sb.table.side_effect = table_factory
+        return mock_sb, recorded
+
+    def test_min_score_pushed_to_supabase_gte(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = [{"id": "s1", "student_name": "Alice", "score": 90, "total_points": 100,
+                 "percentage": 90.0, "submitted_at": "2026-03-20T10:00:00", "results": None}]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(assessment_name="T", min_score=70, teacher_id="t-1")
+        assert ('percentage', 70) in recorded['gte_args'], (
+            f"Expected gte('percentage', 70) call; got {recorded['gte_args']}"
+        )
+
+    def test_max_score_pushed_to_supabase_lte(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = [{"id": "s1", "student_name": "Bob", "score": 60, "total_points": 100,
+                 "percentage": 60.0, "submitted_at": "2026-03-20T10:00:00", "results": None}]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(assessment_name="T", max_score=70, teacher_id="t-1")
+        assert ('percentage', 70) in recorded['lte_args']
+
+    def test_student_name_pushed_to_supabase_ilike(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = [{"id": "s1", "student_name": "Alice", "score": 90, "total_points": 100,
+                 "percentage": 90.0, "submitted_at": "2026-03-20T10:00:00", "results": None}]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(assessment_name="T", student_name="Alice", teacher_id="t-1")
+        # ilike calls happen on both published_assessments AND submissions chains.
+        # We're looking for the submissions one with student_name pattern.
+        assert any(
+            args == ('student_name', '%Alice%') for args in recorded['ilike_args']
+        ), f"Expected ilike('student_name', '%Alice%'); got {recorded['ilike_args']}"
+
+    def test_default_pagination_uses_range_0_99(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = []
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(assessment_name="T", teacher_id="t-1")
+        # Default page size 100 → range(0, 99)
+        assert (0, 99) in recorded['range_args'], (
+            f"Expected default range(0, 99); got {recorded['range_args']}"
+        )
+
+    def test_explicit_pagination_uses_provided_offset_and_limit(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = []
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(
+                assessment_name="T", limit=50, offset=100, teacher_id="t-1",
+            )
+        # offset=100, limit=50 → range(100, 149)
+        assert (100, 149) in recorded['range_args']
+
+    def test_limit_clamped_to_max_500(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = []
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(
+                assessment_name="T", limit=99999, teacher_id="t-1",
+            )
+        # Caller-supplied limit=99999 should be clamped to 500 → range(0, 499)
+        assert (0, 499) in recorded['range_args']
+
+    def test_negative_offset_clamped_to_zero(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = []
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            query_assessment_results(
+                assessment_name="T", offset=-5, teacher_id="t-1",
+            )
+        assert (0, 99) in recorded['range_args']
+
+    def test_response_includes_pagination_block(self):
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        page = [{"id": "s1", "student_name": "A", "score": 90, "total_points": 100,
+                 "percentage": 90.0, "submitted_at": "x", "results": None}]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page)
+            mock_get.return_value = mock_sb
+            result = query_assessment_results(
+                assessment_name="T", limit=50, offset=10, teacher_id="t-1",
+            )
+        assert "pagination" in result
+        assert result["pagination"]["limit"] == 50
+        assert result["pagination"]["offset"] == 10
+        assert result["pagination"]["returned"] == 1
+        assert "has_more" in result["pagination"]
+
+    def test_summary_uses_stats_query_not_paginated_page(self):
+        # If stats are computed over the page only, paginating loses
+        # accurate aggregates. Pin: total_submissions reflects the stats
+        # query count, NOT len(submissions).
+        from backend.services.assistant_tools_assessments import query_assessment_results
+        assessments = [{"id": "u1", "join_code": "ABC123", "title": "T", "settings": {}}]
+        # Page returns 2 rows; stats simulated to indicate 5 total matching.
+        page = [
+            {"id": "s1", "student_name": "A", "score": 90, "total_points": 100, "percentage": 90.0, "submitted_at": "x", "results": None},
+            {"id": "s2", "student_name": "B", "score": 80, "total_points": 100, "percentage": 80.0, "submitted_at": "x", "results": None},
+        ]
+        with patch('backend.services.assistant_tools_assessments._get_supabase') as mock_get:
+            mock_sb, recorded = self._spy_supabase(assessments, page, stats_count=5)
+            mock_get.return_value = mock_sb
+            result = query_assessment_results(
+                assessment_name="T", limit=2, teacher_id="t-1",
+            )
+        # Stats query returns 5 percentages (page rows + 3 padding rows from
+        # _spy_supabase fixture). total_submissions reflects ALL matching,
+        # not just the page.
+        assert result["summary"]["total_submissions"] == 5
+        # But submissions list is bounded by page size.
+        assert len(result["submissions"]) == 2
 
 
 class TestAssessmentToolIntegration:
