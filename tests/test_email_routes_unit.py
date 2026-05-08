@@ -2,8 +2,10 @@
 Unit tests for backend/routes/email_routes.py — pure helpers + read-only
 routes + state-machine paths that don't require live SMTP/subprocess.
 
-Audit MAJOR #4 sprint follow-up to PR #246. Aims to push email_routes.py
-from 23% to >=80% by exercising:
+Audit MAJOR #4 sprint follow-up to PR #246. Coverage gain: 23% → 47%
+(focused suite) / 56% (full test suite). Higher coverage targets would
+require fixturing the AI/Resend/subprocess pipeline in depth and are
+deferred. Areas exercised:
 
 - Pure helpers: _normalize_submission_name, _match_to_config_title,
   _find_in_roster, _edit_distance, _unique_roster_students,
@@ -42,9 +44,17 @@ def flask_app(tmp_path, monkeypatch):
     os.makedirs(str(tmp_path / "outlook_exports"), exist_ok=True)
     monkeypatch.setattr(er_mod, "CONFIRMATIONS_FILE", str(tmp_path / "confirmations_sent.json"))
 
-    # Reset per-route state between tests
-    er_mod._outlook_send_state.update({"status": "idle", "sent": 0, "failed": 0, "total": 0, "log": [], "message": ""})
-    er_mod._focus_comms_state.update({"status": "idle", "sent": 0, "failed": 0, "total": 0, "log": [], "message": ""})
+    # Reset per-route state between tests — including `process` so a test
+    # that injects a mock proc doesn't leak into a later test's not-running
+    # branch (Codex round-1 MAJOR finding).
+    er_mod._outlook_send_state.update({
+        "status": "idle", "process": None, "sent": 0, "failed": 0,
+        "total": 0, "log": [], "message": "",
+    })
+    er_mod._focus_comms_state.update({
+        "status": "idle", "process": None, "sent": 0, "failed": 0,
+        "total": 0, "log": [], "message": "",
+    })
 
     app = Flask(__name__)
     app.config["TESTING"] = True
@@ -507,6 +517,10 @@ class TestLaunchOutlookSender:
         assert "VPortal credentials" in result["error"]
 
     def test_happy_path_spawns_subprocess(self, flask_app):
+        """Happy-path subprocess spawn — pins the GH #245 multi-tenant
+        credential isolation contract: per-teacher creds path passed via
+        GRAIDER_PORTAL_CREDS_FILE env var, correct script invoked, payload
+        written to disk for the subprocess to read (Codex round-1 MEDIUM)."""
         app, er_mod, tmp_path = flask_app
         with patch("backend.routes.assistant_routes.write_temp_creds_file",
                    return_value=True), \
@@ -523,11 +537,39 @@ class TestLaunchOutlookSender:
 
         assert result["status"] == "started"
         assert result["total"] == 1
-        # Subprocess was launched
         assert mock_popen.called
         # State machine moved to running → total=1
         assert er_mod._outlook_send_state["status"] == "running"
         assert er_mod._outlook_send_state["total"] == 1
+
+        # ── GH #245 contract assertions ──
+        call_kwargs = mock_popen.call_args.kwargs
+        sub_env = call_kwargs.get("env", {})
+        # Per-teacher creds path threaded via env var
+        assert "GRAIDER_PORTAL_CREDS_FILE" in sub_env, (
+            "Subprocess env MUST include GRAIDER_PORTAL_CREDS_FILE per GH #245"
+        )
+        creds_path_in_env = sub_env["GRAIDER_PORTAL_CREDS_FILE"]
+        # Per-teacher path includes the safe teacher_id suffix (not legacy shared)
+        assert "portal_credentials_teacher-alice.json" in creds_path_in_env, (
+            f"Expected per-teacher creds path; got {creds_path_in_env!r}"
+        )
+        assert "portal_credentials.json" not in os.path.basename(creds_path_in_env), (
+            "Subprocess must NOT receive the legacy shared portal_credentials.json"
+        )
+
+        # Correct subprocess command — outlook_sender.py with the temp emails file
+        cmd = mock_popen.call_args.args[0]
+        assert cmd[1].endswith("outlook_sender.py"), f"Wrong script: {cmd}"
+        tmp_emails_path = cmd[2]
+        assert tmp_emails_path.endswith("tmp_outlook_emails.json")
+
+        # Payload written to disk with the actual emails
+        with open(tmp_emails_path, 'r') as f:
+            payload = json.load(f)
+        assert "emails" in payload
+        assert len(payload["emails"]) == 1
+        assert payload["emails"][0]["to"] == "x@x.com"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -676,21 +718,23 @@ class TestSendOutlookEmails:
 
     def test_already_running_returns_409_via_launch(self, flask_app):
         """When emails are buildable but launch_outlook_sender reports already-running,
-        the route surfaces the 409."""
+        the route surfaces the 409. Patches audit_log so the test does not write
+        to ~/.graider_audit.log (Codex round-1 MEDIUM)."""
         app, er_mod, _ = flask_app
         with open(er_mod.PARENT_CONTACTS_FILE, 'w') as f:
             json.dump({"sid-1": {"parent_emails": ["p@x.com"]}}, f)
         er_mod._outlook_send_state["status"] = "running"
 
-        client = app.test_client()
-        resp = client.post("/api/send-outlook-emails", json={
-            "type": "parent",
-            "results": [{
-                "student_id": "sid-1", "student_name": "Alice Smith",
-                "score": 90, "letter_grade": "A", "feedback": "ok",
-                "assignment": "Quiz",
-            }],
-        })
+        with patch("backend.routes.email_routes.audit_log"):
+            client = app.test_client()
+            resp = client.post("/api/send-outlook-emails", json={
+                "type": "parent",
+                "results": [{
+                    "student_id": "sid-1", "student_name": "Alice Smith",
+                    "score": 90, "letter_grade": "A", "feedback": "ok",
+                    "assignment": "Quiz",
+                }],
+            })
         assert resp.status_code == 409
 
 
