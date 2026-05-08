@@ -41,6 +41,48 @@ DEFAULT_STYLE = {
 }
 
 
+def _safe_style_name(name):
+    """Sanitize a style name for safe filesystem use (closes GH #253).
+
+    Mirrors the `_portal_credentials_file_for(teacher_id)` pattern from
+    PR #246: replace path-traversal characters and reject empty / dot
+    sentinels. Returns the sanitized name or None if unusable.
+
+    Args:
+        name: Raw style name from caller (may be untrusted).
+
+    Returns:
+        Sanitized basename (no extension), or None if invalid.
+    """
+    if not name:
+        return None
+    # Allow alphanum, dash, underscore. Replace everything else with '_'
+    # so that '../', '/', '\\', and absolute path attempts are neutralized.
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', str(name))
+    if not sanitized or sanitized in ('.', '..'):
+        return None
+    # Cap length to avoid pathological long filenames
+    return sanitized[:120]
+
+
+def _resolve_style_path(name):
+    """Resolve a style file path, returning None if traversal detected.
+
+    Defense in depth on top of `_safe_style_name`: even if a sanitized
+    name somehow resolves outside STYLES_DIR (symlink, race), reject it.
+    """
+    safe = _safe_style_name(name)
+    if not safe:
+        return None
+    filepath = os.path.join(STYLES_DIR, safe + ".json")
+    # Resolve and verify the result lives inside STYLES_DIR
+    resolved = os.path.realpath(filepath)
+    styles_root = os.path.realpath(STYLES_DIR)
+    if not (resolved == styles_root or resolved.startswith(styles_root + os.sep)):
+        return None
+    return filepath
+
+
 def _hex_to_rgb(hex_str):
     """Convert '#RRGGBB' to RGBColor. Returns None if invalid."""
     if not hex_str or not isinstance(hex_str, str):
@@ -63,13 +105,16 @@ def load_style(style_name):
 
     Returns:
         Dict of style properties (defaults filled in for missing keys).
+        Falls back to defaults silently if `style_name` contains path
+        traversal characters or otherwise sanitizes to an empty/invalid
+        name (closes GH #253).
     """
     style = dict(DEFAULT_STYLE)
     if not style_name:
         return style
 
-    filepath = os.path.join(STYLES_DIR, style_name + ".json")
-    if not os.path.exists(filepath):
+    filepath = _resolve_style_path(style_name)
+    if not filepath or not os.path.exists(filepath):
         return style
 
     try:
@@ -114,23 +159,33 @@ def save_style(name, style_dict):
 
     Args:
         name: Style name (e.g., 'cornell-notes', 'parent-letter').
+            Sanitized via `_safe_style_name` so attacker-controlled
+            inputs can't escape STYLES_DIR (closes GH #253).
         style_dict: Dict of visual properties to save.
 
     Returns:
-        Dict with status and filepath.
+        Dict with status and filepath, or {"error": ...} if name is
+        invalid after sanitization.
     """
+    safe_name = _safe_style_name(name)
+    if not safe_name:
+        return {"error": "Invalid style name. Use letters, numbers, dashes, or underscores only."}
+
     os.makedirs(STYLES_DIR, exist_ok=True)
-    filepath = os.path.join(STYLES_DIR, name + ".json")
+    filepath = _resolve_style_path(name)
+    if not filepath:
+        # Defense in depth — _resolve_style_path also caught it
+        return {"error": "Style path resolved outside STYLES_DIR (rejected)."}
 
     # Only keep recognized keys
     allowed_keys = set(DEFAULT_STYLE.keys()) | {"name"}
     filtered = {k: v for k, v in style_dict.items() if k in allowed_keys}
-    filtered["name"] = name
+    filtered["name"] = safe_name
 
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(filtered, f, indent=2)
 
-    return {"status": "saved", "style_name": name, "filepath": filepath}
+    return {"status": "saved", "style_name": safe_name, "filepath": filepath}
 
 
 def list_styles():
