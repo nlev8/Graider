@@ -158,7 +158,16 @@ def test_extensions_allows_in_memory_in_development(monkeypatch):
 
 
 def test_extensions_global_default_is_100_per_minute(monkeypatch):
-    """Phase 4.6 tightened the global default from 200/min → 100/min."""
+    """Phase 4.6 tightened the global default from 200/min → 100/min.
+
+    Inspects the parsed RateLimitItem object directly (limit.amount,
+    limit.multiples, GRANULARITY.name) rather than substring-matching
+    against str(RuntimeLimit), which CONTAINS the function pointer
+    repr like `key_func=<function get_remote_address at 0x7f2000445080>`.
+    A pointer hex address coincidentally containing '200' triggered a
+    false-positive failure on PR #256 CI. (Codex investigation confirmed
+    main has the same brittleness — failure depends on memory layout.)
+    """
     monkeypatch.setenv("FLASK_ENV", "development")
     monkeypatch.delenv("REDIS_URL", raising=False)
 
@@ -166,15 +175,25 @@ def test_extensions_global_default_is_100_per_minute(monkeypatch):
     sys.modules.pop("backend.extensions", None)
     import backend.extensions
 
-    # flask-limiter exposes resolved limit strings via limit_manager
-    default_strs = [str(lim) for lim in backend.extensions.limiter.limit_manager.default_limits]
-    assert any("100" in s for s in default_strs), (
-        f"Expected a '100 per minute' default limit; got {default_strs}"
-    )
-    # And confirm we are NOT still at the old 200
-    assert not any("200" in s for s in default_strs), (
-        f"Global default still contains '200' — tightening regressed: {default_strs}"
-    )
+    defaults = list(backend.extensions.limiter.limit_manager.default_limits)
+    # default_limits is a list of LimitGroup wrappers; each .limit is the
+    # parsed RateLimitItem with .amount, .multiples, and a GRANULARITY.
+    parsed = [lim.limit for lim in defaults]
+    assert any(
+        getattr(p, "amount", None) == 100
+        and getattr(p, "multiples", None) == 1
+        and getattr(type(p), "GRANULARITY", None) is not None
+        and type(p).GRANULARITY.name == "minute"
+        for p in parsed
+    ), f"Expected a '100 per minute' default limit; got {parsed!r}"
+    # Confirm we are NOT still at the old 200/min (or any /min variant).
+    assert not any(
+        getattr(p, "amount", None) == 200
+        and getattr(p, "multiples", None) == 1
+        and getattr(type(p), "GRANULARITY", None) is not None
+        and type(p).GRANULARITY.name == "minute"
+        for p in parsed
+    ), f"Global default still '200 per minute' — tightening regressed: {parsed!r}"
 
 
 class TestProxyFixClientIp:
