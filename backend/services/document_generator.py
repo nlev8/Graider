@@ -214,7 +214,10 @@ def save_style(name, style_dict):
     """
     safe_name = _safe_style_name(name)
     if not safe_name:
-        return {"error": "Invalid style name. Use letters, numbers, dashes, or underscores only."}
+        return {"error": (
+            "Invalid style name. Use letters, numbers, dashes, or underscores only "
+            f"(max {_MAX_STYLE_NAME} characters after sanitization)."
+        )}
 
     os.makedirs(STYLES_DIR, exist_ok=True)
     filepath = _resolve_style_path(name)
