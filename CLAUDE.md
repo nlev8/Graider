@@ -621,6 +621,13 @@ When given a bug report with a screenshot or clear description: just fix it. Rea
 ### 10. Subagent Discipline
 Use subagents when the task requires 3+ searches, parallel research across multiple files, or would pollute the main context with large outputs. Don't use them for simple greps or reading one file. One task per subagent for focused execution. Prefer direct Glob/Grep/Read for targeted lookups.
 
+### 11. Every Error Is Yours to Fix
+When you find a bug — silent failure, swallowed exception, broken import, latent NameError, dead-code path — the default action is **fix it**, not file-and-defer. "I'll track it as a follow-up" is an escape hatch that turns into rot. Filing a separate issue is reserved for genuinely cross-cutting refactors (different storage key + multi-file + SSE consumer audit, like GH #247) — not "this would be a 5-line fix but isn't strictly in PR scope."
+
+If you can fix it in <15 minutes without touching unrelated code, fix it. Don't just label it MEDIUM and move on. Don't just write a comment that says "TODO." Fix it, add a regression test, ship it.
+
+If the fix genuinely exceeds PR scope (3+ files of unrelated changes, requires architectural decisions, or would balloon the diff past 500 lines), then file a follow-up — but include the **specific fix sketch** and a **5-line repro** in the issue body so future-you (or another contributor) can land it without re-investigating. Filing without a fix sketch is deferring, not tracking.
+
 ---
 
 ## Post-Processing Pipeline (planner_routes.py)
@@ -643,7 +650,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **Graider** (11622 symbols, 29308 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Graider** (13553 symbols, 36143 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
