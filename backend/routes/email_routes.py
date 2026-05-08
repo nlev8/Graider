@@ -873,9 +873,14 @@ def send_confirmation_emails():
         if not roster:
             return jsonify({"error": "No students found in period CSVs (~/.graider_data/periods/)"}), 400
 
-        # Load already-confirmed filenames from confirmations file + grading_state
+        # Load already-confirmed filenames from confirmations file + grading_state.
+        # Closes GH #249: grading_state was a module-level global in grading_routes
+        # before the Phase 3 refactor; now it's per-teacher state factory functions.
         confirmed_filenames = _load_confirmed_filenames()
-        from backend.routes.grading_routes import grading_state, grading_lock
+        from backend.grading.state import _get_state, _get_lock
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        grading_state = _get_state(teacher_id)
+        grading_lock = _get_lock(teacher_id)
         if grading_state and grading_state.get("results"):
             lock = grading_lock
             results = grading_state["results"] if not lock else None
@@ -1222,8 +1227,13 @@ def mark_confirmations_sent_file():
         if not filenames:
             return jsonify({"error": "No filenames provided"}), 400
 
-        # Update grading_state for graded results
-        from backend.routes.grading_routes import grading_state, grading_lock
+        # Update grading_state for graded results.
+        # Closes GH #249: same as send_confirmation_emails — use the
+        # per-teacher state factory instead of the removed module-level global.
+        from backend.grading.state import _get_state, _get_lock
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        grading_state = _get_state(teacher_id)
+        grading_lock = _get_lock(teacher_id)
 
         updated = 0
         if grading_state and grading_state.get("results"):
