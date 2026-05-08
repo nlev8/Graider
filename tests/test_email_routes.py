@@ -288,24 +288,23 @@ class TestConfirmation:
 
     @staticmethod
     def _setup_grading_module(mock_state, lock):
-        """Inject grading_state and grading_lock onto the grading_routes module.
+        """Inject mock state into the per-teacher grading state factory.
 
-        The email routes use a deferred import:
-            from backend.routes.grading_routes import grading_state, grading_lock
-        But those names are local variables inside each route function, not
-        module-level attributes.  We monkey-patch them onto the module so the
-        import succeeds in tests.
+        Post GH #249 fix (PR #256): email_routes now reads via
+        `backend.grading.state._get_state(teacher_id)` — the per-teacher
+        state cache. Tests inject the mock state under the test teacher_id
+        ('test') so when the route calls `_get_state('test')`, it sees the
+        mock results.
         """
-        import backend.routes.grading_routes as gr_mod
-        gr_mod.grading_state = mock_state
-        gr_mod.grading_lock = lock
+        import backend.grading.state as state_mod
+        state_mod._grading_states['test'] = mock_state
+        state_mod._grading_locks['test'] = lock
 
     @staticmethod
     def _teardown_grading_module():
-        import backend.routes.grading_routes as gr_mod
-        for attr in ('grading_state', 'grading_lock'):
-            if hasattr(gr_mod, attr):
-                delattr(gr_mod, attr)
+        import backend.grading.state as state_mod
+        state_mod._grading_states.pop('test', None)
+        state_mod._grading_locks.pop('test', None)
 
     def test_valid_confirmation_marks_result(self, mock_grading_state, grading_lock, tmp_path):
         """Marking a filename as confirmed updates grading_state results."""
