@@ -523,7 +523,7 @@ class TestLaunchOutlookSender:
         written to disk for the subprocess to read (Codex round-1 MEDIUM)."""
         app, er_mod, tmp_path = flask_app
         with patch("backend.routes.assistant_routes.write_temp_creds_file",
-                   return_value=True), \
+                   return_value=True) as mock_write, \
              patch("backend.routes.email_routes.subprocess.Popen") as mock_popen, \
              patch("backend.routes.email_routes.threading.Thread"):
             mock_proc = MagicMock()
@@ -534,6 +534,11 @@ class TestLaunchOutlookSender:
                 [{"to": "x@x.com", "subject": "s", "body": "b", "student_name": "n"}],
                 teacher_id="teacher-alice",
             )
+
+        # write_temp_creds_file received the per-teacher id (Codex round-2 MINOR).
+        # Without this, a regression to default 'local-dev' could still pass
+        # the env-var assertion (legacy path is the suffix-less filename).
+        mock_write.assert_called_once_with("teacher-alice")
 
         assert result["status"] == "started"
         assert result["total"] == 1
