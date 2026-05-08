@@ -304,8 +304,13 @@ class TestCreateAnswerKeyDoc:
         assert "Paris" in all_text
         assert "Madrid" in all_text
 
-    def test_correct_answer_filled_bubble(self):
-        """The correct option is rendered with a filled bubble (●)."""
+    def test_correct_answer_filled_bubble_on_right_option_only(self):
+        """The correct option's paragraph contains the filled bubble (●);
+        the wrong option's paragraph contains the empty bubble (○).
+        Codex round-1 MINOR: previous version had a duplicate-assertion
+        weakness (`'●' in s or '●' in s`) — strengthened to assert the
+        filled bubble lives on the correct paragraph specifically and
+        the empty bubble lives on the wrong paragraph."""
         from backend.services.worksheet_generator import _create_answer_key_doc
         questions = [{
             "number": 1, "question_text": "Q?",
@@ -313,9 +318,26 @@ class TestCreateAnswerKeyDoc:
             "correct_answer": "B", "is_tf": False,
         }]
         doc = _create_answer_key_doc("Quiz", questions)
-        all_text = "\n".join(p.text for p in doc.paragraphs)
-        # Filled bubble character in text near "Right"
-        assert "●" in all_text or "●" in all_text
+        # Find paragraphs containing each option text
+        wrong_para = next(
+            (p for p in doc.paragraphs if "A) Wrong" in p.text), None
+        )
+        right_para = next(
+            (p for p in doc.paragraphs if "B) Right" in p.text), None
+        )
+        assert wrong_para is not None, "A) Wrong paragraph not rendered"
+        assert right_para is not None, "B) Right paragraph not rendered"
+        # Correct option has filled bubble (●), wrong option has empty (○)
+        assert "●" in right_para.text, (
+            f"Correct option missing filled bubble: {right_para.text!r}"
+        )
+        assert "○" in wrong_para.text, (
+            f"Wrong option missing empty bubble: {wrong_para.text!r}"
+        )
+        # And the wrong option does NOT have a filled bubble
+        assert "●" not in wrong_para.text, (
+            f"Wrong option has filled bubble (should be empty): {wrong_para.text!r}"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
