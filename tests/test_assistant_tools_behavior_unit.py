@@ -297,6 +297,77 @@ class TestLoadBehaviorEvents:
         entry = result["alice"]["entries"][0]
         assert "14:35" in entry["timestamps"]
 
+    def test_fallback_path_when_joined_query_raises(self):
+        """Codex round-1 MEDIUM: only the joined-query path was exercised
+        before. This pins the fallback at lines 79-111: when the first
+        joined .execute() raises, the function falls back to a session-less
+        events query, looks up sessions separately, and applies date/period
+        filtering in Python."""
+        from backend.services.assistant_tools_behavior import _load_behavior_events
+
+        # Joined-query chain raises on .execute()
+        joined_chain = MagicMock()
+        joined_chain.select.return_value = joined_chain
+        joined_chain.eq.return_value = joined_chain
+        joined_chain.gte.return_value = joined_chain
+        joined_chain.execute.side_effect = RuntimeError("joined query failed")
+
+        # Fallback events chain (no .gte for join filter — Python filters)
+        fallback_events_chain = MagicMock()
+        fallback_events_chain.select.return_value = fallback_events_chain
+        fallback_events_chain.eq.return_value = fallback_events_chain
+        fallback_events_chain.execute.return_value = MagicMock(data=[
+            {
+                "student_name": "Alice", "type": "correction",
+                "note": "fallback note", "transcript": "", "source": "manual",
+                "event_time": "2026-05-01T09:00:00Z",
+                "session_id": "sess-new",
+            },
+            {
+                "student_name": "Alice", "type": "correction",
+                "note": "old note", "transcript": "", "source": "manual",
+                "event_time": "2026-04-01T09:00:00Z",
+                "session_id": "sess-old",
+            },
+        ])
+
+        # Sessions chain — production code does sb.table('behavior_sessions')
+        # .select('id, period, date').in_('id', session_ids).execute()
+        sessions_chain = MagicMock()
+        sessions_chain.select.return_value = sessions_chain
+        sessions_chain.in_.return_value = sessions_chain
+        sessions_chain.execute.return_value = MagicMock(data=[
+            {"id": "sess-new", "period": "Period 1", "date": "2026-05-01"},
+            {"id": "sess-old", "period": "Period 1", "date": "2026-04-01"},
+        ])
+
+        sb = MagicMock()
+        events_call_count = {"n": 0}
+
+        def table_router(name):
+            if name == "behavior_events":
+                events_call_count["n"] += 1
+                # First call → joined (raises). Second → fallback (succeeds).
+                return joined_chain if events_call_count["n"] == 1 else fallback_events_chain
+            if name == "behavior_sessions":
+                return sessions_chain
+            return MagicMock()
+
+        sb.table = table_router
+
+        with patch("backend.services.assistant_tools_behavior._get_supabase",
+                   return_value=sb):
+            # cutoff filters out the 2026-04-01 entry; keeps 2026-05-01
+            result = _load_behavior_events(TID, cutoff_date="2026-04-15")
+
+        # Fallback path produced data
+        assert "alice" in result
+        entries = result["alice"]["entries"]
+        assert len(entries) == 1
+        # Only the post-cutoff entry survived
+        assert entries[0]["date"] == "2026-05-01"
+        assert "fallback note" in entries[0]["notes"]
+
 
 # ──────────────────────────────────────────────────────────────────
 # debug_behavior
@@ -409,14 +480,44 @@ class TestGetBehaviorSummary:
         assert student["daily_breakdown"]["2026-05-01"]["corrections"] == 2
 
     def test_days_clamped_max_90(self):
-        """days > 90 clamped to 90; days=0 clamped to 1."""
+        """Codex round-1 LOW: previous version only asserted _load_behavior_events
+        was called — would pass even if clamping was removed. Now asserts
+        the actual cutoff_date kwarg corresponds to ≤90 days ago, not 500."""
+        from datetime import datetime, timedelta
         from backend.services.assistant_tools_behavior import get_behavior_summary
+
         with patch("backend.services.assistant_tools_behavior._load_behavior_events",
                    return_value={}) as mock_load:
             get_behavior_summary(days=500, teacher_id=TID)
-        # cutoff_date in the call args should be ~90 days ago
-        # We just verify _load_behavior_events was called (clamping happens upstream)
-        mock_load.assert_called_once()
+
+        kwargs = mock_load.call_args.kwargs
+        cutoff_str = kwargs.get("cutoff_date", "")
+        cutoff_dt = datetime.strptime(cutoff_str, "%Y-%m-%d")
+        # 500-day clamp would resolve to ~today minus 500 days; clamp keeps it at 90
+        days_ago = (datetime.now() - cutoff_dt).days
+        assert 89 <= days_ago <= 91, (
+            f"cutoff_date {cutoff_str} is {days_ago} days ago; "
+            f"clamping to 90 broken (would be ~500 unclamped)"
+        )
+
+    def test_days_clamped_min_1(self):
+        """days=0 clamps to 1 (the max(days or 7, 1) branch)."""
+        from datetime import datetime
+        from backend.services.assistant_tools_behavior import get_behavior_summary
+
+        with patch("backend.services.assistant_tools_behavior._load_behavior_events",
+                   return_value={}) as mock_load:
+            get_behavior_summary(days=0, teacher_id=TID)
+
+        kwargs = mock_load.call_args.kwargs
+        cutoff_str = kwargs.get("cutoff_date", "")
+        cutoff_dt = datetime.strptime(cutoff_str, "%Y-%m-%d")
+        # days=0 falls back to 7 (default), then clamped >=1 → effective 7 days
+        days_ago = (datetime.now() - cutoff_dt).days
+        assert 6 <= days_ago <= 8, (
+            f"cutoff_date {cutoff_str} is {days_ago} days ago; "
+            "expected ~7 (days=0 → falls back to default 7)"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -570,3 +671,28 @@ class TestTeacherIdRequired:
         from backend.services.assistant_tools_behavior import generate_behavior_email
         with pytest.raises(ValueError, match="teacher_id is required"):
             generate_behavior_email("Alice", teacher_id="")
+
+    def test_send_behavior_email_empty_raises(self):
+        """Codex round-1 MEDIUM: send_behavior_email is the 4th public
+        behavior handler — was missing from this contract pin."""
+        from backend.services.assistant_tools_behavior import send_behavior_email
+        with pytest.raises(ValueError, match="teacher_id is required"):
+            send_behavior_email("Alice", "Subject", "Body", teacher_id="")
+
+    def test_send_behavior_email_local_dev_returns_preview_not_auth_error(self):
+        """Codex round-1 MEDIUM (verified expected behavior): unlike the
+        other 3 handlers, send_behavior_email does NOT return an auth error
+        when teacher_id resolves to 'local-dev'. Instead, it returns a
+        PREVIEW (NOT_SENT=True) — actual send requires confirm_and_send.
+        This pins the divergent behavior so a future "fix" to align with
+        the other handlers doesn't silently break the preview-then-confirm
+        flow."""
+        from flask import Flask
+        from backend.services.assistant_tools_behavior import send_behavior_email
+        app = Flask(__name__)
+        with app.test_request_context():
+            result = send_behavior_email("Alice", "Subj", "Body", teacher_id="local-dev")
+        # Returns preview (not error)
+        assert result.get("NOT_SENT") is True
+        assert result.get("PREVIEW_ONLY") is True
+        assert result.get("action") == "send_behavior_email"
