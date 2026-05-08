@@ -36,6 +36,10 @@ class GraiderEmailer:
 
     def _init_resend(self):
         """Initialize Resend with API key from environment."""
+        # Always initialize the flag so downstream `if not self.resend_available`
+        # checks don't raise AttributeError when the resend package is missing.
+        self.resend_available = False
+
         if not RESEND_AVAILABLE:
             return
 
