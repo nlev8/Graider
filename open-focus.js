@@ -2,7 +2,11 @@ var chromium = require('playwright').chromium;
 var path = require('path');
 var fs = require('fs');
 var BROWSER_DATA_DIR = path.join(process.env.HOME, '.graider_data', 'focus_browser');
-var CREDS_PATH = path.join(process.env.HOME, '.graider_data', 'portal_credentials.json');
+// Closes GH #245: parent process passes per-teacher creds path via
+// GRAIDER_PORTAL_CREDS_FILE env var. Falls back to the legacy shared
+// path for direct CLI / local-dev workflows.
+var CREDS_PATH = process.env.GRAIDER_PORTAL_CREDS_FILE ||
+  path.join(process.env.HOME, '.graider_data', 'portal_credentials.json');
 fs.mkdirSync(BROWSER_DATA_DIR, { recursive: true });
 
 (async function() {

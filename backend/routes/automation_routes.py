@@ -292,11 +292,19 @@ def run_automation(workflow_id):
         "log": [],
     })
 
-    # Closes GH #245 (Codex round-2): runner.js login step reads
-    # creds; pass per-teacher path so concurrent workflows for
-    # different teachers don't read each other's credentials.
+    # Closes GH #245 (Codex rounds 2 + 3): runner.js login step reads
+    # creds; populate the per-teacher creds file BEFORE launching so
+    # concurrent workflows for different teachers each read their
+    # own credentials. write_temp_creds_file returns False on Supabase
+    # miss + no local file — fail fast rather than spawning a
+    # subprocess that hits a missing creds file mid-run.
     teacher_id = getattr(g, 'user_id', 'local-dev')
-    from backend.routes.assistant_routes import _portal_credentials_file_for
+    from backend.routes.assistant_routes import (
+        _portal_credentials_file_for,
+        write_temp_creds_file,
+    )
+    if not write_temp_creds_file(teacher_id):
+        return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
     creds_path = _portal_credentials_file_for(teacher_id)
     sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
 
@@ -363,11 +371,19 @@ def start_picker():
     if auto_login:
         cmd.append("--login")
 
-    # Closes GH #245 (Codex round-2): picker.js loads creds when
-    # --login is set; pass per-teacher path so concurrent picker
-    # sessions don't read each other's credentials.
+    # Closes GH #245 (Codex rounds 2 + 3): picker.js loads creds when
+    # --login is set; populate the per-teacher creds file BEFORE
+    # launching so concurrent picker sessions don't read each other's
+    # credentials. Only required when auto_login=True since picker.js
+    # skips loadCredentials() otherwise.
     teacher_id = getattr(g, 'user_id', 'local-dev')
-    from backend.routes.assistant_routes import _portal_credentials_file_for
+    from backend.routes.assistant_routes import (
+        _portal_credentials_file_for,
+        write_temp_creds_file,
+    )
+    if auto_login and not write_temp_creds_file(teacher_id):
+        _picker_state["status"] = "idle"
+        return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
     creds_path = _portal_credentials_file_for(teacher_id)
     sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
 
