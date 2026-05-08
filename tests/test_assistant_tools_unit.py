@@ -197,10 +197,12 @@ class TestNormalizeAssignmentName:
         assert _normalize_assignment_name("Multi    Space") == "multi space"
 
     def test_keeps_ampersand_and_apostrophe(self):
+        """Codex round-1 MINOR: previous version checked apostrophe-OR-ampersand;
+        now pin the exact normalized output so a regression that drops one but
+        not the other would fail."""
         from backend.services.assistant_tools import _normalize_assignment_name
-        # Ampersand and apostrophe are preserved per the regex
         result = _normalize_assignment_name("Smith's Quiz & Test")
-        assert "'" in result or "&" in result
+        assert result == "smith's quiz & test"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -266,16 +268,29 @@ class TestGetPeriodAssignments:
         assert period_assigns == {} or all(len(v) == 0 for v in period_assigns.values())
 
     def test_keeps_longest_display_name(self):
-        """If the same normalized name appears with different display
-        forms, the longest (most descriptive) wins."""
-        from backend.services.assistant_tools import _get_period_assignments
+        """Codex round-1 MINOR: previous version had inputs that normalized
+        to different keys, so the test would pass even if longest-name
+        replacement broke. Now uses two inputs with the SAME normalized key
+        (only differing in raw whitespace + version suffix), so the assertion
+        actually tests the longest-display-name selection."""
+        from backend.services.assistant_tools import (
+            _get_period_assignments, _normalize_assignment_name,
+        )
+        # Same normalized key, two display forms; longest must win
+        short_form = "Quiz"
+        long_form = "Quiz Final"  # different normalized key, used for sanity check
+        # For SAME normalized key, vary the raw padding/casing/version-suffix
         rows = [
-            {"period": "1", "assignment": "Quiz"},
-            {"period": "1", "assignment": "Quiz - Unit 3 Final Exam"},
+            {"period": "1", "assignment": "  quiz   "},     # raw ugly version
+            {"period": "1", "assignment": "Quiz"},          # canonical short
+            {"period": "1", "assignment": "Quiz (1)"},      # version-suffix removed → same key
         ]
         _, display, _ = _get_period_assignments(rows)
-        # Both normalize differently so this just verifies we have entries
-        assert len(display) > 0
+        norm = _normalize_assignment_name("Quiz")
+        # All three normalize to the same key
+        assert norm in display
+        # Display is the LONGEST raw form provided
+        assert display[norm] == "  quiz   "
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -284,10 +299,14 @@ class TestGetPeriodAssignments:
 
 
 class TestLoadResults:
-    def test_storage_hit_takes_precedence(self, isolated_dirs):
+    def test_storage_hit_takes_precedence_and_passes_teacher_id(self, isolated_dirs):
+        """Codex round-1 MINOR: pins multi-tenant routing — storage_load
+        must be called with ('results', TID). A regression to default
+        'local-dev' or omitted teacher_id would fail this assertion."""
         _, at = isolated_dirs
-        with patch.object(at, "storage_load", return_value=[{"id": 1}]):
+        with patch.object(at, "storage_load", return_value=[{"id": 1}]) as mock:
             assert at._load_results(TID) == [{"id": 1}]
+        mock.assert_called_once_with("results", TID)
 
     def test_file_fallback_when_storage_returns_none(self, isolated_dirs):
         tmp, at = isolated_dirs
@@ -318,10 +337,12 @@ class TestLoadResults:
 
 
 class TestLoadSettings:
-    def test_storage_hit_takes_precedence(self, isolated_dirs):
+    def test_storage_hit_takes_precedence_and_passes_teacher_id(self, isolated_dirs):
         _, at = isolated_dirs
-        with patch.object(at, "storage_load", return_value={"config": {"subject": "Math"}}):
+        with patch.object(at, "storage_load",
+                          return_value={"config": {"subject": "Math"}}) as mock:
             assert at._load_settings(TID) == {"config": {"subject": "Math"}}
+        mock.assert_called_once_with("settings", TID)
 
     def test_file_fallback(self, isolated_dirs):
         tmp, at = isolated_dirs
@@ -337,11 +358,12 @@ class TestLoadSettings:
 
 
 class TestLoadAccommodations:
-    def test_storage_hit(self, isolated_dirs):
+    def test_storage_hit_passes_teacher_id(self, isolated_dirs):
         _, at = isolated_dirs
         with patch.object(at, "storage_load",
-                          return_value={"sid-1": {"presets": ["IEP"]}}):
+                          return_value={"sid-1": {"presets": ["IEP"]}}) as mock:
             assert at._load_accommodations(TID) == {"sid-1": {"presets": ["IEP"]}}
+        mock.assert_called_once_with("accommodations", TID)
 
     def test_no_dir_returns_empty(self, isolated_dirs):
         _, at = isolated_dirs
@@ -369,11 +391,12 @@ class TestLoadAccommodations:
 
 
 class TestLoadCalendar:
-    def test_storage_hit(self, isolated_dirs):
+    def test_storage_hit_passes_teacher_id(self, isolated_dirs):
         _, at = isolated_dirs
         cal = {"scheduled_lessons": [{"id": 1}], "holidays": [], "school_days": {}}
-        with patch.object(at, "storage_load", return_value=cal):
+        with patch.object(at, "storage_load", return_value=cal) as mock:
             assert at._load_calendar(TID) == cal
+        mock.assert_called_once_with("teaching_calendar", TID)
 
     def test_default_when_no_storage_no_file(self, isolated_dirs):
         _, at = isolated_dirs
@@ -412,10 +435,12 @@ class TestSaveCalendar:
 
 
 class TestLoadMemories:
-    def test_storage_list(self, isolated_dirs):
+    def test_storage_list_passes_teacher_id(self, isolated_dirs):
         _, at = isolated_dirs
-        with patch.object(at, "storage_load", return_value=["fact1", "fact2"]):
+        with patch.object(at, "storage_load",
+                          return_value=["fact1", "fact2"]) as mock:
             assert at._load_memories(TID) == ["fact1", "fact2"]
+        mock.assert_called_once_with("assistant_memory", TID)
 
     def test_storage_non_list_returns_empty(self, isolated_dirs):
         _, at = isolated_dirs
