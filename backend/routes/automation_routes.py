@@ -284,20 +284,14 @@ def run_automation(workflow_id):
     for k, v in data.get("vars", {}).items():
         var_args.extend(["--var", str(k) + "=" + str(v)])
 
-    _run_state.update({
-        "process": None, "status": "running",
-        "workflow_name": workflow_id,
-        "current_step": 0, "total_steps": 0,
-        "step_label": "", "message": "Starting automation...",
-        "log": [],
-    })
-
-    # Closes GH #245 (Codex rounds 2 + 3): runner.js login step reads
-    # creds; populate the per-teacher creds file BEFORE launching so
-    # concurrent workflows for different teachers each read their
+    # Closes GH #245 (Codex rounds 2 + 3 + 4): runner.js login step
+    # reads creds; populate the per-teacher creds file BEFORE launching
+    # so concurrent workflows for different teachers each read their
     # own credentials. write_temp_creds_file returns False on Supabase
     # miss + no local file — fail fast rather than spawning a
-    # subprocess that hits a missing creds file mid-run.
+    # subprocess that hits a missing creds file mid-run. Preflight
+    # runs BEFORE the _run_state mutation so a 400 here does not leave
+    # the run endpoint stuck in "running" (next call would hit 409).
     teacher_id = getattr(g, 'user_id', 'local-dev')
     from backend.routes.assistant_routes import (
         _portal_credentials_file_for,
@@ -307,6 +301,14 @@ def run_automation(workflow_id):
         return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
     creds_path = _portal_credentials_file_for(teacher_id)
     sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
+    _run_state.update({
+        "process": None, "status": "running",
+        "workflow_name": workflow_id,
+        "current_step": 0, "total_steps": 0,
+        "step_label": "", "message": "Starting automation...",
+        "log": [],
+    })
 
     proc = subprocess.Popen(
         ["node", RUNNER_SCRIPT, workflow_path] + var_args,
