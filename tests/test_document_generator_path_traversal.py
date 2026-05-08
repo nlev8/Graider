@@ -80,11 +80,17 @@ class TestSafeStyleName:
         assert "'" not in result
         assert " " not in result
 
-    def test_length_capped(self):
+    def test_overlong_name_rejected(self):
+        """Codex round-1 MINOR: silent truncation let two distinct names
+        differing only past char 120 collide and overwrite each other.
+        Now they're rejected outright."""
         from backend.services.document_generator import _safe_style_name
-        long_name = "a" * 500
-        result = _safe_style_name(long_name)
-        assert len(result) <= 120
+        assert _safe_style_name("a" * 121) is None
+        assert _safe_style_name("a" * 500) is None
+
+    def test_exactly_120_chars_accepted(self):
+        from backend.services.document_generator import _safe_style_name
+        assert _safe_style_name("a" * 120) == "a" * 120
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -165,6 +171,42 @@ class TestLoadStyleSanitization:
         result = dg.load_style("cornell-notes")
         assert result["title_font_name"] == "Helvetica"
 
+    def test_legacy_unsanitized_filename_loads_via_fallback(self, isolated_dirs):
+        """Codex round-1 MAJOR: pre-#253 saves used raw names like 'My Style'
+        which list_styles() still returns. load_style('My Style') must find
+        the existing 'My Style.json' file even though sanitization would
+        produce 'My_Style'. The legacy fallback handles this."""
+        tmp, dg = isolated_dirs
+        os.makedirs(dg.STYLES_DIR, exist_ok=True)
+        legacy_path = os.path.join(dg.STYLES_DIR, "My Style.json")
+        with open(legacy_path, 'w') as f:
+            json.dump({"title_font_name": "LegacyFont"}, f)
+        result = dg.load_style("My Style")
+        assert result["title_font_name"] == "LegacyFont", (
+            "Backward-compat fallback failed: load_style returned defaults "
+            "for a legitimate pre-#253 style filename."
+        )
+
+    def test_legacy_fallback_still_blocks_traversal(self, isolated_dirs):
+        """The legacy fallback must NOT open the door to path traversal.
+        A name with `/` or `\\` is hard-rejected before any filesystem op."""
+        tmp, dg = isolated_dirs
+        # Place attacker file at the path the OLD vulnerable code would have read
+        attacker_path = tmp / "outside.json"
+        attacker_path.write_text(json.dumps({"title_font_name": "ATTACKER"}))
+
+        # Old code: os.path.join(STYLES_DIR, "../../outside" + ".json") would
+        # resolve to tmp.parent / outside.json (depending on tmp depth).
+        # In our test, STYLES_DIR is tmp/doc_styles, so '../outside' would
+        # resolve to tmp/outside.json — exactly where we placed the file.
+        result = dg.load_style("../outside")
+        # Legacy fallback rejects the name (contains /), AND realpath rejects
+        # because the resolved path escapes STYLES_DIR.
+        assert result["title_font_name"] != "ATTACKER", (
+            "Legacy fallback re-opened the path traversal vector that #253 fixed!"
+        )
+        assert result == dg.DEFAULT_STYLE
+
 
 # ──────────────────────────────────────────────────────────────────
 # save_style respects sanitization
@@ -206,6 +248,20 @@ class TestSaveStyleSanitization:
         assert os.path.exists(result["filepath"])
         # Stored name reflects sanitization
         assert result["style_name"] == "my_style"
+
+    def test_overlong_names_dont_silently_collide(self, isolated_dirs):
+        """Codex round-1 MINOR: if save_style truncated at 120, two distinct
+        names differing past char 120 would produce the same filename and
+        the second save would overwrite the first. After the fold,
+        over-long names are rejected with an error (not truncated)."""
+        _, dg = isolated_dirs
+        a_name = "a" * 121
+        b_name = ("a" * 130) + "DIFFERENT_TAIL"
+        ra = dg.save_style(a_name, {"title_font_name": "First"})
+        rb = dg.save_style(b_name, {"title_font_name": "Second"})
+        # Both rejected — no overwrite collision possible
+        assert "error" in ra
+        assert "error" in rb
 
     def test_save_normalizes_name_in_payload(self, isolated_dirs):
         """The stored 'name' field in the JSON should be the sanitized
