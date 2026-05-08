@@ -10,7 +10,7 @@ import subprocess
 import threading
 from collections import defaultdict
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, jsonify, request
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.utils.audit import audit_log
@@ -585,7 +585,6 @@ def send_outlook_emails():
         if not emails:
             return jsonify({"error": "No emails to send (no matching contacts)"}), 400
 
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
         audit_log(
             "EMAIL_SEND_OUTLOOK",
@@ -623,7 +622,6 @@ def outlook_login():
     """Open Outlook in browser for login verification."""
     try:
         # Write per-teacher creds to temp file for subprocess access
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
         from backend.routes.assistant_routes import (
             write_temp_creds_file,
@@ -1080,7 +1078,6 @@ def send_confirmation_emails():
         if not emails:
             return jsonify({"error": "No emails to send"}), 400
 
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
         result = launch_outlook_sender(emails, teacher_id=teacher_id)
         if "error" in result:
@@ -1421,7 +1418,6 @@ def send_focus_comms():
         if not messages:
             return jsonify({"error": "No messages provided"}), 400
 
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
         result = launch_focus_comms(messages, teacher_id=teacher_id)
         if "error" in result:
@@ -1506,7 +1502,6 @@ def confirm_send():
         return jsonify({"error": "No pending send. Generate a preview first."})
 
     action = pending.get("action")
-    from flask import g
     teacher_id = getattr(g, 'user_id', 'local-dev')
 
     if action == "send_focus_comms":
