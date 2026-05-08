@@ -11,7 +11,7 @@ import subprocess
 import threading
 from datetime import datetime
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, jsonify, request
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 import sentry_sdk
