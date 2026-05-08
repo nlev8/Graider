@@ -470,3 +470,18 @@ class TestTeacherIdRequired:
         from backend.services.assistant_tools_student import export_student_data
         with pytest.raises(ValueError, match="teacher_id is required"):
             export_student_data("Alice", teacher_id="")
+
+    def test_confirm_student_removal_empty_raises(self):
+        """Codex round-1 LOW: destructive operation must guard teacher_id.
+        confirm_student_removal executes a pending removal — guarding the
+        empty teacher_id case prevents accidental deletes during testing
+        or when auth middleware fails to populate g.user_id."""
+        from backend.services.assistant_tools_student import confirm_student_removal
+        with pytest.raises(ValueError, match="teacher_id is required"):
+            confirm_student_removal(teacher_id="")
+
+    def test_import_student_data_empty_raises(self):
+        """Codex round-1 LOW: import writes data — must guard teacher_id."""
+        from backend.services.assistant_tools_student import import_student_data
+        with pytest.raises(ValueError, match="teacher_id is required"):
+            import_student_data("/some/path.json", teacher_id="")
