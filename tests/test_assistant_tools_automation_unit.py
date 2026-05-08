@@ -163,8 +163,32 @@ class TestCreateAutomation:
             result = ata.create_automation_tool(
                 "My Workflow! v2.0", [{"type": "click", "label": "x"}], teacher_id=TID,
             )
-        # Special chars collapsed to dashes; trailing dashes stripped
+        # Special chars collapsed to dashes
         assert result["id"] == "my-workflow-v2-0"
+
+    def test_slug_strips_trailing_dashes(self, isolated_dirs):
+        """Codex round-1 LOW: previous slug test had no trailing non-alphanum
+        char, so it didn't actually pin the .strip('-') call. Now uses inputs
+        that produce trailing dashes if NOT stripped."""
+        _, ata = isolated_dirs
+        with patch.object(ata, "storage_load", return_value=[]), \
+             patch.object(ata, "storage_save"):
+            # Trailing punctuation → trailing dashes if not stripped
+            r1 = ata.create_automation_tool(
+                "Trailing Bang!!!", [{"type": "click", "label": "x"}], teacher_id=TID,
+            )
+            r2 = ata.create_automation_tool(
+                "  Spaces Around  ", [{"type": "click", "label": "x"}], teacher_id=TID,
+            )
+        # Both must end in alphanum, never dash
+        assert not r1["id"].endswith("-"), f"slug ends with dash: {r1['id']!r}"
+        assert not r2["id"].endswith("-"), f"slug ends with dash: {r2['id']!r}"
+        # And neither starts with a dash
+        assert not r1["id"].startswith("-")
+        assert not r2["id"].startswith("-")
+        # Concretely
+        assert r1["id"] == "trailing-bang"
+        assert r2["id"] == "spaces-around"
 
     def test_step_id_and_params_defaults_filled(self, isolated_dirs):
         """create_automation_tool sets id and params defaults for each step."""
