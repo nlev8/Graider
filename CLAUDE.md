@@ -32,7 +32,7 @@ All changes go through Pull Requests:
 5. Merge when CI passes → Railway auto-deploys
 
 **Branch protection on `main` requires:**
-- `Backend Tests` job passes (pytest with `--cov-fail-under=41`; bumped 32→40 in PR #239, then 40→41 in PR #241 after backend/auth.py 37%→97% coverage push; target 50% per audit MAJOR #4. Raise this floor as coverage grows.)
+- `Backend Tests` job passes (pytest with `--cov-fail-under=40`; bumped 32→40 in PR #239 to match measured ~41%. Floor stays at 40 in PR #241 (auth.py 37%→97% pushed measured coverage to 40.95%, just under a 41 floor; subsequent module coverage PRs will earn the next bump). Target 50% per audit MAJOR #4. Raise this floor as coverage grows.)
 - `Frontend Build` job passes (Vite build succeeds)
 
 **Emergency bypass:** Repo admins can merge without CI if `enforce_admins` is false. Use only for critical hotfixes — fix CI immediately after.

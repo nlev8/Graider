@@ -153,9 +153,15 @@ class TestValidateToken:
         mock_jwks.get_signing_key_from_jwt.return_value = MagicMock(key='k')
 
         with patch.object(auth_mod, '_get_jwks_client', return_value=mock_jwks), \
-             patch.object(auth_mod.jwt, 'decode', side_effect=jwt.ExpiredSignatureError):
+             patch.object(auth_mod.jwt, 'decode',
+                          side_effect=jwt.ExpiredSignatureError) as mock_decode:
             result = auth_mod.validate_token('expired.token.here')
             assert result is None
+            # Codex round-1 MINOR fold: ExpiredSignatureError on ES256
+            # MUST NOT fall through to HS256. A regression that retried
+            # HS256 and also got expired would still return None — only
+            # the call_count assertion catches that case.
+            assert mock_decode.call_count == 1
 
     def test_es256_invalid_falls_back_to_hs256_success(self, monkeypatch):
         # If ES256 raises a non-expired InvalidTokenError, we try HS256.
