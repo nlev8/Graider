@@ -292,10 +292,19 @@ def run_automation(workflow_id):
         "log": [],
     })
 
+    # Closes GH #245 (Codex round-2): runner.js login step reads
+    # creds; pass per-teacher path so concurrent workflows for
+    # different teachers don't read each other's credentials.
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    from backend.routes.assistant_routes import _portal_credentials_file_for
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
     proc = subprocess.Popen(
         ["node", RUNNER_SCRIPT, workflow_path] + var_args,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, bufsize=1,
+        env=sub_env,
     )
     _run_state["process"] = proc
     threading.Thread(target=_read_runner_output, args=(proc,), daemon=True).start()
@@ -354,10 +363,19 @@ def start_picker():
     if auto_login:
         cmd.append("--login")
 
+    # Closes GH #245 (Codex round-2): picker.js loads creds when
+    # --login is set; pass per-teacher path so concurrent picker
+    # sessions don't read each other's credentials.
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    from backend.routes.assistant_routes import _portal_credentials_file_for
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, bufsize=1,
+        env=sub_env,
     )
     _picker_state["process"] = proc
     threading.Thread(target=_read_picker_output, args=(proc,), daemon=True).start()
