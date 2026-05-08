@@ -52,9 +52,16 @@ def flask_app(tmp_path, monkeypatch):
 
     Initializes the state factory functions via init_grading_routes
     and patches GRAIDER_DATA_DIR + ELL_DATA_FILE for filesystem isolation.
+    Codex round-1 MAJOR: HOME is redirected to tmp_path so update-result
+    can't overwrite the user's real ~/.graider_results.json.
     """
     from flask import Flask, g
     import backend.routes.grading_routes as gr_mod
+
+    # MUST come first — affects all subsequent os.path.expanduser('~/...')
+    # calls in the route handlers, including the update-result results-file
+    # write at backend/routes/grading_routes.py:367.
+    monkeypatch.setenv("HOME", str(tmp_path))
 
     monkeypatch.setattr(gr_mod, "EXPORTS_DIR", str(tmp_path / "exports"))
     monkeypatch.setattr(gr_mod, "FOCUS_EXPORTS_DIR", str(tmp_path / "exports" / "focus"))
@@ -69,12 +76,19 @@ def flask_app(tmp_path, monkeypatch):
     # Per-teacher state dict + lock (one per fixture instance)
     state = _make_state()
     lock = threading.Lock()
+    # Track teacher_ids received by the state factory — pins the
+    # multi-teacher routing contract (Codex round-1 gap).
+    teacher_ids_seen = []
 
     def _get_state(teacher_id):
+        teacher_ids_seen.append(teacher_id)
         return state
 
     def _get_lock(teacher_id):
         return lock
+
+    # Expose the tracker as a module attribute for test inspection
+    gr_mod._test_teacher_ids_seen = teacher_ids_seen
 
     def _thread_fn(*args, **kwargs):
         pass
@@ -320,8 +334,11 @@ class TestUpdateResult:
             "score": 70,
             "feedback": "ok",
         }]
+        # Codex round-1 MAJOR: patch record_correction to keep this unit test
+        # off the real Supabase correction-pattern store.
         with patch("backend.routes.grading_routes.audit_log"), \
-             patch("backend.routes.grading_routes._sync_result_to_master_csv"):
+             patch("backend.routes.grading_routes._sync_result_to_master_csv"), \
+             patch("backend.services.correction_patterns.record_correction") as mock_record:
             client = app.test_client()
             resp = client.post(
                 "/api/update-result",
@@ -335,13 +352,20 @@ class TestUpdateResult:
         assert result["teacher_edited"] is True
         assert result["ai_score"] == 70
         assert result["ai_feedback"] == "ok"
+        # Correction pattern recorded with ai_score=70 vs teacher_score=92
+        mock_record.assert_called_once()
+        kwargs = mock_record.call_args.kwargs
+        assert kwargs["ai_score"] == 70
+        assert kwargs["teacher_score"] == 92
+        assert kwargs["teacher_id"] == "teacher-alice"
 
     def test_score_letter_grade_boundaries(self, flask_app):
         app, _, _, state, _ = flask_app
         for score, expected_grade in [(90, "A"), (80, "B"), (70, "C"), (60, "D"), (59, "F")]:
             state["results"] = [{"filename": "x.docx", "score": 0}]
             with patch("backend.routes.grading_routes.audit_log"), \
-                 patch("backend.routes.grading_routes._sync_result_to_master_csv"):
+                 patch("backend.routes.grading_routes._sync_result_to_master_csv"), \
+                 patch("backend.services.correction_patterns.record_correction"):
                 client = app.test_client()
                 resp = client.post(
                     "/api/update-result",
@@ -353,12 +377,14 @@ class TestUpdateResult:
             )
 
     def test_only_allowed_fields_updated(self, flask_app):
-        """Untrusted fields like 'teacher_edited' from request must not bypass
-        the allowed_fields filter."""
+        """Untrusted fields from request must not bypass the allowed_fields
+        filter — including a forged `teacher_edited` flag (Codex round-1 MINOR:
+        previous version didn't actually send teacher_edited)."""
         app, _, _, state, _ = flask_app
         state["results"] = [{"filename": "x.docx", "score": 70, "feedback": "ok"}]
         with patch("backend.routes.grading_routes.audit_log"), \
-             patch("backend.routes.grading_routes._sync_result_to_master_csv"):
+             patch("backend.routes.grading_routes._sync_result_to_master_csv"), \
+             patch("backend.services.correction_patterns.record_correction"):
             client = app.test_client()
             resp = client.post(
                 "/api/update-result",
@@ -366,6 +392,13 @@ class TestUpdateResult:
                     "filename": "x.docx",
                     "score": 95,
                     "verified": True,
+                    # Forged teacher_edited — must not be controllable from outside.
+                    # The route sets teacher_edited=True itself based on score
+                    # being present, so the assertion below is that teacher_edited
+                    # came from the route logic, not the request.
+                    "teacher_edited": False,
+                    "ai_score": 999,
+                    "ai_feedback": "FORGED",
                     "malicious_field": "injected",
                     "filename_override": "evil.docx",
                 },
@@ -375,6 +408,12 @@ class TestUpdateResult:
         result = resp.get_json()["result"]
         assert result["score"] == 95
         assert result["verified"] is True
+        # Route owns teacher_edited and ai_* — must not be overwritable from the request
+        assert result["teacher_edited"] is True, (
+            "Forged teacher_edited=False in request must not stick"
+        )
+        assert result["ai_score"] == 70, "ai_score must reflect prior score, not 999 from request"
+        assert result["ai_feedback"] == "ok", "ai_feedback must reflect prior feedback, not 'FORGED'"
         assert "malicious_field" not in result
         # Filename was not overridden
         assert result["filename"] == "x.docx"
@@ -383,7 +422,8 @@ class TestUpdateResult:
         app, _, _, state, _ = flask_app
         state["results"] = [{"filename": "x.docx", "score": 70}]
         with patch("backend.routes.grading_routes.audit_log") as mock_audit, \
-             patch("backend.routes.grading_routes._sync_result_to_master_csv"):
+             patch("backend.routes.grading_routes._sync_result_to_master_csv"), \
+             patch("backend.services.correction_patterns.record_correction"):
             client = app.test_client()
             client.post(
                 "/api/update-result",
@@ -405,6 +445,30 @@ class TestUpdateResult:
                 json={"filename": "x.docx", "verified": True},
             )
         mock_audit.assert_not_called()
+
+    def test_teacher_id_routed_to_state_factory(self, flask_app):
+        """Multi-tenant safety pin (Codex round-1 gap): /api/update-result
+        must call _get_state with g.user_id, NOT 'local-dev' or a shared default.
+        The fixture's _get_state appends the teacher_id it received to a
+        module-level tracker."""
+        app, gr_mod, _, state, _ = flask_app
+        state["results"] = [{"filename": "x.docx", "score": 70}]
+        gr_mod._test_teacher_ids_seen.clear()
+
+        with patch("backend.routes.grading_routes.audit_log"), \
+             patch("backend.routes.grading_routes._sync_result_to_master_csv"), \
+             patch("backend.services.correction_patterns.record_correction"):
+            client = app.test_client()
+            client.post("/api/update-result", json={"filename": "x.docx", "score": 95})
+
+        assert "teacher-alice" in gr_mod._test_teacher_ids_seen, (
+            f"Expected 'teacher-alice' in state factory calls; got "
+            f"{gr_mod._test_teacher_ids_seen!r}. A regression to default "
+            "'local-dev' would cause cross-tenant state corruption."
+        )
+        assert "local-dev" not in gr_mod._test_teacher_ids_seen, (
+            "Route must NOT fall back to 'local-dev' when authenticated"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -692,16 +756,34 @@ class TestReadFocusCommentsOutput:
         gr_mod._read_focus_comments_output(proc)
         assert gr_mod._focus_comments_state["status"] == "done"
 
-    def test_log_truncated_at_100(self, flask_app):
+    def test_log_truncated_to_50_when_exceeds_100(self, flask_app):
+        """Codex round-1 MINOR: previous test only asserted <= 100, which
+        a broken implementation that drops all logs would also pass.
+        Now pins the explicit truncation contract: when log exceeds 100,
+        keep the last 50 entries."""
         _, gr_mod, _, _, _ = flask_app
         proc = MagicMock()
-        events = [json.dumps({"type": "progress", "entered": i, "total": 105}) + "\n"
-                  for i in range(105)]
+        events = [
+            json.dumps({"type": "progress", "entered": i, "total": 105}) + "\n"
+            for i in range(105)
+        ]
         proc.stdout = iter(events)
         gr_mod._focus_comments_state["status"] = "running"
         gr_mod._focus_comments_state["log"] = []
         gr_mod._read_focus_comments_output(proc)
-        assert len(gr_mod._focus_comments_state["log"]) <= 100
+
+        # After 105 events: triggered truncation once at event 101
+        # (len > 100 → keep last 50). Then 4 more events appended → final 54.
+        # The KEY invariant is the tail is preserved — most recent events
+        # are still in the log.
+        log = gr_mod._focus_comments_state["log"]
+        assert len(log) > 0, "Truncation must not drop ALL entries"
+        assert len(log) <= 100, f"Log overflowed: {len(log)} entries"
+        # Most recent event must be in the log (tail preserved)
+        last_event = log[-1]
+        assert last_event["entered"] == 104, (
+            f"Tail not preserved by truncation: last entry {last_event!r}"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
