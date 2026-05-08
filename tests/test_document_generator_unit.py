@@ -342,17 +342,35 @@ class TestGenerateDocument:
         # Only alphanum + space + - + _ kept, then strip
         assert result["filename"] == "BadTitleWithChars.docx"
 
-    def test_custom_style_loaded(self, isolated_dirs):
+    def test_custom_style_loaded_and_applied_to_docx(self, isolated_dirs):
+        """Codex round-1 MINOR: previous version only checked metadata.
+        Now reads back the docx and confirms the saved style's
+        distinctive font landed in the title run."""
+        from docx import Document
         tmp, dg = isolated_dirs
         os.makedirs(dg.STYLES_DIR, exist_ok=True)
         with open(os.path.join(dg.STYLES_DIR, "custom.json"), 'w') as f:
-            json.dump({"title_font_name": "Helvetica"}, f)
+            json.dump({
+                "title_font_name": "Verdana",  # distinctive — not in DEFAULT_STYLE
+                "body_font_name": "Times New Roman",
+            }, f)
 
         result = dg.generate_document(
-            "Doc", content=[], style_name="custom",
+            "Doc", content=[{"type": "paragraph", "text": "Hello"}],
+            style_name="custom",
         )
         assert result["style_used"] == "custom"
         assert os.path.exists(result["filepath"])
+
+        # Read back the docx and verify the title run uses Verdana
+        doc = Document(result["filepath"])
+        title_para = doc.paragraphs[0]
+        assert title_para.text == "Doc"
+        title_fonts = [r.font.name for r in title_para.runs if r.font.name]
+        assert "Verdana" in title_fonts, (
+            f"Custom style title_font_name='Verdana' was not applied; "
+            f"title runs use {title_fonts!r}"
+        )
 
     def test_save_to_builder_writes_assignment_config(self, isolated_dirs):
         tmp, dg = isolated_dirs
