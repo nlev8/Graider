@@ -49,17 +49,38 @@ class TestMatchAssignmentToConfig:
             )
         assert result == "quiz"
 
-    def test_prefix_fuzzy_match_25_chars(self):
+    def test_prefix_fuzzy_match_via_saved_norm_only(self):
+        """Codex round-1 LOW: previous version matched via saved_display
+        prefix path. This version forces the saved_norm branch by:
+        - Making saved_norm a SHORT string that's a prefix of the input
+          (sn_lower[:25] == sn_lower since len(sn) < 25)
+        - Making saved_display unrelated so its branch can't match."""
         from backend.services.assistant_tools_grading import _match_assignment_to_config
         with patch("backend.services.assistant_tools_grading._normalize_assignment_name",
                    side_effect=lambda x: x.lower()):
-            # norm and saved_norm share 25+ char prefix
             result = _match_assignment_to_config(
-                "Cornell Notes Unit 3 The Civil War",
-                saved_norms={"cornell notes unit 3 long version"},
-                saved_display={"cornell notes unit 3 long version": "Cornell Notes Unit 3"},
+                "Long Quiz About History of Rome",
+                # Short saved_norm prefix (9 chars < 25)
+                saved_norms={"long quiz"},
+                # saved_display is "Z" so its prefix check can't match
+                saved_display={"long quiz": "Z"},
             )
-        assert result == "cornell notes unit 3 long version"
+        assert result == "long quiz"
+
+    def test_prefix_fuzzy_match_via_saved_display(self):
+        """Distinct branch: saved_norm doesn't share prefix, but
+        saved_display does match the 25-char prefix check."""
+        from backend.services.assistant_tools_grading import _match_assignment_to_config
+        with patch("backend.services.assistant_tools_grading._normalize_assignment_name",
+                   side_effect=lambda x: x.lower()):
+            result = _match_assignment_to_config(
+                "Long Quiz About History of Rome",
+                # saved_norm doesn't prefix-match input
+                saved_norms={"abbrev"},
+                # saved_display "Long Quiz About History of Rome..." matches
+                saved_display={"abbrev": "Long Quiz About History of Rome Final"},
+            )
+        assert result == "abbrev"
 
     def test_no_match(self):
         from backend.services.assistant_tools_grading import _match_assignment_to_config
@@ -87,17 +108,30 @@ class TestQueryGrades:
             "score": score, "letter_grade": letter, "quarter": quarter, "date": date,
         }
 
-    def test_no_filters_returns_all(self):
+    def test_no_filters_returns_all_and_propagates_teacher_id(self):
+        """Codex round-1 LOW: pin tenant propagation. _load_master_csv
+        and _load_results must receive teacher_id=TID."""
         from backend.services.assistant_tools_grading import query_grades
         rows = [self._row("Alice", "1", "Quiz", 90),
                 self._row("Bob", "2", "Quiz", 70)]
         with patch("backend.services.assistant_tools_grading._load_master_csv",
-                   return_value=rows), \
+                   return_value=rows) as mock_master, \
              patch("backend.services.assistant_tools_grading._load_results",
-                   return_value=[]):
+                   return_value=[]) as mock_results:
             result = query_grades(teacher_id=TID)
         assert result["total_matches"] == 2
         assert result["showing"] == 2
+        # Multi-tenant propagation contract
+        master_kwargs = mock_master.call_args.kwargs
+        assert master_kwargs.get("teacher_id") == TID, (
+            f"_load_master_csv called with teacher_id="
+            f"{master_kwargs.get('teacher_id')!r} (expected {TID!r})"
+        )
+        # _load_results is called positionally
+        assert mock_results.call_args.args[0] == TID, (
+            f"_load_results called with teacher_id="
+            f"{mock_results.call_args.args[0]!r} (expected {TID!r})"
+        )
 
     def test_student_name_fuzzy_filter(self):
         from backend.services.assistant_tools_grading import query_grades
@@ -339,19 +373,22 @@ class TestGetClassAnalytics:
             result = get_class_analytics(teacher_id=TID)
         assert "error" in result
 
-    def test_basic_analytics(self):
+    def test_basic_analytics_and_propagates_teacher_id(self):
+        """Codex round-1 LOW: pin tenant propagation for class analytics."""
         from backend.services.assistant_tools_grading import get_class_analytics
         rows = [
             self._row("Alice", 90), self._row("Alice", 95),
             self._row("Bob", 60), self._row("Bob", 65),
         ]
         with patch("backend.services.assistant_tools_grading._load_master_csv",
-                   return_value=rows), \
+                   return_value=rows) as mock_master, \
              patch("backend.services.assistant_tools_grading._load_roster",
-                   return_value=[]), \
+                   return_value=[]) as mock_roster, \
              patch("backend.services.assistant_tools_grading._normalize_period",
                    side_effect=lambda x: x):
             result = get_class_analytics(teacher_id=TID)
+        assert mock_master.call_args.kwargs.get("teacher_id") == TID
+        assert mock_roster.call_args.args[0] == TID
         # Class avg = (90+95+60+65)/4 = 77.5
         assert result["class_average"] == 77.5
         assert result["total_students"] == 2
@@ -600,3 +637,15 @@ class TestTeacherIdRequired:
         from backend.services.assistant_tools_grading import list_assignments_tool
         with pytest.raises(ValueError, match="teacher_id is required"):
             list_assignments_tool(teacher_id="")
+
+    def test_get_assignment_stats_empty_teacher_id_raises(self):
+        """Codex round-1 LOW: TestTeacherIdRequired covered 4 entrypoints
+        but skipped these two public tools. Closing the gap."""
+        from backend.services.assistant_tools_grading import get_assignment_stats
+        with pytest.raises(ValueError, match="teacher_id is required"):
+            get_assignment_stats("Quiz", teacher_id="")
+
+    def test_compare_periods_empty_teacher_id_raises(self):
+        from backend.services.assistant_tools_grading import compare_periods
+        with pytest.raises(ValueError, match="teacher_id is required"):
+            compare_periods(teacher_id="")
