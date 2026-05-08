@@ -11,7 +11,7 @@ import subprocess
 import threading
 from datetime import datetime
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, jsonify, request
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 import sentry_sdk
@@ -284,6 +284,24 @@ def run_automation(workflow_id):
     for k, v in data.get("vars", {}).items():
         var_args.extend(["--var", str(k) + "=" + str(v)])
 
+    # Closes GH #245 (Codex rounds 2 + 3 + 4): runner.js login step
+    # reads creds; populate the per-teacher creds file BEFORE launching
+    # so concurrent workflows for different teachers each read their
+    # own credentials. write_temp_creds_file returns False on Supabase
+    # miss + no local file — fail fast rather than spawning a
+    # subprocess that hits a missing creds file mid-run. Preflight
+    # runs BEFORE the _run_state mutation so a 400 here does not leave
+    # the run endpoint stuck in "running" (next call would hit 409).
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    from backend.routes.assistant_routes import (
+        _portal_credentials_file_for,
+        write_temp_creds_file,
+    )
+    if not write_temp_creds_file(teacher_id):
+        return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
     _run_state.update({
         "process": None, "status": "running",
         "workflow_name": workflow_id,
@@ -296,6 +314,7 @@ def run_automation(workflow_id):
         ["node", RUNNER_SCRIPT, workflow_path] + var_args,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, bufsize=1,
+        env=sub_env,
     )
     _run_state["process"] = proc
     threading.Thread(target=_read_runner_output, args=(proc,), daemon=True).start()
@@ -354,10 +373,27 @@ def start_picker():
     if auto_login:
         cmd.append("--login")
 
+    # Closes GH #245 (Codex rounds 2 + 3): picker.js loads creds when
+    # --login is set; populate the per-teacher creds file BEFORE
+    # launching so concurrent picker sessions don't read each other's
+    # credentials. Only required when auto_login=True since picker.js
+    # skips loadCredentials() otherwise.
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    from backend.routes.assistant_routes import (
+        _portal_credentials_file_for,
+        write_temp_creds_file,
+    )
+    if auto_login and not write_temp_creds_file(teacher_id):
+        _picker_state["status"] = "idle"
+        return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, bufsize=1,
+        env=sub_env,
     )
     _picker_state["process"] = proc
     threading.Thread(target=_read_picker_output, args=(proc,), daemon=True).start()

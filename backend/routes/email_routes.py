@@ -10,7 +10,7 @@ import subprocess
 import threading
 from collections import defaultdict
 from datetime import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, jsonify, request
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.utils.audit import audit_log
@@ -401,7 +401,10 @@ def launch_outlook_sender(emails, teacher_id='local-dev'):
         return {"error": "No emails to send"}
 
     # Write per-teacher creds to temp file for subprocess access
-    from backend.routes.assistant_routes import write_temp_creds_file
+    from backend.routes.assistant_routes import (
+        write_temp_creds_file,
+        _portal_credentials_file_for,
+    )
     if not write_temp_creds_file(teacher_id):
         return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
@@ -419,6 +422,12 @@ def launch_outlook_sender(emails, teacher_id='local-dev'):
         "log": [],
     })
 
+    # Closes GH #245: hand the per-teacher creds file path to the
+    # subprocess via env var. Without this, outlook_sender reads the
+    # shared `portal_credentials.json` which is unsafe across tenants.
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
     script_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'outlook_sender.py')
     proc = subprocess.Popen(
         [sys.executable, script_path, tmp_file],
@@ -426,6 +435,7 @@ def launch_outlook_sender(emails, teacher_id='local-dev'):
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=sub_env,
     )
     _outlook_send_state["process"] = proc
 
@@ -575,7 +585,6 @@ def send_outlook_emails():
         if not emails:
             return jsonify({"error": "No emails to send (no matching contacts)"}), 400
 
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
         audit_log(
             "EMAIL_SEND_OUTLOOK",
@@ -613,17 +622,24 @@ def outlook_login():
     """Open Outlook in browser for login verification."""
     try:
         # Write per-teacher creds to temp file for subprocess access
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
-        from backend.routes.assistant_routes import write_temp_creds_file
+        from backend.routes.assistant_routes import (
+            write_temp_creds_file,
+            _portal_credentials_file_for,
+        )
         if not write_temp_creds_file(teacher_id):
             return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
+        # Closes GH #245: subprocess must read the per-teacher file,
+        # not the legacy shared one.
+        creds_path = _portal_credentials_file_for(teacher_id)
+        sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
         script_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'outlook_sender.py')
         subprocess.Popen(
             [sys.executable, script_path, "--login-only"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=sub_env,
         )
         return jsonify({"status": "started", "message": "Browser opening..."})
     except Exception as e:
@@ -1062,7 +1078,6 @@ def send_confirmation_emails():
         if not emails:
             return jsonify({"error": "No emails to send"}), 400
 
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
         result = launch_outlook_sender(emails, teacher_id=teacher_id)
         if "error" in result:
@@ -1297,7 +1312,10 @@ def launch_focus_comms(messages, teacher_id='local-dev'):
         return {"error": "No messages to send"}
 
     # Write per-teacher creds to temp file for subprocess access
-    from backend.routes.assistant_routes import write_temp_creds_file
+    from backend.routes.assistant_routes import (
+        write_temp_creds_file,
+        _portal_credentials_file_for,
+    )
     if not write_temp_creds_file(teacher_id):
         return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
@@ -1319,12 +1337,17 @@ def launch_focus_comms(messages, teacher_id='local-dev'):
         "log": [],
     })
 
+    # Closes GH #245: focus-comms.js subprocess must read per-teacher
+    # creds, not the legacy shared file.
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
     proc = subprocess.Popen(
         ["node", FOCUS_COMMS_SCRIPT, "--screenshot", tmp_file],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=sub_env,
     )
     _focus_comms_state["process"] = proc
 
@@ -1395,7 +1418,6 @@ def send_focus_comms():
         if not messages:
             return jsonify({"error": "No messages provided"}), 400
 
-        from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
         result = launch_focus_comms(messages, teacher_id=teacher_id)
         if "error" in result:
@@ -1480,7 +1502,6 @@ def confirm_send():
         return jsonify({"error": "No pending send. Generate a preview first."})
 
     action = pending.get("action")
-    from flask import g
     teacher_id = getattr(g, 'user_id', 'local-dev')
 
     if action == "send_focus_comms":

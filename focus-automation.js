@@ -15,8 +15,14 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
-// Load credentials from local config
-const CREDS_PATH = path.join(process.env.HOME, '.graider_data', 'portal_credentials.json');
+// Load credentials from local config.
+// Closes GH #245: parent process passes the per-teacher path via
+// GRAIDER_PORTAL_CREDS_FILE env var so concurrent automations for
+// different teachers don't read each other's credentials. Falls
+// back to the legacy shared path for direct CLI invocation /
+// local-dev workflows.
+const CREDS_PATH = process.env.GRAIDER_PORTAL_CREDS_FILE ||
+  path.join(process.env.HOME, '.graider_data', 'portal_credentials.json');
 
 function loadCredentials() {
   if (!fs.existsSync(CREDS_PATH)) {

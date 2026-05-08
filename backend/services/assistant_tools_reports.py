@@ -1097,7 +1097,10 @@ def create_focus_assignment(name, category=None, points=None, date=None, descrip
     """Launch Focus automation to create an assignment."""
     require_teacher_id(teacher_id)
     # Write per-teacher creds to temp file for subprocess access
-    from backend.routes.assistant_routes import write_temp_creds_file
+    from backend.routes.assistant_routes import (
+        write_temp_creds_file,
+        _portal_credentials_file_for,
+    )
     if not write_temp_creds_file(teacher_id):
         return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
@@ -1115,12 +1118,18 @@ def create_focus_assignment(name, category=None, points=None, date=None, descrip
     if description:
         cmd.extend(["--description", description])
 
+    # Closes GH #245: focus-automation.js subprocess must read
+    # per-teacher creds, not the legacy shared file.
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
     try:
         process = subprocess.Popen(
             cmd,
             cwd=PROJECT_ROOT,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            env=sub_env,
         )
         return {
             "status": "launched",

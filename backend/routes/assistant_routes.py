@@ -82,7 +82,25 @@ assistant_bp = Blueprint('assistant', __name__)
 # ═══════════════════════════════════════════════════════
 
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
-CREDS_FILE = os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
+CREDS_FILE = os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")  # legacy local-dev path
+
+# Closes GH #245 (Codex review of PR #244): the legacy shared CREDS_FILE
+# was overwritten by every real teacher's save and read by every real
+# teacher's get/load, leaking VPortal credentials across tenants. Real
+# teachers now use per-teacher files keyed by sanitized teacher_id;
+# local-dev keeps the legacy shared file for back-compat with subprocess
+# launchers that hard-coded the path.
+def _portal_credentials_file_for(teacher_id):
+    """Return the per-teacher VPortal credentials file path.
+
+    For real teachers: `portal_credentials_{safe_id}.json` under
+    GRAIDER_DATA_DIR, isolated per teacher.
+    For local-dev: legacy shared file (preserves subprocess workflow).
+    """
+    if not teacher_id or teacher_id == 'local-dev':
+        return CREDS_FILE
+    safe_id = str(teacher_id).replace(':', '_').replace('/', '_').replace('\\', '_')
+    return os.path.join(GRAIDER_DATA_DIR, f"portal_credentials_{safe_id}.json")
 AUDIT_LOG_FILE = os.path.expanduser("~/.graider_audit.log")
 
 ASSISTANT_MODELS = {
@@ -2094,13 +2112,17 @@ def save_credentials():
     encoded = base64.b64encode(password.encode()).decode()
     creds_data = {"email": email, "password": encoded}
 
-    # Primary: Supabase per-teacher
+    # Primary: Supabase per-teacher (storage.py marks 'portal_credentials'
+    # as a sensitive key — no file write/read fallback for real teachers
+    # within storage.py itself).
     if storage_save:
         storage_save('portal_credentials', creds_data, teacher_id)
 
-    # File fallback for local-dev and subprocess access
+    # Per-teacher file fallback for subprocess access (local-dev keeps
+    # the legacy shared path; real teachers get an isolated per-teacher
+    # file). Closes GH #245.
     os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
-    with open(CREDS_FILE, 'w') as f:
+    with open(_portal_credentials_file_for(teacher_id), 'w') as f:
         json.dump(creds_data, f)
 
     _audit_log("credentials_saved", "VPortal credentials updated")
@@ -2120,10 +2142,12 @@ def get_credentials():
         if data and data.get('email'):
             return jsonify({"configured": True, "email": data.get("email", "")})
 
-    # File fallback
-    if os.path.exists(CREDS_FILE):
+    # Per-teacher file fallback (closes GH #245 — was previously a
+    # shared CREDS_FILE that leaked email across teachers).
+    creds_file = _portal_credentials_file_for(teacher_id)
+    if os.path.exists(creds_file):
         try:
-            with open(CREDS_FILE, 'r') as f:
+            with open(creds_file, 'r') as f:
                 data = json.load(f)
             return jsonify({"configured": True, "email": data.get("email", "")})
         except Exception as e:
@@ -2136,6 +2160,10 @@ def load_portal_credentials(teacher_id='local-dev'):
 
     Returns (email, password) tuple, or (None, None) if not configured.
     Used by subprocess launchers to write temp creds files.
+
+    Per-teacher file isolation closes GH #245 — was previously a shared
+    CREDS_FILE that returned another teacher's password under Supabase
+    miss.
     """
     # Primary: Supabase per-teacher
     if storage_load:
@@ -2145,10 +2173,11 @@ def load_portal_credentials(teacher_id='local-dev'):
             password = base64.b64decode(data['password']).decode()
             return email, password
 
-    # File fallback
-    if os.path.exists(CREDS_FILE):
+    # Per-teacher file fallback
+    creds_file = _portal_credentials_file_for(teacher_id)
+    if os.path.exists(creds_file):
         try:
-            with open(CREDS_FILE, 'r') as f:
+            with open(creds_file, 'r') as f:
                 data = json.load(f)
             email = data.get('email', '')
             password = base64.b64decode(data.get('password', '')).decode()
@@ -2162,13 +2191,18 @@ def load_portal_credentials(teacher_id='local-dev'):
 
 
 def write_temp_creds_file(teacher_id='local-dev'):
-    """Write a temp creds file for subprocess access. Returns True if creds available."""
+    """Write a temp creds file for subprocess access. Returns True if creds available.
+
+    Writes to the per-teacher path so concurrent subprocess launchers
+    for different teachers don't clobber each other's credentials
+    (closes GH #245).
+    """
     email, password = load_portal_credentials(teacher_id)
     if not email or not password:
         return False
     os.makedirs(GRAIDER_DATA_DIR, exist_ok=True)
     encoded = base64.b64encode(password.encode()).decode()
-    with open(CREDS_FILE, 'w') as f:
+    with open(_portal_credentials_file_for(teacher_id), 'w') as f:
         json.dump({"email": email, "password": encoded}, f)
     return True
 

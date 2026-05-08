@@ -29,7 +29,14 @@ import sentry_sdk
 
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 BROWSER_DATA_DIR = os.path.join(GRAIDER_DATA_DIR, "outlook_browser")
-CREDS_FILE = os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
+# Closes GH #245: the parent process passes the per-teacher creds file
+# via GRAIDER_PORTAL_CREDS_FILE env var so concurrent subprocesses for
+# different teachers don't read each other's credentials. Falls back to
+# the legacy shared path for local-dev / direct CLI invocation.
+CREDS_FILE = os.environ.get(
+    "GRAIDER_PORTAL_CREDS_FILE",
+    os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json"),
+)
 ERROR_SCREENSHOT = os.path.join(GRAIDER_DATA_DIR, "outlook_error.png")
 
 
