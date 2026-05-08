@@ -1502,8 +1502,14 @@ _focus_import_state = {
 }
 
 
-def _run_focus_import():
-    """Run the Focus roster import script in a background thread."""
+def _run_focus_import(creds_path=None):
+    """Run the Focus roster import script in a background thread.
+
+    Closes GH #245: `creds_path` is the per-teacher VPortal credentials
+    file the subprocess should read; passed via `GRAIDER_PORTAL_CREDS_FILE`
+    env var so focus-roster-import.js doesn't fall back to the legacy
+    shared file.
+    """
     global _focus_import_state
     _focus_import_state["status"] = "running"
     _focus_import_state["progress"] = "Starting Focus import..."
@@ -1520,12 +1526,17 @@ def _run_focus_import():
         _focus_import_state["error"] = "focus-roster-import.js not found"
         return
 
+    sub_env = dict(os.environ)
+    if creds_path:
+        sub_env['GRAIDER_PORTAL_CREDS_FILE'] = creds_path
+
     try:
         proc = subprocess.Popen(
             ["node", script_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            env=sub_env,
         )
 
         # Read stdout lines for progress updates
@@ -1728,15 +1739,24 @@ def import_from_focus():
     # Write per-teacher creds to temp file for subprocess access
     from flask import g
     teacher_id = getattr(g, 'user_id', 'local-dev')
-    from backend.routes.assistant_routes import write_temp_creds_file
+    from backend.routes.assistant_routes import (
+        write_temp_creds_file,
+        _portal_credentials_file_for,
+    )
     if not write_temp_creds_file(teacher_id):
         return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools > District Portal."}), 400
 
     if _focus_import_state["status"] == "running":
         return jsonify({"error": "Import already in progress"}), 409
 
+    # Closes GH #245: pass per-teacher creds path to the background
+    # thread so the subprocess reads the right file.
+    creds_path = _portal_credentials_file_for(teacher_id)
+
     # Start import in background thread
-    thread = threading.Thread(target=_run_focus_import, daemon=True)
+    thread = threading.Thread(
+        target=_run_focus_import, args=(creds_path,), daemon=True,
+    )
     thread.start()
 
     return jsonify({"status": "started", "message": "Focus import started. A browser window will open for 2FA."})

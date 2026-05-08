@@ -34,7 +34,11 @@ const fs = require('fs');
 const path = require('path');
 
 const GRAIDER_DATA_DIR = path.join(process.env.HOME, '.graider_data');
-const CREDS_PATH = path.join(GRAIDER_DATA_DIR, 'portal_credentials.json');
+// Closes GH #245: parent process passes per-teacher creds path via
+// GRAIDER_PORTAL_CREDS_FILE env var. Falls back to the legacy shared
+// path for direct CLI / local-dev workflows.
+const CREDS_PATH = process.env.GRAIDER_PORTAL_CREDS_FILE ||
+  path.join(GRAIDER_DATA_DIR, 'portal_credentials.json');
 const BROWSER_DATA_DIR = path.join(GRAIDER_DATA_DIR, 'focus_browser');
 const SCREENSHOTS_DIR = path.join(GRAIDER_DATA_DIR, 'focus_screenshots');
 const ERROR_SCREENSHOT = path.join(GRAIDER_DATA_DIR, 'focus-comments-error.png');

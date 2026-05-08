@@ -625,15 +625,23 @@ def outlook_login():
         # Write per-teacher creds to temp file for subprocess access
         from flask import g
         teacher_id = getattr(g, 'user_id', 'local-dev')
-        from backend.routes.assistant_routes import write_temp_creds_file
+        from backend.routes.assistant_routes import (
+            write_temp_creds_file,
+            _portal_credentials_file_for,
+        )
         if not write_temp_creds_file(teacher_id):
             return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
+        # Closes GH #245: subprocess must read the per-teacher file,
+        # not the legacy shared one.
+        creds_path = _portal_credentials_file_for(teacher_id)
+        sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
         script_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'outlook_sender.py')
         subprocess.Popen(
             [sys.executable, script_path, "--login-only"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=sub_env,
         )
         return jsonify({"status": "started", "message": "Browser opening..."})
     except Exception as e:
@@ -1307,7 +1315,10 @@ def launch_focus_comms(messages, teacher_id='local-dev'):
         return {"error": "No messages to send"}
 
     # Write per-teacher creds to temp file for subprocess access
-    from backend.routes.assistant_routes import write_temp_creds_file
+    from backend.routes.assistant_routes import (
+        write_temp_creds_file,
+        _portal_credentials_file_for,
+    )
     if not write_temp_creds_file(teacher_id):
         return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
@@ -1329,12 +1340,17 @@ def launch_focus_comms(messages, teacher_id='local-dev'):
         "log": [],
     })
 
+    # Closes GH #245: focus-comms.js subprocess must read per-teacher
+    # creds, not the legacy shared file.
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
     proc = subprocess.Popen(
         ["node", FOCUS_COMMS_SCRIPT, "--screenshot", tmp_file],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=sub_env,
     )
     _focus_comms_state["process"] = proc
 

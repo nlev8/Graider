@@ -1189,9 +1189,16 @@ def upload_focus_comments():
     try:
         # Write per-teacher creds to temp file for subprocess access
         teacher_id = getattr(g, 'user_id', 'local-dev')
-        from backend.routes.assistant_routes import write_temp_creds_file
+        from backend.routes.assistant_routes import (
+            write_temp_creds_file,
+            _portal_credentials_file_for,
+        )
         if not write_temp_creds_file(teacher_id):
             return jsonify({"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}), 400
+        # Closes GH #245: focus-comments-upload.js subprocess must read
+        # per-teacher creds, not the legacy shared file.
+        creds_path = _portal_credentials_file_for(teacher_id)
+        sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
 
         data = request.json or {}
         use_manifest = data.get("use_manifest", True)
@@ -1248,6 +1255,7 @@ def upload_focus_comments():
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
+            env=sub_env,
         )
         _focus_comments_state["process"] = proc
 
