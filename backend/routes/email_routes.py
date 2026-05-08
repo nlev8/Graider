@@ -401,7 +401,10 @@ def launch_outlook_sender(emails, teacher_id='local-dev'):
         return {"error": "No emails to send"}
 
     # Write per-teacher creds to temp file for subprocess access
-    from backend.routes.assistant_routes import write_temp_creds_file
+    from backend.routes.assistant_routes import (
+        write_temp_creds_file,
+        _portal_credentials_file_for,
+    )
     if not write_temp_creds_file(teacher_id):
         return {"error": "VPortal credentials not configured. Go to Settings > Tools to set them up."}
 
@@ -419,6 +422,12 @@ def launch_outlook_sender(emails, teacher_id='local-dev'):
         "log": [],
     })
 
+    # Closes GH #245: hand the per-teacher creds file path to the
+    # subprocess via env var. Without this, outlook_sender reads the
+    # shared `portal_credentials.json` which is unsafe across tenants.
+    creds_path = _portal_credentials_file_for(teacher_id)
+    sub_env = {**os.environ, 'GRAIDER_PORTAL_CREDS_FILE': creds_path}
+
     script_path = os.path.join(os.path.dirname(__file__), '..', 'services', 'outlook_sender.py')
     proc = subprocess.Popen(
         [sys.executable, script_path, tmp_file],
@@ -426,6 +435,7 @@ def launch_outlook_sender(emails, teacher_id='local-dev'):
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=sub_env,
     )
     _outlook_send_state["process"] = proc
 

@@ -12,8 +12,10 @@
 *.key
 credentials.json
 secrets.json
-*_secret*
-*_credentials*
+*_secret.json
+*_secret.txt
+*_credentials.json
+*_credentials.txt
 .graider_email.json
 
 # API Keys that might be in files
