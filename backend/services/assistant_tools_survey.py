@@ -152,6 +152,16 @@ def get_survey_results(join_code=None, teacher_id='local-dev', **kwargs):
             'questions': summary,
         })
 
+    # If a specific join_code was queried but the only matching row was not
+    # a survey (e.g. an assessment with the same code), the filter loop
+    # leaves `surveys` empty. Fall through to the error path so callers
+    # don't get back a misleading `{"surveys": []}` payload (which then
+    # makes `compile_survey_report` build a "Survey 'None' has no responses
+    # yet" report — confusing the teacher about a code that doesn't exist
+    # as a survey).
+    if join_code and not surveys:
+        return {"error": "No surveys found"}
+
     if join_code and surveys:
         return surveys[0]
     return {"surveys": surveys}

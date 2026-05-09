@@ -64,35 +64,53 @@ def _make_supabase(execute_returns=None):
             successive `.execute()` calls.
 
     Returns:
-        (db_mock, insert_payloads_list, table_names_list).
+        (db_mock, insert_payloads_list, table_names_list, chains_list).
+
+    Each `_Chain` instance records `.filters` (list of (key, val) tuples
+    from `.eq()` calls) and `.actions` (list of method-call labels). This
+    lets tests pin tenant-scoping like `assert ('teacher_id', 't') in
+    chains[0].filters` — without that, a regression that drops the
+    `.eq('teacher_id', ...)` filter would silently leak cross-tenant rows.
     """
     insert_payloads: list = []
     table_names: list = []
+    chains: list = []
     queue: list = list(execute_returns or [])
 
     class _Chain:
         def __init__(self):
             self._action = None
             self._payload = None
+            self.filters: list = []
+            self.actions: list = []
 
         def select(self, *_a, **_kw):
             self._action = "select"
+            self.actions.append("select")
             return self
 
         def order(self, *_a, **_kw):
+            self.actions.append("order")
             return self
 
-        def eq(self, *_a, **_kw):
+        def eq(self, key, val):
+            # PR #268 Codex round-1 MAJOR fold: record filter args so tests
+            # can pin tenant-scoping. The old `*_a, **_kw` swallow made
+            # filter regressions invisible to the suite.
+            self.filters.append((key, val))
+            self.actions.append(("eq", key, val))
             return self
 
         def insert(self, payload, **_kw):
             self._action = "insert"
             self._payload = payload
+            self.actions.append("insert")
             return self
 
         def update(self, payload, **_kw):
             self._action = "update"
             self._payload = payload
+            self.actions.append("update")
             return self
 
         def execute(self):
@@ -107,10 +125,12 @@ def _make_supabase(execute_returns=None):
 
     def _table(name):
         table_names.append(name)
-        return _Chain()
+        chain = _Chain()
+        chains.append(chain)
+        return chain
 
     db.table.side_effect = _table
-    return db, insert_payloads, table_names
+    return db, insert_payloads, table_names, chains
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -124,7 +144,7 @@ class TestCreateParentSurvey:
             create_parent_survey, DEFAULT_QUESTIONS,
         )
 
-        db, payloads, _tbls = _make_supabase(execute_returns=[
+        db, payloads, _tbls, _chains = _make_supabase(execute_returns=[
             [],   # collision-check returns empty → break loop
             [],   # insert call
         ])
@@ -142,7 +162,7 @@ class TestCreateParentSurvey:
     def test_custom_title_and_questions_passed_through(self):
         from backend.services.assistant_tools_survey import create_parent_survey
 
-        db, payloads, _ = _make_supabase(execute_returns=[[], []])
+        db, payloads, _, _chains = _make_supabase(execute_returns=[[], []])
         custom_questions = [
             {"id": "q1", "text": "Custom?", "type": "rating"},
         ]
@@ -163,7 +183,7 @@ class TestCreateParentSurvey:
         # First select returns 1 record (collision), second returns empty.
         from backend.services.assistant_tools_survey import create_parent_survey
 
-        db, payloads, _ = _make_supabase(execute_returns=[
+        db, payloads, _, _chains = _make_supabase(execute_returns=[
             [{"id": "preexisting"}],  # collision
             [],                        # clear
             [],                        # insert
@@ -185,7 +205,7 @@ class TestCreateParentSurvey:
     def test_payload_structure_complete(self):
         from backend.services.assistant_tools_survey import create_parent_survey
 
-        db, payloads, _ = _make_supabase(execute_returns=[[], []])
+        db, payloads, _, _chains = _make_supabase(execute_returns=[[], []])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             create_parent_survey(teacher_id="teach-tenant-9")
@@ -206,7 +226,7 @@ class TestCreateParentSurvey:
     def test_returns_url_and_message_with_question_count(self):
         from backend.services.assistant_tools_survey import create_parent_survey
 
-        db, payloads, _ = _make_supabase(execute_returns=[[], []])
+        db, payloads, _, _chains = _make_supabase(execute_returns=[[], []])
         questions = [{"id": "a", "text": "?", "type": "rating"}] * 7
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
@@ -222,7 +242,7 @@ class TestCreateParentSurvey:
     def test_table_name_is_published_assessments(self):
         from backend.services.assistant_tools_survey import create_parent_survey
 
-        db, _payloads, table_names = _make_supabase(execute_returns=[[], []])
+        db, _payloads, table_names, _chains = _make_supabase(execute_returns=[[], []])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             create_parent_survey(teacher_id="teach-1")
@@ -256,7 +276,7 @@ class TestGetSurveyResults:
     def test_no_data_returns_error(self):
         from backend.services.assistant_tools_survey import get_survey_results
 
-        db, _, _ = _make_supabase(execute_returns=[[]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(
@@ -275,7 +295,7 @@ class TestGetSurveyResults:
             ],
             responses=[{"comm": 5}, {"comm": 4}, {"comm": 3}],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(
@@ -293,7 +313,7 @@ class TestGetSurveyResults:
             _survey_record(join_code="A1", title="S1"),
             _survey_record(join_code="B2", title="S2"),
         ]
-        db, _, _ = _make_supabase(execute_returns=[records])
+        db, _, _, _chains = _make_supabase(execute_returns=[records])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(teacher_id="teach-1")
@@ -310,7 +330,7 @@ class TestGetSurveyResults:
             _survey_record(join_code="B2", title="AssessmentRow",
                            content_type="assessment"),
         ]
-        db, _, _ = _make_supabase(execute_returns=[records])
+        db, _, _, _chains = _make_supabase(execute_returns=[records])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(teacher_id="teach-1")
@@ -327,7 +347,7 @@ class TestGetSurveyResults:
                 {"q1": 5}, {"q1": 5}, {"q1": 4}, {"q1": 3}, {"q1": 1},
             ],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(
@@ -350,7 +370,7 @@ class TestGetSurveyResults:
             questions=[{"id": "q1", "text": "?", "type": "rating"}],
             responses=[],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(
@@ -372,7 +392,7 @@ class TestGetSurveyResults:
                 {"rating1": 3},
             ],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(
@@ -394,7 +414,7 @@ class TestGetSurveyResults:
                 {"feedback": ""},  # truthy filter drops empty strings
             ],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = get_survey_results(
@@ -404,6 +424,90 @@ class TestGetSurveyResults:
         assert q["type"] == "text"
         assert q["count"] == 2
         assert q["responses"] == ["Great teacher", "Communicates well"]
+
+    def test_join_code_path_scopes_query_by_join_code_AND_teacher_id(self):
+        # PR #268 Codex round-1 MAJOR fold: pin tenant scoping. A regression
+        # that drops `.eq('teacher_id', teacher_id)` from production at
+        # backend/services/assistant_tools_survey.py:103 would have leaked
+        # cross-tenant survey rows. The previous `_Chain.eq(*_a, **_kw)`
+        # swallowed all filter args, making this regression invisible.
+        from backend.services.assistant_tools_survey import get_survey_results
+
+        record = _survey_record()
+        db, _, _, chains = _make_supabase(execute_returns=[[record]])
+        with patch("backend.services.assistant_tools_survey._get_supabase",
+                   return_value=db):
+            get_survey_results(join_code="ABC123", teacher_id="teach-X")
+
+        # Single .table() call → single chain → both filters present
+        assert len(chains) == 1
+        filters = dict(chains[0].filters)
+        assert filters.get("join_code") == "ABC123"
+        assert filters.get("teacher_id") == "teach-X", (
+            "Cross-tenant safety: teacher_id MUST be in the .eq() filters"
+        )
+
+    def test_list_path_scopes_query_by_teacher_id_and_content_type(self):
+        # The no-join-code path must filter by teacher_id AND content_type so
+        # the teacher only sees their own SURVEY records (not assessments).
+        from backend.services.assistant_tools_survey import get_survey_results
+
+        db, _, _, chains = _make_supabase(execute_returns=[[]])
+        with patch("backend.services.assistant_tools_survey._get_supabase",
+                   return_value=db):
+            get_survey_results(teacher_id="teach-Y")
+
+        assert len(chains) == 1
+        filters = dict(chains[0].filters)
+        assert filters.get("teacher_id") == "teach-Y", (
+            "Cross-tenant safety: teacher_id filter required on list path"
+        )
+        assert filters.get("settings->>content_type") == "survey", (
+            "List path must scope to survey content_type"
+        )
+
+    def test_join_code_matching_non_survey_record_returns_error(self):
+        # PR #268 Codex round-1 MINOR fold + Rule #11 production fix:
+        # If a join_code matches a row that ISN'T a survey (e.g., an
+        # assessment with the same code under a different content_type),
+        # the filter loop at viz.py:120-121 leaves `surveys` empty.
+        # Previously fell through to `{"surveys": []}` → callers like
+        # compile_survey_report then built "Survey 'None' has no responses
+        # yet" reports about a code that doesn't actually exist as a
+        # survey. Now returns the error path.
+        from backend.services.assistant_tools_survey import get_survey_results
+
+        # The DB returns a row but its content_type is "assessment", not "survey"
+        non_survey = _survey_record(
+            join_code="LOST01",
+            content_type="assessment",
+        )
+        db, _, _, _chains = _make_supabase(execute_returns=[[non_survey]])
+        with patch("backend.services.assistant_tools_survey._get_supabase",
+                   return_value=db):
+            result = get_survey_results(
+                join_code="LOST01", teacher_id="teach-1",
+            )
+        # Error path, not `{"surveys": []}`
+        assert result == {"error": "No surveys found"}
+
+    def test_list_path_filters_non_surveys_but_returns_empty_list(self):
+        # Symmetric coverage: the no-join_code list path with only
+        # non-survey rows should still return `{"surveys": []}` (NOT an
+        # error) — the production behavior for a teacher with no surveys
+        # yet must remain stable.
+        from backend.services.assistant_tools_survey import get_survey_results
+
+        non_surveys = [
+            _survey_record(join_code="A1", content_type="assessment"),
+            _survey_record(join_code="B2", content_type="assessment"),
+        ]
+        db, _, _, _chains = _make_supabase(execute_returns=[non_surveys])
+        with patch("backend.services.assistant_tools_survey._get_supabase",
+                   return_value=db):
+            result = get_survey_results(teacher_id="teach-1")
+        # No join_code → empty surveys list (not error)
+        assert result == {"surveys": []}
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -415,7 +519,7 @@ class TestCompileSurveyReport:
     def test_passes_through_get_survey_results_error(self):
         from backend.services.assistant_tools_survey import compile_survey_report
 
-        db, _, _ = _make_supabase(execute_returns=[[]])  # → "No surveys found"
+        db, _, _, _chains = _make_supabase(execute_returns=[[]])  # → "No surveys found"
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = compile_survey_report(
@@ -431,7 +535,7 @@ class TestCompileSurveyReport:
             questions=[{"id": "q1", "text": "?", "type": "rating"}],
             responses=[],  # zero responses
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = compile_survey_report(
@@ -458,7 +562,7 @@ class TestCompileSurveyReport:
                 {"comm": 4, "supp": 4},
             ],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = compile_survey_report(
@@ -490,7 +594,7 @@ class TestCompileSurveyReport:
                 {"fb": "Very supportive teacher"},
             ],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = compile_survey_report(
@@ -516,7 +620,7 @@ class TestCompileSurveyReport:
                 {"rating1": 5},  # no `fb` value
             ],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = compile_survey_report(
@@ -540,7 +644,7 @@ class TestCompileSurveyReport:
                 {"q": 1},                       # 1 one → 1 asterisk
             ],
         )
-        db, _, _ = _make_supabase(execute_returns=[[record]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[record]])
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             result = compile_survey_report(
@@ -572,7 +676,7 @@ class TestTeacherIdRequired:
     def test_create_parent_survey_calls_require_teacher_id(self):
         from backend.services.assistant_tools_survey import create_parent_survey
 
-        db, _, _ = _make_supabase(execute_returns=[[], []])
+        db, _, _, _chains = _make_supabase(execute_returns=[[], []])
         with patch("backend.services.assistant_tools_survey.require_teacher_id") as mock_req, \
              patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
@@ -582,26 +686,27 @@ class TestTeacherIdRequired:
     def test_get_survey_results_calls_require_teacher_id(self):
         from backend.services.assistant_tools_survey import get_survey_results
 
-        db, _, _ = _make_supabase(execute_returns=[[]])
+        db, _, _, _chains = _make_supabase(execute_returns=[[]])
         with patch("backend.services.assistant_tools_survey.require_teacher_id") as mock_req, \
              patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db):
             get_survey_results(teacher_id="t")
         mock_req.assert_called_once_with("t")
 
-    def test_compile_survey_report_calls_require_teacher_id(self):
+    def test_compile_survey_report_calls_require_teacher_id_directly(self):
+        # PR #268 Codex round-1 MAJOR fold: the previous test asserted only
+        # `call_count >= 1`, which would have passed even if compile's
+        # OWN direct require_teacher_id call at viz.py:162 were removed
+        # (because get_survey_results delegate also calls it). Patch the
+        # delegate to short-circuit so this isolates compile's own call.
         from backend.services.assistant_tools_survey import compile_survey_report
 
-        db, _, _ = _make_supabase(execute_returns=[[]])
         with patch("backend.services.assistant_tools_survey.require_teacher_id") as mock_req, \
-             patch("backend.services.assistant_tools_survey._get_supabase",
-                   return_value=db):
+             patch("backend.services.assistant_tools_survey.get_survey_results",
+                   return_value={"error": "stubbed"}):
             compile_survey_report(join_code="ABC123", teacher_id="t")
-        # compile delegates to get_survey_results which ALSO calls
-        # require_teacher_id, so we expect 2 calls — first is the direct one
-        # at compile_survey_report's entry, second is via get_survey_results.
-        assert mock_req.call_count >= 1
-        mock_req.assert_any_call("t")
+        # With the delegate stubbed, only compile's DIRECT call should fire.
+        mock_req.assert_called_once_with("t")
 
 
 # ──────────────────────────────────────────────────────────────────
