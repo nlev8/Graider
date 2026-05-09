@@ -110,77 +110,58 @@ class TestTestConnectionResendUnavailableAtCallTime:
 class TestInitResendDotEnvFallback:
     """Test the `.env`-file parsing path in `_init_resend` (lines 51-62).
 
-    The production code at email_service.py:51-62 walks two paths looking
-    for a `RESEND_API_KEY=...` line:
+    Production walks two paths looking for `RESEND_API_KEY=...`:
       1. Path(__file__).parent.parent.parent / '.env'  (project root)
       2. Path.cwd() / '.env'
 
-    In this test environment, the actual project root `.env` exists with
-    a real RESEND_API_KEY — so to test the fallback in isolation, we
-    patch the `env_paths` source by patching the `Path` class used in
-    the module. We provide a controlled list of paths that point only
-    to a tmp directory.
+    The real project-root `.env` exists with a real key, so naive tests
+    collide with it. Tests here use REAL Path objects: a fake project
+    structure under `tmp_path` and `monkeypatch` of (a) the module's
+    `__file__` so `.parent.parent.parent` traverses to the fake root,
+    and (b) `monkeypatch.chdir` so `Path.cwd()` returns the fake cwd.
+
+    PR #274 Gemini round-1 MAJOR fold: the prior `_StubPath` approach
+    short-circuited path traversal (`.parent` → self) and ignored the
+    operand of `/ '.env'`, so production regressions like dropping a
+    `.parent` or changing the filename would still pass.
     """
 
     @staticmethod
-    def _patch_env_paths_to(*paths):
-        """Build a mock `Path` whose `Path(...) / '.env'` returns paths in
-        order: first call returns paths[0], second call returns paths[1], etc.
+    def _make_fake_layout(tmp_path):
+        """Set up a fake project root + cwd structure under tmp_path.
 
-        Returns a `patch` context manager that replaces `email_service.Path`.
+        Returns (project_root, cwd, module_file) — module_file is positioned
+        3 directories deep so `Path(module_file).parent.parent.parent`
+        resolves to project_root via real pathlib traversal.
         """
-        from pathlib import Path as _RealPath
-
-        # Production constructs:
-        #   Path(__file__).parent.parent.parent / '.env'
-        #   Path.cwd() / '.env'
-        # We need both `Path(arg)` and `Path.cwd()` to chain to controlled
-        # outputs. Easiest approach: use a callable that, when invoked,
-        # returns a chain ending in one of our `paths` (popped FIFO).
-
-        queue = list(paths)
-
-        class _StubPath:
-            """Builds a chainable object whose `.parent` / `.cwd()` /
-            `/ '.env'` ultimately yields a real Path from the queue."""
-
-            def __init__(self, *args):
-                self._stub = True
-
-            @property
-            def parent(self):
-                return self
-
-            @classmethod
-            def cwd(cls):
-                return cls()
-
-            def __truediv__(self, other):
-                # The final `/ '.env'` returns the next queued real Path
-                if queue:
-                    return queue.pop(0)
-                return _RealPath("/nonexistent")
-
-        return patch("backend.services.email_service.Path", _StubPath)
+        project_root = tmp_path / "fake_root"
+        cwd = tmp_path / "fake_cwd"
+        # Production calls Path(__file__).parent.parent.parent — needs 3
+        # levels of directory above the module file
+        module_dir = project_root / "backend" / "services"
+        module_dir.mkdir(parents=True)
+        cwd.mkdir()
+        module_file = module_dir / "email_service.py"
+        module_file.write_text("# fake module")
+        return project_root, cwd, module_file
 
     def test_loads_api_key_from_env_file_when_env_var_absent(
         self, tmp_path, monkeypatch,
     ):
-        # PR #274 gap-fill: `_init_resend` falls back to reading `.env` files
-        # at backend/services/email_service.py:51-62 when `os.getenv()` is empty.
         monkeypatch.delenv("RESEND_API_KEY", raising=False)
+        project_root, cwd, module_file = self._make_fake_layout(tmp_path)
 
-        # First env_path is the only one that exists, contains the key
-        first_env = tmp_path / "first.env"
-        first_env.write_text(
+        # Place the .env at the project root (first path checked)
+        (project_root / ".env").write_text(
             "OTHER_VAR=ignored\n"
             'RESEND_API_KEY="re_test_abcd_1234"\n'
             "ANOTHER=also_ignored\n"
         )
-        # Second is non-existent (won't be reached due to outer break)
-        second_env = tmp_path / "nonexistent.env"
 
-        with self._patch_env_paths_to(first_env, second_env), \
+        # Real Path.cwd() returns fake_cwd; module __file__ resolves so
+        # .parent.parent.parent → project_root.
+        monkeypatch.chdir(cwd)
+        with patch("backend.services.email_service.__file__", str(module_file)), \
              patch("backend.services.email_service.RESEND_AVAILABLE", True), \
              patch("backend.services.email_service.resend") as mock_resend:
             from backend.services.email_service import GraiderEmailer
@@ -194,15 +175,14 @@ class TestInitResendDotEnvFallback:
     def test_strips_single_quotes_from_env_file_value(
         self, tmp_path, monkeypatch,
     ):
-        # The .env parser strips both `"..."` and `'...'` quotes per
-        # email_service.py:59 — `.strip().strip('"').strip("'")`
         monkeypatch.delenv("RESEND_API_KEY", raising=False)
+        project_root, cwd, module_file = self._make_fake_layout(tmp_path)
 
-        first_env = tmp_path / "first.env"
-        first_env.write_text("RESEND_API_KEY='re_singly_quoted'\n")
-        second_env = tmp_path / "missing.env"
-
-        with self._patch_env_paths_to(first_env, second_env), \
+        (project_root / ".env").write_text(
+            "RESEND_API_KEY='re_singly_quoted'\n"
+        )
+        monkeypatch.chdir(cwd)
+        with patch("backend.services.email_service.__file__", str(module_file)), \
              patch("backend.services.email_service.RESEND_AVAILABLE", True), \
              patch("backend.services.email_service.resend") as mock_resend:
             from backend.services.email_service import GraiderEmailer
@@ -213,12 +193,11 @@ class TestInitResendDotEnvFallback:
         self, tmp_path, monkeypatch,
     ):
         monkeypatch.delenv("RESEND_API_KEY", raising=False)
+        project_root, cwd, module_file = self._make_fake_layout(tmp_path)
 
-        first_env = tmp_path / "first.env"
-        first_env.write_text("RESEND_API_KEY=re_unquoted_xyz\n")
-        second_env = tmp_path / "missing.env"
-
-        with self._patch_env_paths_to(first_env, second_env), \
+        (project_root / ".env").write_text("RESEND_API_KEY=re_unquoted_xyz\n")
+        monkeypatch.chdir(cwd)
+        with patch("backend.services.email_service.__file__", str(module_file)), \
              patch("backend.services.email_service.RESEND_AVAILABLE", True), \
              patch("backend.services.email_service.resend") as mock_resend:
             from backend.services.email_service import GraiderEmailer
@@ -228,54 +207,76 @@ class TestInitResendDotEnvFallback:
     def test_inner_break_after_finding_api_key(
         self, tmp_path, monkeypatch,
     ):
-        # `break` at line 60 after finding RESEND_API_KEY= — first match wins
+        # `break` at line 60 — first match wins inside a single .env file
         monkeypatch.delenv("RESEND_API_KEY", raising=False)
+        project_root, cwd, module_file = self._make_fake_layout(tmp_path)
 
-        first_env = tmp_path / "first.env"
-        first_env.write_text(
+        (project_root / ".env").write_text(
             "RESEND_API_KEY=first_value\n"
             "RESEND_API_KEY=second_value\n"
         )
-        second_env = tmp_path / "missing.env"
-
-        with self._patch_env_paths_to(first_env, second_env), \
+        monkeypatch.chdir(cwd)
+        with patch("backend.services.email_service.__file__", str(module_file)), \
              patch("backend.services.email_service.RESEND_AVAILABLE", True), \
              patch("backend.services.email_service.resend") as mock_resend:
             from backend.services.email_service import GraiderEmailer
             GraiderEmailer(config_path=str(tmp_path / "cfg.json"))
         assert mock_resend.api_key == "first_value"
 
-    def test_falls_through_to_second_path_when_first_missing(
+    def test_falls_through_to_cwd_env_when_project_root_missing(
         self, tmp_path, monkeypatch,
     ):
-        # First env path doesn't exist → loop continues to second path
-        # which has the key. Pins the iteration through the env_paths list.
+        # Project-root .env doesn't exist → loop continues to cwd/.env
+        # which has the key. Real path traversal verifies both paths
+        # are actually checked in the right order.
         monkeypatch.delenv("RESEND_API_KEY", raising=False)
+        project_root, cwd, module_file = self._make_fake_layout(tmp_path)
 
-        first_env = tmp_path / "missing-first.env"  # doesn't exist
-        second_env = tmp_path / "second.env"
-        second_env.write_text("RESEND_API_KEY=second_path_key\n")
+        # NO .env at project_root; only at cwd
+        (cwd / ".env").write_text("RESEND_API_KEY=cwd_path_key\n")
 
-        with self._patch_env_paths_to(first_env, second_env), \
+        monkeypatch.chdir(cwd)
+        with patch("backend.services.email_service.__file__", str(module_file)), \
              patch("backend.services.email_service.RESEND_AVAILABLE", True), \
              patch("backend.services.email_service.resend") as mock_resend:
             from backend.services.email_service import GraiderEmailer
             GraiderEmailer(config_path=str(tmp_path / "cfg.json"))
-        assert mock_resend.api_key == "second_path_key"
+        assert mock_resend.api_key == "cwd_path_key"
+
+    def test_project_root_env_takes_precedence_over_cwd(
+        self, tmp_path, monkeypatch,
+    ):
+        # Both env files exist with different keys. Project-root .env is
+        # checked first → outer-loop break at line 61-62 prevents reading
+        # cwd/.env. Pins the search-order contract.
+        monkeypatch.delenv("RESEND_API_KEY", raising=False)
+        project_root, cwd, module_file = self._make_fake_layout(tmp_path)
+
+        (project_root / ".env").write_text("RESEND_API_KEY=root_key\n")
+        (cwd / ".env").write_text("RESEND_API_KEY=cwd_key\n")
+
+        monkeypatch.chdir(cwd)
+        with patch("backend.services.email_service.__file__", str(module_file)), \
+             patch("backend.services.email_service.RESEND_AVAILABLE", True), \
+             patch("backend.services.email_service.resend") as mock_resend:
+            from backend.services.email_service import GraiderEmailer
+            GraiderEmailer(config_path=str(tmp_path / "cfg.json"))
+        # Project root wins (first in env_paths list)
+        assert mock_resend.api_key == "root_key"
 
     def test_resend_available_false_when_no_key_anywhere(
         self, tmp_path, monkeypatch,
     ):
-        # Both env paths exist but neither has a RESEND_API_KEY line —
-        # falls through to the `resend_available = False` branch at line 69.
+        # Both .env files exist but neither has RESEND_API_KEY → falls
+        # through to `resend_available = False` at line 69.
         monkeypatch.delenv("RESEND_API_KEY", raising=False)
+        project_root, cwd, module_file = self._make_fake_layout(tmp_path)
 
-        first_env = tmp_path / "first.env"
-        first_env.write_text("OTHER_VAR=irrelevant\n")
-        second_env = tmp_path / "second.env"
-        second_env.write_text("ALSO_IRRELEVANT=value\n")
+        (project_root / ".env").write_text("OTHER_VAR=irrelevant\n")
+        (cwd / ".env").write_text("ALSO_IRRELEVANT=value\n")
 
-        with self._patch_env_paths_to(first_env, second_env), \
+        monkeypatch.chdir(cwd)
+        with patch("backend.services.email_service.__file__", str(module_file)), \
              patch("backend.services.email_service.RESEND_AVAILABLE", True):
             from backend.services.email_service import GraiderEmailer
             emailer = GraiderEmailer(
