@@ -80,6 +80,28 @@ class TestGetVerificationMessage:
         assert "UNEXPECTED STATUS" in result
         assert "queued" in result
 
+    def test_unknown_action_type_falls_through_to_none(self):
+        # Hit line 131 — the defensive `return None` after both branches.
+        # Triggered when an entry has a `type` value that's neither
+        # "preview_confirm" nor "verify_result". A regression that adds a
+        # third action type without a corresponding handler would produce
+        # a silent no-op on this path; this test pins the contract that
+        # unknown action types currently return None.
+        from backend.services.assistant_tool_guards import (
+            get_verification_message, GUARDED_ACTIONS,
+        )
+
+        # Inject a temporary entry with an unrecognized type
+        GUARDED_ACTIONS["__test_unknown_type__"] = {
+            "type": "future_action_type_not_yet_handled",
+        }
+        try:
+            result = get_verification_message("__test_unknown_type__", {})
+            assert result is None
+        finally:
+            # Always clean up the registry
+            del GUARDED_ACTIONS["__test_unknown_type__"]
+
 
 # ---------------------------------------------------------------------------
 # TestCheckFalseClaims
