@@ -842,7 +842,8 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
         if not parent_email:
             return {"error": "No parent email found for '" + student_name + "'. Add parent contacts in the student roster or parent contacts file."}
 
-    # Build pending payload
+    # Build pending payload — GH #280 fix: inject teacher_id so
+    # confirm_and_send can do cross-tenant IDOR validation
     pending = {
         "action": "send_behavior_email",
         "student_name": student_name,
@@ -850,6 +851,7 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
         "body": body,
         "method": method,
         "parent_email": parent_email,
+        "teacher_id": teacher_id,
     }
 
     # Save to storage (preferred)
@@ -860,11 +862,11 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
     except Exception:
         pass
 
-    # Filesystem fallback
+    # Filesystem fallback — GH #280 fix: per-tenant path (was global)
     try:
-        data_dir = os.path.expanduser("~/.graider_data")
-        os.makedirs(data_dir, exist_ok=True)
-        pending_path = os.path.join(data_dir, "pending_send.json")
+        from backend.utils.pending_send import pending_send_path
+        pending_path = pending_send_path(teacher_id)
+        os.makedirs(os.path.dirname(pending_path), exist_ok=True)
         with open(pending_path, 'w') as f:
             json.dump(pending, f)
     except Exception as e:
