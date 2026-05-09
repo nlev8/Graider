@@ -147,6 +147,50 @@ class TestCallHaiku:
             result = _call_haiku("x")
         assert result == {"k": 2}
 
+    def test_preamble_before_fenced_json_still_parses(self):
+        # PR #267 Codex round-3 MINOR fold: AI sometimes prefixes a
+        # natural-language preamble before the fenced JSON block, e.g.
+        # "Here's the analysis:\n```json\n{...}\n```". Previously the parser
+        # only ran when `text.startswith("```")`, so this fell through to
+        # `json.loads(raw_preamble_plus_fence)` and failed.
+        from backend.services.assistant_tools_ai import _call_haiku
+
+        wrapped = (
+            "Here's the result:\n"
+            "```json\n"
+            "{\"k\": 3, \"label\": \"with-preamble\"}\n"
+            "```"
+        )
+        mock_response = MagicMock()
+        mock_response.content_parts = [MagicMock(text=wrapped)]
+        with patch("backend.api_keys.get_api_key", return_value="sk-test"), \
+             patch("backend.services.llm_adapter.AnthropicAdapter") as MockAdapter:
+            MockAdapter.return_value.chat.return_value = mock_response
+            result = _call_haiku("x")
+        assert result == {"k": 3, "label": "with-preamble"}
+
+    def test_json_with_backticks_in_string_value_does_not_get_mangled(self):
+        # Regression guard for PR #267 Codex round-3 fold: after the parser
+        # was extended to find fences anywhere in the text (not just at
+        # position 0), a JSON document that legitimately contains backticks
+        # in a string value would have been mangled. The fix is to try
+        # direct json.loads FIRST and only fall back to fence-strip on
+        # JSONDecodeError. This test pins that ordering.
+        from backend.services.assistant_tools_ai import _call_haiku
+
+        # The JSON itself contains ``` inside a string value (a code-fence
+        # template, e.g. for an instructional response).
+        valid_json = '{"description": "use ``` to start a code block"}'
+        mock_response = MagicMock()
+        mock_response.content_parts = [MagicMock(text=valid_json)]
+        with patch("backend.api_keys.get_api_key", return_value="sk-test"), \
+             patch("backend.services.llm_adapter.AnthropicAdapter") as MockAdapter:
+            MockAdapter.return_value.chat.return_value = mock_response
+            result = _call_haiku("x")
+        # The string value must be preserved intact — fence-strip must NOT
+        # have run because the direct parse succeeded first.
+        assert result == {"description": "use ``` to start a code block"}
+
     def test_invalid_json_returns_error_with_raw(self):
         from backend.services.assistant_tools_ai import _call_haiku
 

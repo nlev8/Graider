@@ -117,17 +117,26 @@ def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
             metadata={"feature_label": "assistant_tools_ai"},
         ))
         text = (response.content_parts[0].text if response.content_parts else "").strip()
-        # Strip markdown fences if present. Use .find() rather than .index()
-        # so malformed shapes don't get swallowed by the generic-exception
-        # handler with a cryptic "substring not found" message. Three branches:
+        # Try direct JSON parse FIRST. This handles two cases the fence-strip
+        # branch can't: (a) JSON whose string values legitimately contain
+        # backticks (`{"description": "use ``` to escape"}`), and (b) the
+        # common happy path where the AI returned no fences at all.
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass  # fall through to fence-strip retry
+        # Strip markdown fences. Search for the first fence anywhere in the
+        # text (not just at position 0) so a preamble like
+        # "Here's the result:\n```json\n{...}\n```" still parses. Three
+        # post-strip shapes:
         #   1. Single-line fence (no newline): strip backticks
         #   2. Multi-line fence with closing: take content between newline
         #      and last fence
         #   3. Multi-line fence with NO closing (labeled or bare): take
-        #      everything after the first newline so a labeled opener like
-        #      ```json\n{"k":1} still parses
-        if text.startswith("```"):
-            first_nl = text.find("\n")
+        #      everything after the first newline
+        if "```" in text:
+            first_fence = text.find("```")
+            first_nl = text.find("\n", first_fence)
             if first_nl == -1:
                 text = text.strip("`").strip()
             else:
