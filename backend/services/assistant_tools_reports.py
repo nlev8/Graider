@@ -2590,14 +2590,19 @@ def confirm_and_send(teacher_id='local-dev'):
             if "error" in result:
                 # Keep pending data so teacher can retry
                 return result
-            # Success — clear pending to prevent double-send
+            # Success — clear pending to prevent double-send. GH #280
+            # round-2 fold: previously this used `if storage_save: ... else:`
+            # which left the local file orphaned in production (where
+            # storage_save is non-None). Subsequent confirmations would
+            # then read the orphaned file and replay the send. Now both
+            # storage clears AND the file remove run unconditionally.
             if storage_save:
                 storage_save('pending_send', None, teacher_id)
-            else:
-                try:
-                    os.remove(_pending_send_path(teacher_id))
-                except OSError:
-                    pass
+                storage_save('pending_send:send_focus_comms', None, teacher_id)
+            try:
+                os.remove(_pending_send_path(teacher_id))
+            except OSError:
+                pass
             audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_messages"] = len(messages)
             return result
@@ -2609,14 +2614,14 @@ def confirm_and_send(teacher_id='local-dev'):
             result = launch_outlook_sender(emails, teacher_id=teacher_id)
             if "error" in result:
                 return result
-            # Success — clear pending to prevent double-send
+            # Success — clear both Supabase keys + local file (GH #280 R2)
             if storage_save:
                 storage_save('pending_send', None, teacher_id)
-            else:
-                try:
-                    os.remove(_pending_send_path(teacher_id))
-                except OSError:
-                    pass
+                storage_save('pending_send:send_parent_emails', None, teacher_id)
+            try:
+                os.remove(_pending_send_path(teacher_id))
+            except OSError:
+                pass
             audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_emails"] = len(emails)
             return result

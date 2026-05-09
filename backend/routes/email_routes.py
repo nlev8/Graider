@@ -1529,18 +1529,34 @@ def confirm_send():
 
     action = pending.get("action")
 
+    def _clear_pending(action_key):
+        """Clear pending payload from Supabase + local file.
+
+        GH #280 round-2 fold: previously only the local file was removed,
+        leaving the Supabase record stale. Subsequent confirmations
+        would read the orphaned record and replay the send. Now BOTH
+        layers cleared unconditionally.
+        """
+        try:
+            from backend.storage import save as _storage_save
+            _storage_save('pending_send', None, teacher_id)
+            if action_key:
+                _storage_save('pending_send:' + action_key, None, teacher_id)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+        try:
+            if os.path.exists(pending_path):
+                os.remove(pending_path)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+
     if action == "send_focus_comms":
         messages = pending.get("messages", [])
         if not messages:
             return jsonify({"error": "No messages in pending payload"})
         result = launch_focus_comms(messages, teacher_id=teacher_id)
         if "error" not in result:
-            # Success — clean up file to prevent double-send
-            try:
-                if os.path.exists(pending_path):
-                    os.remove(pending_path)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+            _clear_pending("send_focus_comms")
         return jsonify(result)
 
     elif action == "send_parent_emails":
@@ -1549,11 +1565,7 @@ def confirm_send():
             return jsonify({"error": "No emails in pending payload"})
         result = launch_outlook_sender(emails, teacher_id=teacher_id)
         if "error" not in result:
-            try:
-                if os.path.exists(pending_path):
-                    os.remove(pending_path)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+            _clear_pending("send_parent_emails")
         return jsonify(result)
 
     else:
