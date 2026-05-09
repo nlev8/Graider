@@ -121,8 +121,12 @@ def image_to_latex(image_data, formats=None):
             'error': 'Mathpix API request timed out',
         }
     except requests.exceptions.HTTPError as e:
-        status = e.response.status_code if e.response else 'unknown'
-        body = e.response.text[:200] if e.response else ''
+        # Use `is not None` rather than truthiness — real `requests.Response`
+        # objects for 4xx/5xx are FALSEY (Response.__bool__ returns self.ok),
+        # which would otherwise hide the actual status/body in error reports
+        # for every real HTTP failure. PR #269 Codex round-1 MAJOR fold.
+        status = e.response.status_code if e.response is not None else 'unknown'
+        body = e.response.text[:200] if e.response is not None else ''
         return {
             'latex': '',
             'text': '',
@@ -210,12 +214,14 @@ def _clean_ocr_text(text):
         return ''
     # Remove surrounding whitespace
     text = text.strip()
-    # Remove Mathpix's surrounding dollar signs for inline math
-    if text.startswith('$') and text.endswith('$'):
-        text = text[1:-1].strip()
-    # Remove double dollar signs for display math
+    # Remove Mathpix's surrounding dollar signs. Check `$$...$$` (display
+    # math) BEFORE `$...$` (inline math) — otherwise the single-dollar
+    # branch trips first on display math, stripping only one `$` from each
+    # side and leaving `$x^2$` for what should have been `x^2`.
     if text.startswith('$$') and text.endswith('$$'):
         text = text[2:-2].strip()
+    elif text.startswith('$') and text.endswith('$'):
+        text = text[1:-1].strip()
     # Collapse multiple spaces
     text = re.sub(r'  +', ' ', text)
     return text
