@@ -327,10 +327,36 @@ class TestScanSubmissionsFolder:
             if os.path.exists(cfg_path):
                 os.remove(cfg_path)
 
-        # Top assignments returned
-        assert "top_assignments" in result or "assignments" in result or "error" not in result
-        # Total files counted
-        assert result.get("error") is None or "Assignments" not in result.get("error", "")
+        # Codex round-1 LOW: previous version was too permissive. Now
+        # asserts the concrete output shape:
+        # - 5 supported files (Quiz1 x3, Quiz2 x1, Bad_Filename = 5; .xyz skipped)
+        # - 3 unique students (Alice, Bob, Carol — last initials normalized)
+        # - 2 parseable assignments (Quiz1, Quiz2)
+        # - Bad_Filename.docx in unparseable_files
+        assert result.get("error") is None, f"Unexpected error: {result.get('error')}"
+        # 4 parseable + 1 unparseable = 5 supported files (.xyz excluded)
+        assert result["total_files"] == 5
+        # Quiz1 + Quiz2 — Bad_Filename never made it to the assignment_groups
+        assert result["unique_assignments"] == 2
+        # Alice S., Bob J., Carol D. — student_display = "First L." form
+        assert result["unique_students"] == 3
+        # Top assignments sorted by submission count desc
+        top = result["top_assignments"]
+        assert len(top) == 2
+        # Quiz1 has 3 submissions (Alice, Bob, Carol)
+        quiz1 = next((a for a in top if a["assignment"].lower() == "quiz1"), None)
+        assert quiz1 is not None
+        assert quiz1["submissions"] == 3
+        assert quiz1["student_count"] == 3
+        # Quiz2 has 1 submission (Alice)
+        quiz2 = next((a for a in top if a["assignment"].lower() == "quiz2"), None)
+        assert quiz2 is not None
+        assert quiz2["submissions"] == 1
+        # All ungraded (no results passed in)
+        assert quiz1["ungraded"] == 3
+        assert quiz2["ungraded"] == 1
+        # Bad_Filename.docx is unparseable
+        assert any("Bad_Filename" in f for f in result["unparseable_files"])
 
 
 # ──────────────────────────────────────────────────────────────────
