@@ -122,6 +122,35 @@ STUDENT_TOOL_DEFINITIONS = [
 
 
 # ═══════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════
+
+
+def _sanitize_tenant_for_path(teacher_id):
+    """Return a filesystem-safe representation of a teacher_id.
+
+    Replaces any character that isn't alphanumeric / hyphen / underscore
+    with `_` and caps length at 64. Used by `_pending_send_path` to
+    namespace per-tenant filesystem fallback files without risking
+    path traversal (`..`, `/`) or collision with reserved filenames.
+    """
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", teacher_id or "local-dev")
+    return safe[:64] or "local-dev"
+
+
+def _pending_send_path(teacher_id):
+    """Per-tenant pending-send filesystem fallback path.
+
+    PR #279 Gemini round-1 CRIT fix: previously this file was global
+    (`~/.graider_data/pending_send.json`), which let two teachers
+    clobber each other's pending payloads AND let one tenant read
+    another's pending action. Now namespaced per teacher_id.
+    """
+    safe_tid = _sanitize_tenant_for_path(teacher_id)
+    return os.path.expanduser(f"~/.graider_data/pending_send_{safe_tid}.json")
+
+
+# ═══════════════════════════════════════════════════════
 # TOOL HANDLERS
 # ═══════════════════════════════════════════════════════
 
@@ -697,7 +726,11 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
     except Exception as e:
         sentry_sdk.capture_exception(e)
     try:
-        pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
+        # PR #279 Gemini round-1 CRIT fix: namespace the filesystem
+        # fallback path by teacher_id so two teachers' pending payloads
+        # can't clobber each other (and one tenant can't read another's
+        # via the global filename). Sanitize teacher_id for path safety.
+        pending_path = _pending_send_path(teacher_id)
         os.makedirs(os.path.dirname(pending_path), exist_ok=True)
         with open(pending_path, "w") as f:
             json.dump(pending, f)
@@ -737,10 +770,10 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
     except Exception as e:
         sentry_sdk.capture_exception(e)
 
-    # Filesystem fallback
+    # Filesystem fallback (namespaced by teacher_id — see PR #279 fix)
     if not pending:
         try:
-            pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
+            pending_path = _pending_send_path(teacher_id)
             if os.path.exists(pending_path):
                 with open(pending_path, "r") as f:
                     pending = json.load(f)
@@ -753,16 +786,37 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
     student_name = pending.get("student_name", "")
     pending_teacher_id = pending.get("teacher_id", teacher_id)
 
-    # Execute the actual removal
-    result = _execute_student_removal(student_name, teacher_id=pending_teacher_id)
+    # PR #279 Gemini round-1 CRIT fix: cross-tenant IDOR.
+    # The pending payload's teacher_id MUST match the caller's teacher_id.
+    # Storage is already tenant-namespaced, but the filesystem fallback
+    # was not (until this PR), and even with namespacing, defense-in-
+    # depth requires explicit validation. Without this check, a
+    # malicious or buggy second tenant could trigger another tenant's
+    # destructive pending action.
+    if pending_teacher_id != teacher_id:
+        sentry_sdk.capture_message(
+            f"Cross-tenant student-removal attempt blocked: "
+            f"caller={teacher_id} pending={pending_teacher_id}",
+            level="warning",
+        )
+        return {
+            "error": (
+                "Pending student removal belongs to a different teacher. "
+                "Only the teacher who initiated the preview can confirm. "
+                "Run remove_student_from_roster first."
+            )
+        }
+
+    # Execute the actual removal — pending_teacher_id == teacher_id here
+    result = _execute_student_removal(student_name, teacher_id=teacher_id)
 
     # Clear pending storage
     try:
-        storage_save("pending_send:remove_student", None, pending_teacher_id)
+        storage_save("pending_send:remove_student", None, teacher_id)
     except Exception as e:
         sentry_sdk.capture_exception(e)
     try:
-        pending_path = os.path.expanduser("~/.graider_data/pending_send.json")
+        pending_path = _pending_send_path(teacher_id)
         if os.path.exists(pending_path):
             os.remove(pending_path)
     except Exception as e:

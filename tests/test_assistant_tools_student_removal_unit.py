@@ -218,8 +218,12 @@ class TestRemoveStudentFromRoster:
         # Tenant id is the third arg to storage.save
         assert mock_save.call_args.args[2] == "teach-tenant-9"
 
-    def test_pending_payload_persisted_to_filesystem(self, isolated_pending):
-        # Verify the json file is written with the right contents
+    def test_pending_payload_persisted_to_namespaced_filesystem_path(
+        self, isolated_pending,
+    ):
+        # PR #279 Gemini round-1 CRIT fold: filesystem fallback path is
+        # now namespaced by teacher_id (was global, allowed cross-tenant
+        # clobber). Verify the per-tenant filename.
         from backend.services.assistant_tools_student import (
             remove_student_from_roster,
         )
@@ -235,11 +239,42 @@ class TestRemoveStudentFromRoster:
                 student_name="Grace", teacher_id="t",
             )
 
-        pending_path = isolated_pending / ".graider_data" / "pending_send.json"
+        # Per-tenant filename — `_t` because teacher_id="t"
+        pending_path = (
+            isolated_pending / ".graider_data" / "pending_send_t.json"
+        )
         assert pending_path.exists()
+        # And the OLD global path must NOT exist
+        old_global = isolated_pending / ".graider_data" / "pending_send.json"
+        assert not old_global.exists(), (
+            "Global pending_send.json still being written — cross-tenant "
+            "clobber risk."
+        )
         payload = json.loads(pending_path.read_text())
         assert payload["action"] == "remove_student"
         assert payload["student_name"] == "Grace Hill"
+        assert payload["teacher_id"] == "t"
+
+    def test_pending_path_sanitizes_unsafe_teacher_ids(
+        self, isolated_pending,
+    ):
+        # PR #279 Gemini round-1 CRIT fold: unsafe teacher_id values
+        # (slashes, dots, etc.) MUST be sanitized before being used in
+        # the filesystem path. Otherwise teacher_id="../etc/passwd"
+        # could escape the .graider_data directory.
+        from backend.services.assistant_tools_student import (
+            remove_student_from_roster, _sanitize_tenant_for_path,
+        )
+
+        # Direct unit test of the sanitizer
+        assert _sanitize_tenant_for_path("../etc/passwd") == "___etc_passwd"
+        assert _sanitize_tenant_for_path("a/b/c") == "a_b_c"
+        assert _sanitize_tenant_for_path("normal-uuid-1234") == "normal-uuid-1234"
+        assert _sanitize_tenant_for_path("local-dev") == "local-dev"
+        assert _sanitize_tenant_for_path("") == "local-dev"  # empty → fallback
+        # Length cap
+        long_id = "x" * 200
+        assert len(_sanitize_tenant_for_path(long_id)) <= 64
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -301,12 +336,12 @@ class TestConfirmStudentRemoval:
         self, isolated_pending,
     ):
         # If storage.load raises, production falls back to reading the
-        # pending file from disk.
+        # pending file from disk. Path is namespaced per PR #279 fix.
         from backend.services.assistant_tools_student import (
             confirm_student_removal,
         )
 
-        # Pre-write the pending file
+        # Pre-write the pending file at the per-tenant namespaced path
         pending_dir = isolated_pending / ".graider_data"
         pending_dir.mkdir()
         pending = {
@@ -314,7 +349,7 @@ class TestConfirmStudentRemoval:
             "student_name": "Bob Jones",
             "teacher_id": "t",
         }
-        (pending_dir / "pending_send.json").write_text(json.dumps(pending))
+        (pending_dir / "pending_send_t.json").write_text(json.dumps(pending))
 
         with patch("backend.storage.load",
                    side_effect=RuntimeError("storage down")), \
@@ -361,10 +396,11 @@ class TestConfirmStudentRemoval:
             confirm_student_removal,
         )
 
-        # Pre-write the pending file
+        # Pre-write the pending file at the namespaced path (per
+        # PR #279 fix: per-tenant filename)
         pending_dir = isolated_pending / ".graider_data"
         pending_dir.mkdir()
-        pending_file = pending_dir / "pending_send.json"
+        pending_file = pending_dir / "pending_send_t.json"
         pending_file.write_text(json.dumps({
             "action": "remove_student",
             "student_name": "Carol",
@@ -415,11 +451,17 @@ class TestConfirmStudentRemoval:
         assert result["status"] == "removed"
         assert result["deleted"] is True
 
-    def test_uses_pending_teacher_id_for_execution(self, isolated_pending):
-        # Pending payload's teacher_id (which may differ from the call's)
-        # is used for the actual execution. Pin this contract — important
-        # for cross-tenant safety: the user who PREVIEWED the deletion
-        # must be the same one whose data gets deleted.
+    def test_cross_tenant_mismatch_blocked(self, isolated_pending):
+        # PR #279 Gemini round-1 CRIT fold: caller's teacher_id MUST
+        # match the pending payload's teacher_id. A regression that
+        # blindly trusts the payload tenant would let Teacher B trigger
+        # Teacher A's pending deletion (cross-tenant IDOR).
+        #
+        # Storage is already tenant-namespaced (storage.load filters by
+        # the caller's teacher_id), but the filesystem fallback CAN
+        # surface cross-tenant payloads (esp. before this PR's
+        # filesystem-namespacing fix). Defense-in-depth requires the
+        # explicit caller-vs-pending check regardless.
         from backend.services.assistant_tools_student import (
             confirm_student_removal,
         )
@@ -427,16 +469,51 @@ class TestConfirmStudentRemoval:
         pending = {
             "action": "remove_student",
             "student_name": "Eve",
-            "teacher_id": "tenant-original",
+            "teacher_id": "tenant-A",
+        }
+        with patch("backend.storage.load", return_value=pending), \
+             patch("backend.storage.save"), \
+             patch(f"{MODULE}.sentry_sdk.capture_message") as mock_sentry, \
+             patch(f"{MODULE}._execute_student_removal") as mock_exec:
+            # Caller is tenant-B; pending says tenant-A → must reject.
+            result = confirm_student_removal(teacher_id="tenant-B")
+
+        # Execution NEVER reached
+        mock_exec.assert_not_called()
+        # Sentry alert fired (security incident)
+        mock_sentry.assert_called_once()
+        sentry_msg = mock_sentry.call_args.args[0]
+        assert "Cross-tenant" in sentry_msg
+        assert "tenant-B" in sentry_msg
+        assert "tenant-A" in sentry_msg
+        # User-facing error explains why
+        assert "error" in result
+        assert "different teacher" in result["error"]
+
+    def test_matching_caller_and_pending_proceeds_to_execution(
+        self, isolated_pending,
+    ):
+        # Symmetric pin: when caller matches pending, execution proceeds
+        # normally. This is the happy path for the cross-tenant check.
+        from backend.services.assistant_tools_student import (
+            confirm_student_removal,
+        )
+
+        pending = {
+            "action": "remove_student",
+            "student_name": "Frank",
+            "teacher_id": "tenant-X",
         }
         with patch("backend.storage.load", return_value=pending), \
              patch("backend.storage.save"), \
              patch(f"{MODULE}._execute_student_removal",
                    return_value={"deleted": True}) as mock_exec:
-            confirm_student_removal(teacher_id="tenant-different")
+            result = confirm_student_removal(teacher_id="tenant-X")
 
-        # Execution uses the PENDING tenant id, not the call's tenant id
-        assert mock_exec.call_args.kwargs.get("teacher_id") == "tenant-original"
+        mock_exec.assert_called_once()
+        # Execution uses the (matched) tenant id
+        assert mock_exec.call_args.kwargs.get("teacher_id") == "tenant-X"
+        assert result["status"] == "removed"
 
     def test_non_dict_result_from_execute_no_status_added(
         self, isolated_pending,
