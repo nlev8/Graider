@@ -33,30 +33,44 @@ MODULE = "backend.services.correction_patterns"
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestSaveWrappers:
-    def test_save_corrections_calls_storage_with_namespaced_key(self):
-        # Hit line 52: `save("grading_corrections", data, teacher_id)`
-        from backend.services.correction_patterns import _save_corrections
+class TestStorageKeysContractViaRecordCorrection:
+    """PR #271 Codex round-1 MINOR fold: test the storage-key contract
+    through the public `record_correction` entry point instead of patching
+    private one-line wrappers. This still hits coverage lines 52 and 65
+    (the wrappers' bodies) AND pins the contract that callers depend on:
+    per-teacher data lands at `grading_corrections:<teacher_id>` while
+    global data lands at `grading_corrections:global:system`.
+    """
 
-        with patch(f"{MODULE}.save") as mock_save:
-            _save_corrections("teacher-9", {"corrections": [{"x": 1}]})
-        mock_save.assert_called_once_with(
-            "grading_corrections",
-            {"corrections": [{"x": 1}]},
-            "teacher-9",
-        )
+    def test_record_correction_routes_save_calls_to_correct_keys(self):
+        from backend.services.correction_patterns import record_correction
 
-    def test_save_global_uses_global_key_and_system_owner(self):
-        # Hit line 65: `save("grading_corrections:global", data, "system")`
-        from backend.services.correction_patterns import _save_global
+        with patch(f"{MODULE}._load_corrections",
+                   return_value={"corrections": [], "patterns": {},
+                                 "updated_at": ""}), \
+             patch(f"{MODULE}._load_global",
+                   return_value={"corrections": [], "patterns": {},
+                                 "teacher_hashes": {}, "updated_at": ""}), \
+             patch(f"{MODULE}.save") as mock_save:
+            record_correction(
+                teacher_id="teacher-7",
+                ai_score=5, teacher_score=8, max_points=10,
+                question_type="essay",
+                subject="English", grade_level="8",
+                assignment="Quiz",
+            )
 
-        with patch(f"{MODULE}.save") as mock_save:
-            _save_global({"corrections": []})
-        mock_save.assert_called_once_with(
-            "grading_corrections:global",
-            {"corrections": []},
-            "system",
-        )
+        # Two save calls, in order: per-teacher then global
+        assert mock_save.call_count == 2
+        first, second = mock_save.call_args_list
+
+        # Per-teacher save: namespaced key + teacher's own ID
+        assert first.args[0] == "grading_corrections"
+        assert first.args[2] == "teacher-7"
+
+        # Global save: ':global' suffix + 'system' as owner
+        assert second.args[0] == "grading_corrections:global"
+        assert second.args[2] == "system"
 
 
 class TestLoadFallbacks:
@@ -380,14 +394,25 @@ class TestHashTeacher:
         assert h1 != h2
 
     def test_hash_falls_back_to_default_salt(self):
-        # When FLASK_SECRET_KEY is unset, falls back to "graider-default-salt"
+        # When FLASK_SECRET_KEY is unset, falls back to "graider-default-salt".
+        # PR #271 Codex round-1 MINOR fold: assert the EXACT hash, not just
+        # length, to prove the default salt was actually used. Otherwise any
+        # 12-char output (e.g. fallback to a different default) would pass.
         from backend.services.correction_patterns import _hash_teacher
+        import hashlib
         import os
 
-        # Remove the env var if set
+        # Compute what the hash should be when default-salt is applied
+        expected = hashlib.sha256(
+            ("teacher-x" + "graider-default-salt").encode()
+        ).hexdigest()[:12]
+
+        # Remove FLASK_SECRET_KEY if set so the `or` fallback fires
         env_no_salt = {k: v for k, v in os.environ.items()
                        if k != "FLASK_SECRET_KEY"}
         with patch.dict("os.environ", env_no_salt, clear=True):
             h = _hash_teacher("teacher-x")
-        # Hash is still 12 chars (fallback worked, didn't crash)
-        assert len(h) == 12
+        assert h == expected, (
+            f"Expected default-salt hash {expected!r} but got {h!r}. "
+            f"This means _hash_teacher's fallback salt isn't 'graider-default-salt'."
+        )
