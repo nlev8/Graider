@@ -875,6 +875,151 @@ class TestChartActuallyDraws:
             f"got {len(dot_markers)}"
         )
 
+    # PR #266 Codex round-3 MAJOR fold: stem_and_leaf, venn_diagram, and
+    # protractor were still smoke-only; the round-3 review pointed out that
+    # removing their drawing primitives would still produce a valid PNG.
+    # The following tests inspect the actual artists/text those functions
+    # produce so a regression in any drawing call would now fail.
+
+    def test_stem_and_leaf_renders_stems_and_leaves(self, captured_figures):
+        # data = [12, 15, 22, 25, 28, 31, 33, 47]
+        #   stems: 1, 2, 3, 4
+        #   leaves: stem 1 → [2, 5]; stem 2 → [2, 5, 8]; stem 3 → [1, 3]; stem 4 → [7]
+        viz.create_stem_and_leaf(data=[12, 15, 22, 25, 28, 31, 33, 47])
+        snap = captured_figures[0]
+        assert len(snap["texts"]) == 1, (
+            f"Expected exactly 1 ax.text() call; got {len(snap['texts'])}"
+        )
+        rendered = snap["texts"][0].get_text()
+        assert "Stem | Leaf" in rendered
+        # Each stem on its own row
+        for stem in (1, 2, 3, 4):
+            assert f"  {stem} |" in rendered, (
+                f"Expected stem row '  {stem} |'; rendered: {rendered!r}"
+            )
+        # Joined leaves match the production format `' '.join(...)`
+        assert "  1 | 2 5" in rendered
+        assert "  2 | 2 5 8" in rendered
+        assert "  4 | 7" in rendered
+
+    def test_stem_and_leaf_blank_omits_leaf_digits(self, captured_figures):
+        viz.create_stem_and_leaf(data=[12, 25, 33], blank=True)
+        snap = captured_figures[0]
+        rendered = snap["texts"][0].get_text()
+        # Blank stems present
+        for stem in (1, 2, 3):
+            assert f"  {stem} |" in rendered
+        # Leaf digits MUST NOT appear after the pipe — these would be present
+        # in the populated path (e.g. "  1 | 2") but not in blank.
+        assert "  1 | 2" not in rendered, "blank=True should omit leaf 2 (from 12)"
+        assert "  2 | 5" not in rendered, "blank=True should omit leaf 5 (from 25)"
+        assert "  3 | 3" not in rendered, "blank=True should omit leaf 3 (from 33)"
+
+    def test_stem_and_leaf_no_data_renders_placeholder(self, captured_figures):
+        viz.create_stem_and_leaf(data=None)
+        snap = captured_figures[0]
+        rendered = snap["texts"][0].get_text()
+        assert "Create your stem-and-leaf plot" in rendered
+        # And NO stem|leaf header
+        assert "Stem | Leaf" not in rendered
+
+    def test_venn_2_sets_creates_4_circle_patches_and_labels(self, captured_figures):
+        from matplotlib.patches import Circle
+
+        viz.create_venn_diagram(
+            sets=2,
+            labels=["Cats", "Dogs"],
+            regions={"only_a": "5", "a_and_b": "2", "only_b": "8"},
+        )
+        snap = captured_figures[0]
+        circles = [p for p in snap["patches"] if isinstance(p, Circle)]
+        # Two filled circles + two outline circles
+        assert len(circles) == 4, (
+            f"Expected exactly 4 Circle patches for 2-set Venn; got {len(circles)}"
+        )
+        rendered_texts = [t.get_text() for t in snap["texts"]]
+        # Set labels rendered
+        assert "Cats" in rendered_texts
+        assert "Dogs" in rendered_texts
+        # Region values rendered
+        for v in ("5", "2", "8"):
+            assert v in rendered_texts, (
+                f"Expected region value {v!r}; got texts {rendered_texts}"
+            )
+
+    def test_venn_3_sets_creates_6_circle_patches_and_all_regions(self, captured_figures):
+        from matplotlib.patches import Circle
+
+        viz.create_venn_diagram(
+            sets=3,
+            regions={
+                "only_a": "1", "only_b": "2", "only_c": "3",
+                "a_and_b": "4", "a_and_c": "5", "b_and_c": "6", "all": "7",
+            },
+        )
+        snap = captured_figures[0]
+        circles = [p for p in snap["patches"] if isinstance(p, Circle)]
+        # Three filled + three outline
+        assert len(circles) == 6, (
+            f"Expected exactly 6 Circle patches for 3-set Venn; got {len(circles)}"
+        )
+        rendered_texts = [t.get_text() for t in snap["texts"]]
+        for v in ("1", "2", "3", "4", "5", "6", "7"):
+            assert v in rendered_texts, (
+                f"Expected region value {v!r}; got texts {rendered_texts}"
+            )
+
+    def test_venn_blank_omits_region_values(self, captured_figures):
+        viz.create_venn_diagram(sets=2, regions={"only_a": "99"}, blank=True)
+        snap = captured_figures[0]
+        rendered_texts = [t.get_text() for t in snap["texts"]]
+        # Default labels still appear (drawn outside the `if not blank` branch)
+        assert "Set A" in rendered_texts
+        assert "Set B" in rendered_texts
+        # But the region value "99" is in the `if not blank and regions:` branch
+        # — so it must NOT appear here.
+        assert "99" not in rendered_texts, (
+            f"blank=True should suppress region values; got {rendered_texts}"
+        )
+
+    def test_protractor_creates_two_arcs_and_expected_lines(self, captured_figures):
+        from matplotlib.patches import Arc
+
+        viz.create_protractor(given_angle=45, show_answer=True)
+        snap = captured_figures[0]
+        arcs = [p for p in snap["patches"] if isinstance(p, Arc)]
+        # Outer 180° arc + inner angle arc
+        assert len(arcs) == 2, f"Expected 2 Arc patches; got {len(arcs)}"
+        # range(0, 181, 10) → 19 tick lines + 1 baseline arm + 1 angle arm = 21
+        assert len(snap["lines"]) == 21, (
+            f"Expected 21 Line2D entries (19 ticks + 2 arms); "
+            f"got {len(snap['lines'])}"
+        )
+
+    def test_protractor_show_answer_renders_angle_label(self, captured_figures):
+        viz.create_protractor(given_angle=72, show_answer=True)
+        snap = captured_figures[0]
+        rendered_texts = [t.get_text() for t in snap["texts"]]
+        # Angle answer label uses the unicode degree sign (°)
+        assert "72°" in rendered_texts, (
+            f"Expected '72°' answer label; got texts {rendered_texts}"
+        )
+        # Tick degree labels at multiples of 30 also appear
+        for d in (0, 30, 60, 90, 120, 150, 180):
+            assert f"{d}°" in rendered_texts, (
+                f"Expected tick label '{d}°'; got {rendered_texts}"
+            )
+
+    def test_protractor_show_answer_false_renders_question_mark(self, captured_figures):
+        viz.create_protractor(given_angle=45, show_answer=False)
+        snap = captured_figures[0]
+        rendered_texts = [t.get_text() for t in snap["texts"]]
+        # The center label is now '?' instead of the angle
+        assert "?" in rendered_texts
+        assert "45°" not in rendered_texts, (
+            f"show_answer=False should suppress '45°'; got {rendered_texts}"
+        )
+
 
 class TestAddImageToDocx:
     def test_strips_data_url_prefix_and_adds_picture(self):
