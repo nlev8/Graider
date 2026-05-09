@@ -79,6 +79,43 @@ class TestCallHaiku:
             result = _call_haiku("x")
         assert result == {"k": 1}
 
+    def test_strips_single_line_fenced_response(self):
+        # PR #267 Codex round-1 MINOR fold + Rule #11 production fix:
+        # Previously a single-line fenced response (no newline) caused
+        # `text.index("\n")` to raise ValueError, swallowed by the generic
+        # exception handler with the unhelpful message "substring not found".
+        # Hardened: malformed fences strip leading/trailing backticks and
+        # fall through to json.loads.
+        from backend.services.assistant_tools_ai import _call_haiku
+
+        wrapped = "```{\"single_line\": true}```"
+        mock_response = MagicMock()
+        mock_response.content_parts = [MagicMock(text=wrapped)]
+        with patch("backend.api_keys.get_api_key", return_value="sk-test"), \
+             patch("backend.services.llm_adapter.AnthropicAdapter") as MockAdapter:
+            MockAdapter.return_value.chat.return_value = mock_response
+            result = _call_haiku("x")
+        assert result == {"single_line": True}
+
+    def test_malformed_fence_falls_through_to_json_error(self):
+        # Confirms the malformed-fence branch produces a clean JSONDecodeError
+        # path with `raw` set, instead of a cryptic "substring not found".
+        from backend.services.assistant_tools_ai import _call_haiku
+
+        wrapped = "```not valid json at all```"
+        mock_response = MagicMock()
+        mock_response.content_parts = [MagicMock(text=wrapped)]
+        with patch("backend.api_keys.get_api_key", return_value="sk-test"), \
+             patch("backend.services.llm_adapter.AnthropicAdapter") as MockAdapter:
+            MockAdapter.return_value.chat.return_value = mock_response
+            result = _call_haiku("x")
+        assert "error" in result
+        assert "non-JSON" in result["error"]
+        # `raw` reflects post-fence-strip text, so the leading/trailing
+        # backticks are gone but the inner garbage remains
+        assert "not valid json at all" in result.get("raw", "")
+        assert "substring not found" not in result["error"]
+
     def test_invalid_json_returns_error_with_raw(self):
         from backend.services.assistant_tools_ai import _call_haiku
 
@@ -169,11 +206,17 @@ class TestDifferentiateContent:
         assert "error" in result
         assert "text is required" in result["error"]
 
-    def test_whitespace_only_text_returns_error(self):
+    def test_whitespace_only_text_returns_error_without_calling_haiku(self):
+        # PR #267 Codex round-1 MINOR fold: assert _call_haiku is NOT invoked.
+        # Previously, with no API key set, a missing `.strip()` validation in
+        # production would still satisfy `"error" in result` because _call_haiku
+        # itself returns an error dict. That made this test smoke-only.
         from backend.services.assistant_tools_ai import differentiate_content
 
-        result = differentiate_content(text="   \n\t  ", teacher_id="teach-1")
-        assert "error" in result
+        with patch("backend.services.assistant_tools_ai._call_haiku") as mock_haiku:
+            result = differentiate_content(text="   \n\t  ", teacher_id="teach-1")
+        assert result == {"error": "text is required"}
+        mock_haiku.assert_not_called()
 
     def test_default_levels_in_prompt(self):
         from backend.services.assistant_tools_ai import differentiate_content
@@ -610,6 +653,41 @@ class TestGenerateIepProgressNotes:
         roster_arg = mock_anon.call_args.args[1]
         assert roster_arg == [{"student_name": "Stu"}]
 
+    def test_anonymized_prompt_sent_to_haiku_not_raw_pii(self):
+        # PR #267 Codex round-1 MAJOR fold: pin that the *anonymized* prompt
+        # is what reaches _call_haiku. A regression that called
+        # `_call_haiku(prompt_text, ...)` instead of
+        # `_call_haiku(anon_prompt, ...)` would leak PII to the external AI.
+        # Without this assertion the prior round-trip test would still pass.
+        from backend.services.assistant_tools_ai import generate_iep_progress_notes
+
+        master = [{"Student Name": "Stu", "Score": "80", "Assignment": "Q1"}]
+        with patch("backend.services.assistant_tools_ai._load_master_csv", return_value=master), \
+             patch("backend.services.assistant_tools_ai._load_results", return_value=[]), \
+             patch("backend.services.assistant_tools_ai._load_accommodations", return_value={}), \
+             patch("backend.services.assistant_tools_ai._load_roster",
+                   return_value=[{"name": "Stu"}]), \
+             patch("backend.services.assistant_tools_ai.audit_tool_action"), \
+             patch("backend.services.assistant_tools_ai.anonymize_for_ai",
+                   return_value=("ANONYMIZED_SAFE_PROMPT", {"S1": "Stu"})), \
+             patch("backend.services.assistant_tools_ai.deanonymize",
+                   side_effect=lambda s, m: s), \
+             patch("backend.services.assistant_tools_ai._call_haiku",
+                   return_value={}) as mock_haiku:
+            generate_iep_progress_notes(
+                student_name="Stu", teacher_id="teach-1",
+            )
+        # First positional arg to _call_haiku must be the anonymized prompt
+        sent_prompt = mock_haiku.call_args.args[0]
+        assert sent_prompt == "ANONYMIZED_SAFE_PROMPT", (
+            f"Expected anonymized prompt sent to AI; got {sent_prompt!r}"
+        )
+        # Hard PII-leak guard: the raw student name must not appear in the
+        # prompt that left the process boundary.
+        assert "Stu" not in sent_prompt, (
+            f"PII leak: student name 'Stu' in prompt: {sent_prompt!r}"
+        )
+
     def test_deanonymize_round_trip_restores_names(self):
         # anonymize replaces "Stu" → "S1" in the prompt, then the AI response
         # comes back with "S1". deanonymize turns that back into "Stu".
@@ -704,26 +782,39 @@ class TestTeacherIdRequired:
     """
 
     def test_differentiate_content_calls_require_teacher_id(self):
+        # PR #267 Codex round-1 MAJOR fold: also patch _call_haiku so this
+        # contract test cannot leak into a real Anthropic API call when run
+        # in an environment with ANTHROPIC_API_KEY set.
         from backend.services.assistant_tools_ai import differentiate_content
 
-        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock:
+        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock_req, \
+             patch("backend.services.assistant_tools_ai._call_haiku",
+                   return_value={}) as mock_haiku:
             differentiate_content(text="x", teacher_id="t")
-        mock.assert_called_once_with("t")
+        mock_req.assert_called_once_with("t")
+        # Also verify _call_haiku was reached (i.e. require_teacher_id didn't
+        # short-circuit) — this is the order the contract guarantees.
+        mock_haiku.assert_called_once()
 
     def test_generate_questions_calls_require_teacher_id(self):
         from backend.services.assistant_tools_ai import generate_questions_from_text
 
-        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock:
+        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock_req, \
+             patch("backend.services.assistant_tools_ai._call_haiku",
+                   return_value={}) as mock_haiku:
             generate_questions_from_text(text="x", teacher_id="t")
-        mock.assert_called_once_with("t")
+        mock_req.assert_called_once_with("t")
+        mock_haiku.assert_called_once()
 
     def test_generate_iep_progress_notes_calls_require_teacher_id(self):
         from backend.services.assistant_tools_ai import generate_iep_progress_notes
 
-        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock:
-            # Empty student name is fine — require_teacher_id is invoked first.
+        # Empty student name short-circuits before _call_haiku is reached, so
+        # we don't need to patch _call_haiku here — the early return
+        # `{"error": "student_name is required"}` prevents any AI call.
+        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock_req:
             generate_iep_progress_notes(student_name="", teacher_id="t")
-        mock.assert_called_once_with("t")
+        mock_req.assert_called_once_with("t")
 
 
 # ──────────────────────────────────────────────────────────────────

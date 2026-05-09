@@ -117,11 +117,20 @@ def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
             metadata={"feature_label": "assistant_tools_ai"},
         ))
         text = (response.content_parts[0].text if response.content_parts else "").strip()
-        # Strip markdown fences if present
+        # Strip markdown fences if present. Use .find() rather than .index()
+        # so a malformed single-line fenced response (e.g. "```{\"k\":1}```")
+        # falls through to the JSONDecodeError path with `raw` set, instead of
+        # being swallowed by the generic-exception handler with a cryptic
+        # "substring not found" message.
         if text.startswith("```"):
-            first_nl = text.index("\n")
+            first_nl = text.find("\n")
             last_fence = text.rfind("```")
-            text = text[first_nl + 1:last_fence].strip()
+            if first_nl != -1 and last_fence > first_nl:
+                text = text[first_nl + 1:last_fence].strip()
+            else:
+                # Single-line or malformed fence — strip leading/trailing
+                # backticks and let json.loads decide.
+                text = text.strip("`").strip()
         return json.loads(text)
     except json.JSONDecodeError:
         return {"error": "AI returned non-JSON response", "raw": text}
