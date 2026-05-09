@@ -210,12 +210,14 @@ def _clean_ocr_text(text):
         return ''
     # Remove surrounding whitespace
     text = text.strip()
-    # Remove Mathpix's surrounding dollar signs for inline math
-    if text.startswith('$') and text.endswith('$'):
-        text = text[1:-1].strip()
-    # Remove double dollar signs for display math
+    # Remove Mathpix's surrounding dollar signs. Check `$$...$$` (display
+    # math) BEFORE `$...$` (inline math) — otherwise the single-dollar
+    # branch trips first on display math, stripping only one `$` from each
+    # side and leaving `$x^2$` for what should have been `x^2`.
     if text.startswith('$$') and text.endswith('$$'):
         text = text[2:-2].strip()
+    elif text.startswith('$') and text.endswith('$'):
+        text = text[1:-1].strip()
     # Collapse multiple spaces
     text = re.sub(r'  +', ' ', text)
     return text
