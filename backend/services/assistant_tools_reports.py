@@ -28,6 +28,10 @@ from backend.services.assistant_tools import (
 )
 from backend.services.assistant_tools_grading import get_missing_assignments
 from backend.utils.compliance import audit_tool_action, require_teacher_id
+from backend.utils.pending_send import (
+    pending_send_path as _pending_send_path,
+    assert_pending_belongs_to as _assert_pending_belongs_to,
+)
 import sentry_sdk
 
 try:
@@ -2335,12 +2339,20 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
                 "body": e["body"][:500] + ("..." if len(e["body"]) > 500 else ""),
                 "student_name": e["student_name"],
             })
-        # Store pending payload for confirm_and_send tool
-        pending_data = {"action": "send_parent_emails", "emails": emails}
+        # Store pending payload for confirm_and_send tool.
+        # GH #280 fix: inject teacher_id so confirm_and_send can do
+        # cross-tenant IDOR validation; use per-tenant filesystem path
+        # via _pending_send_path() helper.
+        pending_data = {
+            "action": "send_parent_emails",
+            "emails": emails,
+            "teacher_id": teacher_id,
+        }
         if storage_save:
             storage_save('pending_send', pending_data, teacher_id)
-        # Always write filesystem fallback (SSE event builder reads from here)
-        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+        # Filesystem fallback (SSE event builder reads from here) —
+        # now per-tenant, never the legacy global path.
+        pending_path = _pending_send_path(teacher_id)
         os.makedirs(os.path.dirname(pending_path), exist_ok=True)
         try:
             with open(pending_path, 'w') as pf:
@@ -2482,12 +2494,18 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
                 "email_body": m["email_body"][:500] + ("..." if len(m["email_body"]) > 500 else ""),
                 "sms_body": m["sms_body"][:200] if m["sms_body"] else "(no SMS)",
             })
-        # Store pending payload for confirm_and_send tool
-        pending_data = {"action": "send_focus_comms", "messages": messages}
+        # Store pending payload for confirm_and_send tool.
+        # GH #280 fix: inject teacher_id + per-tenant filesystem path.
+        pending_data = {
+            "action": "send_focus_comms",
+            "messages": messages,
+            "teacher_id": teacher_id,
+        }
         if storage_save:
             storage_save('pending_send', pending_data, teacher_id)
-        # Always write filesystem fallback (SSE event builder reads from here)
-        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+        # Filesystem fallback (SSE event builder reads from here) —
+        # now per-tenant, never the legacy global path.
+        pending_path = _pending_send_path(teacher_id)
         os.makedirs(os.path.dirname(pending_path), exist_ok=True)
         try:
             with open(pending_path, 'w') as pf:
@@ -2543,7 +2561,8 @@ def confirm_and_send(teacher_id='local-dev'):
                 break
 
     if not pending:
-        pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+        # GH #280 fix: per-tenant filesystem path (was global)
+        pending_path = _pending_send_path(teacher_id)
         if not os.path.exists(pending_path):
             return {"error": "No pending send action. Generate a preview first using send_focus_comms or send_parent_emails."}
         try:
@@ -2551,6 +2570,13 @@ def confirm_and_send(teacher_id='local-dev'):
                 pending = json.load(f)
         except Exception as e:
             return {"error": "Failed to read pending send: " + str(e)}
+
+    # GH #280 fix: cross-tenant IDOR validation. Defense-in-depth even
+    # though the storage layer is already tenant-namespaced — guards
+    # against legacy payloads + filesystem-fallback misroutes.
+    idor_err = _assert_pending_belongs_to(pending, teacher_id)
+    if idor_err is not None:
+        return idor_err
 
     action = pending.get("action")
 
@@ -2564,14 +2590,19 @@ def confirm_and_send(teacher_id='local-dev'):
             if "error" in result:
                 # Keep pending data so teacher can retry
                 return result
-            # Success — clear pending to prevent double-send
+            # Success — clear pending to prevent double-send. GH #280
+            # round-2 fold: previously this used `if storage_save: ... else:`
+            # which left the local file orphaned in production (where
+            # storage_save is non-None). Subsequent confirmations would
+            # then read the orphaned file and replay the send. Now both
+            # storage clears AND the file remove run unconditionally.
             if storage_save:
                 storage_save('pending_send', None, teacher_id)
-            else:
-                try:
-                    os.remove(os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json"))
-                except OSError:
-                    pass
+                storage_save('pending_send:send_focus_comms', None, teacher_id)
+            try:
+                os.remove(_pending_send_path(teacher_id))
+            except OSError:
+                pass
             audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_messages"] = len(messages)
             return result
@@ -2583,14 +2614,14 @@ def confirm_and_send(teacher_id='local-dev'):
             result = launch_outlook_sender(emails, teacher_id=teacher_id)
             if "error" in result:
                 return result
-            # Success — clear pending to prevent double-send
+            # Success — clear both Supabase keys + local file (GH #280 R2)
             if storage_save:
                 storage_save('pending_send', None, teacher_id)
-            else:
-                try:
-                    os.remove(os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json"))
-                except OSError:
-                    pass
+                storage_save('pending_send:send_parent_emails', None, teacher_id)
+            try:
+                os.remove(_pending_send_path(teacher_id))
+            except OSError:
+                pass
             audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_emails"] = len(emails)
             return result
@@ -2605,7 +2636,7 @@ def confirm_and_send(teacher_id='local-dev'):
                     storage_save('pending_send', None, teacher_id)
                     storage_save('pending_send:send_behavior_email', None, teacher_id)
                 try:
-                    os.remove(os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json"))
+                    os.remove(_pending_send_path(teacher_id))
                 except OSError:
                     pass
 

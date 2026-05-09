@@ -1900,8 +1900,12 @@ def assistant_chat():
                                 event_data['download_urls'] = dl_urls
                             if result.get('NOT_SENT'):
                                 event_data['pending_send'] = True
-                                # Include payload so frontend can send directly
-                                pending_path = os.path.join(os.path.expanduser("~/.graider_data"), "pending_send.json")
+                                # Include payload so frontend can send directly.
+                                # GH #280 fix: per-tenant pending file path
+                                # (was a global file that leaked across tenants).
+                                from backend.utils.pending_send import pending_send_path
+                                _teacher_id = getattr(g, 'user_id', 'local-dev')
+                                pending_path = pending_send_path(_teacher_id)
                                 try:
                                     if os.path.exists(pending_path):
                                         with open(pending_path, 'r') as _pf:

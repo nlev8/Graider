@@ -125,32 +125,14 @@ STUDENT_TOOL_DEFINITIONS = [
 # HELPERS
 # ═══════════════════════════════════════════════════════
 
-
-def _sanitize_tenant_for_path(teacher_id):
-    """Return a filesystem-safe representation of a teacher_id.
-
-    Replaces any character that isn't alphanumeric / hyphen / underscore
-    with `_` and caps length at 64. Used by `_pending_send_path` to
-    namespace per-tenant filesystem fallback files without risking
-    path traversal (`..`, `/`) or collision with reserved filenames.
-
-    PR #279 Gemini round-2 NIT fold: coerce to str() so non-string
-    teacher_ids (ints from a buggy caller, etc.) don't raise TypeError.
-    """
-    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", str(teacher_id or "local-dev"))
-    return safe[:64] or "local-dev"
-
-
-def _pending_send_path(teacher_id):
-    """Per-tenant pending-send filesystem fallback path.
-
-    PR #279 Gemini round-1 CRIT fix: previously this file was global
-    (`~/.graider_data/pending_send.json`), which let two teachers
-    clobber each other's pending payloads AND let one tenant read
-    another's pending action. Now namespaced per teacher_id.
-    """
-    safe_tid = _sanitize_tenant_for_path(teacher_id)
-    return os.path.expanduser(f"~/.graider_data/pending_send_{safe_tid}.json")
+# Shared pending-send helpers re-exported as private aliases so
+# existing tests that patch `_pending_send_path` / `_sanitize_tenant_for_path`
+# continue to work. See backend/utils/pending_send.py for the canonical
+# implementation (extracted in the GH #280 cross-module fix PR).
+from backend.utils.pending_send import (
+    pending_send_path as _pending_send_path,
+    sanitize_tenant_for_path as _sanitize_tenant_for_path,
+)
 
 
 # ═══════════════════════════════════════════════════════

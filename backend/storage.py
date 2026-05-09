@@ -396,7 +396,7 @@ def load(data_key, teacher_id='local-dev'):
         if result is not None:
             return result
         # Don't fall back to shared file for sensitive keys (prevents cross-teacher leakage)
-        if data_key in _SENSITIVE_KEYS:
+        if _is_sensitive_key(data_key):
             return None
         # Fallback: try local file (covers first-time migration)
         return _file_load(data_key)
@@ -404,6 +404,27 @@ def load(data_key, teacher_id='local-dev'):
 
 
 _SENSITIVE_KEYS = {'api_keys', 'portal_credentials'}
+
+# GH #280 fix: keys with these prefixes ALSO bypass the file-write
+# fallback. The pending_send.* keys can be written under several
+# action-specific suffixes (e.g. pending_send:send_behavior_email,
+# pending_send:remove_student) — all of them previously dual-wrote to
+# the global ~/.graider_data/pending_send.json file, which clobbered
+# across tenants. Per-tenant filesystem persistence is now handled
+# directly by the calling tools via `backend.utils.pending_send.pending_send_path()`.
+_SENSITIVE_KEY_PREFIXES = ('pending_send',)
+
+
+def _is_sensitive_key(data_key):
+    """Return True if `data_key` should bypass the file-write fallback.
+
+    GH #280 fix: extends the previous _SENSITIVE_KEYS set with prefix
+    matching so all `pending_send:*` action-keyed variants are covered
+    without enumerating each one.
+    """
+    if data_key in _SENSITIVE_KEYS:
+        return True
+    return any(data_key.startswith(p) for p in _SENSITIVE_KEY_PREFIXES)
 
 
 def save(data_key, data, teacher_id='local-dev'):
@@ -421,7 +442,7 @@ def save(data_key, data, teacher_id='local-dev'):
         sb_ok = _sb_save(data_key, data, teacher_id)
         # Skip file write for sensitive data when not local-dev
         # to prevent different teachers from overwriting each other's secrets
-        if data_key not in _SENSITIVE_KEYS:
+        if not _is_sensitive_key(data_key):
             _file_save(data_key, data)
         return sb_ok
 

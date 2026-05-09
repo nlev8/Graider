@@ -1474,11 +1474,21 @@ def focus_comms_stop():
 def confirm_send():
     """Execute a confirmed send action from the assistant preview.
 
-    Accepts payload from POST body (preferred) or reads from pending_send.json file.
-    Called by the frontend 'Send Now' button or by the confirm_and_send tool.
+    Accepts payload from POST body (preferred) or reads from per-tenant
+    pending_send file. Called by the frontend 'Send Now' button or by
+    the confirm_and_send tool.
+
+    GH #280 fix: per-tenant filesystem path + cross-tenant IDOR check.
     """
+    from backend.utils.pending_send import (
+        pending_send_path,
+        assert_pending_belongs_to,
+    )
+
     pending = None
-    pending_path = os.path.join(GRAIDER_DATA_DIR, "pending_send.json")
+    teacher_id = getattr(g, 'user_id', 'local-dev')
+    # Per-tenant fallback path (was a global file pre-#280)
+    pending_path = pending_send_path(teacher_id)
 
     # Try POST body first (sent by frontend Send Now button)
     body = request.get_json(silent=True) or {}
@@ -1489,17 +1499,16 @@ def confirm_send():
     if not pending:
         try:
             from backend.storage import load as _storage_load
-            _teacher_id = getattr(g, 'user_id', 'local-dev')
-            pending = _storage_load('pending_send', _teacher_id)
+            pending = _storage_load('pending_send', teacher_id)
             if not pending:
                 for _key in ('send_focus_comms', 'send_behavior_email', 'send_parent_emails'):
-                    pending = _storage_load('pending_send:' + _key, _teacher_id)
+                    pending = _storage_load('pending_send:' + _key, teacher_id)
                     if pending:
                         break
         except Exception as e:
             sentry_sdk.capture_exception(e)
 
-    # Fall back to pending file
+    # Fall back to per-tenant pending file
     if not pending and os.path.exists(pending_path):
         try:
             with open(pending_path, 'r') as f:
@@ -1511,8 +1520,35 @@ def confirm_send():
     if not pending:
         return jsonify({"error": "No pending send. Generate a preview first."})
 
+    # GH #280 fix: cross-tenant IDOR validation. POST body callers
+    # injecting payloads from another tenant, or storage/file paths
+    # that surface a foreign payload, all must fail closed here.
+    idor_err = assert_pending_belongs_to(pending, teacher_id)
+    if idor_err is not None:
+        return jsonify(idor_err), 403
+
     action = pending.get("action")
-    teacher_id = getattr(g, 'user_id', 'local-dev')
+
+    def _clear_pending(action_key):
+        """Clear pending payload from Supabase + local file.
+
+        GH #280 round-2 fold: previously only the local file was removed,
+        leaving the Supabase record stale. Subsequent confirmations
+        would read the orphaned record and replay the send. Now BOTH
+        layers cleared unconditionally.
+        """
+        try:
+            from backend.storage import save as _storage_save
+            _storage_save('pending_send', None, teacher_id)
+            if action_key:
+                _storage_save('pending_send:' + action_key, None, teacher_id)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+        try:
+            if os.path.exists(pending_path):
+                os.remove(pending_path)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     if action == "send_focus_comms":
         messages = pending.get("messages", [])
@@ -1520,12 +1556,7 @@ def confirm_send():
             return jsonify({"error": "No messages in pending payload"})
         result = launch_focus_comms(messages, teacher_id=teacher_id)
         if "error" not in result:
-            # Success — clean up file to prevent double-send
-            try:
-                if os.path.exists(pending_path):
-                    os.remove(pending_path)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+            _clear_pending("send_focus_comms")
         return jsonify(result)
 
     elif action == "send_parent_emails":
@@ -1534,11 +1565,7 @@ def confirm_send():
             return jsonify({"error": "No emails in pending payload"})
         result = launch_outlook_sender(emails, teacher_id=teacher_id)
         if "error" not in result:
-            try:
-                if os.path.exists(pending_path):
-                    os.remove(pending_path)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+            _clear_pending("send_parent_emails")
         return jsonify(result)
 
     else:
