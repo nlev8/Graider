@@ -87,20 +87,21 @@ class TestGetVerificationMessage:
         # third action type without a corresponding handler would produce
         # a silent no-op on this path; this test pins the contract that
         # unknown action types currently return None.
-        from backend.services.assistant_tool_guards import (
-            get_verification_message, GUARDED_ACTIONS,
-        )
+        #
+        # PR #273 Gemini round-1 fold: use `mock.patch.dict` instead of
+        # mutating GUARDED_ACTIONS directly + try/finally cleanup. Cleaner,
+        # safer under pytest-xdist parallel execution.
+        from unittest.mock import patch
+        from backend.services.assistant_tool_guards import get_verification_message
 
-        # Inject a temporary entry with an unrecognized type
-        GUARDED_ACTIONS["__test_unknown_type__"] = {
-            "type": "future_action_type_not_yet_handled",
-        }
-        try:
+        with patch.dict(
+            "backend.services.assistant_tool_guards.GUARDED_ACTIONS",
+            {"__test_unknown_type__": {
+                "type": "future_action_type_not_yet_handled",
+            }},
+        ):
             result = get_verification_message("__test_unknown_type__", {})
             assert result is None
-        finally:
-            # Always clean up the registry
-            del GUARDED_ACTIONS["__test_unknown_type__"]
 
 
 # ---------------------------------------------------------------------------
