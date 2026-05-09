@@ -121,8 +121,12 @@ def image_to_latex(image_data, formats=None):
             'error': 'Mathpix API request timed out',
         }
     except requests.exceptions.HTTPError as e:
-        status = e.response.status_code if e.response else 'unknown'
-        body = e.response.text[:200] if e.response else ''
+        # Use `is not None` rather than truthiness — real `requests.Response`
+        # objects for 4xx/5xx are FALSEY (Response.__bool__ returns self.ok),
+        # which would otherwise hide the actual status/body in error reports
+        # for every real HTTP failure. PR #269 Codex round-1 MAJOR fold.
+        status = e.response.status_code if e.response is not None else 'unknown'
+        body = e.response.text[:200] if e.response is not None else ''
         return {
             'latex': '',
             'text': '',

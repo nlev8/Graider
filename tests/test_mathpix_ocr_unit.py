@@ -67,6 +67,24 @@ class TestGetCredentials:
                         clear=False):
             assert _get_credentials() == (None, None)
 
+    def test_credentials_are_platform_global_not_per_tenant(self):
+        # PR #269 Codex round-1 MINOR fold: pin the contract that Mathpix
+        # creds are platform-owned (not per-teacher / per-district). Graider
+        # pays for OCR centrally; tenants don't supply their own keys.
+        # `_get_credentials` takes NO arguments — the function signature
+        # already enforces this contract, but a regression that adds a
+        # `teacher_id` parameter (intending per-tenant scoping) would change
+        # observable behavior. This test pins the no-args contract.
+        import inspect
+        from backend.services.mathpix_ocr import _get_credentials
+
+        sig = inspect.signature(_get_credentials)
+        assert len(sig.parameters) == 0, (
+            "Mathpix creds are platform-owned: _get_credentials() takes no "
+            "tenant args. If you're adding per-tenant Mathpix billing, that "
+            "is a contract change requiring documentation and migration."
+        )
+
 
 # ──────────────────────────────────────────────────────────────────
 # is_available
@@ -102,12 +120,32 @@ class TestIsAvailable:
 
 
 def _make_response(json_data, status_code=200):
-    """Build a mock requests.Response."""
+    """Build a mock requests.Response (success — raise_for_status no-op)."""
     r = MagicMock()
     r.json.return_value = json_data
     r.status_code = status_code
     r.text = "body"
     r.raise_for_status = MagicMock()
+    return r
+
+
+def _make_error_response(status_code, body):
+    """Build a falsey mock Response that triggers HTTPError on raise_for_status.
+
+    PR #269 Codex round-1 MAJOR fold: real `requests.Response` for 4xx/5xx
+    is FALSEY (Response.__bool__ returns self.ok). This mock matches that
+    so the production check `if e.response is not None:` is exercised on
+    realistic input. The previous truthy `MagicMock()` could not detect
+    the production bug where `if e.response:` was used instead.
+    """
+    r = MagicMock(spec=_requests.Response)
+    r.status_code = status_code
+    r.text = body
+    # `__bool__` returns False so falsey-checks fail (matches real Response)
+    r.__bool__ = lambda self: False
+    # raise_for_status raises HTTPError with the response attached
+    err = _requests.exceptions.HTTPError(response=r)
+    r.raise_for_status = MagicMock(side_effect=err)
     return r
 
 
@@ -275,28 +313,55 @@ class TestImageToLatex:
         assert result["latex"] == ""
         assert result["confidence"] == 0
 
-    def test_http_error_with_response(self):
+    def test_http_error_with_response_through_raise_for_status(self):
+        # PR #269 Codex round-1 MAJOR fold: exercise the REAL flow where
+        # requests.post returns successfully but raise_for_status() raises
+        # HTTPError. Uses a falsey-Response mock that matches the real
+        # `requests.Response.__bool__` semantics for 4xx/5xx — without this,
+        # the test would still pass even if production line 100
+        # (`response.raise_for_status()`) were deleted.
         from backend.services.mathpix_ocr import image_to_latex
 
-        # Build a fake response with status_code + text
-        err_resp = MagicMock()
-        err_resp.status_code = 401
-        err_resp.text = "Unauthorized: invalid app_key"
-        http_err = _requests.exceptions.HTTPError(response=err_resp)
+        err_resp = _make_error_response(401, "Unauthorized: invalid app_key")
 
         with patch("backend.services.mathpix_ocr._get_credentials",
                    return_value=("id", "key")), \
              patch("backend.services.mathpix_ocr.requests") as mock_requests:
             mock_requests.exceptions = _requests.exceptions
-            mock_requests.post.side_effect = http_err
+            mock_requests.post.return_value = err_resp
             result = image_to_latex("data:image/png;base64,abc")
-        assert "HTTP 401" in result["error"]
-        assert "Unauthorized" in result["error"]
+        # raise_for_status() actually fired (proves line 100 not stubbed)
+        err_resp.raise_for_status.assert_called_once()
+        # Status code + body extracted via `is not None` check (NOT truthy
+        # check) — falsey 4xx response would otherwise mask both fields.
+        assert "401" in result["error"]
+        assert "Unauthorized: invalid app_key" in result["error"]
 
-    def test_http_error_without_response_uses_unknown(self):
+    def test_http_error_with_5xx_response_extracts_body(self):
+        # Symmetric coverage: 5xx Response is also falsey in real requests
+        # but `is not None` check still extracts the body. Pins the
+        # production fix for `if e.response:` → `if e.response is not None`.
         from backend.services.mathpix_ocr import image_to_latex
 
-        # HTTPError with no response attribute — production uses 'unknown'
+        err_resp = _make_error_response(500, "internal server error")
+
+        with patch("backend.services.mathpix_ocr._get_credentials",
+                   return_value=("id", "key")), \
+             patch("backend.services.mathpix_ocr.requests") as mock_requests:
+            mock_requests.exceptions = _requests.exceptions
+            mock_requests.post.return_value = err_resp
+            result = image_to_latex("data:image/png;base64,abc")
+        assert "500" in result["error"]
+        assert "internal server error" in result["error"]
+        # Confirm we did NOT fall into the "HTTP unknown" branch
+        assert "unknown" not in result["error"]
+
+    def test_http_error_without_response_uses_unknown(self):
+        # HTTPError with no response attribute — production uses 'unknown'.
+        # This stays a side_effect-from-post pattern because the bare
+        # HTTPError can't be raised by raise_for_status (no Response).
+        from backend.services.mathpix_ocr import image_to_latex
+
         http_err = _requests.exceptions.HTTPError()
         http_err.response = None
 
@@ -321,19 +386,17 @@ class TestImageToLatex:
         assert "connection reset" in result["error"]
 
     def test_response_truncates_body_to_200_chars(self):
-        # HTTPError body is truncated at 200 chars in the error message
+        # HTTPError body is truncated at 200 chars in the error message.
+        # Uses the real raise_for_status path via _make_error_response.
         from backend.services.mathpix_ocr import image_to_latex
 
-        err_resp = MagicMock()
-        err_resp.status_code = 500
-        err_resp.text = "X" * 500
-        http_err = _requests.exceptions.HTTPError(response=err_resp)
+        err_resp = _make_error_response(500, "X" * 500)
 
         with patch("backend.services.mathpix_ocr._get_credentials",
                    return_value=("id", "key")), \
              patch("backend.services.mathpix_ocr.requests") as mock_requests:
             mock_requests.exceptions = _requests.exceptions
-            mock_requests.post.side_effect = http_err
+            mock_requests.post.return_value = err_resp
             result = image_to_latex("data:image/png;base64,abc")
         # Body truncation: 200 X's, not 500
         assert "X" * 200 in result["error"]
