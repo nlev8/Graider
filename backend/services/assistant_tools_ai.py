@@ -108,6 +108,12 @@ def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
     api_key = get_api_key('anthropic', teacher_id or 'local-dev')
     if not api_key:
         return {"error": "ANTHROPIC_API_KEY not configured"}
+    # Adapter call. Any exception here (including a JSONDecodeError raised
+    # inside the adapter chain itself, e.g. mangled wire response) is an
+    # adapter-side failure — classify as "AI call failed" and never reach
+    # the response-text parser. Splitting this from the parse try/except
+    # also prevents an UnboundLocalError on `text` if the adapter raises
+    # before line 119 executes.
     try:
         adapter = AnthropicAdapter(api_key=api_key)
         response = adapter.chat(LLMRequest(
@@ -117,16 +123,42 @@ def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
             metadata={"feature_label": "assistant_tools_ai"},
         ))
         text = (response.content_parts[0].text if response.content_parts else "").strip()
-        # Strip markdown fences if present
-        if text.startswith("```"):
-            first_nl = text.index("\n")
+    except Exception as e:
+        return {"error": f"AI call failed: {str(e)}"}
+
+    # Response-text parse. Try direct JSON parse FIRST: this handles
+    # (a) JSON whose string values legitimately contain backticks
+    # (`{"description": "use ``` to escape"}`), and (b) the common happy
+    # path where the AI returned no fences at all.
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass  # fall through to fence-strip retry
+
+    # Strip markdown fences. Search for the first fence anywhere in the
+    # text (not just at position 0) so a preamble like
+    # "Here's the result:\n```json\n{...}\n```" still parses. Three
+    # post-strip shapes:
+    #   1. Single-line fence (no newline): strip backticks
+    #   2. Multi-line fence with closing: take content between newline
+    #      and last fence
+    #   3. Multi-line fence with NO closing (labeled or bare): take
+    #      everything after the first newline
+    if "```" in text:
+        first_fence = text.find("```")
+        first_nl = text.find("\n", first_fence)
+        if first_nl == -1:
+            text = text.strip("`").strip()
+        else:
             last_fence = text.rfind("```")
-            text = text[first_nl + 1:last_fence].strip()
+            if last_fence > first_nl:
+                text = text[first_nl + 1:last_fence].strip()
+            else:
+                text = text[first_nl + 1:].strip()
+    try:
         return json.loads(text)
     except json.JSONDecodeError:
         return {"error": "AI returned non-JSON response", "raw": text}
-    except Exception as e:
-        return {"error": f"AI call failed: {str(e)}"}
 
 
 # ═══════════════════════════════════════════════════════
