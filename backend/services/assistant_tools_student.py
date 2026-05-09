@@ -133,8 +133,11 @@ def _sanitize_tenant_for_path(teacher_id):
     with `_` and caps length at 64. Used by `_pending_send_path` to
     namespace per-tenant filesystem fallback files without risking
     path traversal (`..`, `/`) or collision with reserved filenames.
+
+    PR #279 Gemini round-2 NIT fold: coerce to str() so non-string
+    teacher_ids (ints from a buggy caller, etc.) don't raise TypeError.
     """
-    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", teacher_id or "local-dev")
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", str(teacher_id or "local-dev"))
     return safe[:64] or "local-dev"
 
 

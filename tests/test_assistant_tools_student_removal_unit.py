@@ -275,6 +275,9 @@ class TestRemoveStudentFromRoster:
         # Length cap
         long_id = "x" * 200
         assert len(_sanitize_tenant_for_path(long_id)) <= 64
+        # PR #279 Gemini round-2 NIT: non-str input must not raise TypeError
+        assert _sanitize_tenant_for_path(12345) == "12345"
+        assert _sanitize_tenant_for_path(None) == "local-dev"
 
 
 # ──────────────────────────────────────────────────────────────────
