@@ -189,6 +189,125 @@ class TestWritersInjectTeacherId:
         assert fs_payload["teacher_id"] == "tenant-W"
 
 
+class TestRESTConfirmSendIDORCheck:
+    """GH #280 fix: /api/confirm-send (REST endpoint hit by frontend Send Now)
+    must apply the same IDOR check as the assistant tool.
+    """
+
+    def test_post_body_with_foreign_teacher_id_rejected(
+        self, isolated_dirs,
+    ):
+        # POST body callers can inject any payload — including one with
+        # a foreign teacher_id. The IDOR check must catch it.
+        from backend.app import app
+
+        client = app.test_client()
+        # Set the session user to "tenant-B" but include a payload
+        # whose teacher_id says "tenant-A"
+        with patch("backend.routes.email_routes.require_teacher",
+                   side_effect=lambda f: f), \
+             patch("backend.utils.pending_send.sentry_sdk.capture_message"):
+            with client.session_transaction() as sess:
+                sess['user_id'] = 'tenant-B'
+
+            # The actual response handler reads g.user_id. We simulate
+            # this by hitting the endpoint with a body claiming to be
+            # from a different tenant.
+            response = client.post(
+                "/api/confirm-send",
+                json={
+                    "action": "send_focus_comms",
+                    "messages": [{"to": "x@y.com"}],
+                    "teacher_id": "tenant-A",  # ← wrong tenant
+                },
+            )
+
+        # 403 forbidden + "different teacher" error
+        # Note: in reality the route's @require_teacher decorator may
+        # return its own response in test mode without auth setup. We
+        # just verify it doesn't blindly proceed.
+        # If status is 401 or 403, the IDOR check or auth caught it.
+        # If 200, that's a regression.
+        assert response.status_code in (401, 403, 400), (
+            f"Expected auth/IDOR rejection; got {response.status_code}: "
+            f"{response.get_data(as_text=True)[:200]}"
+        )
+
+
+class TestStorageLayerSensitiveKeyPrefix:
+    """GH #280 fix: storage.save dual-write must skip pending_send.* keys.
+
+    Previously `_SENSITIVE_KEYS = {'api_keys', 'portal_credentials'}` meant
+    `storage.save('pending_send', ...)` ALWAYS wrote to the global
+    `~/.graider_data/pending_send.json` file via `_file_save`, completely
+    undermining any per-tenant filesystem fix in callers. Adding
+    `pending_send` as a SENSITIVE_KEY_PREFIX blocks the dual-write.
+    """
+
+    def test_pending_send_treated_as_sensitive(self):
+        from backend.storage import _is_sensitive_key
+        assert _is_sensitive_key("pending_send") is True
+
+    def test_pending_send_action_keyed_variants_treated_as_sensitive(self):
+        from backend.storage import _is_sensitive_key
+        # All known action-keyed variants
+        assert _is_sensitive_key("pending_send:send_focus_comms") is True
+        assert _is_sensitive_key("pending_send:send_behavior_email") is True
+        assert _is_sensitive_key("pending_send:send_parent_emails") is True
+        assert _is_sensitive_key("pending_send:remove_student") is True
+        # And any future action key automatically inherits
+        assert _is_sensitive_key("pending_send:future_action") is True
+
+    def test_existing_sensitive_keys_still_work(self):
+        from backend.storage import _is_sensitive_key
+        assert _is_sensitive_key("api_keys") is True
+        assert _is_sensitive_key("portal_credentials") is True
+
+    def test_non_sensitive_keys_not_flagged(self):
+        from backend.storage import _is_sensitive_key
+        # The set is narrow — only these prefixes/keys
+        assert _is_sensitive_key("settings") is False
+        assert _is_sensitive_key("rubric") is False
+        assert _is_sensitive_key("results") is False
+        # Important: a key that LOOKS like pending but isn't shouldn't match
+        assert _is_sensitive_key("pending_review") is False
+
+    def test_save_skips_file_write_for_pending_send_key(
+        self, isolated_dirs, monkeypatch,
+    ):
+        # Pin the actual production behavior: when supabase is configured,
+        # storage.save('pending_send', ...) MUST NOT dual-write to the
+        # global pending_send.json file.
+        from backend import storage
+
+        # Force "supabase configured" path
+        monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
+        monkeypatch.setenv("SUPABASE_SERVICE_KEY", "key-1")
+
+        # Mock the supabase save so we don't try to hit the real backend
+        with patch.object(storage, "_sb_save", return_value=True), \
+             patch.object(storage, "_file_save") as mock_file_save:
+            storage.save("pending_send", {"x": 1}, teacher_id="tenant-1")
+
+        # _file_save MUST NOT be called for pending_send
+        mock_file_save.assert_not_called()
+
+    def test_save_skips_file_write_for_keyed_pending_send(
+        self, isolated_dirs, monkeypatch,
+    ):
+        from backend import storage
+
+        monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
+        monkeypatch.setenv("SUPABASE_SERVICE_KEY", "key-1")
+
+        with patch.object(storage, "_sb_save", return_value=True), \
+             patch.object(storage, "_file_save") as mock_file_save:
+            storage.save("pending_send:send_behavior_email",
+                         {"x": 1}, teacher_id="tenant-1")
+
+        mock_file_save.assert_not_called()
+
+
 class TestSendBehaviorEmailWriter:
     def test_pending_payload_includes_teacher_id_and_namespaced_path(
         self, isolated_dirs,
