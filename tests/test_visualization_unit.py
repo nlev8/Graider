@@ -764,29 +764,115 @@ class TestChartActuallyDraws:
         )
 
     def test_number_line_plots_each_point(self, captured_figures):
+        # PR #266 Codex round-2 MAJOR fold: prior assertion `len(lines) >= 3`
+        # was satisfied by the 11 integer tick lines alone (range(-5, 6))
+        # plus the axhline — even if the point-marker draw at viz.py:152 were
+        # removed. Distinguish by marker style: tick lines use `linestyle='-'`
+        # with no marker; point markers use `marker='o'` with `linestyle='None'`.
         viz.create_number_line(
             min_val=-5, max_val=5,
             points=[-3, 0, 2.5],
             labels=["A", "B", "C"],
         )
         snap = captured_figures[0]
-        # 1 axhline + 11 integer tick mark plots (-5..5) + 3 point markers = 15.
-        # Strict lower bound: at least 3 markers > 0 explicitly representing
-        # the points list (rather than coincidentally the same as ticks).
-        # We verify that 3 unique colors were used by checking the count of
-        # circle-marker plot calls.
-        assert len(snap["lines"]) >= 3, (
-            f"Expected ≥3 line entries (point markers + ticks); got {len(snap['lines'])}"
+        point_markers = [
+            ln for ln in snap["lines"]
+            if ln.get_marker() == "o" and ln.get_linestyle() == "None"
+        ]
+        assert len(point_markers) == 3, (
+            f"Expected exactly 3 'o' markers (one per point); got {len(point_markers)}"
+        )
+
+    def test_number_line_blank_omits_point_markers(self, captured_figures):
+        # Regression guard for the `if points and not blank` branch
+        viz.create_number_line(
+            min_val=-3, max_val=3,
+            points=[1, 2], labels=["A", "B"], blank=True,
+        )
+        snap = captured_figures[0]
+        point_markers = [
+            ln for ln in snap["lines"]
+            if ln.get_marker() == "o" and ln.get_linestyle() == "None"
+        ]
+        assert len(point_markers) == 0, (
+            "blank=True should suppress all point markers"
         )
 
     def test_coordinate_plane_plots_each_point(self, captured_figures):
+        # Same marker-style filter as number-line so that removing
+        # `ax.plot(pt[0], pt[1], 'o', ...)` would actually fail this test.
         viz.create_coordinate_plane(
             points=[(1, 2), (-3, -4), (4, -1)], labels=["A", "B", "C"],
         )
         snap = captured_figures[0]
-        # Each point is plotted via ax.plot('o') → one Line2D each
-        assert len(snap["lines"]) >= 3, (
-            f"Expected ≥3 point markers; got {len(snap['lines'])}"
+        point_markers = [
+            ln for ln in snap["lines"]
+            if ln.get_marker() == "o" and ln.get_linestyle() == "None"
+        ]
+        assert len(point_markers) == 3, (
+            f"Expected exactly 3 'o' markers (one per point); got {len(point_markers)}"
+        )
+
+    def test_coordinate_plane_blank_omits_point_markers(self, captured_figures):
+        viz.create_coordinate_plane(
+            points=[(1, 2), (3, 4)], blank=True,
+        )
+        snap = captured_figures[0]
+        point_markers = [
+            ln for ln in snap["lines"]
+            if ln.get_marker() == "o" and ln.get_linestyle() == "None"
+        ]
+        assert len(point_markers) == 0, (
+            "blank=True should suppress all point markers"
+        )
+
+    def test_dot_plot_draws_each_dot(self, captured_figures):
+        # PR #266 Codex round-2 MAJOR fold: TestDotPlot was smoke-only;
+        # this asserts the actual data dots at viz.py:945 are drawn —
+        # one 'o' marker per count value across all categories.
+        viz.create_dot_plot(
+            categories=["A", "B", "C"],
+            dots={"A": 2, "B": 3, "C": 1},
+        )
+        snap = captured_figures[0]
+        dot_markers = [
+            ln for ln in snap["lines"]
+            if ln.get_marker() == "o" and ln.get_linestyle() == "None"
+        ]
+        # Total dots = 2 + 3 + 1 = 6
+        assert len(dot_markers) == 6, (
+            f"Expected exactly 6 dot markers (sum of dots dict); "
+            f"got {len(dot_markers)}"
+        )
+
+    def test_dot_plot_blank_omits_dots(self, captured_figures):
+        viz.create_dot_plot(
+            categories=["A", "B"], dots={"A": 1, "B": 2}, blank=True,
+        )
+        snap = captured_figures[0]
+        dot_markers = [
+            ln for ln in snap["lines"]
+            if ln.get_marker() == "o" and ln.get_linestyle() == "None"
+        ]
+        assert len(dot_markers) == 0, (
+            "blank=True should omit dot markers"
+        )
+
+    def test_dot_plot_zero_count_categories_draw_nothing(self, captured_figures):
+        # If a category has count 0, `range(count)` is empty → no dot drawn
+        viz.create_dot_plot(
+            categories=["X", "Y", "Z"],
+            dots={"X": 1, "Z": 2},  # Y missing → defaults to 0
+        )
+        snap = captured_figures[0]
+        dot_markers = [
+            ln for ln in snap["lines"]
+            if ln.get_marker() == "o" and ln.get_linestyle() == "None"
+        ]
+        # 1 + 0 + 2 = 3
+        assert len(dot_markers) == 3, (
+            f"Expected exactly 3 dot markers (X=1, Y=0, Z=2); "
+            f"got {len(dot_markers)}"
         )
 
 
