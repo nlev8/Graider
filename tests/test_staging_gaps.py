@@ -98,24 +98,36 @@ class TestStageFilesEdgeCases:
 
     def test_stat_oserror_on_source_skips_file(self, staging_dirs):
         # Hit lines 145-146: `except OSError: continue` when stat() fails
-        # on a source file. This is hard to trigger naturally; mock
-        # `Path.stat` to raise OSError on the bad file.
+        # on a source file. Need to patch BOTH `Path.is_file` (so the
+        # production check at line 138 returns True without calling stat
+        # internally — Python 3.12's is_file() calls stat()) AND
+        # `Path.stat` (so the explicit call at line 144 raises).
         from backend.staging import stage_files
+        from pathlib import Path as _RealPath
 
         good = staging_dirs / "alice_smith_essay.docx"
         good.write_text("content")
         bad = staging_dirs / "bob_jones_quiz.docx"
         bad.write_text("content")
 
-        # Use real_stat for non-bad paths, raise for bad path
-        from pathlib import Path as _RealPath
         real_stat = _RealPath.stat
+        real_is_file = _RealPath.is_file
+
         def selective_stat(self, *args, **kwargs):
             if self.name == "bob_jones_quiz.docx":
                 raise OSError("permission denied")
             return real_stat(self, *args, **kwargs)
 
-        with patch.object(Path, "stat", selective_stat):
+        def selective_is_file(self):
+            # is_file() internally calls stat() in Python 3.12. Force
+            # True for our bad file so production reaches line 144's
+            # explicit stat() call (which is the line we're testing).
+            if self.name == "bob_jones_quiz.docx":
+                return True
+            return real_is_file(self)
+
+        with patch.object(Path, "stat", selective_stat), \
+             patch.object(Path, "is_file", selective_is_file):
             result = stage_files(str(staging_dirs))
 
         # Only the good file should be staged (bad was skipped on stat)
@@ -125,57 +137,83 @@ class TestStageFilesEdgeCases:
         self, staging_dirs,
     ):
         # Hit lines 192-193: `except OSError: curr_size = None`. When
-        # size lookup fails, the resubmission detection falls through
-        # gracefully (treats as no resubmission).
+        # size lookup fails inside the resubmission-detection block,
+        # `size_changed` evaluates to False, so no resubmission is
+        # flagged. (The stat at line 203 also fails, hitting lines
+        # 204-205 — both branches share the same OSError trigger and
+        # cannot be cleanly isolated since both call src_path.stat()
+        # in the same flow. The file still gets staged because
+        # `shutil.copy2` doesn't depend on stat().)
+        #
+        # PR #276 Gemini round-1 fold: was previously try/except'd and
+        # swallowed test failures. Now strict — function MUST complete,
+        # MUST stage the file, and MUST NOT flag resubmission.
         from backend.staging import stage_files
 
         from pathlib import Path as _RealPath
 
-        # Initial stage
+        # Initial stage with everything working
         f = staging_dirs / "alice_smith_essay.docx"
         f.write_text("v1 content")
         first = stage_files(str(staging_dirs))
         assert first["staged_count"] == 1
         assert first["resubmissions"] == set()
 
-        # Modify file (size + mtime change)
-        f.write_text("v2 different content with more bytes")
-        os.utime(str(f), (10000, 20000))  # set explicit mtime
+        # Modify file: changes both size and mtime → would normally flag
+        # resubmission, but with stat-OSError curr_size=None → no flag
+        f.write_text("v2 different content with more bytes total")
+        os.utime(str(f), (10000, 20000))
 
-        # Second run: size lookup raises on the source file inside the
-        # resubmission-check block at line 191. We need to differentiate
-        # the size call inside the check (lines 191-193) from the size
-        # call on copy at line 203. Both call .stat() on src_path.
-        # Since both raise, we'll pin the behavior that the staging
-        # still proceeds (doesn't crash).
+        # Per-file call counter (NOT global) — only counts stats on
+        # alice's file so other files / hidden filesystem stats don't
+        # throw the count off.
         real_stat = _RealPath.stat
+        real_is_file = _RealPath.is_file
+        alice_calls = {"n": 0}
 
-        # Counter to fail on the size-check stat (after first 2 stats:
-        # one for mtime in phase 1, one for stat-check OK)
-        call_log = {"count": 0}
-
-        def conditional_stat(self, *args, **kwargs):
-            call_log["count"] += 1
-            # Always allow the first phase-1 stat (line 144) to succeed
-            # so the file is included in source_files. After that, raise
-            # on stats for this file (which trigger lines 191/203 paths).
-            if call_log["count"] > 1 and self.name == "alice_smith_essay.docx":
-                raise OSError("intermittent")
+        def selective_stat(self, *args, **kwargs):
+            if self.name == "alice_smith_essay.docx":
+                alice_calls["n"] += 1
+                # First call is phase-1 mtime read at viz.py:144 — let it
+                # succeed so the file is included in source_files.
+                # Subsequent calls (line 191 size-check, line 203 post-
+                # copy size) raise to exercise the OSError branches.
+                if alice_calls["n"] >= 2:
+                    raise OSError("intermittent stat failure")
             return real_stat(self, *args, **kwargs)
 
-        # We can't easily isolate just lines 192-193 without 204-205 also
-        # triggering; both are tested together by this scenario.
-        with patch.object(Path, "stat", conditional_stat):
-            try:
-                result = stage_files(str(staging_dirs))
-            except OSError:
-                # If shutil.copy2 itself raises, that's a different code path
-                # than the swallowed OSError we're testing. Fall through.
-                return
+        def selective_is_file(self):
+            # Python 3.12's is_file() calls stat(). Force True for our
+            # target so production reaches the explicit try/except.
+            if self.name == "alice_smith_essay.docx":
+                return True
+            return real_is_file(self)
 
-        # Coverage hit: lines 192-193 (curr_size = None) and 204-205
-        # (file_size = -1). The function returns without crashing.
-        assert "staging_folder" in result
+        with patch.object(Path, "stat", selective_stat), \
+             patch.object(Path, "is_file", selective_is_file):
+            # NO try/except — production must handle the OSError itself.
+            # If stage_files crashes with OSError, the test correctly
+            # fails (signaling that the production guard is broken).
+            result = stage_files(str(staging_dirs))
+
+        # Production handled the OSError gracefully:
+        # 1. File still staged (copy2 doesn't need stat)
+        assert result["staged_count"] == 1
+        # 2. NO resubmission flagged — because curr_size was None during
+        #    the check, size_changed evaluated to False
+        assert result["resubmissions"] == set(), (
+            "Stat-OSError during resubmission check should NOT flag a "
+            "resubmission (curr_size unknown means we can't confirm it "
+            "actually changed)."
+        )
+        # 3. Verify the post-copy stat OSError fell through to file_size=-1
+        from backend.staging import _load_manifest
+        manifest = _load_manifest(result["staging_folder"])
+        assert manifest["alice_smith_essay.docx"]["size"] == -1
+        # 4. Confirm the OSError trigger actually fired the way we expected
+        #    (alice's stat was called >= 2 times — the count proves the
+        #    OSError branches were exercised, not bypassed)
+        assert alice_calls["n"] >= 2
 
     def test_stat_after_copy_oserror_uses_negative_one_size(
         self, staging_dirs,
@@ -189,6 +227,7 @@ class TestStageFilesEdgeCases:
         f.write_text("content")
 
         real_stat = _RealPath.stat
+        real_is_file = _RealPath.is_file
         # Track stat calls so we can fail only the post-copy one
         # (lines 191 and 203 both call src_path.stat).
         stat_calls = {"by_file": {}}
@@ -204,7 +243,14 @@ class TestStageFilesEdgeCases:
                     raise OSError("vanished")
             return real_stat(self, *args, **kwargs)
 
-        with patch.object(Path, "stat", selective_stat):
+        def selective_is_file(self):
+            # Python 3.12's is_file() calls stat(); force True for target
+            if self.name == "alice_smith_essay.docx":
+                return True
+            return real_is_file(self)
+
+        with patch.object(Path, "stat", selective_stat), \
+             patch.object(Path, "is_file", selective_is_file):
             result = stage_files(str(staging_dirs))
 
         # File still staged (copy succeeded) — manifest stored size=-1
