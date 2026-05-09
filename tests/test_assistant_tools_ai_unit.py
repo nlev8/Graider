@@ -215,6 +215,30 @@ class TestCallHaiku:
         assert "AI call failed" in result["error"]
         assert "API down" in result["error"]
 
+    def test_adapter_raises_json_decode_error_no_unbound_local(self):
+        # PR #267 Codex round-4 MINOR fold: if the adapter chain itself
+        # raises JSONDecodeError (mangled wire response, not the response
+        # text), the previous code hit UnboundLocalError on `raw: text`
+        # because `text` was never assigned. Split try/except now classifies
+        # adapter-side decode failures as "AI call failed" and never enters
+        # the response-parser branch.
+        from backend.services.assistant_tools_ai import _call_haiku
+
+        with patch("backend.api_keys.get_api_key", return_value="sk-test"), \
+             patch("backend.services.llm_adapter.AnthropicAdapter") as MockAdapter:
+            MockAdapter.return_value.chat.side_effect = json.JSONDecodeError(
+                "wire mangled", "doc", 0,
+            )
+            result = _call_haiku("x")
+        # Must not raise UnboundLocalError. Adapter-side decode failures
+        # are classified as "AI call failed" (not response parse).
+        assert "error" in result
+        assert "AI call failed" in result["error"]
+        assert "wire mangled" in result["error"]
+        # And `raw` MUST NOT be present — it's reserved for response-parse
+        # failures where the response text itself was the problem.
+        assert "raw" not in result
+
     def test_empty_content_parts_treated_as_blank_text(self):
         # When `response.content_parts` is empty, text == "" → JSONDecodeError
         # path with raw == "".
