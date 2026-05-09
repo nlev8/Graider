@@ -100,6 +100,8 @@ class TestCallHaiku:
     def test_malformed_fence_falls_through_to_json_error(self):
         # Confirms the malformed-fence branch produces a clean JSONDecodeError
         # path with `raw` set, instead of a cryptic "substring not found".
+        # PR #267 Codex round-2 NIT fold: pin `raw` exactly to confirm the
+        # leading/trailing backticks were actually stripped.
         from backend.services.assistant_tools_ai import _call_haiku
 
         wrapped = "```not valid json at all```"
@@ -111,10 +113,39 @@ class TestCallHaiku:
             result = _call_haiku("x")
         assert "error" in result
         assert "non-JSON" in result["error"]
-        # `raw` reflects post-fence-strip text, so the leading/trailing
-        # backticks are gone but the inner garbage remains
-        assert "not valid json at all" in result.get("raw", "")
+        # Post-fence-strip text — both leading AND trailing ``` are gone.
+        assert result["raw"] == "not valid json at all"
         assert "substring not found" not in result["error"]
+
+    def test_labeled_fence_with_no_closing_still_parses(self):
+        # PR #267 Codex round-2 MINOR fold: a labeled opening fence with no
+        # closing (e.g. `\`\`\`json\n{"k":1}`) is a real shape Anthropic
+        # sometimes emits when truncated. Previously the parser left
+        # `json\n{"k":1}` for json.loads, which failed. Now the third branch
+        # consumes everything after the first newline.
+        from backend.services.assistant_tools_ai import _call_haiku
+
+        wrapped = "```json\n{\"k\": 1, \"label\": \"truncated-fence\"}"
+        mock_response = MagicMock()
+        mock_response.content_parts = [MagicMock(text=wrapped)]
+        with patch("backend.api_keys.get_api_key", return_value="sk-test"), \
+             patch("backend.services.llm_adapter.AnthropicAdapter") as MockAdapter:
+            MockAdapter.return_value.chat.return_value = mock_response
+            result = _call_haiku("x")
+        assert result == {"k": 1, "label": "truncated-fence"}
+
+    def test_bare_opening_fence_with_no_closing_still_parses(self):
+        # Same branch as above, but with no language label.
+        from backend.services.assistant_tools_ai import _call_haiku
+
+        wrapped = "```\n{\"k\": 2}"
+        mock_response = MagicMock()
+        mock_response.content_parts = [MagicMock(text=wrapped)]
+        with patch("backend.api_keys.get_api_key", return_value="sk-test"), \
+             patch("backend.services.llm_adapter.AnthropicAdapter") as MockAdapter:
+            MockAdapter.return_value.chat.return_value = mock_response
+            result = _call_haiku("x")
+        assert result == {"k": 2}
 
     def test_invalid_json_returns_error_with_raw(self):
         from backend.services.assistant_tools_ai import _call_haiku
@@ -781,30 +812,47 @@ class TestTeacherIdRequired:
     the contract would fail.
     """
 
-    def test_differentiate_content_calls_require_teacher_id(self):
-        # PR #267 Codex round-1 MAJOR fold: also patch _call_haiku so this
-        # contract test cannot leak into a real Anthropic API call when run
-        # in an environment with ANTHROPIC_API_KEY set.
+    def _assert_require_teacher_id_fires_before_haiku(self, callable_, **kwargs):
+        # PR #267 Codex round-2 MINOR fold: prove the compliance guard runs
+        # BEFORE the AI boundary, not just that both fired. Records call
+        # order via a shared list and asserts ordering.
+        calls: list[str] = []
+
+        def _record_req(tid):
+            calls.append("require_teacher_id")
+
+        def _record_haiku(*a, **k):
+            calls.append("_call_haiku")
+            return {}
+
+        with patch("backend.services.assistant_tools_ai.require_teacher_id",
+                   side_effect=_record_req) as mock_req, \
+             patch("backend.services.assistant_tools_ai._call_haiku",
+                   side_effect=_record_haiku) as mock_haiku:
+            callable_(**kwargs)
+
+        mock_req.assert_called_once_with("t")
+        mock_haiku.assert_called_once()
+        # Strict ordering — guard must precede AI call
+        assert calls == ["require_teacher_id", "_call_haiku"], (
+            f"require_teacher_id must run before _call_haiku; got {calls}"
+        )
+
+    def test_differentiate_content_calls_require_teacher_id_first(self):
+        # Also patches _call_haiku so the contract test cannot leak into a
+        # real Anthropic API call when run with ANTHROPIC_API_KEY set.
         from backend.services.assistant_tools_ai import differentiate_content
 
-        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock_req, \
-             patch("backend.services.assistant_tools_ai._call_haiku",
-                   return_value={}) as mock_haiku:
-            differentiate_content(text="x", teacher_id="t")
-        mock_req.assert_called_once_with("t")
-        # Also verify _call_haiku was reached (i.e. require_teacher_id didn't
-        # short-circuit) — this is the order the contract guarantees.
-        mock_haiku.assert_called_once()
+        self._assert_require_teacher_id_fires_before_haiku(
+            differentiate_content, text="x", teacher_id="t",
+        )
 
-    def test_generate_questions_calls_require_teacher_id(self):
+    def test_generate_questions_calls_require_teacher_id_first(self):
         from backend.services.assistant_tools_ai import generate_questions_from_text
 
-        with patch("backend.services.assistant_tools_ai.require_teacher_id") as mock_req, \
-             patch("backend.services.assistant_tools_ai._call_haiku",
-                   return_value={}) as mock_haiku:
-            generate_questions_from_text(text="x", teacher_id="t")
-        mock_req.assert_called_once_with("t")
-        mock_haiku.assert_called_once()
+        self._assert_require_teacher_id_fires_before_haiku(
+            generate_questions_from_text, text="x", teacher_id="t",
+        )
 
     def test_generate_iep_progress_notes_calls_require_teacher_id(self):
         from backend.services.assistant_tools_ai import generate_iep_progress_notes

@@ -118,19 +118,24 @@ def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
         ))
         text = (response.content_parts[0].text if response.content_parts else "").strip()
         # Strip markdown fences if present. Use .find() rather than .index()
-        # so a malformed single-line fenced response (e.g. "```{\"k\":1}```")
-        # falls through to the JSONDecodeError path with `raw` set, instead of
-        # being swallowed by the generic-exception handler with a cryptic
-        # "substring not found" message.
+        # so malformed shapes don't get swallowed by the generic-exception
+        # handler with a cryptic "substring not found" message. Three branches:
+        #   1. Single-line fence (no newline): strip backticks
+        #   2. Multi-line fence with closing: take content between newline
+        #      and last fence
+        #   3. Multi-line fence with NO closing (labeled or bare): take
+        #      everything after the first newline so a labeled opener like
+        #      ```json\n{"k":1} still parses
         if text.startswith("```"):
             first_nl = text.find("\n")
-            last_fence = text.rfind("```")
-            if first_nl != -1 and last_fence > first_nl:
-                text = text[first_nl + 1:last_fence].strip()
-            else:
-                # Single-line or malformed fence — strip leading/trailing
-                # backticks and let json.loads decide.
+            if first_nl == -1:
                 text = text.strip("`").strip()
+            else:
+                last_fence = text.rfind("```")
+                if last_fence > first_nl:
+                    text = text[first_nl + 1:last_fence].strip()
+                else:
+                    text = text[first_nl + 1:].strip()
         return json.loads(text)
     except json.JSONDecodeError:
         return {"error": "AI returned non-JSON response", "raw": text}
