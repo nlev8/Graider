@@ -158,8 +158,21 @@ class TestSaveLesson:
     def test_filesystem_write_failure_returns_500(
         self, client, auth_headers, tmp_lesson_dirs,
     ):
+        # Selective open() patch — Gemini round-1 caught that a blanket
+        # `side_effect=IOError` could leak into Flask templates / logging /
+        # lazy-loaded module reads and make the 500 succeed for the wrong
+        # reason (framework crash, not the explicit JSON 500 path).
+        real_open = open
+
+        def selective(path, *args, **kwargs):
+            # Only fail on the lesson JSON write target. Anything Flask
+            # reads (templates, logger sinks, modules) passes through.
+            if str(path).endswith("X.json"):
+                raise IOError("disk gone")
+            return real_open(path, *args, **kwargs)
+
         with patch("backend.routes.lesson_routes.storage_save", None), \
-             patch("builtins.open", side_effect=IOError("disk gone")):
+             patch("builtins.open", side_effect=selective):
             resp = client.post(
                 "/api/save-lesson",
                 data=json.dumps({
@@ -214,8 +227,17 @@ class TestListLessons:
     def test_storage_hit_returns_grouped_lessons(
         self, client, auth_headers,
     ):
-        keys = ["lesson:Biology:Cells", "lesson:Biology:DNA",
-                "lesson:Math:Algebra"]
+        keys = [
+            "lesson:Biology:Cells", "lesson:Biology:DNA",
+            "lesson:Math:Algebra",
+            # Gemini round-1 #3: pin the malformed-key fallback paths
+            # for the `parts = key.split(':', 2)` length conditionals.
+            "lesson:OnlyTwoParts",  # len(parts)=2 → unit='OnlyTwoParts',
+                                    # title_part='' → fallback in
+                                    # `data.get('title', title_part)`
+            "lessononeparttotal",   # len(parts)=1 → unit='General',
+                                    # title_part=''
+        ]
         loads = {
             "lesson:Biology:Cells": {
                 "title": "Cells", "standards": ["S1"],
@@ -223,6 +245,8 @@ class TestListLessons:
             },
             "lesson:Biology:DNA": {"title": "DNA"},
             "lesson:Math:Algebra": {"title": "Algebra"},
+            "lesson:OnlyTwoParts": {"title": "Two-Part Lesson"},
+            "lessononeparttotal": {"title": "One-Part Lesson"},
         }
         with patch("backend.routes.lesson_routes.storage_list_keys",
                    return_value=keys), \
@@ -233,8 +257,11 @@ class TestListLessons:
         assert "Biology" in body["units"]
         assert len(body["units"]["Biology"]) == 2
         assert "Math" in body["units"]
-        assert len(body["lessons"]) == 3
-        # Cells has the metadata fields populated
+        # Two-part key → unit='OnlyTwoParts' bucket
+        assert "OnlyTwoParts" in body["units"]
+        # One-part key → 'General' fallback bucket
+        assert "General" in body["units"]
+        assert len(body["lessons"]) == 5
         cells = next(
             l for l in body["lessons"] if l["title"] == "Cells"
         )
@@ -458,10 +485,14 @@ class TestListUnits:
     def test_storage_hit_returns_sorted_units(
         self, client, auth_headers,
     ):
+        # Include a 1-part key — production uses `len(parts) > 1` to
+        # decide whether to add to the unit_set, so a bare `lesson`
+        # key is silently skipped (Gemini round-1 #3).
         with patch(
             "backend.routes.lesson_routes.storage_list_keys",
             return_value=[
                 "lesson:Math:A", "lesson:Biology:B", "lesson:Math:C",
+                "lessononly",  # len(parts)=1 → skipped
             ],
         ):
             resp = client.get("/api/list-units", headers=auth_headers)
@@ -942,8 +973,20 @@ class TestParseDocumentForCalendar:
         assert resp.status_code == 500
         assert "ANTHROPIC_API_KEY" in resp.get_json()["error"]
 
+    @pytest.mark.parametrize("ai_text_factory,desc", [
+        (
+            lambda evs: "```json\n" + json.dumps(evs) + "\n```",
+            "with-markdown-fence",
+        ),
+        (
+            lambda evs: json.dumps(evs),
+            "raw-json-no-fence",  # Gemini round-1 #2: pin the
+                                  # prompt-compliant happy path
+        ),
+    ])
     def test_ai_returns_valid_events(
         self, client, auth_headers, tmp_lesson_dirs,
+        ai_text_factory, desc,
     ):
         tmp_lesson_dirs["documents"].mkdir(parents=True)
         (tmp_lesson_dirs["documents"] / "x.pdf").write_text("dummy")
@@ -953,10 +996,9 @@ class TestParseDocumentForCalendar:
             {"date": "2026-09-08", "title": "Cells intro",
              "type": "lesson", "unit": "Biology"},
         ]
-        # Build a fake adapter.chat() response with markdown fence
         fake_msg = MagicMock()
         text_part = MagicMock()
-        text_part.text = "```json\n" + json.dumps(events) + "\n```"
+        text_part.text = ai_text_factory(events)
         fake_msg.content_parts = [text_part]
         fake_adapter = MagicMock()
         fake_adapter.chat.return_value = fake_msg
@@ -976,7 +1018,7 @@ class TestParseDocumentForCalendar:
                 data=json.dumps({"filename": "x.pdf"}),
                 headers=auth_headers,
             )
-        assert resp.status_code == 200
+        assert resp.status_code == 200, f"{desc}: {resp.get_json()}"
         body = resp.get_json()
         assert body["count"] == 2
         assert body["events"][1]["title"] == "Cells intro"
