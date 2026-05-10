@@ -78,7 +78,7 @@ def flask_app(tmp_path, monkeypatch):
 
     app.register_blueprint(auto_mod.automation_bp)
 
-    return {
+    yield {
         "app": app,
         "auto_mod": auto_mod,
         "automations_dir": automations_dir,
@@ -86,6 +86,21 @@ def flask_app(tmp_path, monkeypatch):
         "runner_script": runner_script,
         "picker_script": picker_script,
     }
+
+    # Teardown: explicitly clear any MagicMock processes left behind by
+    # tests that mutate _run_state["process"] / _picker_state["process"]
+    # directly (TestCleanupSubprocesses, TestStopRun, TestStopPicker).
+    # The atexit-registered _cleanup_subprocesses runs at interpreter
+    # shutdown and would otherwise call .poll() on dangling mocks during
+    # pytest teardown. Explicit reset isolates each test cleanly.
+    auto_mod._run_state.update({
+        "process": None, "status": "idle",
+        "workflow_name": "", "current_step": 0, "total_steps": 0,
+        "step_label": "", "message": "", "log": [],
+    })
+    auto_mod._picker_state.update({
+        "process": None, "status": "idle", "events": [],
+    })
 
 
 @pytest.fixture
@@ -456,9 +471,10 @@ class TestRunAutomation:
             "backend.routes.assistant_routes._portal_credentials_file_for",
             return_value="/tmp/test-creds",
         ), patch(
-            "subprocess.Popen", return_value=fake_proc,
+            "backend.routes.automation_routes.subprocess.Popen",
+            return_value=fake_proc,
         ) as popen, patch(
-            "threading.Thread",
+            "backend.routes.automation_routes.threading.Thread",
         ) as thread_cls:
             resp = client.post(
                 f"/api/automations/{wf_id}/run",
@@ -470,7 +486,11 @@ class TestRunAutomation:
         # subprocess.Popen called with var args appended after script path
         cmd = popen.call_args.args[0]
         assert cmd[0] == "node"
-        assert cmd[2].endswith(f"{wf_id}.json")
+        # Position-independent: the workflow JSON path must appear
+        # somewhere in the argv. Pinning cmd[2] is too brittle —
+        # adding a flag like `--verbose` before the path would break
+        # the test even though the command is semantically correct.
+        assert any(arg.endswith(f"{wf_id}.json") for arg in cmd)
         assert "--var" in cmd
         assert "foo=bar" in cmd
         assert "baz=42" in cmd
@@ -595,9 +615,10 @@ class TestStartPicker:
             "backend.routes.assistant_routes._portal_credentials_file_for",
             return_value="/tmp/creds",
         ), patch(
-            "subprocess.Popen", return_value=fake_proc,
+            "backend.routes.automation_routes.subprocess.Popen",
+            return_value=fake_proc,
         ) as popen, patch(
-            "threading.Thread",
+            "backend.routes.automation_routes.threading.Thread",
         ):
             resp = client.post(
                 "/api/automations/picker/start",
@@ -624,9 +645,10 @@ class TestStartPicker:
             "backend.routes.assistant_routes._portal_credentials_file_for",
             return_value="/tmp/creds",
         ), patch(
-            "subprocess.Popen", return_value=fake_proc,
+            "backend.routes.automation_routes.subprocess.Popen",
+            return_value=fake_proc,
         ) as popen, patch(
-            "threading.Thread",
+            "backend.routes.automation_routes.threading.Thread",
         ):
             resp = client.post(
                 "/api/automations/picker/start",
@@ -788,18 +810,63 @@ class TestReadRunnerOutput:
         assert st["message"] == "Browser crashed"
 
     def test_invalid_json_silently_skipped(self, flask_app):
+        # Pin: invalid lines AND blank lines do not crash the loop. We
+        # use only a status event (not a `done`) so that the post-loop
+        # auto-flip branch is the path that lifts status to "done"
+        # (see test_stream_close_without_done_event below for the
+        # explicit fallback test).
         self._reset_state(flask_app)
         proc = self._make_proc([
             "not json",
             "",  # blank lines also skipped
-            json.dumps({"type": "done"}),
+            json.dumps({"type": "status", "message": "Halfway"}),
+        ])
+        flask_app["auto_mod"]._read_runner_output(proc)
+        # The status event sets the message; status flipped via the
+        # post-loop fallback because no "done" type event was emitted.
+        assert flask_app["auto_mod"]._run_state["message"] == "Halfway"
+        assert flask_app["auto_mod"]._run_state["status"] == "done"
+
+    def test_stream_close_without_done_event_flips_running_to_done(
+        self, flask_app,
+    ):
+        # Pin the post-loop fallback branch: when the subprocess stdout
+        # closes WITHOUT emitting a {"type": "done"} event (e.g. abrupt
+        # exit after only step events), the helper still transitions
+        # status from "running" to "done".
+        self._reset_state(flask_app)
+        proc = self._make_proc([
+            json.dumps({"type": "step_start", "step": "1.x", "label": "L"}),
+            # No done event — stream just ends here.
         ])
         flask_app["auto_mod"]._read_runner_output(proc)
         assert flask_app["auto_mod"]._run_state["status"] == "done"
 
+    def test_stream_close_with_error_status_preserves_error(
+        self, flask_app,
+    ):
+        # Pin: the post-loop fallback only flips when status is exactly
+        # "running". A prior error event must leave status == "error"
+        # after stream close (NOT overwritten to "done").
+        self._reset_state(flask_app)
+        proc = self._make_proc([
+            json.dumps({"type": "error", "message": "bad"}),
+            # Stream closes after the error.
+        ])
+        flask_app["auto_mod"]._read_runner_output(proc)
+        assert flask_app["auto_mod"]._run_state["status"] == "error"
+        assert flask_app["auto_mod"]._run_state["message"] == "bad"
+
     def test_log_trimmed_to_last_100_when_past_200(self, flask_app):
         self._reset_state(flask_app)
-        # Generate 250 step_start events so the log accumulates
+        # Generate 250 step_start events so the log accumulates and
+        # the trim fires exactly once. Trace of the production loop
+        # `if len(log) > 200: log = log[-100:]`:
+        #   - Event #201 brings len to 201 → trim to last 100 → len=100
+        #     (first kept = event 101, last = event 200)
+        #   - Events 202..250 (49 more) → final len=149
+        # Pin the EXACT post-trim length so a regression that changes
+        # the trim cap (e.g. [-150:]) surfaces in CI.
         lines = [
             json.dumps({
                 "type": "step_start",
@@ -811,13 +878,11 @@ class TestReadRunnerOutput:
         proc = self._make_proc(lines)
         flask_app["auto_mod"]._read_runner_output(proc)
         log = flask_app["auto_mod"]._run_state["log"]
-        # Trim happens lazily when len exceeds 200; final length must
-        # be at most 200 (the trim leaves 100, then more events may
-        # be appended after that).
-        assert len(log) <= 200
-        # And we kept the tail, not the head (last entry is the very
-        # last produced event)
+        assert len(log) == 149
+        # Tail kept, head dropped — last entry is the final produced event,
+        # first entry is event 101 (trim point).
         assert log[-1]["label"] == "L249"
+        assert log[0]["label"] == "L101"
 
 
 class TestReadPickerOutput:
