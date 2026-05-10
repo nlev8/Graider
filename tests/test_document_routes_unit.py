@@ -87,6 +87,30 @@ class TestParseDocumentDispatch:
         assert body["text"] == "hello world"
         assert body["type"] == "html"
 
+    def test_doc_extension_hits_unsupported_else(self, client, auth_headers):
+        # `.doc` is in ALLOWED_EXTENSIONS so it passes the gate, but the
+        # dispatch chain only handles .docx/.pdf/.txt — so .doc falls
+        # through to the trailing `else` returning the helpful message.
+        resp = client.post(
+            "/api/parse-document",
+            data={"file": (io.BytesIO(b"legacy doc bytes"), "old.doc")},
+            headers=auth_headers,
+        )
+        body = resp.get_json()
+        assert "Unsupported file type" in body["error"]
+        assert ".docx, .pdf, or .txt" in body["error"]
+
+    def test_rtf_extension_hits_unsupported_else(self, client, auth_headers):
+        # Mirror of the .doc case — .rtf passes the allowed-set gate but
+        # still falls through to the trailing `else`.
+        resp = client.post(
+            "/api/parse-document",
+            data={"file": (io.BytesIO(b"{\\rtf1"), "doc.rtf")},
+            headers=auth_headers,
+        )
+        body = resp.get_json()
+        assert "Unsupported file type" in body["error"]
+
 
 # ──────────────────────────────────────────────────────────────────
 # .docx parsing — mammoth path
@@ -332,19 +356,11 @@ class TestParseDocxFallback:
         def table_factory(child, doc):
             return table
 
-        # Force ImportError specifically on `import mammoth` so the
-        # python-docx-only fallback branch executes. Patch builtins.__import__
-        # because sys.modules tricks let Python re-resolve the package from
-        # disk (mammoth is installed in this venv).
-        import builtins
-        real_import = builtins.__import__
-
-        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if name == "mammoth":
-                raise ImportError("mocked mammoth import failure")
-            return real_import(name, globals, locals, fromlist, level)
-
-        with patch("builtins.__import__", side_effect=fake_import), \
+        # Force ImportError on `import mammoth` so the python-docx-only
+        # fallback branch executes. `patch.dict("sys.modules", {"mammoth": None})`
+        # makes Python's import machinery raise ModuleNotFoundError (subclass
+        # of ImportError) without globally patching __import__.
+        with patch.dict("sys.modules", {"mammoth": None}), \
              patch("docx.Document", return_value=mock_doc), \
              patch("docx.text.paragraph.Paragraph",
                    side_effect=paragraph_factory), \
@@ -443,20 +459,15 @@ class TestParsePdf:
     def test_pdf_pymupdf_missing_returns_helpful_error(
         self, client, auth_headers,
     ):
-        # When PyMuPDF (fitz) isn't installed → ImportError → helpful msg
-        import sys as _sys
-        original_fitz = _sys.modules.pop("fitz", None)
-        # Make the import statement inside _parse_pdf raise
-        try:
-            with patch.dict("sys.modules", {"fitz": None}):
-                resp = client.post(
-                    "/api/parse-document",
-                    data={"file": (io.BytesIO(b"%PDF"), "x.pdf")},
-                    headers=auth_headers,
-                )
-        finally:
-            if original_fitz is not None:
-                _sys.modules["fitz"] = original_fitz
+        # When PyMuPDF (fitz) isn't installed → ImportError → helpful msg.
+        # `patch.dict` saves and restores the original sys.modules entry
+        # automatically — no manual pop/restore needed.
+        with patch.dict("sys.modules", {"fitz": None}):
+            resp = client.post(
+                "/api/parse-document",
+                data={"file": (io.BytesIO(b"%PDF"), "x.pdf")},
+                headers=auth_headers,
+            )
 
         body = resp.get_json()
         assert "PyMuPDF" in body["error"]
@@ -498,3 +509,37 @@ class TestParseTxt:
         # Valid portion preserved, invalid bytes silently dropped
         assert "valid" in body["text"]
         assert "invalid" in body["text"]
+
+
+# ──────────────────────────────────────────────────────────────────
+# handle_route_errors decorator integration
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestRouteErrorHandler:
+    def test_unhandled_exception_returns_rfc7807_500(
+        self, client, auth_headers,
+    ):
+        # Force _parse_txt to blow up with a non-business exception so the
+        # @handle_route_errors decorator catches it and emits RFC 7807
+        # problem+json with status 500 (no traceback leaks to client).
+        def boom(*args, **kwargs):
+            raise RuntimeError("synthetic crash")
+
+        with patch(
+            "backend.routes.document_routes._parse_txt",
+            side_effect=boom,
+        ):
+            resp = client.post(
+                "/api/parse-document",
+                data={"file": (io.BytesIO(b"x"), "note.txt")},
+                headers=auth_headers,
+            )
+
+        assert resp.status_code == 500
+        body = resp.get_json()
+        # RFC 7807 fields
+        assert body.get("title") == "Internal Server Error"
+        assert body.get("status") == 500
+        # Should NOT leak the synthetic-crash detail to the client
+        assert "synthetic crash" not in str(body)
