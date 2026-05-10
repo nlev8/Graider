@@ -30,10 +30,10 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 @pytest.fixture
@@ -91,12 +91,15 @@ class TestPasswordHashBootstrap:
             )
         assert resp.status_code == 200
         assert resp.get_json()["authenticated"] is True
-        # storage_save called twice: once to persist the bootstrapped
-        # hash, once for any audit-log side effects (audit_log mocked).
-        # The hash save is the first call.
+        # The hash save is the first call; verify it's the EXACT hash
+        # of the env-var value, not just a dict with a "hash" key.
+        # (Gemini round-1 #2: the previous assertion was tautological.)
         save_args = save_mock.call_args_list[0].args
         assert save_args[0] == "district:password_hash"
         assert "hash" in save_args[1]
+        assert check_password_hash(
+            save_args[1]["hash"], "envpass1234",
+        ), "Bootstrapped hash must verify against DISTRICT_ADMIN_PASSWORD"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -450,19 +453,12 @@ class TestTestConnection:
             "token_url": "https://x.example/token",
         }
 
-        # Make _ensure_token + _get_with_retry on the client be no-ops
+        # AsyncMock for the awaited coroutines — cleaner than assigning
+        # `async def` stubs and supports call-assertions if needed.
         fake_client = MagicMock()
         fake_client.base_url = cfg["base_url"]
-
-        # asyncio coroutines need to look like awaitables
-        async def _noop_token(http):  # noqa: D401
-            return None
-
-        async def _noop_get(http, url, label=None):
-            return None
-
-        fake_client._ensure_token = _noop_token
-        fake_client._get_with_retry = _noop_get
+        fake_client._ensure_token = AsyncMock()
+        fake_client._get_with_retry = AsyncMock()
 
         with patch(
             "backend.routes.district_routes.storage_load",
@@ -486,11 +482,9 @@ class TestTestConnection:
         }
         fake_client = MagicMock()
         fake_client.base_url = cfg["base_url"]
-
-        async def _raise_token(http):
-            raise RuntimeError("oauth dead")
-
-        fake_client._ensure_token = _raise_token
+        fake_client._ensure_token = AsyncMock(
+            side_effect=RuntimeError("oauth dead"),
+        )
 
         with patch(
             "backend.routes.district_routes.storage_load",
@@ -793,13 +787,10 @@ class TestClearOldProviderData:
     def test_clever_provider_deletes_clever_synced_classes(self, tmp_path):
         from backend.routes.district_routes import _clear_old_provider_data
 
-        # Build a fake Supabase that:
-        # - Returns classes with mixed section ids
-        # - For each delete chain returns a result with .data = [...]
         sb = MagicMock()
         classes_result = MagicMock()
         classes_result.data = [
-            # Clever-synced class (no oneroster: prefix) → DELETE
+            # Clever-synced (no oneroster: prefix) → DELETE
             {"id": "c-clever", "teacher_id": "t-1",
              "clever_section_id": "clever-sec-1"},
             # OneRoster-synced → KEEP (we're clearing clever)
@@ -810,52 +801,62 @@ class TestClearOldProviderData:
              "clever_section_id": None},
         ]
 
-        # Track what each table chain returns.
-        enrollments_result = MagicMock()
-        enrollments_result.data = [{"student_id": "s1"}, {"student_id": "s2"}]
-        # After deleting class c-clever's enrollments, both students
-        # are orphaned (no other enrollments).
-        delete_result = MagicMock()
-        delete_result.data = [{"student_id": "s1"}, {"student_id": "s2"}]
-        remaining_result = MagicMock()
-        remaining_result.count = 0  # orphan check: zero remaining
+        # Two distinct response objects:
+        # - enrollments_result: `select("student_id").eq("class_id", X)`
+        #   inside the for-cls loop
+        # - remaining_result: `select("id", count="exact").eq("student_id", S)`
+        #   inside the orphan-probe loop
+        enrollments_result = MagicMock(
+            data=[{"student_id": "s1"}, {"student_id": "s2"}],
+        )
+        delete_enrollments_result = MagicMock(
+            data=[{"student_id": "s1"}, {"student_id": "s2"}],
+        )
+        remaining_result = MagicMock(count=0, data=None)
 
-        # Multi-shape Supabase mock — branch on the first .table() arg.
+        # Per-table chain references so we can assert each .delete()
+        # was actually invoked (Gemini round-1 #1: previously the
+        # tests only checked the return count without verifying that
+        # any deletion happened).
+        classes_chain = MagicMock()
+        classes_chain.select.return_value.execute.return_value = classes_result
+        classes_chain.delete.return_value.eq.return_value \
+            .execute.return_value = MagicMock(data=[])
+
+        students_chain = MagicMock()
+        students_chain.delete.return_value.eq.return_value \
+            .execute.return_value = MagicMock(data=[])
+
+        # class_students has TWO different select shapes — branch on
+        # kwargs to avoid the previous bug where a single .select stub
+        # masked the orphan probe entirely.
+        class_students_chain = MagicMock()
+
+        def class_students_select_side_effect(*args, **kwargs):
+            shape = MagicMock()
+            if kwargs.get("count") == "exact":
+                # Orphan probe: select("id", count="exact").eq(...).execute
+                shape.eq.return_value.execute.return_value = remaining_result
+            else:
+                # Enrollments: select("student_id").eq(...).execute
+                shape.eq.return_value.execute.return_value = enrollments_result
+            return shape
+
+        class_students_chain.select.side_effect = (
+            class_students_select_side_effect
+        )
+        class_students_chain.delete.return_value.eq.return_value \
+            .execute.return_value = delete_enrollments_result
+
         def table_side_effect(table_name):
-            # Return a chain whose terminal `.execute()` returns the
-            # appropriate canned result for each downstream operation.
-            chain = MagicMock()
-            if table_name == "classes":
-                # First call: select(...) → execute → all classes
-                # Second call: delete().eq().execute() → no return needed
-                chain.select.return_value.execute.return_value = classes_result
-                chain.delete.return_value.eq.return_value \
-                    .execute.return_value = MagicMock(data=[])
-            elif table_name == "class_students":
-                # select for orphan probe AND delete chain
-                chain.select.return_value.eq.return_value \
-                    .execute.return_value = enrollments_result
-                chain.delete.return_value.eq.return_value \
-                    .execute.return_value = delete_result
-                # Orphan-probe count chain
-                chain.select.return_value.eq.return_value \
-                    .execute.return_value = enrollments_result
-                # Override for the count="exact" call path
-                chain.select.return_value.eq = MagicMock(
-                    return_value=MagicMock(
-                        execute=MagicMock(return_value=remaining_result),
-                    )
-                )
-            elif table_name == "students":
-                chain.delete.return_value.eq.return_value \
-                    .execute.return_value = MagicMock(data=[])
-            return chain
+            return {
+                "classes": classes_chain,
+                "class_students": class_students_chain,
+                "students": students_chain,
+            }.get(table_name, MagicMock())
 
-        sb.table = MagicMock(side_effect=table_side_effect)
+        sb.table.side_effect = table_side_effect
 
-        # Use a tmp_path data dir so the glob+remove path runs without
-        # touching real ~/.graider_data
-        # Prepare a roster file for t-1 to verify it gets removed
         fake_data_dir = tmp_path / "fake-data"
         fake_data_dir.mkdir()
         (fake_data_dir / "roster_t-1.csv").write_text("name,email\n")
@@ -868,10 +869,28 @@ class TestClearOldProviderData:
         ):
             count = _clear_old_provider_data("clever")
 
-        # One teacher had clever-synced classes deleted (t-1)
+        # One teacher (t-1) had clever-synced classes deleted
         assert count == 1
         # roster file removed
         assert not (fake_data_dir / "roster_t-1.csv").exists()
+
+        # Verify the actual deletes actually fired (Gemini round-1 #1):
+        # - classes.delete().eq("id", "c-clever") was invoked
+        classes_chain.delete.return_value.eq.assert_any_call(
+            "id", "c-clever",
+        )
+        # - class_students.delete().eq("class_id", "c-clever") was invoked
+        class_students_chain.delete.return_value.eq.assert_any_call(
+            "class_id", "c-clever",
+        )
+        # - students.delete().eq("id", S) was invoked for at least one
+        #   orphaned student (s1 or s2 depending on set-iteration order)
+        student_eq_calls = students_chain.delete.return_value \
+            .eq.call_args_list
+        assert any(
+            call.args == ("id", "s1") or call.args == ("id", "s2")
+            for call in student_eq_calls
+        )
 
     def test_oneroster_provider_deletes_oneroster_synced_classes(self):
         from backend.routes.district_routes import _clear_old_provider_data
@@ -970,6 +989,68 @@ class TestClearOldProviderData:
         ):
             count = _clear_old_provider_data("clever")
         assert count == 1
+
+    def test_student_delete_failure_swallowed(self):
+        """Pin lines 141-142: when the orphan-student probe or delete
+        raises, the inner try/except routes the exception to
+        sentry_sdk.capture_exception and continues without bubbling."""
+        from backend.routes.district_routes import _clear_old_provider_data
+
+        sb = MagicMock()
+        classes_result = MagicMock()
+        classes_result.data = [
+            {"id": "c1", "teacher_id": "t1",
+             "clever_section_id": "clever-1"},
+        ]
+        enrollments_result = MagicMock(data=[{"student_id": "s1"}])
+
+        classes_chain = MagicMock()
+        classes_chain.select.return_value.execute.return_value = classes_result
+        classes_chain.delete.return_value.eq.return_value \
+            .execute.return_value = MagicMock(data=[])
+
+        students_chain = MagicMock()
+
+        class_students_chain = MagicMock()
+
+        def class_students_select_side_effect(*args, **kwargs):
+            shape = MagicMock()
+            if kwargs.get("count") == "exact":
+                # Orphan probe raises → enters lines 141-142
+                shape.eq.return_value.execute.side_effect = (
+                    RuntimeError("count probe failed")
+                )
+            else:
+                shape.eq.return_value.execute.return_value = enrollments_result
+            return shape
+
+        class_students_chain.select.side_effect = (
+            class_students_select_side_effect
+        )
+        class_students_chain.delete.return_value.eq.return_value \
+            .execute.return_value = MagicMock(data=[])
+
+        def table_side_effect(table_name):
+            return {
+                "classes": classes_chain,
+                "class_students": class_students_chain,
+                "students": students_chain,
+            }.get(table_name, MagicMock())
+
+        sb.table.side_effect = table_side_effect
+
+        sentry_capture = MagicMock()
+        with patch(
+            "backend.supabase_client.get_supabase", return_value=sb,
+        ), patch(
+            "backend.routes.district_routes.sentry_sdk.capture_exception",
+            sentry_capture,
+        ):
+            # Must not raise
+            count = _clear_old_provider_data("clever")
+        assert count == 1
+        # Sentry was notified about the orphan-probe failure
+        assert sentry_capture.called
 
     def test_class_delete_failure_swallowed(self):
         """A per-class delete failure logs + continues; doesn't raise."""
