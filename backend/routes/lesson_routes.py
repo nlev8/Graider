@@ -428,9 +428,6 @@ def parse_document_for_calendar():
         logger.error("Failed to extract text from %s: %s", filename, e)
         return jsonify({"error": "Failed to read document"}), 500
 
-    if anthropic is None:
-        return jsonify({"error": "anthropic package is not installed"}), 500
-
     from backend.api_keys import get_api_key
     api_key = get_api_key('anthropic', getattr(g, 'user_id', 'local-dev'))
     if not api_key:
