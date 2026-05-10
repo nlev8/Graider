@@ -331,25 +331,28 @@ def delete_behavior_data():
     student_id = request.args.get('student_id', '')
     clear_all = request.args.get('all', '').lower() == 'true'
 
+    if not (clear_all or student_id):
+        return jsonify({"error": "Specify student_id or all=true"})
+
     sb = _get_supabase()
 
     if clear_all:
-        # Delete all sessions (cascade deletes events)
         sb.table('behavior_sessions').delete().eq(
             'teacher_id', teacher_id
         ).execute()
         return jsonify({"status": "success", "message": "All behavior data cleared"})
 
-    if student_id:
-        # student_id is name-based key like "john_smith" — convert to name
-        student_name_guess = student_id.replace('_', ' ')
-        # Delete events matching this student name (case-insensitive)
-        sb.table('behavior_events').delete().eq(
-            'teacher_id', teacher_id
-        ).ilike('student_name', student_name_guess).execute()
-        return jsonify({"status": "success", "message": f"Cleared data for {student_id}"})
-
-    return jsonify({"error": "Specify student_id or all=true"})
+    # student_id is name-based key like "john_smith" — underscores
+    # become spaces, and PostgreSQL ILIKE wildcards (%, \) are escaped
+    # so a query param of "%" cannot match every student under this
+    # teacher. (After the underscore→space pass there are no `_` chars
+    # left, so only `%` and `\` need escaping.)
+    student_name_guess = student_id.replace('_', ' ')
+    student_name_guess = student_name_guess.replace('\\', '\\\\').replace('%', '\\%')
+    sb.table('behavior_events').delete().eq(
+        'teacher_id', teacher_id
+    ).ilike('student_name', student_name_guess).execute()
+    return jsonify({"status": "success", "message": f"Cleared data for {student_id}"})
 
 
 @behavior_bp.route('/api/behavior/debug', methods=['GET'])

@@ -217,14 +217,25 @@ class TestSaveSession:
         assert resp.get_json()["error"] == "Failed to create session"
 
     def test_happy_path_saves_events(self, client, auth_headers):
-        # Simulate insert returning a session id, then an event insert.
-        # FakeChain returns the same canned data for every execute() call,
-        # so set it to look like a valid session insert.
+        # Use a counter-based execute() that returns the session-id payload
+        # for the FIRST call and an empty list for the second (the events
+        # insert). Pins both the response shape AND the actual payloads
+        # passed to .insert() so a regression that mismaps event fields
+        # would surface here.
         sb = MagicMock()
-        chain = FakeChain(execute_data=[{"id": "sess-1"}])
+        chain = FakeChain()
         sb.table.side_effect = chain.table
+        call_count = {"n": 0}
 
-        with patch(
+        def per_call_execute(self):
+            i = call_count["n"]
+            call_count["n"] += 1
+            self.calls.append(("execute", (), {}))
+            m = MagicMock()
+            m.data = [{"id": "sess-1"}] if i == 0 else []
+            return m
+
+        with patch.object(FakeChain, "execute", per_call_execute), patch(
             "backend.routes.behavior_routes._get_supabase",
             return_value=sb,
         ):
@@ -256,6 +267,36 @@ class TestSaveSession:
         body = resp.get_json()
         assert body["status"] == "success"
         assert body["message"] == "Saved 2 events"
+
+        # Verify both insert payloads (Gemini round-1 critical fix).
+        insert_calls = [c for c in chain.calls if c[0] == "insert"]
+        assert len(insert_calls) == 2
+
+        # 1) Session insert: dict with teacher_id + period + date + device
+        session_payload = insert_calls[0][1][0]
+        assert session_payload["teacher_id"] == "teach-1"
+        assert session_payload["period"] == "Period 3"
+        assert session_payload["date"] == "2026-05-09"
+        assert session_payload["device"] == "web"
+        assert session_payload["is_active"] is False
+
+        # 2) Events insert: list of 2 dicts (blank-name skipped); each
+        # carries the session_id + event_time built as date + "T" + ts + ":00"
+        events_payload = insert_calls[1][1][0]
+        assert len(events_payload) == 2
+        jane = events_payload[0]
+        assert jane["student_name"] == "Jane Doe"
+        assert jane["type"] == "correction"
+        assert jane["note"] == "Talking"
+        assert jane["session_id"] == "sess-1"
+        assert jane["teacher_id"] == "teach-1"
+        assert jane["source"] == "manual"
+        assert jane["event_time"] == "2026-05-09T09:15:00"
+        john = events_payload[1]
+        assert john["student_name"] == "John Smith"
+        assert john["type"] == "praise"
+        # Empty note coerced to None (production line 112)
+        assert john["note"] is None
 
     def test_happy_path_omits_event_insert_when_only_blank_names(
         self, client, auth_headers,
@@ -368,7 +409,9 @@ class TestGetData:
         assert john["entries"][0]["timestamps"] == []
 
     def test_filters_passed_through_to_query(self, client, auth_headers):
-        # Verify gte/lte/eq filter chain runs based on query params.
+        # Pin EXACT filter args, not just method names. A refactor that
+        # filtered by the wrong column (e.g. event_time instead of
+        # behavior_sessions.date) would surface here.
         p, chain = patch_supabase(execute_data=[])
         with p:
             resp = client.get(
@@ -377,12 +420,10 @@ class TestGetData:
                 headers=auth_headers,
             )
         assert resp.status_code == 200
-        # Inspect chain to verify filters fired
-        methods = [c[0] for c in chain.calls]
-        assert "gte" in methods
-        assert "lte" in methods
-        # period filter adds a second .eq() call (one for teacher, one for period)
-        assert methods.count("eq") >= 2
+        assert ("gte", ("behavior_sessions.date", "2026-01-01"), {}) in chain.calls
+        assert ("lte", ("behavior_sessions.date", "2026-12-31"), {}) in chain.calls
+        assert ("eq", ("behavior_sessions.period", "P1"), {}) in chain.calls
+        assert ("eq", ("teacher_id", "teach-1"), {}) in chain.calls
 
     def test_student_name_filter_substring_match(
         self, client, auth_headers,
@@ -484,6 +525,8 @@ class TestGetEvents:
         assert limit_calls[0][1] == (50,)
 
     def test_filter_chain_applied(self, client, auth_headers):
+        # Pin EXACT filter args + the order/limit chain (route uses
+        # .order('event_time', desc=True).limit(50) by default).
         p, chain = patch_supabase(execute_data=[])
         with p:
             client.get(
@@ -491,10 +534,11 @@ class TestGetEvents:
                 "&date_to=2026-12-31&period=P2&student_name=smith",
                 headers=auth_headers,
             )
-        methods = [c[0] for c in chain.calls]
-        assert "gte" in methods
-        assert "lte" in methods
-        assert methods.count("eq") >= 2
+        assert ("gte", ("behavior_sessions.date", "2026-01-01"), {}) in chain.calls
+        assert ("lte", ("behavior_sessions.date", "2026-12-31"), {}) in chain.calls
+        assert ("eq", ("behavior_sessions.period", "P2"), {}) in chain.calls
+        assert ("eq", ("teacher_id", "teach-1"), {}) in chain.calls
+        assert ("order", ("event_time",), {"desc": True}) in chain.calls
 
     def test_student_filter_substring_drops_non_match(
         self, client, auth_headers,
@@ -553,11 +597,11 @@ class TestDeleteData:
         assert "delete" in methods
         assert methods.count("eq") >= 1
 
-    def test_per_student_uses_ilike_with_unsanitized_name(
+    def test_per_student_uses_ilike_with_underscore_to_space(
         self, client, auth_headers,
     ):
         # student_id "john_smith" becomes "john smith" via underscore→space
-        # and is passed verbatim to ilike() — pin exact behavior.
+        # and is passed to ilike() (no wildcards to escape in this name).
         p, chain = patch_supabase(execute_data=[])
         with p:
             resp = client.delete(
@@ -570,17 +614,57 @@ class TestDeleteData:
         assert ilike_calls
         assert ilike_calls[0][1] == ("student_name", "john smith")
 
-    def test_no_args_returns_error(self, client, auth_headers):
-        # No clear_all + no student_id → the helpful error branch
-        # _get_supabase still gets called above the branch — patch it
-        p, _ = patch_supabase(execute_data=[])
+    def test_per_student_escapes_percent_wildcard(
+        self, client, auth_headers,
+    ):
+        # Pin the Rule-#11 fix: a `%` in student_id MUST be escaped before
+        # reaching ilike(), otherwise the query matches every student under
+        # this teacher and deletes their data wholesale.
+        p, chain = patch_supabase(execute_data=[])
         with p:
+            resp = client.delete(
+                "/api/behavior/data?student_id=%25",  # URL-encoded "%"
+                headers=auth_headers,
+            )
+        assert resp.status_code == 200
+        ilike_calls = [c for c in chain.calls if c[0] == "ilike"]
+        assert ilike_calls
+        # Production must escape the wildcard
+        assert ilike_calls[0][1] == ("student_name", "\\%")
+
+    def test_per_student_escapes_backslash(
+        self, client, auth_headers,
+    ):
+        # A literal backslash in student_id should be doubled before being
+        # passed to ilike() so the % escape itself stays unambiguous.
+        p, chain = patch_supabase(execute_data=[])
+        with p:
+            resp = client.delete(
+                "/api/behavior/data?student_id=%5C%25",  # "\%"
+                headers=auth_headers,
+            )
+        assert resp.status_code == 200
+        ilike_calls = [c for c in chain.calls if c[0] == "ilike"]
+        assert ilike_calls
+        # Backslash → \\, percent → \% → final string is "\\\\\\%"
+        assert ilike_calls[0][1] == ("student_name", "\\\\\\%")
+
+    def test_no_args_returns_error_without_supabase_call(
+        self, client, auth_headers,
+    ):
+        # Per Rule #11 cleanup: validation now fires BEFORE _get_supabase()
+        # so the early-error branch never instantiates a client.
+        with patch(
+            "backend.routes.behavior_routes._get_supabase",
+        ) as mock_sb:
             resp = client.delete(
                 "/api/behavior/data",
                 headers=auth_headers,
             )
         body = resp.get_json()
         assert body["error"] == "Specify student_id or all=true"
+        # _get_supabase should NOT have been called
+        assert mock_sb.call_count == 0
 
 
 # ──────────────────────────────────────────────────────────────────
