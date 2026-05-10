@@ -973,20 +973,13 @@ class TestParseDocumentForCalendar:
         assert resp.status_code == 500
         assert "ANTHROPIC_API_KEY" in resp.get_json()["error"]
 
-    @pytest.mark.parametrize("ai_text_factory,desc", [
-        (
-            lambda evs: "```json\n" + json.dumps(evs) + "\n```",
-            "with-markdown-fence",
-        ),
-        (
-            lambda evs: json.dumps(evs),
-            "raw-json-no-fence",  # Gemini round-1 #2: pin the
-                                  # prompt-compliant happy path
-        ),
-    ])
+    @pytest.mark.parametrize("ai_text_factory", [
+        lambda evs: "```json\n" + json.dumps(evs) + "\n```",
+        lambda evs: json.dumps(evs),
+    ], ids=["with-markdown-fence", "raw-json-no-fence"])
     def test_ai_returns_valid_events(
         self, client, auth_headers, tmp_lesson_dirs,
-        ai_text_factory, desc,
+        ai_text_factory,
     ):
         tmp_lesson_dirs["documents"].mkdir(parents=True)
         (tmp_lesson_dirs["documents"] / "x.pdf").write_text("dummy")
@@ -1018,7 +1011,7 @@ class TestParseDocumentForCalendar:
                 data=json.dumps({"filename": "x.pdf"}),
                 headers=auth_headers,
             )
-        assert resp.status_code == 200, f"{desc}: {resp.get_json()}"
+        assert resp.status_code == 200, resp.get_json()
         body = resp.get_json()
         assert body["count"] == 2
         assert body["events"][1]["title"] == "Cells intro"
