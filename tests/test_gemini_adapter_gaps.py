@@ -359,16 +359,22 @@ class TestChatKwargsBranches:
 
     @patch(f"{MODULE}.genai.Client")
     def test_text_attribute_raises_falls_back_to_parts(self, mock_client_cls):
-        # raw.text raises (e.g., response was blocked) → fall through
-        # to candidates[0].content.parts
+        # Gemini quality-review (CRITICAL fold): pre-fix did
+        # `type(raw).text = property(...)` where `raw` was a
+        # MagicMock — `type(raw)` is the MagicMock CLASS itself,
+        # so this globally mutated MagicMock, breaking every
+        # other test that touched `.text` on any MagicMock.
+        # Fix: use a local subclass so the property lives on the
+        # subclass, not the global MagicMock class.
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
 
-        raw = MagicMock()
-        # Make `raw.text` access raise
-        type(raw).text = property(lambda _: (_ for _ in ()).throw(
-            ValueError("blocked"),
-        ))
+        class BlockedResponse(MagicMock):
+            @property
+            def text(self):
+                raise ValueError("blocked")
+
+        raw = BlockedResponse()
 
         # Build a candidate with parts containing text
         part = MagicMock()
@@ -394,3 +400,67 @@ class TestChatKwargsBranches:
         # Parts-based fallback extracted text
         assert len(resp.content_parts) == 1
         assert resp.content_parts[0].text == "from parts"
+
+    @patch(f"{MODULE}.genai.Client")
+    def test_finish_reason_enum_int_1_maps_to_stop(self, mock_client_cls):
+        # Gemini quality-review (MAJOR fold): the file docstring
+        # advertised testing `finish_reason int enum mapping
+        # (1 → stop, 2 → max_tokens_reached)` and _mock_response
+        # had a `finish_int` parameter — but no test ever invoked
+        # it. Adding both mappings.
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        raw = MagicMock()
+        raw.text = "ok"
+        candidate = MagicMock(spec=["finish_reason", "content"])
+        # finish_reason has no `.name` attribute → falls through to
+        # str(fr); spec=[] prevents MagicMock auto-creating .name.
+        fr = MagicMock(spec=[])
+        # Set __str__ on the class so str(fr) returns "1"
+        fr.__class__.__str__ = lambda self: "1"
+        candidate.finish_reason = fr
+        raw.candidates = [candidate]
+        raw.usage_metadata = MagicMock(
+            prompt_token_count=10, candidates_token_count=5,
+        )
+        raw.model_version = "gemini-2.0-flash"
+        mock_client.models.generate_content.return_value = raw
+
+        adapter = GeminiAdapter(api_key="test")
+        req = LLMRequest(
+            model="gemini-2.0-flash",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+        resp = adapter.chat(req)
+        # Integer enum "1" → "stop"
+        assert resp.finish_reason == "stop"
+
+    @patch(f"{MODULE}.genai.Client")
+    def test_finish_reason_enum_int_2_maps_to_max_tokens(
+        self, mock_client_cls,
+    ):
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        raw = MagicMock()
+        raw.text = "ok"
+        candidate = MagicMock(spec=["finish_reason", "content"])
+        fr = MagicMock(spec=[])
+        fr.__class__.__str__ = lambda self: "2"
+        candidate.finish_reason = fr
+        raw.candidates = [candidate]
+        raw.usage_metadata = MagicMock(
+            prompt_token_count=10, candidates_token_count=5,
+        )
+        raw.model_version = "gemini-2.0-flash"
+        mock_client.models.generate_content.return_value = raw
+
+        adapter = GeminiAdapter(api_key="test")
+        req = LLMRequest(
+            model="gemini-2.0-flash",
+            messages=[Message(role="user", content=[TextPart(text="hi")])],
+        )
+        resp = adapter.chat(req)
+        # Integer enum "2" → max_tokens_reached → normalized to "length"
+        assert resp.finish_reason == "length"
