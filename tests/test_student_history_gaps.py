@@ -274,24 +274,35 @@ class TestBaselineDeviationGaps:
         return history
 
     def test_category_flag_when_above_max_seen(self, seeded_history):
-        # Current breakdown is dramatically higher than baseline max
+        # Isolate the category-deviation branch by keeping score=70
+        # (matches baseline avg ~70.2 → std_devs ~0 → no overall trigger).
+        # Then content_accuracy=40 alone exceeds max_seen(26)+5 → fires
+        # ONLY the category branch. Prior score=95 also triggered the
+        # overall-deviation branch, making the `or` assertion vacuous.
         current = {
-            "score": 95,  # well above baseline avg ~70
+            "score": 70,
             "breakdown": {
                 "content_accuracy": 40,  # max_seen was 26 → 40 > 26+5
-                "completeness": 25,      # max_seen was 18 → 25 > 18+5
+                "completeness": 18,      # within baseline — no fire
             },
         }
         result = sh.detect_baseline_deviation("sid-1", current)
-        assert result["flag"] in ("review", "significant_deviation")
         joined = " ".join(result["reasons"])
-        assert "Category deviations" in joined or "above baseline" in joined
+        # Strict assertion: ONLY the category branch should appear.
+        assert "Category deviations" in joined
+        assert "above baseline" not in joined
+        # Exactly 1 deviation, std_deviations ~0 → review (not significant)
+        assert result["flag"] == "review"
 
     def test_new_skills_detected(self, seeded_history):
         # Current submission has 3+ skills NOT in baseline typical_skills
-        # (baseline only has "reading" as typical)
+        # (baseline only has "reading" as typical). Score 72 sits ~1.2
+        # std devs above baseline avg ~70.2 (sample std ~1.5) → stays
+        # below the 2.5 trigger so the overall-deviation branch does
+        # NOT fire, isolating the new-skills branch. Prior score 75
+        # was ~3.2 std devs above and DID accidentally trigger overall.
         current = {
-            "score": 75,  # close to baseline avg, won't trigger overall
+            "score": 72,
             "breakdown": {
                 "content_accuracy": 26, "completeness": 18,
             },
@@ -329,22 +340,29 @@ class TestBaselineDeviationGaps:
         assert len(result["reasons"]) >= 2
 
     def test_review_flag_with_single_reason(self, seeded_history):
-        # Exactly one deviation, std_devs not >3 → review
+        # Hit the "review" branch: len(deviations) == 1 AND
+        # std_deviations <= 3. Score 70 keeps std_deviations ~0 so the
+        # overall-score deviation does NOT fire. content_accuracy=32
+        # exceeds max_seen(26)+5 → triggers exactly ONE category
+        # deviation. Result: 1 deviation, std_devs ~0 → "review".
+        # Prior score=90 had std_devs ~13 which forced the
+        # significant_deviation path via the std_deviations > 3 clause,
+        # making the `in ("review", "significant_deviation")` assertion
+        # vacuous (it could never test the review path).
         current = {
-            "score": 90,  # +20 from recent avg → sudden improvement, only 1 reason
+            "score": 70,
             "breakdown": {
-                "content_accuracy": 25, "completeness": 18,
+                "content_accuracy": 32,  # > max_seen(26)+5 → category fires
+                "completeness": 18,
             },
             "skills_demonstrated": {
-                # No new sophisticated skills
                 "strengths": ["reading"],
             },
         }
         result = sh.detect_baseline_deviation("sid-1", current)
-        # Should be either review OR significant_deviation depending on
-        # std_dev math; reasons should be >=1
-        assert result["flag"] in ("review", "significant_deviation")
-        assert len(result["reasons"]) >= 1
+        # Strict assertion: this MUST hit the review branch.
+        assert result["flag"] == "review"
+        assert len(result["reasons"]) == 1
 
 
 # ──────────────────────────────────────────────────────────────────

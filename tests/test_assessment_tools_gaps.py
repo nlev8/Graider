@@ -29,8 +29,20 @@ MODULE = "backend.services.assistant_tools_assessments"
 
 class TestGetSupabase:
     def test_import_error_returns_none(self):
-        # When backend.supabase_client.get_supabase raises any exception,
-        # _get_supabase returns None
+        # Genuine ImportError from the `from backend.supabase_client
+        # import get_supabase` statement — `sys.modules` is poisoned so
+        # the import resolves to None and Python raises ImportError.
+        from backend.services.assistant_tools_assessments import (
+            _get_supabase,
+        )
+        with patch.dict("sys.modules", {"backend.supabase_client": None}):
+            result = _get_supabase()
+        assert result is None
+
+    def test_runtime_error_during_call_returns_none(self):
+        # The same except Exception: block also catches post-import
+        # call-time errors from get_supabase() — covers the other branch
+        # through the same try block.
         from backend.services.assistant_tools_assessments import (
             _get_supabase,
         )
@@ -101,9 +113,11 @@ class TestQueryAssessmentResultsBranches:
         # All subsequent execute() calls return empty data → no submissions
         empty_result = MagicMock(data=[])
 
-        execute_calls = [first_result] + [empty_result] * 100
-        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.side_effect = execute_calls
-        # Filter chain for stats + page query
+        # Production calls eq.eq.execute exactly once (the initial
+        # published_assessments lookup); subsequent pagination uses the
+        # eq.range and eq.order.range chains mocked below. The 100-element
+        # side_effect array was vacuous (never consumed past element 0).
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = first_result
         mock_sb.table.return_value.select.return_value.eq.return_value.range.return_value.execute.return_value = empty_result
         mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.range.return_value.execute.return_value = empty_result
 
@@ -129,9 +143,7 @@ class TestQueryAssessmentResultsBranches:
             "title": "Q1", "settings": {},
         }])
         empty_result = MagicMock(data=[])
-        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.side_effect = (
-            [first_result] + [empty_result] * 100
-        )
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = first_result
         mock_sb.table.return_value.select.return_value.eq.return_value.range.return_value.execute.return_value = empty_result
         mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.range.return_value.execute.return_value = empty_result
 
@@ -154,9 +166,7 @@ class TestQueryAssessmentResultsBranches:
             "title": "Q1", "settings": {},
         }])
         empty_result = MagicMock(data=[])
-        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.side_effect = (
-            [first_result] + [empty_result] * 100
-        )
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = first_result
         mock_sb.table.return_value.select.return_value.eq.return_value.range.return_value.execute.return_value = empty_result
         mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.range.return_value.execute.return_value = empty_result
 
