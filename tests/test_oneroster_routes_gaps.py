@@ -144,8 +144,21 @@ class TestSyncRosterLockLoadException:
 
         # Sync still succeeded despite storage exception
         assert resp.status_code == 200
-        # Sentry was called for the storage exception
-        mock_sentry.assert_called()
+        # Sentry was called specifically for the storage exception
+        # (Gemini quality-review CRITICAL fold: was loose
+        # assert_called; now verify the captured exception is
+        # exactly the RuntimeError we forced)
+        captured = [
+            c.args[0] for c in mock_sentry.call_args_list
+            if c.args
+        ]
+        assert any(
+            isinstance(e, RuntimeError) and "storage broke" in str(e)
+            for e in captured
+        ), (
+            f"Expected sentry to capture the 'storage broke' "
+            f"RuntimeError; got: {captured}"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -194,8 +207,20 @@ class TestSyncRosterPersistExceptions:
 
         # Sync still succeeds; exception swallowed
         assert resp.status_code == 200
-        # Sentry alerted
-        mock_sentry.assert_called()
+        # Sentry captured exactly the "csv write failed" RuntimeError
+        # (Gemini quality-review CRITICAL fold: was loose
+        # assert_called; tighten to verify the right exception)
+        captured = [
+            c.args[0] for c in mock_sentry.call_args_list
+            if c.args
+        ]
+        assert any(
+            isinstance(e, RuntimeError) and "csv write failed" in str(e)
+            for e in captured
+        ), (
+            f"Expected sentry to capture the 'csv write failed' "
+            f"RuntimeError from persist_roster_as_csv; got: {captured}"
+        )
 
     def test_persist_sections_as_periods_exception_swallowed(
         self, client, auth_headers,
@@ -234,4 +259,18 @@ class TestSyncRosterPersistExceptions:
 
         # Sync still succeeds; exception swallowed
         assert resp.status_code == 200
-        mock_sentry.assert_called()
+        # Sentry captured exactly the "periods write failed" error
+        # (Gemini quality-review CRITICAL fold: was loose
+        # assert_called; tighten to verify the right exception)
+        captured = [
+            c.args[0] for c in mock_sentry.call_args_list
+            if c.args
+        ]
+        assert any(
+            isinstance(e, RuntimeError) and "periods write failed" in str(e)
+            for e in captured
+        ), (
+            f"Expected sentry to capture the 'periods write failed' "
+            f"RuntimeError from persist_sections_as_periods; "
+            f"got: {captured}"
+        )

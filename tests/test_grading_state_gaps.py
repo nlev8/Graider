@@ -73,12 +73,17 @@ class TestSanitizeStudentName:
         assert gs._sanitize_student_name(raw) == "Eaton, Dan"
 
     def test_strips_trailing_punctuation(self):
-        raw = "Smith, Alice 📓 -;,"
-        # Emoji boundary cuts at 📓; trailing punctuation NOT in the name
-        # since the slice happens before — but we verify the rstrip path
-        # via a marker-stripped name that left trailing punctuation
-        raw2 = "Smith, Alice CORNELL NOTES "  # nothing after marker
-        assert gs._sanitize_student_name(raw2) == "Smith, Alice"
+        # Gemini quality-review (CRITICAL fold): pre-fix used a string
+        # that didn't actually leave trailing punctuation after the
+        # marker was stripped (the marker slice ate everything), so
+        # the rstrip line was never exercised. Use a string where the
+        # marker-strip slice leaves a trailing comma that rstrip
+        # then removes.
+        raw = "Smith, Alice, CORNELL NOTES Chapter 5"
+        # After marker strip ("CORNELL NOTES Chapter 5" sliced off):
+        #   "Smith, Alice," — trailing comma
+        # After rstrip(' ,;:-–—'): "Smith, Alice"
+        assert gs._sanitize_student_name(raw) == "Smith, Alice"
 
     def test_initial_period_preserved(self):
         # Periods on initials like "M." should be preserved (rstrip
@@ -121,10 +126,10 @@ class TestLoadSavedResults:
         loaded = gs.load_saved_results(teacher_id="teach-1")
         assert loaded[0]["student_name"] == "Berriozabal, Daniel"
 
-    def test_storage_returns_empty_falls_back_to_file(
+    def test_storage_returns_none_falls_back_to_file(
         self, tmp_path, monkeypatch,
     ):
-        # storage returns empty list (falsy) → file fallback
+        # storage returns None (e.g., unavailable) → file fallback
         monkeypatch.setattr(gs, "storage_load",
                             MagicMock(return_value=None))
         monkeypatch.setattr(gs, "storage_save", MagicMock())
@@ -140,6 +145,30 @@ class TestLoadSavedResults:
         # Sanitization happens on file path too
         assert loaded[0]["student_name"] == "Alice"
         assert loaded[0]["graded_at"] is None  # auto-filled
+
+    def test_storage_returns_empty_list_does_NOT_fall_back(
+        self, tmp_path, monkeypatch,
+    ):
+        # Gemini quality-review (MAJOR fold): empty list from
+        # storage is a VALID state (teacher cleared their results).
+        # It must NOT silently fall through to the local file,
+        # which would resurrect stale data.
+        monkeypatch.setattr(gs, "storage_load",
+                            MagicMock(return_value=[]))
+        monkeypatch.setattr(gs, "storage_save", MagicMock())
+
+        # Pre-populate file with stale data
+        results_file = tmp_path / "results.json"
+        results_file.write_text(json.dumps([
+            {"student_name": "StaleAlice", "score": 100,
+             "graded_at": "2020-01-01"},
+        ]))
+        monkeypatch.setattr(gs, "RESULTS_FILE", str(results_file))
+
+        loaded = gs.load_saved_results(teacher_id="teach-1")
+        # Empty list from storage is returned as-is; stale file
+        # contents are NOT loaded.
+        assert loaded == []
 
     def test_storage_unavailable_falls_back_to_file(
         self, tmp_path, monkeypatch,
@@ -237,7 +266,8 @@ class TestUpdateAndResetState:
         gs._grading_states.clear()
         gs._grading_locks.clear()
 
-    def test_update_state_thread_safe(self):
+    def test_update_state_partial_update_via_kwargs(self):
+        # Verifies kwargs flow through to dict.update()
         with patch.object(gs, "load_saved_results", return_value=[]):
             gs._update_state(
                 teacher_id="teach-1",
@@ -248,6 +278,47 @@ class TestUpdateAndResetState:
         assert state["is_running"] is True
         assert state["progress"] == 42
         assert state["current_file"] == "doc.pdf"
+
+    def test_update_state_thread_safe_under_concurrent_writes(self):
+        # Gemini quality-review (MAJOR fold): the pre-fix test ran
+        # sequentially and wouldn't catch a regression where the
+        # `with _get_lock(teacher_id):` was removed. Spawn multiple
+        # threads, each incrementing the progress field, and verify
+        # the total matches expected (no lost updates).
+        import threading
+
+        with patch.object(gs, "load_saved_results", return_value=[]):
+            gs._get_state("teach-1")["progress"] = 0
+
+        # 50 threads × 100 increments = 5000 expected
+        N_THREADS = 50
+        INCREMENTS = 100
+        barrier = threading.Barrier(N_THREADS)
+
+        def incrementer():
+            barrier.wait()  # Maximize contention
+            for _ in range(INCREMENTS):
+                # Acquire lock, read-modify-write
+                with gs._get_lock("teach-1"):
+                    s = gs._get_state("teach-1")
+                    s["progress"] = s["progress"] + 1
+
+        threads = [
+            threading.Thread(target=incrementer)
+            for _ in range(N_THREADS)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10.0)
+
+        final = gs._get_state("teach-1")["progress"]
+        # If the lock were absent, races would cause lost updates and
+        # final would be < N_THREADS * INCREMENTS.
+        assert final == N_THREADS * INCREMENTS, (
+            f"Lost updates under concurrent writes: "
+            f"got {final}, expected {N_THREADS * INCREMENTS}"
+        )
 
     def test_reset_state_preserves_results_by_default(self):
         with patch.object(gs, "load_saved_results", return_value=[]):

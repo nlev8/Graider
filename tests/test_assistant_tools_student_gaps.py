@@ -717,6 +717,62 @@ class TestDeleteStudentSupabase:
         # Only Alice matched (lowercase substring "alice")
         assert "Deleted from Supabase" in result
         assert "Alice Smith" in result
+
+        # Gemini quality-review (CRITICAL fold): verify the cascade
+        # actually fires across all 3 tables. Pre-fix the test only
+        # checked the message string — production could silently
+        # delete from the wrong tables (or skip the cascade) and
+        # this test would still pass.
+        table_calls = [c.args[0] for c in mock_sb.table.call_args_list]
+        assert "behavior_events" in table_calls
+        assert "class_students" in table_calls
+        assert "students" in table_calls
+        # Verify the deletes used the matched student_id (uuid-1),
+        # not the unmatched Bob (uuid-2)
+        delete_eq_calls = (
+            mock_sb.table.return_value.delete.return_value
+            .eq.call_args_list
+        )
+        eq_args = [c.args for c in delete_eq_calls]
+        assert ("student_id", "uuid-1") in eq_args, (
+            f"Expected delete().eq('student_id', 'uuid-1') "
+            f"for Alice; got: {eq_args}"
+        )
+        # Bob (unmatched) must NOT be deleted
+        assert not any(
+            args == ("student_id", "uuid-2") for args in eq_args
+        ), "Unmatched student (Bob) was deleted — fuzzy match broken"
+
+    def test_no_match_no_delete_cascade(self):
+        # Symmetric pin: if NO students match, no delete chains
+        # should fire (only the SELECT for the lookup).
+        from backend.services.assistant_tools_student import (
+            _delete_student_supabase,
+        )
+        from flask import Flask
+        app = Flask(__name__)
+
+        mock_sb = MagicMock()
+        execute_result = MagicMock()
+        execute_result.data = [
+            {"id": "uuid-1", "first_name": "Alice", "last_name": "Smith"},
+        ]
+        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            execute_result
+        )
+
+        with app.test_request_context():
+            from flask import g
+            g.user_id = "teach-1"
+            with patch("backend.supabase_client.get_supabase",
+                       return_value=mock_sb), \
+                 patch(f"{MODULE}._fuzzy_name_match", return_value=False):
+                result = _delete_student_supabase("NoSuchStudent")
+
+        assert result == ""
+        # delete().eq() should NEVER have been called
+        delete_chain = mock_sb.table.return_value.delete
+        assert delete_chain.call_count == 0
         assert "Bob Jones" not in result
 
     def test_supabase_exception_swallowed(self):
