@@ -22,8 +22,6 @@ from __future__ import annotations
 
 import base64
 import queue
-import threading
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -105,15 +103,32 @@ class TestWorkerLoopDirect:
         assert s._results[0] == ("flush", None)
 
     def test_queue_timeout_loops_until_closed_or_poison(self):
-        # Don't queue anything; flip _closed flag to True from outside
-        # the loop. The loop's `queue.get(timeout=1.0)` raises Empty,
-        # then the while-condition exits because _closed is True.
+        # Gemini review (MAJOR fold): the pre-fix version set
+        # _closed=True BEFORE calling _worker_loop(), which bypassed
+        # the entire `while not self._closed:` body — the
+        # `queue.Empty` exception branch was never exercised.
+        #
+        # Fix: actually drive the queue to raise queue.Empty, and
+        # only flip _closed mid-execution via the get's side_effect.
         s = _make_stream()
-        s._closed = True
-        # Should return immediately via while-loop check
-        s._worker_loop()
-        # No results expected (no work was done)
+
+        empty_calls = {"n": 0}
+
+        def fake_get(timeout=None):
+            empty_calls["n"] += 1
+            # First Empty raise; on the second pass flip closed so
+            # the loop exits.
+            if empty_calls["n"] >= 1:
+                s._closed = True
+            raise queue.Empty()
+
+        with patch.object(s._job_queue, "get", side_effect=fake_get):
+            s._worker_loop()
+
+        # No results (queue.Empty was the only thing seen)
         assert s._results == {}
+        # The queue.Empty branch was actually exercised
+        assert empty_calls["n"] >= 1
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -122,25 +137,28 @@ class TestWorkerLoopDirect:
 
 
 class TestSequencerLoopDirect:
+    """Gemini review (MAJOR fold): rewritten to drive _sequencer_loop
+    SYNCHRONOUSLY in the main thread by patching _results_ready.wait
+    with a side_effect that flips _closed. Removes thread races and
+    time.sleep(0.1) which were flaky on slow CI.
+    """
+
     def test_emits_audio_in_strict_seq_order(self):
         s = _make_stream()
         # Pre-load results out of order
         s._results[1] = ("audio", "second-audio")
         s._results[0] = ("audio", "first-audio")
         s._results[2] = ("audio", "third-audio")
-        s._results_ready.set()
 
-        # Run sequencer in a brief window then close to break the loop
-        def _run_sequencer_briefly():
+        # Patch _results_ready.wait so the first call returns
+        # immediately (results already queued) and flips _closed so
+        # the loop exits after draining the buffer.
+        def mock_wait(timeout=None):
+            s._closed = True
+            return True
+
+        with patch.object(s._results_ready, "wait", side_effect=mock_wait):
             s._sequencer_loop()
-
-        t = threading.Thread(target=_run_sequencer_briefly, daemon=True)
-        t.start()
-        # Give the sequencer a moment to drain
-        time.sleep(0.1)
-        s._closed = True
-        s._results_ready.set()  # Wake from timeout
-        t.join(timeout=2.0)
 
         # Drain audio_queue
         emitted = []
@@ -157,30 +175,28 @@ class TestSequencerLoopDirect:
     def test_flush_result_sets_flush_done(self):
         s = _make_stream()
         s._results[0] = ("flush", None)
-        s._results_ready.set()
 
-        t = threading.Thread(target=s._sequencer_loop, daemon=True)
-        t.start()
-        time.sleep(0.1)
-        s._closed = True
-        s._results_ready.set()
-        t.join(timeout=2.0)
+        def mock_wait(timeout=None):
+            s._closed = True
+            return True
 
-        # Flush event was set
+        with patch.object(s._results_ready, "wait", side_effect=mock_wait):
+            s._sequencer_loop()
+
+        # Flush event was set during drain
         assert s._flush_done.is_set()
 
     def test_skip_result_advances_counter(self):
         s = _make_stream()
         s._results[0] = ("skip", None)
         s._results[1] = ("audio", "real-audio")
-        s._results_ready.set()
 
-        t = threading.Thread(target=s._sequencer_loop, daemon=True)
-        t.start()
-        time.sleep(0.1)
-        s._closed = True
-        s._results_ready.set()
-        t.join(timeout=2.0)
+        def mock_wait(timeout=None):
+            s._closed = True
+            return True
+
+        with patch.object(s._results_ready, "wait", side_effect=mock_wait):
+            s._sequencer_loop()
 
         # audio_queue should have only the second result
         emitted = []
@@ -206,17 +222,31 @@ class TestConnectAndLifecycle:
         # 2 workers + 1 sequencer = 3 alive threads
         assert len(s._workers) == 2
         assert s._sequencer_thread is not None
-        # Clean up
+        # Clean up — also join sequencer (Gemini MINOR fold)
         s.close()
         for w in s._workers:
             w.join(timeout=2.0)
+        if s._sequencer_thread:
+            s._sequencer_thread.join(timeout=2.0)
 
     def test_close_idempotent_does_not_double_send_pills(self):
         s = _make_stream()
         s.connect()
         s.close()
-        # Second close should early-return
+        # Second close should early-return — no additional poison pills
         s.close()
+        # Gemini MAJOR fold: assert that the queue is empty after both
+        # workers consumed their single poison pill. If close() were
+        # bugged and pushed pills twice, 2 pills would remain in the
+        # queue (workers consume 1 each then exit).
+        for w in s._workers:
+            w.join(timeout=2.0)
+        if s._sequencer_thread:
+            s._sequencer_thread.join(timeout=2.0)
+        assert s._job_queue.empty(), (
+            f"close() pushed extra poison pills; "
+            f"queue should be drained after worker join"
+        )
         # Drain any sentinels that leaked through
         for w in s._workers:
             w.join(timeout=2.0)

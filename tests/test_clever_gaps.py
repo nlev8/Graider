@@ -72,30 +72,47 @@ class TestGetCleverUserFailure:
 
 class TestFetchRosterErrors:
     def test_sections_non_200_breaks_loop(self):
-        # Build a sync_roster scenario where teachers + students
-        # succeed, but sections returns non-200 → loop breaks, no items
+        # Gemini review (CRITICAL): pre-fix this test would pass even
+        # if production deleted the `if status != 200: break` guard
+        # (the 503 response returned valid `{}` JSON and
+        # _next_page_url was forced to None, so loop would exit
+        # cleanly anyway). Production URLs use `?role=teacher`
+        # (singular), so `"teachers" in url` was dead-code too.
+        #
+        # Fix: match real URL params (role=teacher/student) AND
+        # assert that .json() is NEVER called on the 503 response
+        # (would fail if the break is removed because production
+        # would then evaluate body = resp.json()).
         from backend.clever import sync_roster
+
+        captured_resps = []  # (url, response) so we can verify .json() calls
 
         async def fake_get(client, url, headers, label=""):
             resp = MagicMock()
-            if "teachers" in url or "students" in url:
+            if "role=teacher" in url or "role=student" in url:
                 resp.status_code = 200
                 resp.json.return_value = {"data": []}
-                return resp
-            if "sections" in url or "users?role=contact" in url:
-                resp.status_code = 503  # non-200 → break
-                resp.json.return_value = {}
-                return resp
-            resp.status_code = 200
-            resp.json.return_value = {"data": []}
+            elif "sections" in url or "users?role=contact" in url:
+                resp.status_code = 503  # non-200 → break (NO json read)
+            else:
+                resp.status_code = 200
+                resp.json.return_value = {"data": []}
+            captured_resps.append((url, resp))
             return resp
 
         with patch(f"{MODULE}._clever_get_with_retry",
-                   side_effect=fake_get), \
-             patch(f"{MODULE}._next_page_url", return_value=None):
+                   side_effect=fake_get):
             result = asyncio.run(sync_roster("token"))
-        # Sections list empty due to non-200 break
+        # Sections empty due to non-200 break
         assert result["sections"] == []
+        # The 503 sections response's .json() was NEVER read — this
+        # is what proves the break guard is intact. If the guard
+        # were deleted, production would call resp.json() to parse
+        # the body before continuing the loop.
+        section_resps = [r for u, r in captured_resps if "sections" in u]
+        assert len(section_resps) >= 1
+        for resp in section_resps:
+            resp.json.assert_not_called()
 
     def test_sections_httperror_swallowed(self):
         from backend.clever import sync_roster
@@ -150,9 +167,14 @@ class TestPersistRosterCorruptJson:
         # Should not raise — corrupt archive triggers fallback to {}
         persist_roster_as_csv(students, "test-teacher")
 
-        # Verify CSV was created at expected path
+        # Verify CSV was created with the student's data — Gemini
+        # review MINOR fold: previous version only checked existence,
+        # which would pass even if fallback regression wrote empty file.
         csv_path = tmp_path / f"clever_roster_{safe_id}.csv"
         assert csv_path.exists()
+        csv_content = csv_path.read_text()
+        assert "s1" in csv_content
+        assert "Alice" in csv_content
 
     def test_corrupt_overrides_falls_back_to_empty(
         self, tmp_path, monkeypatch,
@@ -177,8 +199,11 @@ class TestPersistRosterCorruptJson:
         ]
         persist_roster_as_csv(students, "test-teacher")
 
-        # CSV created
+        # CSV created with the student's data (Gemini MINOR fold)
         csv_path = tmp_path / f"clever_roster_{safe_id}.csv"
+        csv_content = csv_path.read_text()
+        assert "s1" in csv_content
+        assert "Bob" in csv_content
         assert csv_path.exists()
 
     def test_no_archive_or_overrides_files_works(
