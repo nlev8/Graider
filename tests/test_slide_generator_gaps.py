@@ -140,9 +140,16 @@ class TestGenerateSlideContentBranches:
         assert result["title"] == "Test"
 
     def test_json_prefix_stripped(self):
-        # Response wrapped in ```json\n...\n```
+        # Gemini quality-review MAJOR fold: pre-fix wrapped in
+        # ```json\n...\n``` would be intercepted by the
+        # `startswith("```")` branch FIRST (which splits on \n,
+        # dropping the "json" line entirely). The
+        # `startswith("json")` branch never ran.
+        #
+        # Bare `json\n{...}` (no markdown fences) exercises the
+        # targeted prefix-strip branch directly.
         from backend.services.slide_generator import generate_slide_content
-        wrapped = "```json\n" + json.dumps(_VALID_RESPONSE) + "\n```"
+        wrapped = "json\n" + json.dumps(_VALID_RESPONSE)
         mock_adapter = _make_mock_adapter(wrapped)
 
         with patch("backend.services.llm_adapter.GeminiAdapter",

@@ -601,11 +601,14 @@ def sync_all_to_cloud(teacher_id):
                 sentry_sdk.capture_exception(e)
 
     # Sync resources
+    # Gemini quality-review 2026-05-10: was `if data:` which dropped
+    # valid empty `{}` / `[]` from sync. Standardize on `is not None`
+    # to match the other sync loops above.
     resource_keys = _file_list_keys('resource:')
     synced_resources = 0
     for key in resource_keys:
         data = _file_load(key)
-        if data:
+        if data is not None:
             _sb_save(key, data, teacher_id)
             synced_resources += 1
     summary['resources'] = f"{synced_resources} synced"

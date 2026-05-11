@@ -139,6 +139,11 @@ def grade_written_questions(questions, answers, ai_notes, grade_level, subject,
 
     Returns list of grade results from grade_per_question.
     """
+    # Defensive: ai_model can arrive as None/"" from teacher_config
+    # (e.g., db row with NULL ai_model field). Without this guard,
+    # `.startswith()` crashes with AttributeError. Gemini quality-
+    # review 2026-05-10 caught this regression risk.
+    ai_model = ai_model or "gpt-4o-mini"
     if ai_model.startswith("claude"):
         provider = "anthropic"
     elif ai_model.startswith("gemini"):

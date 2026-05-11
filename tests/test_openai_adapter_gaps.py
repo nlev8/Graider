@@ -112,7 +112,10 @@ class TestMessageToOpenAI:
         assert loaded == {"data": [1, 2]}
 
     def test_tool_role_no_result_part_fallback(self):
-        # Tool role with no ToolResultPart → fallback empty content
+        # Tool role with no ToolResultPart → fallback stringifies
+        # the actual TextPart content (Gemini quality-review fold:
+        # production was hardcoding "" but the docstring promised
+        # "stringify whatever's there" — now it actually does).
         msg = Message(
             role="tool",
             content=[TextPart(text="not a result")],
@@ -120,7 +123,7 @@ class TestMessageToOpenAI:
         )
         result = _message_to_openai(msg)
         assert result["role"] == "tool"
-        assert result["content"] == ""
+        assert result["content"] == "not a result"
         assert result["tool_call_id"] == "t1"
 
     def test_assistant_with_tool_calls_and_text(self):
@@ -175,6 +178,8 @@ class TestMessageToOpenAI:
 class TestExpandMessagesForOpenAI:
     def test_multi_tool_result_parts_split_into_separate_messages(self):
         # One Message.content with 2 ToolResultPart → 2 tool-role messages
+        # in the SAME order (LLMs expect tool responses to match call order).
+        # Gemini quality-review NIT fold: was set comparison, now ordered list.
         msg = Message(
             role="tool",
             content=[
@@ -184,8 +189,8 @@ class TestExpandMessagesForOpenAI:
         )
         result = _expand_messages_for_openai([msg])
         assert len(result) == 2
-        ids = {m["tool_call_id"] for m in result}
-        assert ids == {"t1", "t2"}
+        ids = [m["tool_call_id"] for m in result]
+        assert ids == ["t1", "t2"]
 
     def test_single_tool_result_part_passes_through(self):
         msg = Message(
@@ -216,9 +221,11 @@ class TestExpandMessagesForOpenAI:
             ],
         )
         result = _expand_messages_for_openai([msg])
-        for m in result:
-            # JSON-serialized
-            json.loads(m["content"])
+        # Gemini quality-review MINOR fold: was only verifying that
+        # `json.loads()` didn't raise (would pass even if production
+        # serialized empty dicts). Now assert equality on the round-trip.
+        assert json.loads(result[0]["content"]) == {"a": 1}
+        assert json.loads(result[1]["content"]) == {"b": 2}
 
 
 # ──────────────────────────────────────────────────────────────────
