@@ -223,14 +223,16 @@ class TestGetPacingStatusBranches:
         assert "error" in result
 
     def test_ahead_when_pct_standards_above_pct_time(self):
-        # 9 of 10 standards covered, but only 5 of 100 calendar days
-        # done → pct_standards (90%) >> pct_time (5%) → ahead
+        # 9 of 10 standards covered, but only 5 of 34 calendar days
+        # done → pct_standards (90%) >> pct_time (14.7%) → ahead.
+        # datetime.now() is frozen so future dates stay future regardless
+        # of when the test runs (no timebomb).
+        from datetime import datetime as _dt
         from backend.services.assistant_tools_planning import (
             get_pacing_status,
         )
 
         standards = [{"code": f"S.{i}"} for i in range(10)]
-        # 5 past lessons, each covering distinct standards
         past = [
             {"date": "2026-01-01", "lesson_title": "L1"},
             {"date": "2026-01-02", "lesson_title": "L2"},
@@ -238,13 +240,11 @@ class TestGetPacingStatusBranches:
             {"date": "2026-01-04", "lesson_title": "L4"},
             {"date": "2026-01-05", "lesson_title": "L5"},
         ]
-        # 95 future lessons
         future = [
-            {"date": f"2030-01-{i:02d}", "lesson_title": f"F{i}"}
+            {"date": f"2026-06-{i:02d}", "lesson_title": f"F{i}"}
             for i in range(1, 30)
         ]
 
-        # Each past lesson covers ~2 standards
         def mock_for_lesson(lesson):
             idx = int(lesson["lesson_title"][1:])
             return {"standards": [f"S.{idx*2-2}", f"S.{idx*2-1}"]}
@@ -255,23 +255,26 @@ class TestGetPacingStatusBranches:
              patch(f"{MODULE}._load_settings",
                    return_value={"config": {}}), \
              patch(f"{MODULE}._get_standards_for_lesson",
-                   side_effect=mock_for_lesson):
+                   side_effect=mock_for_lesson), \
+             patch(f"{MODULE}.datetime") as mock_dt:
+            mock_dt.now.return_value = _dt(2026, 3, 1)
             result = get_pacing_status(teacher_id="t")
         assert result["status"] == "ahead"
 
     def test_behind_when_pct_standards_below_pct_time(self):
+        # 10 standards, past lessons cover only 1 — and we're 90%
+        # through the calendar → behind.
+        from datetime import datetime as _dt
         from backend.services.assistant_tools_planning import (
             get_pacing_status,
         )
 
-        # 10 standards, but past lessons cover only 1 — and we're 90%
-        # through the calendar → behind
         standards = [{"code": f"S.{i}"} for i in range(10)]
         past = [
             {"date": "2026-01-01", "lesson_title": "L1"},
         ] * 9
         future = [
-            {"date": "2030-01-01", "lesson_title": "F1"},
+            {"date": "2026-06-01", "lesson_title": "F1"},
         ]
 
         with patch(f"{MODULE}._load_standards", return_value=standards), \
@@ -280,7 +283,9 @@ class TestGetPacingStatusBranches:
              patch(f"{MODULE}._load_settings",
                    return_value={"config": {}}), \
              patch(f"{MODULE}._get_standards_for_lesson",
-                   return_value={"standards": ["S.0"]}):
+                   return_value={"standards": ["S.0"]}), \
+             patch(f"{MODULE}.datetime") as mock_dt:
+            mock_dt.now.return_value = _dt(2026, 3, 1)
             result = get_pacing_status(teacher_id="t")
         assert result["status"] == "behind"
 

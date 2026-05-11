@@ -121,8 +121,22 @@ class TestGenerateKahootQuizErrors:
             generate_kahoot_quiz,
         )
 
-        # Force ImportError when openpyxl is loaded
-        with patch.dict("sys.modules", {"openpyxl": None}):
+        # Mock _build_questions_from_source to return a valid MC
+        # question so production doesn't short-circuit on
+        # "Not enough multiple-choice questions" (line 327) before
+        # reaching the openpyxl import block (line 330-332). Without
+        # this mock, the test depends on real "constitution" fixture
+        # data and asserts the wrong error path.
+        mock_mc_question = {
+            "question": "Which amendment guarantees free speech?",
+            "correct_answer": "First",
+            "wrong_answers": ["Second", "Third", "Fourth"],
+            "q_type": "mc",
+        }
+        with patch(
+            f"{MODULE}._build_questions_from_source",
+            return_value=[mock_mc_question],
+        ), patch.dict("sys.modules", {"openpyxl": None}):
             result = generate_kahoot_quiz(topic="constitution")
         assert "error" in result
         assert "openpyxl" in result["error"]
