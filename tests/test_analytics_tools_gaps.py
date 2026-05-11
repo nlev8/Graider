@@ -57,17 +57,11 @@ class TestAssignmentStats:
         from backend.services.assistant_tools_analytics import (
             _assignment_stats,
         )
-        # Empty list → no scores → None
+        # Empty list → no scores → None (line 162 early return).
+        # The "rows without scores" variant is not a real branch:
+        # _safe_int_score returns 0 for missing/invalid, so
+        # `scores = [0, 0, ...]` is truthy and stats are returned.
         assert _assignment_stats([]) is None
-
-    def test_rows_without_scores_returns_none(self):
-        from backend.services.assistant_tools_analytics import (
-            _assignment_stats,
-        )
-        # _safe_int_score returns 0 for missing/invalid, but we still
-        # produce stats in that case. The early return is for genuinely
-        # empty input — keep test focused on that.
-        # (rows with score=0 still produce stats)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -171,34 +165,47 @@ class TestFlagAtRiskStudents:
         assert "Alice" in names
 
     def test_25_to_50_pct_missing_triggers_smaller_flag(self):
-        # 4 assignments, student has 2 → 50% missing. Wait actually
-        # math: 50.0 is "50% missing", code does ">50" not ">=", so 50
-        # exact misses — need 51 or more. Let's use 4 and 1 done = 75%
+        """Verify the `elif missing_pct > 25` branch (line 374) adds
+        +10 risk in isolation. Alice has avg=86.7 (>=75 → no Signal 1),
+        stable trend (no Signal 2), 30% missing (Signal 3 = +10), and
+        no rubric categories (no Signal 4). So risk_score == 10 EXACTLY
+        proves only the >25-missing branch fired."""
         from backend.services.assistant_tools_analytics import (
             flag_at_risk_students,
         )
-        rows = [
-            {"student_name": "Bob", "score": 80, "assignment": "A1",
-             "date": "2026-01-01"},
-            {"student_name": "Bob", "score": 80, "assignment": "A2",
-             "date": "2026-01-02"},
-            {"student_name": "Bob", "score": 80, "assignment": "A3",
-             "date": "2026-01-03"},
-            {"student_name": "Bob", "score": 80, "assignment": "A4",
-             "date": "2026-01-04"},
-            # Alice 3 of 4 = 25% missing → no >25% boost (=25 doesn't trip)
-            # But the score average should still drive things
-            {"student_name": "Alice", "score": 65,
-             "assignment": "A1", "date": "2026-01-01"},
-            {"student_name": "Alice", "score": 65,
-             "assignment": "A2", "date": "2026-01-02"},
-            {"student_name": "Alice", "score": 65,
-             "assignment": "A3", "date": "2026-01-03"},
-        ]
+        rows = []
+        # 10 unique assignments class-wide via Bob (filler)
+        for i in range(1, 11):
+            rows.append({"student_name": "Bob", "score": 85,
+                         "assignment": f"A{i}",
+                         "date": f"2026-01-{i:02d}"})
+        # Alice has 7 of 10 → missing 3 → missing_pct = 30%
+        # Scores [85,86,87,88,87,86,85]: avg=86.3 (no Signal 1),
+        # first_half_avg=86.0, second_half_avg=86.5, diff=0.5 → stable
+        # (no Signal 2), no rubric cats (no Signal 4). Only Signal 3 fires.
+        for i, score in enumerate([85, 86, 87, 88, 87, 86, 85], start=1):
+            rows.append({"student_name": "Alice", "score": score,
+                         "assignment": f"A{i}",
+                         "date": f"2026-01-{i:02d}"})
+
         with patch(f"{MODULE}._load_master_csv", return_value=rows):
             result = flag_at_risk_students(threshold=10, teacher_id="t")
-        names = [s["student"] for s in result["students"]]
-        assert "Alice" in names
+
+        alice = next(
+            (s for s in result["students"] if s["student"] == "Alice"),
+            None,
+        )
+        assert alice is not None, "Alice should be flagged"
+        # risk_score == 10 EXACTLY proves only the >25-missing branch
+        # contributed — any other signal would push it higher.
+        assert alice["risk_score"] == 10, (
+            f"Expected risk_score=10 (only >25-missing branch), "
+            f"got {alice['risk_score']} with flags={alice.get('flags')}"
+        )
+        # Production builds risk_flags from missing>0 (line 397-398)
+        assert any("missing" in f for f in alice["flags"]), (
+            f"Expected 'missing' in flags, got {alice['flags']}"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────

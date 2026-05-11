@@ -75,15 +75,13 @@ class TestSendEmailCCExceptionSwallow:
             "body": "Test body",
         }
 
-        # The function may raise downstream when subject/body cannot
-        # be filled — we only care that the CC except branch is hit.
-        try:
-            send_email(page, eml, 0, 1)
-        except Exception:
-            pass
+        send_email(page, eml, 0, 1)
 
-        # Exception was actually raised + caught
-        expand_btn_mock.is_visible.assert_called()
+        # Proves the production try/except actually swallowed the
+        # is_visible exception: if it had propagated, execution would
+        # never reach the CC field click on the next line.
+        expand_btn_mock.is_visible.assert_called_once()
+        cc_field_mock.last.click.assert_called_once()
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -93,11 +91,10 @@ class TestSendEmailCCExceptionSwallow:
 
 class TestNavigateToOutlookPost2FA:
     def test_post_2fa_office365_jumps_to_outlook(self):
-        """Lines 130-141: when 2FA completes and the URL is on Office
+        """Lines 137-141: when 2FA completes and the URL is on Office
         365 (not Outlook), the function navigates directly to outlook.
         Tests the post-2FA office365.com → outlook.office365.com jump."""
         from backend.services.outlook_sender import navigate_to_outlook
-        import backend.services.outlook_sender as mod
 
         district = {
             "name": "Test District",
@@ -110,60 +107,44 @@ class TestNavigateToOutlookPost2FA:
             },
         }
 
-        # Build a page mock whose .url progresses through the 2FA flow
-        # to land on office.com (post-2FA, not yet Outlook). The
-        # function then calls page.goto("https://outlook.office365.com")
-        # and finally lands there.
-        urls = iter([
-            # navigate flows...
-            "https://vportal.example/",                # initial
-            "https://vportal.example/post-login",      # after VPortal login
-            "https://login.microsoftonline.com/auth",  # MSOL auth start
-            "https://login.microsoft.com/2fa",         # 2FA prompt
-            "https://www.office.com/",                 # post-2FA on Office365
-            "https://www.office.com/",                 # current_url check
-            "https://outlook.office365.com/mail/",     # after goto()
-            "https://outlook.office365.com/mail/",     # after wait_for_url
-        ])
+        # Stateful page.url: starts on office.com (which makes the
+        # ADFS, ClassLink, and microsoftonline branches all skip), so
+        # the only matching branch is the post-2FA Office365 → Outlook
+        # jump at lines 137-141. After production calls page.goto on
+        # the outlook URL, we advance state so the subsequent
+        # wait_for_url and "outlook in url" assertion both succeed.
+        state = {"url": "https://www.office.com/"}
+
+        def goto_side(url, **_kwargs):
+            if "outlook.office365.com" in url:
+                state["url"] = url
+            return None
 
         page = MagicMock()
-        # Make .url access pull from the iterator
-        type(page).url = property(
-            lambda self: next(urls, "https://outlook.office365.com/mail/")
-        )
-
-        # wait_for_url succeeds (no exception → 2FA complete branch)
+        type(page).url = property(lambda self: state["url"])
+        page.goto = MagicMock(side_effect=goto_side)
         page.wait_for_url = MagicMock()
         page.wait_for_load_state = MagicMock()
         page.wait_for_timeout = MagicMock()
-        page.goto = MagicMock()
         page.fill = MagicMock()
         page.click = MagicMock()
-        page.locator.return_value.is_visible.return_value = True
-        page.locator.return_value.click = MagicMock()
         page.get_by_role.return_value.wait_for = MagicMock()
-        # is_visible to throw to short-circuit ADFS / ClassLink
         page.get_by_role.return_value.is_visible.return_value = False
+        page.locator.return_value.is_visible.return_value = False
+        page.locator.return_value.click = MagicMock()
 
         context = MagicMock()
 
-        # The full SSO flow has many internal branches we won't fully
-        # simulate. Wrap the call in try/except — the goal is to
-        # exercise the post-2FA Office365 → Outlook jump branch.
-        try:
-            navigate_to_outlook(page, context, district, "u@x", "pw")
-        except Exception:
-            pass
+        navigate_to_outlook(page, context, district, "u@x", "pw")
 
-        # The post-2FA branch calls page.goto("https://outlook.office365.com/mail/", ...)
-        goto_calls = [
-            c for c in page.goto.call_args_list
-            if c.args and "outlook.office365.com/mail" in c.args[0]
-        ]
-        # If the branch was hit, we should have at least one such call.
-        # If not, the test still passes (other branches may run). The
-        # assertion is informational.
-        assert isinstance(goto_calls, list)
+        # The post-2FA branch MUST have fired — production code calls
+        # page.goto("https://outlook.office365.com/mail/", ...) when
+        # current_url contains "office.com" and not "outlook".
+        page.goto.assert_any_call(
+            "https://outlook.office365.com/mail/",
+            wait_until="domcontentloaded",
+            timeout=30000,
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
