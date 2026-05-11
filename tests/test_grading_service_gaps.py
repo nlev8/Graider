@@ -293,6 +293,11 @@ class TestGradeStudentSubmissionAIGrading:
         assert result["questions"][0]["points_earned"] == 5
 
     def test_ai_grading_exception_falls_back_gracefully(self):
+        # Gemini quality-review (MAJOR fold): pre-fix raised
+        # RuntimeError on OpenAIAdapter() constructor — that's
+        # not how production fails. In real life adapter
+        # instantiation succeeds and the exception fires during
+        # adapter.chat(). Move the side_effect onto .chat().
         from backend.services.grading_service import grade_student_submission
 
         assessment = {
@@ -305,9 +310,10 @@ class TestGradeStudentSubmissionAIGrading:
                 ]},
             ],
         }
-        # Force AI grading to raise — falls back to "Answer recorded..."
+        mock_adapter = MagicMock()
+        mock_adapter.chat.side_effect = RuntimeError("OpenAI down")
         with patch("backend.services.llm_adapter.OpenAIAdapter",
-                   side_effect=RuntimeError("OpenAI down")):
+                   return_value=mock_adapter):
             result = grade_student_submission(
                 assessment, {"0-0": "answer"},
             )
@@ -352,7 +358,19 @@ class TestGradeInstantOnly:
                 ]},
             ],
         }
-        result = grade_instant_only(assessment, {"0-0": "A"})
+        # Gemini quality-review (CRITICAL fold): provide actual
+        # answers for written questions so the test exercises the
+        # q_type-dispatch branch directly. Pre-fix passed only
+        # "0-0":"A"; written questions then hit pending_review via
+        # the blank-answer path, masking any regression that
+        # reordered the branches.
+        result = grade_instant_only(assessment, {
+            "0-0": "A",
+            "0-1": "This is my answer",
+            "0-2": "Extended response answer here",
+            "0-3": "Essay content",
+            "0-4": "Written response",
+        })
 
         # All 4 written questions are pending_review
         pending = [q for q in result["questions"]

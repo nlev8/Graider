@@ -77,7 +77,10 @@ class TestScanSubmissionFolder:
         folder.mkdir()
         (folder / "Alice_Smith_Quiz One.docx").touch()
         (folder / "_staging_manifest.json").write_text("{}")  # Skipped
-        (folder / "ignore.txt").touch()  # Skipped (not in supported set)
+        # Gemini quality-review (MAJOR fold): .txt IS in the
+        # production supported set; use .xlsx for an actual
+        # unsupported-extension test.
+        (folder / "ignore.xlsx").touch()  # Skipped (not in supported set)
         (folder / "Quiz_Bob_Notes.docx").touch()  # parts[1]="Bob" but order is fname_lname so "Quiz" "Bob" → fail to match roster
 
         from backend.staging import MANIFEST_NAME
@@ -420,13 +423,20 @@ class TestScanSubmissionsFolder:
         assert "error" in result
 
     def test_top_n_clamped_between_1_and_25(self, tmp_path):
+        # Gemini quality-review (CRITICAL fold): pre-fix seeded
+        # only 1 file → production returned max 1 item regardless
+        # of top_n value, so the clamping logic could be deleted
+        # without breaking the test. Now seed 30 unique
+        # assignments and assert exact lengths.
         from backend.services.assistant_tools_grading import (
             scan_submissions_folder,
         )
 
         folder = tmp_path / "assignments"
         folder.mkdir()
-        (folder / "Alice_Smith_Q.docx").touch()
+        # 30 unique assignments × 1 submission each
+        for i in range(30):
+            (folder / f"Student{i}_Last{i}_Quiz{i}.docx").touch()
 
         settings_path = tmp_path / ".graider_settings.json"
         settings_path.write_text(json.dumps(
@@ -441,12 +451,20 @@ class TestScanSubmissionsFolder:
                    return_value={"staging_folder": str(folder),
                                  "duplicates_skipped": 0}), \
              patch(f"{MODULE}._load_results", return_value=[]):
-            # top_n=100 clamped to 25
+            # top_n=100 → clamped to 25 (would return 30 if clamp removed)
             r1 = scan_submissions_folder(teacher_id="t", top_n=100)
             assert "error" not in r1
-            # top_n=0 clamped to 1
-            r2 = scan_submissions_folder(teacher_id="t", top_n=0)
+            assert len(r1["top_assignments"]) == 25
+            # top_n=-5 → max(-5, 1) = 1 (lower-bound clamp)
+            # NOTE: top_n=0 is falsy and triggers the `top_n or 10`
+            # default, NOT the lower clamp. So use a negative value
+            # to exercise the max(..., 1) branch.
+            r2 = scan_submissions_folder(teacher_id="t", top_n=-5)
             assert "error" not in r2
+            assert len(r2["top_assignments"]) == 1
+            # Bonus: top_n=None → default 10
+            r3 = scan_submissions_folder(teacher_id="t", top_n=None)
+            assert len(r3["top_assignments"]) == 10
 
     def test_staging_exception_falls_back_to_raw(self, tmp_path):
         from backend.services.assistant_tools_grading import (

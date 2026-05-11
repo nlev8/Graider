@@ -85,6 +85,10 @@ class TestMessageToAnthropic:
         assert result["content"][0]["content"] == "result data"
 
     def test_tool_role_with_non_string_content_stringified(self):
+        # Gemini quality-review fold: production was using str()
+        # which produced invalid JSON ({'nested': 'dict'} with single
+        # quotes). Now uses json.dumps so LLMs receive valid JSON
+        # they can parse back into structured data.
         msg = Message(
             role="tool",
             content=[
@@ -93,8 +97,9 @@ class TestMessageToAnthropic:
             ],
         )
         result = _message_to_anthropic(msg)
-        # content stringified via str()
-        assert "nested" in result["content"][0]["content"]
+        # Must be valid JSON (json.dumps output), not Python repr
+        rendered = result["content"][0]["content"]
+        assert json.loads(rendered) == {"nested": "dict"}
 
     def test_assistant_role_passes_through(self):
         msg = Message(

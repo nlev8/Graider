@@ -107,11 +107,20 @@ def _message_to_anthropic(msg: Message) -> dict[str, Any]:
     # Anthropic uses "user" and "assistant" — "tool" role is not used;
     # tool results are "user" messages with tool_result blocks.
     if msg.role == "tool":
-        # Convert ToolResultPart content into a tool_result block
+        # Convert ToolResultPart content into a tool_result block.
+        # Gemini quality-review 2026-05-10: dict content was being
+        # stringified with `str()`, producing single-quoted invalid
+        # JSON (`{'key': 'value'}`). LLMs that try to parse the
+        # tool result back into structured data fail. Use json.dumps
+        # so the wire format is valid JSON — matches the OpenAI
+        # adapter's _message_to_openai which already does this.
         blocks: list[dict[str, Any]] = []
         for p in msg.content:
             if isinstance(p, ToolResultPart):
-                result_content = p.content if isinstance(p.content, str) else str(p.content)
+                if isinstance(p.content, str):
+                    result_content = p.content
+                else:
+                    result_content = _json.dumps(p.content)
                 blocks.append({
                     "type": "tool_result",
                     "tool_use_id": p.tool_call_id,
