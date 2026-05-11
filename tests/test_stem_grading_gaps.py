@@ -29,16 +29,15 @@ MODULE = "backend.services.stem_grading"
 
 class TestNormalizeMathInputEdges:
     def test_invalid_percentage_falls_through_to_algebra(self):
-        # "abc%" — percentage strip succeeds but float() fails on "abc"
-        # → ValueError caught → falls through. Final algebra/latex also
-        # fails → returns None.
+        # "abc%" enters the `if s.endswith('%')` branch but
+        # float("abc") raises ValueError → caught at lines 49-50.
+        # Falls through to algebra parse, which also fails on "abc%"
+        # (the % is not a valid algebraic op) → returns None.
+        # NOTE: prior input "foo%bar" never entered the % branch at all
+        # because it doesn't end with "%".
         from backend.services.stem_grading import _normalize_math_input
-        result = _normalize_math_input("foo%bar")
-        # SymPy may parse this as multiplication (foo * bar)
-        # or fail entirely. The contract is: percentage-parse exception
-        # is swallowed. We assert the function returns SOMETHING (None
-        # or expr) without raising.
-        assert result is None or result is not None  # didn't raise
+        result = _normalize_math_input("abc%")
+        assert result is None
 
     def test_valid_percentage(self):
         from backend.services.stem_grading import _normalize_math_input
@@ -114,9 +113,13 @@ class TestCheckMathEquivalenceImports:
 
     def test_numerical_fallback_for_LaTeX_floats(self):
         from backend.services.stem_grading import check_math_equivalence
-        # 3.14 vs 3.14159 within 0.01 tolerance
-        result = check_math_equivalence("3.14", "3.14", tolerance=0.01)
+        # Exercise the tolerance comparison: 3.14 vs 3.14159 differ
+        # by 0.00159 which is within the 0.01 tolerance window.
+        # Identical strings (prior 3.14/3.14) would have passed the
+        # equality check trivially without proving tolerance works.
+        result = check_math_equivalence("3.14", "3.14159", tolerance=0.01)
         assert result.get("equivalent") is True
+        assert result.get("method") == "numerical"
 
     def test_simple_numeric_difference_returned(self):
         # When student/correct parse as floats but differ → numerical

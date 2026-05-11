@@ -142,20 +142,33 @@ class TestParentConferenceNotesBranches:
                              "lowest_assignment": {"name": "Q2", "score": 70}},
             "next_steps": [],
         }
+        # Provide a valid student row + fuzzy match so student_id IS
+        # set (sid-alice). The ONLY remaining reason parent_name can
+        # fall back to default is the corrupt-JSON swallow leaving
+        # `contacts = {}`. Previously rows=[] meant student_id stayed
+        # None and the fallback fired regardless of whether the JSON
+        # was actually swallowed — vacuous.
         with patch.object(mod, "PARENT_CONTACTS_FILE", str(bad_file)), \
              patch(f"{MODULE}.draft_student_feedback",
                    return_value=feedback_data), \
              patch(f"{MODULE}._load_settings",
                    return_value={"config": {"teacher_name": "T"}}), \
-             patch(f"{MODULE}._load_master_csv", return_value=[]), \
+             patch(f"{MODULE}._load_master_csv",
+                   return_value=[{"student_name": "Alice Smith",
+                                  "student_id": "sid-alice"}]), \
+             patch(f"{MODULE}._fuzzy_name_match",
+                   side_effect=lambda q, n: "alice" in n.lower()), \
              patch(f"{MODULE}.sentry_sdk.capture_exception") as mock_sentry:
             result = generate_parent_conference_notes(
                 student_name="Alice", teacher_id="t",
             )
-        # Function still returns valid agenda; sentry alerted
+        # Function still returns valid agenda; sentry alerted on the
+        # JSONDecodeError swallow.
         assert "agenda" in result
         mock_sentry.assert_called_once()
-        # parent_name fell back to default
+        # With student_id correctly set to sid-alice, parent_name CAN
+        # only fall back to default if contacts dict was empty (proof
+        # the JSON swallow worked and left contacts={}).
         assert result["parent_name"] == "Parent/Guardian"
 
     def test_parent_contact_hit_uses_primary_contact_name(
