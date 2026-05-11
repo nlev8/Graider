@@ -125,18 +125,47 @@ class TestIsPreflightErrorDns:
 
 class TestResilientExecute:
     def test_method_attribute_error_uses_unknown_label(self):
-        # Query lacks .request entirely → AttributeError → method="unknown"
-        # (covered through happy execute path with no retries needed)
+        # Gemini review (MAJOR fold): pre-fix mocked q.execute to
+        # succeed immediately, so the retry/log path was never
+        # exercised — `method="unknown"` was assigned but no log line
+        # carrying that label ever fired.
+        #
+        # Fix: With q.request stripped, _classify_operation returns
+        # "preflight_only" (label suffix "-preflight"). For that
+        # policy, only preflight errors retry. Use ConnectError
+        # (which IS a preflight error) for attempt #1, then success.
+        # The warning log "[supabase-unknown-preflight] Attempt 1/..."
+        # must fire — proving the AttributeError fallback was hit.
         from backend.supabase_resilient import _resilient_execute
 
         q = MagicMock()
-        # Force AttributeError by removing nested attribute
         del q.request
-        # Make execute() succeed immediately
-        q.execute.return_value = MagicMock(data=[])
 
-        result = _resilient_execute(q)
-        assert result is q.execute.return_value
+        success_result = MagicMock(data=[])
+        q.execute.side_effect = [
+            httpcore.ConnectError("transient preflight"),
+            success_result,
+        ]
+
+        import backend.supabase_resilient as mod_sr
+
+        with patch(f"{MODULE}.time.sleep"), \
+             patch.object(mod_sr, "logger") as mock_log:
+            result = _resilient_execute(q)
+
+        assert result is success_result
+        # The warning log carries the label containing "unknown" — that
+        # proves the AttributeError → "unknown" fallback fired AND the
+        # retry path was actually entered.
+        warning_calls = mock_log.warning.call_args_list
+        assert any(
+            c.args and "unknown" in str(c.args[0]) % c.args[1:]
+            for c in warning_calls
+            if len(c.args) >= 1
+        ), (
+            f"Expected a warning carrying the 'unknown' label; "
+            f"got: {warning_calls}"
+        )
 
     def test_full_retry_exhausted_raises_after_max(self):
         # Force a retryable error to keep firing past MAX_RETRIES

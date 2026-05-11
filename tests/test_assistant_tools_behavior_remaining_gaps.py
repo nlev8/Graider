@@ -35,55 +35,33 @@ class TestLoadBehaviorEventsFallback:
             _load_behavior_events,
         )
 
-        # First execute (joined query) raises; second + third execute
-        # return fallback rows + sessions.
-        sb = MagicMock()
-        joined_chain = MagicMock()
-        joined_chain.execute.side_effect = RuntimeError(
-            "joined query failed"
-        )
-        # First chain
-        sb.table.return_value.select.return_value.eq.return_value = joined_chain
-
-        # Now the fallback re-uses sb.table — we need the second call
-        # to return a different chain. Use side_effect on table() to
-        # alternate. But it's complex; simpler to track call counts.
-
-        call_count = {"n": 0}
+        # Gemini review (CRITICAL): assert against 'entries' (production
+        # output) NOT 'entries_map' (internal-only). Also branch the
+        # mock by table NAME rather than call_count.
+        # Joined query raises → fallback queries 'behavior_events'
+        # (single execute) then 'behavior_sessions' (in_().execute()).
 
         def table_side(name):
-            call_count["n"] += 1
             chain = MagicMock()
-            if call_count["n"] == 1:
-                # First call: joined query raises
-                chain.select.return_value.eq.return_value.execute.side_effect = RuntimeError(
-                    "joined failed"
-                )
-                # Also for the gte/eq filter chain in joined
-                chain.select.return_value.eq.return_value.gte.return_value.eq.return_value.execute.side_effect = RuntimeError(
-                    "joined w/ filters failed"
-                )
-            elif call_count["n"] == 2:
-                # Fallback events query
-                chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
-                    data=[
+            if name == "behavior_events":
+                # Joined chain (eq().gte()/.eq() variants) raises
+                chain.select.return_value.eq.return_value.execute.side_effect = (
+                    # First call = joined query (failures), then fallback
+                    RuntimeError("joined failed"),
+                    MagicMock(data=[
                         {"student_name": "Alice", "type": "correction",
                          "note": "n1", "transcript": "",
                          "event_time": "2026-05-10T10:00:00",
                          "source": "manual", "session_id": "ses1"},
-                        {"student_name": "Bob", "type": "praise",
-                         "note": "n2", "transcript": "",
-                         "event_time": "2026-05-10T11:00:00",
-                         "source": "manual", "session_id": "ses1"},
-                    ]
+                    ]),
                 )
-            else:
-                # Third call: behavior_sessions lookup
+                chain.select.return_value.eq.return_value.gte.return_value.eq.return_value.execute.side_effect = RuntimeError(
+                    "joined w/ filters failed"
+                )
+            elif name == "behavior_sessions":
                 chain.select.return_value.in_.return_value.execute.return_value = MagicMock(
-                    data=[
-                        {"id": "ses1", "period": "Period 1",
-                         "date": "2026-05-10"},
-                    ]
+                    data=[{"id": "ses1", "period": "Period 1",
+                           "date": "2026-05-10"}],
                 )
             return chain
 
@@ -91,13 +69,15 @@ class TestLoadBehaviorEventsFallback:
         sb_with_side.table.side_effect = table_side
 
         with patch(f"{MODULE}._get_supabase", return_value=sb_with_side):
-            # Period mismatch → all rows filtered out
+            # Period mismatch → row filtered out in Python (line 104)
             result = _load_behavior_events(
                 "teach-1", period="Period 99",
             )
-        # All rows excluded by period filter
+        # Production output uses 'entries' list, NOT internal 'entries_map'
+        # dict. Period filter excluded the row → either empty result, or
+        # student dict exists with empty entries list.
         assert result == {} or all(
-            len(s.get("entries_map", {})) == 0
+            len(s.get("entries", [])) == 0
             for s in result.values()
         )
 
@@ -148,9 +128,15 @@ class TestEventTimeParseSwallow:
 
         with patch(f"{MODULE}._get_supabase", return_value=sb):
             result = _load_behavior_events("teach-1")
-        # Row still aggregated despite parse failure (timestamp empty)
+        # Row still aggregated despite parse failure — and the
+        # specific timestamp is empty (Gemini MINOR fold).
         assert "alice" in result
         assert len(result["alice"]["entries"]) >= 1
+        # Verify the parse-swallow actually produced an empty
+        # timestamp list (would catch a regression that re-raised
+        # the parse error or stored a garbage value)
+        entry = result["alice"]["entries"][0]
+        assert entry.get("timestamps", []) == []
 
 
 # ──────────────────────────────────────────────────────────────────
