@@ -76,7 +76,11 @@ def load_saved_results(teacher_id: str = 'local-dev') -> list[dict[str, Any]]:
     """Load results from storage (Supabase in prod, file locally)."""
     if storage_load is not None:
         data: Any = storage_load('results', teacher_id)
-        if data and isinstance(data, list):
+        # `is not None` (not falsy) — an empty list from storage is a
+        # valid state (teacher cleared their results) and must be
+        # returned as-is, not silently fall through to the local file.
+        # Gemini quality-review 2026-05-10 caught this regression risk.
+        if data is not None and isinstance(data, list):
             for r in data:
                 if 'graded_at' not in r:
                     r['graded_at'] = None
@@ -104,7 +108,10 @@ def load_saved_results(teacher_id: str = 'local-dev') -> list[dict[str, Any]]:
     return []
 
 def save_results(results: list[dict[str, Any]], teacher_id: str = 'local-dev') -> None:
-    """Save results to storage (dual-write: file + Supabase)."""
+    """Save results. Routes through storage layer if available
+    (Supabase in prod, file in dev), otherwise falls back to direct
+    RESULTS_FILE write. NOT a dual-write — storage is authoritative
+    when configured."""
     if storage_save is not None:
         storage_save('results', results, teacher_id)
     else:

@@ -67,6 +67,26 @@ class TestResolveUserIdFallbacks:
         assert result != "anonymous"
         assert len(result) == 12
 
+    def test_g_getattr_runtime_error_returns_anonymous(self):
+        # Gemini quality-review (MAJOR fold): the file docstring
+        # claimed this test existed but it was missing. Production
+        # has a defensive `try: ... except RuntimeError:` around
+        # `getattr(g, "user_id", None)` because accessing the Flask
+        # `g` LocalProxy outside an app context raises RuntimeError.
+        #
+        # Strategy: force has_request_context() to lie (return True),
+        # but don't actually enter any app context. The real flask.g
+        # proxy will then raise RuntimeError on attribute access, and
+        # the defensive catch must return "anonymous".
+        from backend.observability.sentry import _resolve_user_id
+
+        with patch("flask.has_request_context", return_value=True):
+            # No app/request context entered — getattr(g, "user_id")
+            # will raise RuntimeError("Working outside of application
+            # context") naturally.
+            result = _resolve_user_id()
+        assert result == "anonymous"
+
 
 # ──────────────────────────────────────────────────────────────────
 # _is_client_error defensive swallow
