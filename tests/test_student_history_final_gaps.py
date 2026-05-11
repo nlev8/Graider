@@ -115,22 +115,19 @@ class TestBaselineDeviationReviewFlag:
 
 
 class TestBuildHistoryContextEmptyBranches:
-    def test_empty_context_parts_returns_empty_string(self, history_root):
-        # All sources empty (no assignments, no streaks, no patterns,
-        # no skill_patterns, no excellent answers) → context_parts
-        # accumulates only the count line "0 previous assignments"
-        # but assignments check at line 576 returns "" early if empty
-        # Let me try a path where assignments is non-empty so the
-        # function builds context but no other branches add info,
-        # then the final empty check fires.
-
-        # Actually with assignments present and >= 1, the function adds:
-        # - count line, recent_assignments header + 1 row, recent avg
-        # - mandatory referencing block at the end
-        # So context_parts is never empty if assignments exist.
-        # The empty branch fires when assignments=[] which is the
-        # short-circuit at line 576. Already covered.
-
-        # Verify the documented empty-history short-circuit
+    def test_unknown_student_returns_empty_string(self, history_root):
+        # Covers the early short-circuit at the top of
+        # build_history_context: `if not history or not history.get(
+        # "assignments"): return ""`. An UNKNOWN student has no
+        # saved history → load_student_history returns None → ""
+        # is returned immediately.
+        #
+        # Historical note: prior version of this test was named
+        # `test_empty_context_parts_returns_empty_string` and claimed
+        # to exercise a `if not context_parts: return ""` check
+        # further down in the function. That check was unreachable
+        # dead code (the assignment-count line was unconditionally
+        # appended to context_parts before the check), and was
+        # removed in the same commit as this rename.
         result = sh.build_history_context("UNKNOWN")
         assert result == ""

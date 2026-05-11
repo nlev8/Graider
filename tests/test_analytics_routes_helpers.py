@@ -85,18 +85,32 @@ class TestFindMasterGrades:
     ):
         from backend.routes.analytics_routes import _find_master_grades
 
-        # Settings file points to folder, but CSV isn't there;
-        # fall back to candidates
+        # Settings file points to a folder where master_grades.csv
+        # doesn't exist; verify the function falls back to the
+        # ~/.graider_data/output candidate path. The earlier version
+        # of this test had no candidate file either, so it returned
+        # None whether the fallback worked or not — vacuous proof of
+        # the fallback contract.
         settings_file = tmp_path / ".graider_global_settings.json"
         settings_file.write_text(json.dumps({
             "output_folder": str(tmp_path / "nonexistent"),
         }))
 
+        # Seed the candidate location with a real CSV
+        graider_data = tmp_path / ".graider_data" / "output"
+        graider_data.mkdir(parents=True)
+        candidate_path = graider_data / "master_grades.csv"
+        candidate_path.write_text("Student Name,Score\n")
+
         with patch(f"{MODULE}.os.path.expanduser",
                    side_effect=lambda p: p.replace(
                        "~", str(tmp_path),
                    )):
-            assert _find_master_grades() is None
+            result = _find_master_grades()
+        # Asserting the candidate path specifically proves fallback
+        # logic — returning None could mean either "fallback worked
+        # but no candidate existed" OR "fallback was broken".
+        assert result == str(candidate_path)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -187,15 +201,24 @@ class TestLoadValidAssignmentNames:
         (assn_dir / "readme.txt").write_text("not json")
         (assn_dir / "old.bak").write_text("backup")
 
+        # Mock sentry so we can prove the .json filter is the active
+        # gate — if the production `if not f.endswith('.json'):
+        # continue` check were removed, json.load(readme.txt) would
+        # raise JSONDecodeError, the except branch would fire and
+        # sentry.capture_exception would be called.
         with patch(f"{MODULE}.os.path.expanduser",
                    side_effect=lambda p: p.replace(
                        "~", str(tmp_path),
-                   )):
+                   )), \
+             patch(f"{MODULE}.sentry_sdk.capture_exception") as mock_sentry:
             result = _load_valid_assignment_names()
 
         # Only the .json file's content survives
         from backend.services.assistant_tools import _normalize_assignment_name
         assert _normalize_assignment_name("JSON Config") in result
+        # Non-JSON files were filtered before parsing, NOT swallowed
+        # via the except block — sentry must NOT have been alerted.
+        mock_sentry.assert_not_called()
 
 
 # ──────────────────────────────────────────────────────────────────
