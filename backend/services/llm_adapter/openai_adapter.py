@@ -110,8 +110,18 @@ def _message_to_openai(msg: Message) -> dict[str, Any]:
                     "tool_call_id": p.tool_call_id,
                     "content": content,
                 }
-        # Fallback: tool message with no ToolResultPart — stringify whatever's there.
-        return {"role": "tool", "tool_call_id": msg.tool_call_id or "", "content": ""}
+        # Fallback: tool message with no ToolResultPart — stringify whatever's
+        # there (Gemini quality-review 2026-05-10: comment said "stringify
+        # whatever's there" but implementation hardcoded "", silently dropping
+        # text content. Fixed to actually concatenate TextPart contents.)
+        fallback_content = " ".join(
+            p.text for p in msg.content if isinstance(p, TextPart)
+        )
+        return {
+            "role": "tool",
+            "tool_call_id": msg.tool_call_id or "",
+            "content": fallback_content,
+        }
 
     # Assistant messages may carry text + tool_use blocks — split them.
     if msg.role == "assistant":
