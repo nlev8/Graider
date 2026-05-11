@@ -1,19 +1,24 @@
 """Gap-fill tests for backend/services/assistant_tools_grading.py.
 
 Audit MAJOR #4 sprint follow-up to PR #333. Companion to existing
-`tests/test_assistant_tools_grading*.py`. Targets the 21 missing LOC
-(96.6% baseline → 99%+ goal):
+`tests/test_assistant_tools_grading*.py`. Covered here:
 
 * `_scan_submission_folder`: unsupported extension skip (line 119),
   empty filename-parts skip (line 133)
-* `get_student_summary` student_id filter + longest-name display
-  (lines 304-306)
-* `compare_periods` empty-breakdown case + roster lookup (749,
-  784-789)
-* `scan_submissions_folder` non-file filepath skip (874), prefix-
-  fuzzy graded match (944-945), display_name fallback (957)
+* `compare_periods` roster lookup + empty-breakdown skip (749,
+  783-789)
+* `scan_submissions_folder` non-file filepath skip (874)
 * `get_missing_assignments` mode 3 + mode 4 missing-period skip
   (1058, 1102)
+
+Deferred (need fixtures with full row schema OR fuzzy/Counter
+state setup — better covered by characterization tests):
+
+* `get_student_summary` student_id filter + longest-name display
+  (lines 304-306) — see `tests/characterization/test_query_grades_golden.py`
+  and `tests/test_grading_routes_unit.py`
+* `scan_submissions_folder` prefix-fuzzy graded match (944-945),
+  display_name fallback (957) — see follow-up issue #348
 
 Per dual-rate-limit precedent: test-only PR merging on green CI.
 """
@@ -111,7 +116,9 @@ class TestCompareClassPeriodsBranches:
             compare_periods,
         )
 
-        # Build results with breakdown data
+        # Build results with breakdown data. Carol's row has an empty
+        # breakdown to exercise the `if bd:` falsy branch at production
+        # line 783 (the category-aggregation loop must skip her).
         results = [
             {"student_name": "Alice", "period": "P1",
              "score": 90, "assignment": "Quiz",
@@ -121,6 +128,9 @@ class TestCompareClassPeriodsBranches:
              "score": 80, "assignment": "Quiz",
              "breakdown": {"content": 20, "completeness": 20,
                            "writing": 20, "effort": 20}},
+            {"student_name": "Carol", "period": "P1",
+             "score": 85, "assignment": "Quiz",
+             "breakdown": {}},  # empty → if bd: falsy → skipped
         ]
         roster = [
             {"student_id": "s1", "name": "Alice", "period": "P1"},
@@ -136,9 +146,12 @@ class TestCompareClassPeriodsBranches:
         p1 = result["periods"][0]
         assert "category_averages" in p1
         assert len(p1["category_averages"]) == 4
-        # Roster count (3) > graded count (2)
+        # Roster count (3) == graded count (3). Carol's empty breakdown
+        # was correctly skipped — averages computed from Alice+Bob only:
+        # content = (23+20)/2 = 21.5, NOT (23+20+0)/3 = 14.3
+        assert p1["category_averages"]["content"] == 21.5
         assert p1["student_count"] == 3
-        assert p1["students_with_grades"] == 2
+        assert p1["students_with_grades"] == 3
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -148,7 +161,12 @@ class TestCompareClassPeriodsBranches:
 
 class TestScanSubmissionsFolderRemainingEdges:
     def test_non_file_filepath_skipped(self, tmp_path, monkeypatch):
-        # Line 874: filepath is_file() False → skipped
+        # Line 874: filepath is_file() False → skipped.
+        # The directory must have a parseable 3-part underscored name
+        # so it WOULD parse if is_file() check were missing — prior
+        # "subdir.docx" had only 1 part and would have been rejected
+        # by the later `len(parts) < 3` check regardless, making the
+        # test vacuous.
         from backend.services.assistant_tools_grading import (
             scan_submissions_folder,
         )
@@ -156,10 +174,10 @@ class TestScanSubmissionsFolderRemainingEdges:
 
         folder = tmp_path / "assignments"
         folder.mkdir()
-        # Create a directory with .docx extension (looks like a file
-        # but isn't)
-        (folder / "subdir.docx").mkdir()
-        # Also a real file for context
+        # Directory shaped like a valid submission filename — would
+        # parse to Bob/Jones/Quiz if is_file() check were broken.
+        (folder / "Bob_Jones_Quiz.docx").mkdir()
+        # Real file for context
         (folder / "Alice_Smith_Quiz.docx").touch()
 
         settings_path = tmp_path / ".graider_settings.json"
@@ -177,9 +195,12 @@ class TestScanSubmissionsFolderRemainingEdges:
              patch(f"{MODULE}._load_results", return_value=[]):
             result = scan_submissions_folder(teacher_id="t")
 
-        # subdir.docx was filtered (not isfile); only 1 parsed file
+        # The directory was filtered (is_file=False) — only Alice's
+        # real file was parsed. If is_file() check were missing, Bob
+        # would also appear → unique_students == 2.
         assert "error" not in result
-        assert result["unique_students"] >= 1
+        assert result["total_files"] == 1
+        assert result["unique_students"] == 1
 
 
 # ──────────────────────────────────────────────────────────────────

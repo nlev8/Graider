@@ -678,9 +678,6 @@ def build_history_context(student_id: str) -> str:
     if all_excellent:
         context_parts.append(f"Previous excellent work examples: {all_excellent[0][:100]}...")
 
-    if not context_parts:
-        return ""
-
     # --- Section C: Mandatory referencing instructions ---
     context_parts.append("")
     context_parts.append("YOU MUST reference this history in your feedback:")

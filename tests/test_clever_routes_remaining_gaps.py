@@ -1,12 +1,15 @@
 """Gap-fill tests for backend/routes/clever_routes.py.
 
 Audit MAJOR #4 sprint follow-up to PR #332. Companion to existing
-`tests/test_clever_routes_*.py`. Targets the 14 missing LOC
-(96.6% baseline → 99%+ goal):
+`tests/test_clever_routes_*.py`. Targets a subset of missing LOC:
 
 * `_create_clever_student_session` outer-except + sentry (241-244)
 * `_background_roster_sync` happy path with contacts persist (260-262)
 * `_background_roster_sync` outer-except + sentry (265-267)
+
+Deferred (require Flask test client + complex session/OAuth state
+mocking — better covered by integration tests):
+
 * OAuth callback user_fetch_failed redirect (line 332)
 * OAuth callback threading.Thread roster sync trigger (421-426)
 
@@ -97,7 +100,12 @@ class TestBackgroundRosterSync:
     def test_outer_exception_swallowed_with_sentry(self):
         from backend.routes.clever_routes import _background_roster_sync
 
-        with patch(f"{MODULE}._run_async",
+        # Patch sync_roster too so production's eager
+        # `sync_roster(district_token)` call returns a plain value
+        # instead of an unawaited coroutine (which mocked _run_async
+        # would ignore → RuntimeWarning leak).
+        with patch(f"{MODULE}.sync_roster", return_value={}), \
+             patch(f"{MODULE}._run_async",
                    side_effect=RuntimeError("network down")), \
              patch(f"{MODULE}.sentry_sdk.capture_exception") as mock_sentry:
             # Should not raise
@@ -108,10 +116,13 @@ class TestBackgroundRosterSync:
     def test_no_students_skips_persist(self):
         from backend.routes.clever_routes import _background_roster_sync
 
-        # Empty students → persist_roster_as_csv not called
-        with patch(f"{MODULE}._run_async",
-                   return_value={"students": [], "sections": [],
-                                 "contacts": []}), \
+        # Patch sync_roster too: production calls sync_roster(token)
+        # eagerly, returning a coroutine; mocked _run_async would
+        # accept and ignore it, leaking an unawaited coroutine.
+        empty_roster = {"students": [], "sections": [], "contacts": []}
+        with patch(f"{MODULE}.sync_roster", return_value=empty_roster), \
+             patch(f"{MODULE}._run_async",
+                   return_value=empty_roster), \
              patch(f"{MODULE}.persist_roster_as_csv") as mock_persist_r, \
              patch(f"{MODULE}.persist_sections_as_periods") as mock_persist_s, \
              patch(f"{MODULE}.persist_parent_contacts") as mock_persist_pc:
@@ -125,10 +136,11 @@ class TestBackgroundRosterSync:
         from backend.routes.clever_routes import _background_roster_sync
 
         # Contacts present but no students → parent contacts not persisted
-        with patch(f"{MODULE}._run_async",
-                   return_value={"students": [],
-                                 "sections": [],
-                                 "contacts": [{"data": {"id": "c1"}}]}), \
+        # (sync_roster patched to avoid unawaited-coroutine leak)
+        roster = {"students": [], "sections": [],
+                  "contacts": [{"data": {"id": "c1"}}]}
+        with patch(f"{MODULE}.sync_roster", return_value=roster), \
+             patch(f"{MODULE}._run_async", return_value=roster), \
              patch(f"{MODULE}.persist_parent_contacts") as mock_persist_pc:
             _background_roster_sync("token", "teach-1")
 
@@ -138,10 +150,12 @@ class TestBackgroundRosterSync:
         from backend.routes.clever_routes import _background_roster_sync
 
         # Students + contacts present but extract returns empty dict
-        with patch(f"{MODULE}._run_async",
-                   return_value={"students": [{"data": {"id": "s1"}}],
-                                 "sections": [],
-                                 "contacts": [{"data": {"id": "c1"}}]}), \
+        # (sync_roster patched to avoid unawaited-coroutine leak)
+        roster = {"students": [{"data": {"id": "s1"}}],
+                  "sections": [],
+                  "contacts": [{"data": {"id": "c1"}}]}
+        with patch(f"{MODULE}.sync_roster", return_value=roster), \
+             patch(f"{MODULE}._run_async", return_value=roster), \
              patch(f"{MODULE}.persist_roster_as_csv"), \
              patch(f"{MODULE}.extract_parent_contacts",
                    return_value={}), \
