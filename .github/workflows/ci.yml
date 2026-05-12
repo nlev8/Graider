@@ -36,10 +36,13 @@ jobs:
           pip install --require-hashes -r requirements-dev.txt
 
       - name: Run tests with coverage
+        # NOTE: `--ignore=tests/stress` was removed — that directory has
+        # never existed in the repo. The actual stress test is
+        # tests/load/test_load.py::test_stress_rapid_polling (still
+        # excluded transitively via --ignore=tests/load).
         run: |
           python -m pytest tests/ -q \
             --ignore=tests/load \
-            --ignore=tests/stress \
             --ignore=tests/e2e \
             -x \
             -m "not live" \
@@ -80,18 +83,19 @@ jobs:
         run: cd frontend && npm run build
 
   frontend-e2e-smoke:
-    # Closes audit MAJOR #5 of GH issue #217 (Codex full-codebase audit
-    # 2026-05-06): runs the Playwright health-check spec against a
+    # Closes audit MAJOR #5 Phase 1 of GH issue #217 (Codex full-codebase
+    # audit 2026-05-06): runs the Playwright health-check spec against a
     # locally-spawned backend, gating PRs on basic server/route smoke.
     # Other Playwright specs require richer fixtures (Supabase, AI keys,
     # auth flows) and stay out of the PR-gated CI for now — they're
-    # intended for a future scheduled/nightly job.
+    # intended for a future scheduled/nightly job (see Phase 3 of
+    # docs/superpowers/plans/2026-05-11-audit-major5-e2e-promotion.md).
     #
-    # Marked continue-on-error initially while we observe stability;
-    # promote to required check after a few clean runs.
+    # Promoted from continue-on-error to required on 2026-05-11 after
+    # 15 consecutive green runs on main (verified per-step). Branch
+    # protection rule on `main` includes this job in required_status_checks.
     name: Frontend E2E Smoke
     runs-on: ubuntu-latest
-    continue-on-error: true
     needs: [frontend-build]
     env:
       # Skip the production-only Redis hard-fail at boot
