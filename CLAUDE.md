@@ -31,13 +31,21 @@ All changes go through Pull Requests:
 4. CI runs automatically (backend tests + frontend build)
 5. Merge when CI passes → Railway auto-deploys
 
-**Branch protection on `main` requires:**
-- `Backend Tests` job passes (pytest with `--cov-fail-under=60`; bumped 32→40 in PR #239 to match measured ~41%, then 40→48 on 2026-05-09 after PRs #266-#277 pushed measured global to 49.91%, then 48→60 on 2026-05-11 after PRs #310-#349 (gap-fill sprint + Gemini quality-review sweep) pushed measured global to 63.25%. **Sprint target 50% per audit MAJOR #4 HIT 2026-05-09; 60% floor locks in the post-sprint wins.** Bump rule: raise floor only when measured global is at least 0.5% above the new floor. Continue raising as coverage grows.)
-- `Frontend Build` job passes (Vite build succeeds)
+**Branch protection on `main` requires 9 status checks (verified via `gh api repos/nlev8/Graider/branches/main/protection/required_status_checks`):**
+
+- `Backend Tests` (pytest with `--cov-fail-under=60`; bumped 32→40 in PR #239 to match measured ~41%, then 40→48 on 2026-05-09 after PRs #266-#277 pushed measured global to 49.91%, then 48→60 on 2026-05-11 after PRs #310-#349 (gap-fill sprint + Gemini quality-review sweep) pushed measured global to 63.25%. **Sprint target 50% per audit MAJOR #4 HIT 2026-05-09; 60% floor locks in the post-sprint wins.** Bump rule: raise floor only when measured global is at least 0.5% above the new floor. Continue raising as coverage grows.)
+- `Frontend Build` (Vite build succeeds + frontend test count ≥ floor)
+- `Frontend E2E Smoke` (Playwright `health-check.spec.js` against locally-spawned backend; promoted from `continue-on-error` to required on 2026-05-11 after 15 consecutive green runs — closes audit MAJOR #5 Phase 1)
+- `Migrations Smoke` (Alembic upgrades cleanly against raw `postgres:15-alpine`)
+- `Lockfile Drift Check` (pip-compile output matches committed `requirements*.txt`)
+- `Ruff Lint`
+- `Bandit SAST`
+- `Secret Scan (trufflehog, verified only, PR diff)`
+- `Mypy Strict (Critical Modules)`
 
 **Emergency bypass:** Repo admins can merge without CI if `enforce_admins` is false. Use only for critical hotfixes — fix CI immediately after.
 
-**CI job names are locked:** The branch protection rule references `Backend Tests` and `Frontend Build` by exact name. If you rename a job in `.github/workflows/ci.yml`, update the branch protection rule too or merges will be blocked. See `docs/superpowers/plans/2026-04-02-cicd-pipeline.md` Task 3 for the update command.
+**CI job names are locked:** The branch protection rule references the 9 jobs above by exact name. If you rename a job in `.github/workflows/ci.yml`, update the branch protection rule too or merges will be blocked. See `docs/superpowers/plans/2026-04-02-cicd-pipeline.md` Task 3 for the update command.
 
 ## Project Overview
 
