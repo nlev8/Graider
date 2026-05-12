@@ -57,8 +57,10 @@ jobs:
       # Isolate ~/.graider_* state writes to a per-run home dir so
       # local-file storage races between specs are bounded to this
       # job. Hosted GH runners give a fresh $HOME each run; this is
-      # for self-hosted/manual safety.
-      HOME: ${{ runner.temp }}/graider-e2e-home
+      # for self-hosted/manual safety. NOTE: `${{ runner.temp }}` is
+      # not available in job-level env (only in steps), so we use a
+      # literal /tmp path. Hosted runners reset /tmp per-job too.
+      HOME: /tmp/graider-e2e-home
 
     steps:
       - uses: actions/checkout@v4
