@@ -176,7 +176,7 @@ The original draft proposed 1 → 2 (broad E2E) → 3 (load). Gemini's review co
    | 3 | `assistant-chat.spec.js` | **T + A** | `/api/assistant/chat` needs OpenAI key OR returns structured 500. Already tolerant. |
    | 4 | `automation-builder.spec.js` | **L** | `/api/automations*` reads/writes `~/.graider_data/automations/`. No Supabase. |
    | 5 | `behavior-tracking.spec.js` | **S + T** | Codex caught: every assertion uses `expect([200, 400, 500]).toContain(...)`. Backend uses Supabase (`behavior_events` table) but spec tolerates absence. Currently "S+T" — needs assertions tightened to gain real coverage in Stage 3b. |
-   | 6 | `clever-accommodations.spec.js` | **C** | `/api/clever/*` needs Clever OAuth credentials. |
+   | 6 | `clever-accommodations.spec.js` | **T** | Header explicitly says "Does NOT require actual Clever credentials". Only blocker was a single hard `expect(200)` for `/api/clever/health` (line 14) which returns 503 when Clever unconfigured. Fixed in this PR — now fully tolerant. Joins Stage 3a allowlist. |
    | 7 | `health-check.spec.js` | **N** | Already runs PR-gated as `frontend-e2e-smoke`. Excluded from Phase 3 to avoid duplication. |
    | 8 | `publish-flow.spec.js` | **N** | UI-only — verifies Publish button visibility on Planner tab. Does not actually publish. |
    | 9 | `resource-management.spec.js` | **L** | `/api/{save,list,load,delete}-resource` reads/writes `~/.graider_data/resources/`. No Supabase. |
@@ -210,7 +210,7 @@ The original draft proposed 1 → 2 (broad E2E) → 3 (load). Gemini's review co
 
    Per Codex review of the initial inventory, the original "15 specs runnable today" claim had bucket-math errors and misclassified 6 specs. Building Stage 3a from an **explicit allowlist** instead of bucket arithmetic:
 
-   **Stage 3a allowlist (12 specs, runnable today against local-backend with no Supabase fixture):**
+   **Stage 3a allowlist (13 specs, runnable today against local-backend with no Supabase fixture):**
 
    1. `publish-flow.spec.js` (N)
    2. `teacher-dashboard.spec.js` (N)
@@ -218,14 +218,15 @@ The original draft proposed 1 → 2 (broad E2E) → 3 (load). Gemini's review co
    4. `automation-builder.spec.js` (L)
    5. `resource-management.spec.js` (L)
    6. `teacher-settings-save.spec.js` (L)
-   7. `analytics-display.spec.js` (L)
-   8. `full-workflow.spec.js` (L + T)
-   9. `multi-teacher.spec.js` (L)
-   10. `planner-workflow.spec.js` (L)
-   11. `settings-workflow.spec.js` (L)
-   12. `smoke.spec.js` (T)
+   7. `clever-accommodations.spec.js` (T) — promoted from C in this PR after fixing the line-14 hard `expect(200)` for `/api/clever/health`
+   8. `analytics-display.spec.js` (L)
+   9. `full-workflow.spec.js` (L + T)
+   10. `multi-teacher.spec.js` (L)
+   11. `planner-workflow.spec.js` (L)
+   12. `settings-workflow.spec.js` (L)
+   13. `smoke.spec.js` (T)
 
-   **Excluded from Stage 3a (17 specs):**
+   **Excluded from Stage 3a (16 specs):**
 
    - `health-check.spec.js` — already in PR-gated smoke
    - `api-endpoints.spec.js` — Codex caught not-fully-tolerant; needs `expect([200,503])` for clever-health and `expect([200,500])` for teacher-assessments before it can join 3a. Tracked separately.
@@ -235,17 +236,16 @@ The original draft proposed 1 → 2 (broad E2E) → 3 (load). Gemini's review co
    - `student-dashboard.spec.js` — Codex caught: only renders login page; not actually Supabase-coverage. Either fold into smoke (N) by removing the misleading description, or leave for 3b once authenticated-session fixture exists.
    - `teacher-planner-interactions.spec.js` — Mixed N+S; needs split before running. The "Multi-Student Same Assessment" describe block uses Supabase publish; the rest is N.
    - 10 Supabase-required specs (`student-content-types`, `student-error-states`, `student-matching`, `student-mc-grading`, `student-multi-subject`, `student-portal`, `student-short-answer`, `student-tf-grading`, `teacher-publish-modal`, plus the 4 deferred above): Stage 3b after Supabase fixture.
-   - `clever-accommodations.spec.js` — needs Clever OAuth credentials, separate decision.
 
    #### Phasing implication for Task 3 (Supabase fixture decision)
 
-   The Stage 3a allowlist gives Phase 3 immediate value (12 specs nightly, no fixture cost). Stage 3b covers the remaining 14 Supabase/Clever/mixed specs once:
+   The Stage 3a allowlist gives Phase 3 immediate value (13 specs nightly, no fixture cost). Stage 3b covers the remaining Supabase/mixed specs once:
 
    1. Supabase fixture decision (Option A paid or Option B `supabase init` PR) lands
    2. `api-endpoints.spec.js`, `teacher-planner-interactions.spec.js` are reclassified or split
    3. `behavior-tracking.spec.js` and `survey-endpoints.spec.js` get their assertions tightened to require real Supabase coverage
 
-   This 3a → 3b ordering lets us land 41% of the e2e surface (12/29) immediately and defer the Supabase $ commitment until we've seen what cheaper specs surface first.
+   This 3a → 3b ordering lets us land 45% of the e2e surface (13/29) immediately and defer the Supabase $ commitment until we've seen what cheaper specs surface first.
 
 2. **CRITICAL — `tests/e2e/playwright.config.js:27` webServer is commented out.** The plan's command `cd tests/e2e && npx playwright test specs/` would fail with no backend running. Three resolutions:
    - **Resolution A**: enable a working `webServer` block in `tests/e2e/playwright.config.js` (similar to `frontend/playwright.config.js:webServer` which auto-builds + spawns backend).
@@ -321,6 +321,7 @@ When all 3 phases ship, this issue is closeable:
 - **2026-05-11 initial draft** — had multiple unverified claims (conflated `frontend/e2e/` with `tests/e2e/`; treated `tests/stress/` as a real dir; falsely equated `migrations-smoke` psql with Supabase; claimed CLAUDE.md required-checks list was complete at 2 entries).
 - **2026-05-11 revision 1** — every claim verified against actual codebase + Gemini cross-review. Phase order swapped (load before broader E2E). Option B (SQLite stub) dropped. Stress-test reality (single function, not directory) documented. CLAUDE.md docs-drift folded into Phase 1.
 - **2026-05-11 revision 2** — fixed 2 residual factual errors caught during self-verification: stress test at `tests/load/test_load.py:186` (not :149); 9 (not 10) persona-style flow files in `tests/load/scenarios/`.
+- **2026-05-12 revision 6** — Gemini verification of the revision-5 corrected inventory surfaced 1 MINOR Codex missed: `clever-accommodations.spec.js` was classified C (Clever-required) but its header explicitly says "Does NOT require actual Clever credentials". The only blocker was a single hard `expect(200)` for `/api/clever/health` at line 14. Fixed in this PR (1-line spec change to `expect([200, 503]).toContain(...)`). Spec promoted from C → T, joins Stage 3a allowlist. Stage 3a bumps 12 → 13 specs (45% of e2e surface).
 - **2026-05-12 revision 5** — Codex high-effort review of the initial Phase 3 spec inventory caught 3 HIGH + 4 MEDIUM + 1 LOW. Corrected:
   - **HIGH**: `assessment-results.spec.js` reclassified L → S (uses `publishAssessment` helper 7×).
   - **HIGH**: `teacher-planner-interactions.spec.js` reclassified N → N+S mixed (final "Multi-Student" describe block uses Supabase publish).
