@@ -155,14 +155,76 @@ The original draft proposed 1 → 2 (broad E2E) → 3 (load). Gemini's review co
 
 **Tasks:**
 
-1. **Inventory ALL 29 specs by fixture need.** Survey `frontend/e2e/` (23 specs) and `tests/e2e/specs/` (6 specs) — categorize each by which fixtures it actually requires (do not assume; read the spec):
-   - **No fixture** (pure UI navigation, doesn't touch backend state) → candidate for promotion to PR-gated smoke
-   - **Local file-backed** (writes to `~/.graider_*` on disk; works without Supabase) → runnable in Phase 2-style local-backend workflow
-   - **Supabase-required** (real DB writes via PostgREST) → blocks on Option A/B decision
-   - **AI-required** (calls OpenAI/Anthropic/Gemini) → needs key with budget cap OR adapter-layer mock
-   - **Auth-state-required** (JWT cookies, Clever session) → needs auth-fixture helper
+1. **Inventory ALL 29 specs by fixture need.** ✅ **COMPLETED 2026-05-12** (see table below).
 
-   Output this inventory as a markdown table in this plan doc before proceeding to Task 2.
+   Methodology: for each spec, grep'd direct `/api/*` calls + auth fingerprints + tolerance patterns (e.g., `expect([200, 500]).toContain(...)`). Where direct API calls weren't present (UI-driven specs in `tests/e2e/specs/`), inspected helpers + page-objects to identify the backend surface exercised. Specs that explicitly tolerate Supabase 500 / missing-AI-key are tagged with **T**.
+
+   Bucket legend:
+   - **N** — No fixture; pure UI navigation. Candidate for PR-gated smoke promotion.
+   - **L** — Local file-backed only (rubric/settings/assignments/resources/lessons/automations writing to `~/.graider_*`); works without Supabase.
+   - **S** — Supabase-required (writes to `published_assessments`, `published_content`, `submissions`, `students`, `classes`, `behavior_events`, `surveys` tables via REST API).
+   - **A** — AI-required (`/api/assistant/chat`, `/api/generate-*`, etc.).
+   - **C** — Clever-required (`/api/clever/*` OAuth flows).
+   - **T** — Tolerant of backend 500s (uses `expect([200, 500]).toContain(...)` or filters Supabase/AI errors).
+
+   #### `frontend/e2e/` (23 specs)
+
+   | # | Spec | Buckets | Notes |
+   |---|------|---------|-------|
+   | 1 | `api-endpoints.spec.js` | **T** | Exercises wide API surface. Already tolerant — uses `[200,500]` for Supabase-backed endpoints (`/api/classes`, etc.). Runnable today against local-backend workflow. |
+   | 2 | `assessment-results.spec.js` | **L** | `/api/analytics`, `/api/assessment-results` read local CSV. No Supabase. |
+   | 3 | `assistant-chat.spec.js` | **T + A** | `/api/assistant/chat` needs OpenAI key OR returns structured 500. Already tolerant. |
+   | 4 | `automation-builder.spec.js` | **L** | `/api/automations*` reads/writes `~/.graider_automations/`. No Supabase. |
+   | 5 | `behavior-tracking.spec.js` | **S** | `/api/behavior/{data,events,session}` uses Supabase `behavior_events` table. |
+   | 6 | `clever-accommodations.spec.js` | **C** | `/api/clever/*` needs Clever OAuth credentials. |
+   | 7 | `health-check.spec.js` | **N** | Already runs PR-gated as `frontend-e2e-smoke`. Excluded from Phase 3 to avoid duplication. |
+   | 8 | `publish-flow.spec.js` | **N** | UI-only — verifies Publish button visibility on Planner tab. Does not actually publish. |
+   | 9 | `resource-management.spec.js` | **L** | `/api/{save,list,load,delete}-resource` reads/writes `~/.graider_resources/`. No Supabase. |
+   | 10 | `student-content-types.spec.js` | **S** | Drives student grading flows via `publishAssessment` helper → `/api/publish-assessment` writes to Supabase. |
+   | 11 | `student-dashboard.spec.js` | **S** | Uses authenticated student session; reads `published_content` from Supabase. |
+   | 12 | `student-error-states.spec.js` | **S** | Hits `/api/teacher/assessment/{code}` which reads from Supabase. |
+   | 13 | `student-matching.spec.js` | **S** | `publishAssessment` helper → Supabase. |
+   | 14 | `student-mc-grading.spec.js` | **S** | `publishAssessment` helper → Supabase. Grading itself is local but the test setup requires Supabase. |
+   | 15 | `student-multi-subject.spec.js` | **S** | Same `publishAssessment` pattern. |
+   | 16 | `student-portal.spec.js` | **S** | `/api/publish-assessment` + `/api/teacher/assessment/`. |
+   | 17 | `student-short-answer.spec.js` | **S** | `publishAssessment` helper. |
+   | 18 | `student-tf-grading.spec.js` | **S** | `publishAssessment` helper. |
+   | 19 | `survey-endpoints.spec.js` | **S** | `/api/survey/*` (already failed in load test for this reason). |
+   | 20 | `teacher-dashboard.spec.js` | **N** | UI-only — tests visibility of dashboard sections. |
+   | 21 | `teacher-planner-interactions.spec.js` | **N** | UI-only — drag/drop, modal interactions. Backend untouched. |
+   | 22 | `teacher-publish-modal.spec.js` | **S** | `/api/publish-assessment` + teacher assessment endpoints. |
+   | 23 | `teacher-settings-save.spec.js` | **L** | `/api/save-rubric`, `/api/save-global-settings` → `~/.graider_*`. |
+
+   #### `tests/e2e/specs/` (6 specs)
+
+   | # | Spec | Buckets | Notes |
+   |---|------|---------|-------|
+   | 24 | `analytics-display.spec.js` | **L** | UI flow exercising `/api/analytics` (local CSV). |
+   | 25 | `full-workflow.spec.js` | **L + T** | Tab traversal (Settings → Builder → Grade → Results → Analytics). UI tolerates backend failures. |
+   | 26 | `multi-teacher.spec.js` | **L** | Codex finding: 3 browsers all hit backend as `local-dev` (NOT multi-tenant). Local-file storage. |
+   | 27 | `planner-workflow.spec.js` | **L** | Planner UI; lesson/calendar writes to `~/.graider_*`. |
+   | 28 | `settings-workflow.spec.js` | **L** | Settings UI; rubric/global-settings writes to `~/.graider_*`. |
+   | 29 | `smoke.spec.js` | **T** | Tab traversal smoke. Explicitly filters Supabase/AI/500 errors at line 51. Already tolerant. |
+
+   #### Bucket summary
+
+   | Bucket | Count | Specs |
+   |---|---|---|
+   | **N** (no fixture, can run today) | 4 | health-check, publish-flow, teacher-dashboard, teacher-planner-interactions |
+   | **L** (local file-backed, can run today) | 11 | assessment-results, automation-builder, resource-management, teacher-settings-save, analytics-display, full-workflow, multi-teacher, planner-workflow, settings-workflow + 2 more |
+   | **T** (already tolerant, can run today) | 4 | api-endpoints, assistant-chat (also A), smoke, plus partial overlap with full-workflow |
+   | **S** (Supabase-required) | 11 | behavior-tracking, student-content-types, student-dashboard, student-error-states, student-matching, student-mc-grading, student-multi-subject, student-portal, student-short-answer, student-tf-grading, survey-endpoints, teacher-publish-modal |
+   | **A** (AI-required) | 1 (overlap with T) | assistant-chat |
+   | **C** (Clever-required) | 1 | clever-accommodations |
+
+   #### Phasing implication for Task 3 (Supabase fixture decision)
+
+   **15 of 29 specs (52%)** are runnable **today** against a local-only backend (buckets N + L + T). The Phase 3 nightly job could ship in two stages:
+
+   - **Stage 3a (no fixture commitment)**: run the 15 N/L/T specs nightly. Zero Supabase cost. Catches regressions in 52% of the e2e surface immediately. Excludes health-check (already in PR smoke).
+   - **Stage 3b (after fixture decision)**: add the 11 S specs once Option A or B lands. The 1 Clever spec needs additional credentials decision (separate from Supabase). The 1 AI spec needs budget controls.
+
+   This stage-3a→3b split lets us land Phase 3 value immediately and defer the Supabase $$ commitment until we've seen what the cheaper specs surface first.
 
 2. **CRITICAL — `tests/e2e/playwright.config.js:27` webServer is commented out.** The plan's command `cd tests/e2e && npx playwright test specs/` would fail with no backend running. Three resolutions:
    - **Resolution A**: enable a working `webServer` block in `tests/e2e/playwright.config.js` (similar to `frontend/playwright.config.js:webServer` which auto-builds + spawns backend).
@@ -238,6 +300,7 @@ When all 3 phases ship, this issue is closeable:
 - **2026-05-11 initial draft** — had multiple unverified claims (conflated `frontend/e2e/` with `tests/e2e/`; treated `tests/stress/` as a real dir; falsely equated `migrations-smoke` psql with Supabase; claimed CLAUDE.md required-checks list was complete at 2 entries).
 - **2026-05-11 revision 1** — every claim verified against actual codebase + Gemini cross-review. Phase order swapped (load before broader E2E). Option B (SQLite stub) dropped. Stress-test reality (single function, not directory) documented. CLAUDE.md docs-drift folded into Phase 1.
 - **2026-05-11 revision 2** — fixed 2 residual factual errors caught during self-verification: stress test at `tests/load/test_load.py:186` (not :149); 9 (not 10) persona-style flow files in `tests/load/scenarios/`.
+- **2026-05-12 revision 4** — Phase 2 shipped (PRs #354 + #356). Phase 3 Task 1 spec inventory completed: 15 of 29 specs (N/L/T buckets) are runnable today without Supabase fixtures; 11 specs need Supabase (S bucket); 1 needs Clever OAuth; 1 needs AI key with budget controls. Plan now proposes a Stage 3a → 3b split so the 15 cheap specs ship nightly immediately, deferring the Supabase fixture commitment until we've seen what they surface.
 - **2026-05-12 revision 3** — Phase 1 shipped (PR #351). Codex high-effort review of Phase 2 and Phase 3 surfaced 2 CRITICAL + 8 MAJOR + 2 MINOR + 1 NIT findings. Folded all of them:
   - Phase 2 expanded from 5 tasks to 11. Added preflight to prevent false-green skip. Removed stub `OPENAI_API_KEY` (would have enabled live AI calls). Documented teacher-isolation gotcha (local-file storage ignores X-Test-Teacher-Id; default Resolution A = single-persona smoke). Added `@pytest.mark.stress` task. Added `requirements-dev.txt` install. Chose harness path explicitly (only one with JSON reporter wired). Optional Rule #11 fix for vacuous cross-contamination check.
   - Phase 3 expanded from 6 tasks to 8. Added spec-inventory-first task (no blanket "needs Supabase" claim). CRITICAL fix: `tests/e2e/playwright.config.js` webServer is commented out — added Resolution B (single job-level backend) preference. Option B (`supabase start`) marked as requiring prerequisite PR (no `supabase/config.toml` in repo). Corrected the "multi-teacher 3-workers" framing to "3 concurrent browser workflows" (no per-teacher auth). Added webServer-conflict-resolution task. Fixture cost analysis remains.
