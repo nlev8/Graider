@@ -194,16 +194,20 @@ jobs:
         # the config and writes to the default playwright-report/
         # path, which the artifact upload below doesn't capture
         # (Codex review caught this).
+        #
+        # No spec-path filters here. The first verification run
+        # tried `specs/analytics-display.spec.js` etc. and Playwright
+        # rejected them as regex filters with "No tests found"
+        # (testDir is already `./specs` in the config, so the prefix
+        # double-matched). Since the Stage 3a inventory determined
+        # ALL 6 specs in tests/e2e/specs/ are runnable today
+        # (analytics-display, full-workflow, multi-teacher,
+        # planner-workflow, settings-workflow, smoke), we just run
+        # the whole testDir. If a new Supabase-requiring spec is
+        # ever added to tests/e2e/specs/, the inventory and this
+        # workflow must be updated in tandem.
         continue-on-error: true
-        run: |
-          cd tests/e2e && npx playwright test \
-            specs/analytics-display.spec.js \
-            specs/full-workflow.spec.js \
-            specs/multi-teacher.spec.js \
-            specs/planner-workflow.spec.js \
-            specs/settings-workflow.spec.js \
-            specs/smoke.spec.js \
-            --workers=1
+        run: cd tests/e2e && npx playwright test --workers=1
 
       - name: Stop backend (detect mid-test crash)
         # Per Codex+Gemini review: both Playwright steps are
