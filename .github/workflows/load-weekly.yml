@@ -107,6 +107,17 @@ jobs:
         # Phase 2 Resolution A: --personas 1.
         # No --live flag → no AI calls.
         # The harness path writes a JSON report; pytest path does not.
+        #
+        # continue-on-error per Phase 2 Task 9 (b): in the initial
+        # baseline-collection phase, this workflow should report
+        # numbers but NOT gate on pass/fail. The harness exits
+        # non-zero whenever any scenario fails; in the early weeks
+        # those failures may surface real pre-existing bugs that
+        # we want visible (red X on the step) but don't want to
+        # block the artifact upload or future scheduled runs.
+        # The threshold-gate decision (4-6 weeks from now per plan)
+        # will revisit this once a noise floor is established.
+        continue-on-error: true
         run: python -m tests.load.harness --personas 1
 
       - name: Stop backend
