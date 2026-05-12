@@ -24,11 +24,26 @@ export default defineConfig({
       use: { browserName: 'chromium', viewport: { width: 1440, height: 900 } },
     },
   ],
-  // Optionally start dev server
-  // webServer: {
-  //   command: 'cd ../../backend && FLASK_ENV=development python app.py',
-  //   url: 'http://localhost:3000',
-  //   reuseExistingServer: true,
-  //   timeout: 15_000,
-  // },
+  // 2026-05-12 (audit MAJOR #5 Phase 3 Task 2): webServer enabled so
+  // this project no longer requires an externally-running backend.
+  // Mirrors frontend/playwright.config.js pattern with two
+  // differences:
+  //   - Working directory is tests/e2e/, so `cd ../..` lands at repo
+  //     root before launching backend/app.py.
+  //   - `npm run build` is NOT included — backend/static/ is expected
+  //     to be pre-populated by the workflow (or by a manual
+  //     `cd frontend && npm run build` for local dev).
+  //
+  // `reuseExistingServer: true` skips the command when a backend is
+  // already listening on port 3000. The e2e-nightly workflow spawns
+  // one backend job-level and runs BOTH this project AND
+  // frontend/playwright.config.js against it.
+  webServer: {
+    command: 'cd ../.. && ${PYTHON:-./venv/bin/python} backend/app.py',
+    url: 'http://localhost:3000',
+    reuseExistingServer: true,
+    timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
 });
