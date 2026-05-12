@@ -183,6 +183,7 @@ def test_student_portal_concurrent(persona_data):
 # STRESS: Rapid concurrent polling
 # ──────────────────────────────────────────────
 
+@pytest.mark.stress
 def test_stress_rapid_polling(persona_data):
     """All personas poll /api/status at high frequency simultaneously."""
     results = []
