@@ -1,0 +1,239 @@
+name: E2E Nightly (Stage 3a)
+
+# Phase 3 Stage 3a of audit MAJOR #5 (GH #217). Plan:
+# docs/superpowers/plans/2026-05-11-audit-major5-e2e-promotion.md
+#
+# Runs the 13-spec Stage 3a allowlist nightly against a locally-
+# spawned backend with NO Supabase fixture, NO OpenAI key, NO Clever
+# credentials. Stage 3b will add the 16 Supabase/mixed specs once a
+# fixture decision (Option A paid project / Option B `supabase init`
+# prerequisite PR) lands.
+#
+# Scope decisions (Phase 3 Task 1 inventory, reviewed by Codex + Gemini):
+#   - 7 specs from frontend/e2e/: publish-flow, teacher-dashboard,
+#     assistant-chat, automation-builder, resource-management,
+#     teacher-settings-save, clever-accommodations.
+#   - 6 specs from tests/e2e/specs/: analytics-display, full-workflow,
+#     multi-teacher, planner-workflow, settings-workflow, smoke.
+#
+# Webserver pattern (Phase 3 Task 2/5):
+#   Single backend spawned at the job level (per Codex's Resolution B).
+#   Both playwright.config.js files have reuseExistingServer:true so
+#   each Playwright invocation reuses the same backend instead of
+#   trying to spawn its own on port 3000.
+#
+# Baseline-collection mode (per load-weekly.yml pattern):
+#   continue-on-error on the playwright steps so the workflow reports
+#   results but does NOT gate. Stage 3a is the FIRST time these 13
+#   specs run in CI; some failures are expected. Threshold-gate
+#   revisited in 4-6 weeks once a noise floor exists.
+
+on:
+  schedule:
+    # 08:00 UTC daily (off-hours US/EU).
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  e2e-nightly:
+    name: E2E Nightly (Stage 3a)
+    runs-on: ubuntu-latest
+
+    env:
+      # Backend env for the spawned process. Critically: NO
+      # OPENAI_API_KEY — assistant-chat.spec.js gracefully tolerates
+      # 500 when key is missing (per its bucket-T classification).
+      FLASK_ENV: development
+      FLASK_SECRET_KEY: ci-test-secret-not-for-production
+      PYTHON: python3
+      # Opt into the playwright.config.js `reuseExistingServer` path
+      # so neither config tries to spawn its own backend on port 3000
+      # (the workflow spawns one explicitly at the job level). The
+      # existing PR-gated `frontend-e2e-smoke` job does NOT set this
+      # variable, so its "always-fresh-server" semantics are
+      # preserved. Per Codex review of Stage 3a (audit MAJOR #5
+      # Phase 3).
+      E2E_REUSE_BACKEND: '1'
+      # Isolate ~/.graider_* state writes to a per-run home dir so
+      # local-file storage races between specs are bounded to this
+      # job. Hosted GH runners give a fresh $HOME each run; this is
+      # for self-hosted/manual safety.
+      HOME: ${{ runner.temp }}/graider-e2e-home
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            tests/e2e/package-lock.json
+
+      - name: Install backend deps (prod + dev)
+        # Plan revision 6 said install both. requirements-dev.txt is
+        # not strictly needed for the Node Playwright path but keeps
+        # parity with Phase 2's load-weekly workflow.
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Install tests/e2e deps
+        # tests/e2e/ is a SEPARATE Playwright project with its own
+        # package.json. Without this step, `npx playwright` in
+        # tests/e2e/ would fail to find @playwright/test.
+        run: cd tests/e2e && npm ci
+
+      - name: Build frontend (populates backend/static/)
+        # Backend serves Vite-built frontend from backend/static/.
+        # Without this build, specs that probe `/` would get an empty
+        # page even though the backend technically responds 200.
+        run: cd frontend && npm run build
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          # Key on BOTH package-lock.json files because each project
+          # may pin a different @playwright/test version. If either
+          # bumps, refresh the cache.
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json', 'tests/e2e/package-lock.json') }}
+
+      - name: Install Playwright OS dependencies
+        # Per Codex review: the browser cache only restores binaries
+        # under ~/.cache/ms-playwright. It does NOT install the
+        # required OS-level packages (libnss3, libasound2, etc.).
+        # Always run install-deps; binary install is conditional below.
+        run: cd frontend && npx playwright install-deps chromium
+
+      - name: Install Playwright browser binaries
+        # Cache-conditional binary install. ~/.cache/ms-playwright is
+        # shared between frontend/ and tests/e2e/ so installing once
+        # is enough as long as both pin compatible Playwright
+        # versions (verified: both currently use 1.x).
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd frontend && npx playwright install chromium
+
+      - name: Initialize isolated $HOME
+        # Required because we override HOME at the job level above;
+        # the directory must exist before backend/app.py reads it
+        # (e.g., os.path.expanduser('~/.graider_*')).
+        run: mkdir -p "$HOME"
+
+      - name: Start backend in background
+        # Same pattern as load-weekly.yml. The backend listens on
+        # port 3000; both Playwright configs detect it via
+        # `reuseExistingServer: true` and skip their own webServer
+        # commands.
+        run: |
+          python backend/app.py &
+          echo $! > /tmp/backend.pid
+
+      - name: Preflight — verify backend is listening
+        # Phase 2 load-test surfaced that without preflight, a failed
+        # backend spawn lets pytest/playwright skip silently and the
+        # job goes green. Fail-fast loop with 30s deadline.
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS --max-time 3 http://localhost:3000/ > /dev/null 2>&1; then
+              echo "Backend is up after ${i} attempt(s)"
+              exit 0
+            fi
+            echo "Backend not yet listening (attempt ${i}/10)"
+            sleep 3
+          done
+          echo "::error::Backend failed to come up on http://localhost:3000/ within 30s"
+          cat /tmp/backend.pid 2>/dev/null && ps -p "$(cat /tmp/backend.pid)" 2>/dev/null || echo "(backend process not running)"
+          exit 1
+
+      - name: Run Stage 3a — frontend/e2e specs (7 specs)
+        # Per audit MAJOR #5 Phase 3 plan, baseline-collection mode:
+        # continue-on-error: true so first-run failures surface in
+        # the HTML report but don't block the artifact upload or
+        # future scheduled runs. Threshold-gate revisited in 4-6
+        # weeks once a noise floor exists.
+        #
+        # --workers=1: per Gemini review, the single shared backend +
+        # shared ~/.graider_* local-file storage means parallel
+        # workers would race on the same files (rubric, settings,
+        # resources). Sequential execution avoids spurious failures
+        # from state clobbering. Slower but correct; revisit when
+        # Stage 3b's Supabase fixture lands and storage is per-tenant.
+        continue-on-error: true
+        run: |
+          cd frontend && npx playwright test \
+            e2e/publish-flow.spec.js \
+            e2e/teacher-dashboard.spec.js \
+            e2e/assistant-chat.spec.js \
+            e2e/automation-builder.spec.js \
+            e2e/resource-management.spec.js \
+            e2e/teacher-settings-save.spec.js \
+            e2e/clever-accommodations.spec.js \
+            --workers=1 \
+            --reporter=list,html
+
+      - name: Run Stage 3a — tests/e2e/specs (6 specs)
+        # Separate Playwright project; runs from tests/e2e/ cwd.
+        # NO --reporter= flag here — tests/e2e/playwright.config.js
+        # already configures `html` with outputFolder ../reports/e2e.
+        # Passing --reporter=list,html on the command line OVERRIDES
+        # the config and writes to the default playwright-report/
+        # path, which the artifact upload below doesn't capture
+        # (Codex review caught this).
+        continue-on-error: true
+        run: |
+          cd tests/e2e && npx playwright test \
+            specs/analytics-display.spec.js \
+            specs/full-workflow.spec.js \
+            specs/multi-teacher.spec.js \
+            specs/planner-workflow.spec.js \
+            specs/settings-workflow.spec.js \
+            specs/smoke.spec.js \
+            --workers=1
+
+      - name: Stop backend (detect mid-test crash)
+        # Per Codex+Gemini review: both Playwright steps are
+        # continue-on-error: true, so a backend crash mid-test would
+        # silently let the workflow report green with all specs
+        # failed. Fail loud if the backend PID is already gone.
+        if: always()
+        run: |
+          if [ -f /tmp/backend.pid ]; then
+            pid="$(cat /tmp/backend.pid)"
+            if ! ps -p "$pid" > /dev/null 2>&1; then
+              echo "::error::Backend crashed during test execution! PID $pid no longer running"
+              exit 1
+            fi
+            kill "$pid" 2>/dev/null || true
+          else
+            echo "::error::Backend PID file missing — start step likely failed"
+            exit 1
+          fi
+
+      - name: Upload Playwright reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-nightly-reports
+          # tests/reports/e2e is where tests/e2e/playwright.config.js
+          # writes its html reporter output (outputFolder is
+          # `../reports/e2e` from tests/e2e/).
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            tests/reports/e2e/
+            tests/e2e/test-results/
+          retention-days: 14
+          if-no-files-found: warn
