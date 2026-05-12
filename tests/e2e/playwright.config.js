@@ -40,8 +40,17 @@ export default defineConfig({
   // frontend/playwright.config.js against it.
   webServer: {
     command: 'cd ../.. && ${PYTHON:-./venv/bin/python} backend/app.py',
+    // Env defaults for the local-dev path so a clean shell
+    // (no FLASK_ENV / FLASK_SECRET_KEY exported) can still spawn
+    // the backend without it crashing on startup. CI workflows
+    // override these via their own env block. Per Codex+Gemini
+    // review of Phase 3 Stage 3a.
+    env: {
+      FLASK_ENV: process.env.FLASK_ENV || 'development',
+      FLASK_SECRET_KEY: process.env.FLASK_SECRET_KEY || 'local-dev-only-not-for-production',
+    },
     url: 'http://localhost:3000',
-    reuseExistingServer: true,
+    reuseExistingServer: process.env.E2E_REUSE_BACKEND === '1' || !process.env.CI,
     timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
