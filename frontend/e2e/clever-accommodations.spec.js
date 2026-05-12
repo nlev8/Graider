@@ -11,9 +11,16 @@ import { AUTH_HEADERS } from './helpers.js'
 test.describe('Clever SSO — API Endpoints', () => {
   test('GET /api/clever/health returns config status', async ({ request }) => {
     const response = await request.get('/api/clever/health')
-    expect(response.status()).toBe(200)
-    const data = await response.json()
-    expect(data).toHaveProperty('configured')
+    // /api/clever/health returns 503 when Clever is unconfigured
+    // (backend/routes/clever_routes.py:806). Per this spec's header,
+    // this file does NOT require Clever credentials, so we accept
+    // both states. Without this tolerance the spec couldn't run in
+    // the Phase 3 Stage 3a nightly job.
+    expect([200, 503]).toContain(response.status())
+    if (response.status() === 200) {
+      const data = await response.json()
+      expect(data).toHaveProperty('configured')
+    }
   })
 
   test('GET /api/clever/login-url returns URL or error', async ({ request }) => {
