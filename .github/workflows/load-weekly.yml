@@ -1,0 +1,126 @@
+name: Load Test (weekly)
+
+# Phase 2 of audit MAJOR #5 closure (GH #217). Plan:
+# docs/superpowers/plans/2026-05-11-audit-major5-e2e-promotion.md
+#
+# Runs the load-test harness against a locally-spawned backend on a
+# weekly schedule. Reports throughput numbers as workflow artifacts.
+#
+# Scope decisions per the plan (Phase 2 Resolution A):
+#   - Single persona (--personas 1). Multi-persona is concurrency
+#     theater without Supabase since backend/storage.py:115,449 writes
+#     to shared local files when no Supabase is configured. Multi-
+#     persona scope is deferred — see GH #353.
+#   - No OPENAI_API_KEY in env. tests/load/config.py:15 gates --live on
+#     bool(OPENAI_API_KEY); the smoke job's sk-ci-stub pattern would
+#     have ENABLED live AI calls. Phase 2 runs only the non-live path.
+#   - curl -fsS preflight before pytest/harness invocation.
+#     tests/load/test_load.py:55 applies a module-level skip if the
+#     server isn't reachable, which would let the job go green even if
+#     the backend never came up. Preflight gates that.
+#   - Installs BOTH requirements.txt AND requirements-dev.txt. The
+#     smoke job only installs prod requirements; pytest lives in
+#     requirements-dev.txt:687.
+#   - Uses harness path (python -m tests.load.harness), which writes a
+#     JSON report to tests/load/reports/. The pytest path imports
+#     JsonReporter but never calls .record() on it.
+
+on:
+  schedule:
+    # Sunday 10:00 UTC (low-traffic window).
+    - cron: '0 10 * * 0'
+  workflow_dispatch:
+
+jobs:
+  load-weekly:
+    name: Load Test (weekly)
+    runs-on: ubuntu-latest
+
+    env:
+      # Same backend env as frontend-e2e-smoke. Crucially: NO
+      # OPENAI_API_KEY set here — Phase 2 is the non-live path.
+      FLASK_ENV: development
+      FLASK_SECRET_KEY: ci-test-secret-not-for-production
+      PYTHON: python3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Set up Node
+        # Backend webServer pattern uses npm run build to populate
+        # backend/static/, mirroring frontend-e2e-smoke.
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend deps (prod + dev)
+        # Per plan Task 6: pytest is in requirements-dev.txt:687, not
+        # requirements.txt. The harness path doesn't need pytest at
+        # runtime but keeping both installs lets `pytest tests/load/`
+        # remain runnable for local dev.
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --require-hashes -r requirements-dev.txt
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Build frontend (populates backend/static/)
+        run: cd frontend && npm run build
+
+      - name: Start backend in background
+        # Same pattern as frontend-e2e-smoke's playwright webServer,
+        # but spawned explicitly here so we can preflight before
+        # invoking the harness.
+        run: |
+          python backend/app.py &
+          echo $! > /tmp/backend.pid
+
+      - name: Preflight — verify backend is listening
+        # Per plan Task 3: tests/load/test_load.py:55 module-level
+        # skips silently if the server isn't reachable. If the spawn
+        # above failed to bind port 3000, the job would otherwise go
+        # green with all tests "skipped". This preflight fails fast
+        # if that happens.
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS --max-time 3 http://localhost:3000/ > /dev/null 2>&1; then
+              echo "Backend is up after ${i} attempt(s)"
+              exit 0
+            fi
+            echo "Backend not yet listening (attempt ${i}/10)"
+            sleep 3
+          done
+          echo "::error::Backend failed to come up on http://localhost:3000/ within 30s"
+          cat /tmp/backend.pid 2>/dev/null && ps -p "$(cat /tmp/backend.pid)" 2>/dev/null || echo "(backend process not running)"
+          exit 1
+
+      - name: Run load test (single persona, non-live)
+        # Phase 2 Resolution A: --personas 1.
+        # No --live flag → no AI calls.
+        # The harness path writes a JSON report; pytest path does not.
+        run: python -m tests.load.harness --personas 1
+
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f /tmp/backend.pid ]; then
+            kill "$(cat /tmp/backend.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload load test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-report
+          path: tests/load/reports/
+          retention-days: 30
+          if-no-files-found: warn
