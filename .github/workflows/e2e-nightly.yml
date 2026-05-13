@@ -173,6 +173,22 @@ jobs:
         # resources). Sequential execution avoids spurious failures
         # from state clobbering. Slower but correct; revisit when
         # Stage 3b's Supabase fixture lands and storage is per-tenant.
+        #
+        # --trace=retain-on-failure: frontend/playwright.config.js has
+        # NO tracing configured by default. Adding trace at the CLI
+        # captures console events, network requests, DOM snapshots,
+        # and screencast for failing tests so future regressions can
+        # be diagnosed without another debug cycle.
+        #
+        # History: PR #364 used --trace=on (always trace) to diagnose
+        # the React-doesn't-mount issue (#362). That fix landed in
+        # #365 (Supabase dummy fallback). But --trace=on overhead in
+        # CI was heavy enough to push tests past the 45s test-level
+        # timeout (frontend step took 23.7m vs typical few min, and
+        # 9 previously-passing teacher-dashboard tests started timing
+        # out at exactly 45.2s due to trace overhead). Switching to
+        # retain-on-failure: still captures rich data for failing
+        # tests, but removes overhead on passing tests.
         continue-on-error: true
         run: |
           cd frontend && npx playwright test \
@@ -184,7 +200,8 @@ jobs:
             e2e/teacher-settings-save.spec.js \
             e2e/clever-accommodations.spec.js \
             --workers=1 \
-            --reporter=list,html
+            --reporter=list,html \
+            --trace=retain-on-failure
 
       - name: Run Stage 3a — tests/e2e/specs (6 specs)
         # Separate Playwright project; runs from tests/e2e/ cwd.
@@ -207,7 +224,7 @@ jobs:
         # ever added to tests/e2e/specs/, the inventory and this
         # workflow must be updated in tandem.
         continue-on-error: true
-        run: cd tests/e2e && npx playwright test --workers=1
+        run: cd tests/e2e && npx playwright test --workers=1 --trace=retain-on-failure
 
       - name: Stop backend (detect mid-test crash)
         # Per Codex+Gemini review: both Playwright steps are
