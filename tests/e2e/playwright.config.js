@@ -15,7 +15,14 @@ export default defineConfig({
     baseURL: 'http://localhost:3000',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    trace: 'retain-on-failure',
+    // 2026-05-13: switched from 'retain-on-failure' to 'on-first-retry'
+    // to remove first-attempt capture overhead. retain-on-failure had
+    // the same execution cost as `on` (only retention differed), which
+    // caused timing regressions in CI (~24m frontend step). on-first-retry
+    // only traces retries (which already run anyway), giving zero
+    // first-attempt overhead while preserving diagnostic data for real
+    // failures.
+    trace: 'on-first-retry',
     actionTimeout: 10_000,
   },
   projects: [

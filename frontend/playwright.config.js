@@ -9,6 +9,20 @@ export default defineConfig({
     baseURL: 'http://localhost:3000',
     headless: true,
     screenshot: 'only-on-failure',
+    // trace: 'on-first-retry' captures full diagnostic data (console
+    // events, network requests, DOM snapshots, screencast) ONLY when
+    // a test fails on first attempt and is retried. Zero overhead on
+    // the first-attempt run; trace only kicks in for failures that
+    // would have re-run anyway.
+    //
+    // Previously the e2e-nightly workflow added --trace=on (PR #364)
+    // and --trace=retain-on-failure (PR #366) at the CLI level. Both
+    // had similar capture overhead that pushed previously-passing
+    // tests past the 45s per-test timeout. on-first-retry restores
+    // first-attempt speed while preserving diagnostic data for any
+    // actual failure (since retries already run anyway, no extra
+    // wall time cost beyond the trace bytes).
+    trace: 'on-first-retry',
   },
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
