@@ -173,6 +173,22 @@ jobs:
         # resources). Sequential execution avoids spurious failures
         # from state clobbering. Slower but correct; revisit when
         # Stage 3b's Supabase fixture lands and storage is per-tenant.
+        #
+        # --trace=on: frontend/playwright.config.js has NO tracing
+        # configured by default (only screenshot: 'only-on-failure').
+        # Adding trace on the CLI captures console events, network
+        # requests, DOM snapshots, and screencast for every test.
+        # Using `on` (not `retain-on-failure`) for THIS diagnostic
+        # cycle because the existing tests/e2e config had
+        # `trace: 'retain-on-failure'` and its CI artifacts contained
+        # only Playwright API events (test.trace), not the rich
+        # 0-trace.trace with console events. Verified locally that
+        # `--trace=on` produces 0-trace.trace with "type":"console"
+        # entries including full text + location.
+        #
+        # After diagnosing the React-mount failure (#362), revert to
+        # `retain-on-failure` to keep artifact size manageable. For
+        # now, ~7 specs × small bundle = manageable artifact bloat.
         continue-on-error: true
         run: |
           cd frontend && npx playwright test \
@@ -184,7 +200,8 @@ jobs:
             e2e/teacher-settings-save.spec.js \
             e2e/clever-accommodations.spec.js \
             --workers=1 \
-            --reporter=list,html
+            --reporter=list,html \
+            --trace=on
 
       - name: Run Stage 3a — tests/e2e/specs (6 specs)
         # Separate Playwright project; runs from tests/e2e/ cwd.
@@ -207,7 +224,7 @@ jobs:
         # ever added to tests/e2e/specs/, the inventory and this
         # workflow must be updated in tandem.
         continue-on-error: true
-        run: cd tests/e2e && npx playwright test --workers=1
+        run: cd tests/e2e && npx playwright test --workers=1 --trace=on
 
       - name: Stop backend (detect mid-test crash)
         # Per Codex+Gemini review: both Playwright steps are
