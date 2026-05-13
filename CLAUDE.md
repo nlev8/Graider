@@ -636,6 +636,36 @@ If you can fix it in <15 minutes without touching unrelated code, fix it. Don't 
 
 If the fix genuinely exceeds PR scope (3+ files of unrelated changes, requires architectural decisions, or would balloon the diff past 500 lines), then file a follow-up — but include the **specific fix sketch** and a **5-line repro** in the issue body so future-you (or another contributor) can land it without re-investigating. Filing without a fix sketch is deferring, not tracking.
 
+### 12. Handoff Discipline (avoid context-fatigue dead-ends)
+
+Long sessions degrade reasoning. `/compact` summarizes facts but inherits the *framing* of the prior conversation — including bad hypotheses and false trails. The fix is a clean handoff to a fresh agent.
+
+**Write `handoff.md` at repo root BEFORE any of these:**
+
+- Running `/clear` or `/compact` when there's an unresolved debug thread
+- A scheduled autonomous loop that may run unattended >2 hours
+- Stopping work mid-investigation to step away
+- You've made **3+ failed attempts** at the same root cause
+
+**The handoff MUST include** (in this order):
+
+1. **Goal** — one sentence stating what we're trying to accomplish
+2. **TL;DR** — 3-5 bullets: what's shipped, what works, what's blocked
+3. **Current state** — files modified, PRs open/merged, follow-up issues filed
+4. **Local repro** — exact shell commands a fresh agent runs to reproduce the failure
+5. **Disproved hypotheses** — things tried that DIDN'T work, with brief reason each was ruled out
+6. **Most likely remaining causes** — ranked
+7. **Concrete next step** — specific code/PR sketch
+8. **References** — PR numbers, issue numbers, CI run IDs, plan docs
+
+Be honest about what you actually tried and what failed. **Do NOT sanitize the failures** — those are the most valuable part of the handoff. The next agent needs them to avoid re-trying the same dead ends.
+
+**Self-trigger heuristic**: if you catch yourself thinking *"let me try X again with a slight variation"* on the same problem for the 3rd time, STOP, write `handoff.md`, and tell the user "I've hit a context-fatigue wall — handoff.md written; recommend `/clear` + fresh session."
+
+**Or invoke explicitly**: `/handoff` slash command auto-generates the file from current session state. Use when the user (or you) recognize the wall before failure mode 3 hits.
+
+`handoff.md` is committable when the handoff itself is documentation of an open investigation (e.g., what shipped tonight at audit MAJOR #5 Stage 3a). Default: leave uncommitted unless it serves as artifact.
+
 ---
 
 ## Post-Processing Pipeline (planner_routes.py)
