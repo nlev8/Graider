@@ -146,6 +146,37 @@ class TestSyncWebhookAuth:
                                    headers={"Authorization": "Bearer test-secret-123"})
         assert resp.status_code == 200
 
+    def test_validate_secret_uses_only_constant_time_compare(self):
+        """_validate_secret must not contain any `==`/`!=` against the
+        secret — only hmac.compare_digest. Prevents both the original
+        timing bug and the 'length leak' refactor pitfall caught by
+        Gemini-proxy plan review (2026-05-14)."""
+        import inspect
+        import ast
+        from backend.routes.sync_routes import _validate_secret
+        src = inspect.getsource(_validate_secret)
+        assert "hmac.compare_digest" in src, (
+            "_validate_secret must call hmac.compare_digest"
+        )
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare):
+                for op in node.ops:
+                    assert not isinstance(op, (ast.Eq, ast.NotEq)), (
+                        f"_validate_secret contains a == or != compare at "
+                        f"line {node.lineno}; use hmac.compare_digest only "
+                        f"(2026-05-14 dimensional review S1)"
+                    )
+
+    def test_validate_secret_rejects_wrong_secret_with_correct_length(self):
+        """Behavioral test: equal-length wrong secret must still be rejected.
+        Catches a length-only check that would pass the AST test above."""
+        app = _make_sync_app(sync_secret="abcdef12345")
+        with app.test_client() as client:
+            resp = client.post('/api/sync/periodic-roster',
+                               headers={"Authorization": "Bearer xyzwvu67890"})
+        assert resp.status_code == 401
+
 
 class TestSyncWebhookOrchestration:
     def test_returns_summary_with_zero_teachers(self):
@@ -408,9 +439,14 @@ class TestSyncOneTeacherRuntime:
     def test_clever_path_returns_success_with_counts(self):
         from backend.routes.sync_routes import _sync_one_teacher
 
+        # teacher_id must be clever:-prefixed (or in clever_links) for the
+        # post-2026-05-14 tenancy filter to resolve a Clever ID. Section
+        # must list this teacher as an owner for the filter to keep it.
         async def fake_clever_sync(token):
             return {
-                'sections': [{'data': {'id': 's1', 'name': 'Algebra'}}],
+                'sections': [{'data': {'id': 's1', 'name': 'Algebra',
+                                       'teachers': ['t1'],
+                                       'students': ['st1']}}],
                 'students': [{'data': {'id': 'st1', 'email': 'a@x.com'}}],
             }
 
@@ -428,7 +464,7 @@ class TestSyncOneTeacherRuntime:
              patch('backend.routes.sync_routes.audit_log'), \
              patch.dict('os.environ', {'CLEVER_DISTRICT_TOKEN': 'x'}):
             result = _sync_one_teacher({
-                'teacher_id': 't1',
+                'teacher_id': 'clever:t1',
                 'provider': 'clever',
                 'config': {},
             })
@@ -586,3 +622,70 @@ class TestAuditLocalFileFormatContract:
         assert entry['details'] == 'provider=clever classes=5 students=12'
         # The new 5th field carries teacher_id (added in PR #214).
         assert entry.get('teacher_id') == 't-abc-123'
+
+
+
+def _make_async_returning(value):
+    """Build an async function that returns the given value, for mocking
+    async functions like backend.clever.sync_roster."""
+    async def _f(*args, **kwargs):
+        return value
+    return _f
+
+
+class TestPeriodicSyncTenancy:
+    """Regression for the periodic-sync district-roster leak.
+    Same bug shape as the manual /api/clever/sync-roster path (Task 3
+    in 2026-05-14-security-quintet plan) but ships daily via
+    .github/workflows/roster-sync.yml. Sourced from Gemini-proxy plan
+    review."""
+
+    def test_periodic_sync_filters_to_teachers_own_sections(self):
+        from backend.routes.sync_routes import _sync_one_teacher
+
+        # Teacher T owns S1 (students A, B); other teacher owns S2 (C, D)
+        roster = {
+            "sections": [
+                {"data": {"id": "S1", "teachers": ["T"],
+                          "students": ["A", "B"], "name": "Pd 1"}},
+                {"data": {"id": "S2", "teachers": ["OTHER"],
+                          "students": ["C", "D"], "name": "Pd 2"}},
+            ],
+            "students": [
+                {"data": {"id": x, "name": x}} for x in ["A", "B", "C", "D"]
+            ],
+        }
+
+        captured = {"sections": None, "students": None}
+        def fake_sync_classes(sections, students, teacher_id):
+            captured["sections"] = sections
+            captured["students"] = students
+            return {"classes": 1, "students": 2, "enrollments": 2}
+
+        teacher = {
+            "teacher_id": "clever:T",  # prefix form — Clever ID = T
+            "provider": "clever",
+            "config": {"district_token": "tok"},
+        }
+
+        with patch('backend.clever.sync_roster',
+                   new=_make_async_returning(roster)), \
+             patch('backend.routes.clever_routes._sync_classes_to_db',
+                   side_effect=fake_sync_classes), \
+             patch('backend.roster_sync.deactivate_missing_students',
+                   return_value=0), \
+             patch('backend.routes.sync_routes.audit_log'):
+            result = _sync_one_teacher(teacher)
+
+        assert result["status"] != "skipped", f"Sync was skipped: {result}"
+        assert captured["sections"] is not None, "sections were never passed"
+        section_ids = [s.get("data", s).get("id") for s in captured["sections"]]
+        student_ids = sorted(s.get("data", s).get("id") for s in captured["students"])
+        assert section_ids == ["S1"], (
+            f"Periodic sync passed cross-teacher sections to _sync_classes_to_db. "
+            f"Got: {section_ids}; expected [S1] (T's only own section)."
+        )
+        assert student_ids == ["A", "B"], (
+            f"District-roster leak in periodic sync. Got students: "
+            f"{student_ids}; expected [A, B]."
+        )

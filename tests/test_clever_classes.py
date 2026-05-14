@@ -400,7 +400,12 @@ class TestBackgroundRosterSyncCallsSyncClassesToDb:
     """Verify that _background_roster_sync calls _sync_classes_to_db when sections exist."""
 
     def test_calls_sync_classes_to_db_when_sections_present(self):
-        """_background_roster_sync should call _sync_classes_to_db after persist_sections_as_periods."""
+        """_background_roster_sync should call _sync_classes_to_db after persist_sections_as_periods.
+
+        Post-2026-05-14 tenancy filter: teacher_id must resolve a Clever ID
+        owning the section. _make_section uses teachers=["t1"], so we pass
+        teacher_id="clever:t1". The filter creates new lists with the same
+        items — assertion checks contents (not identity) for that reason."""
         roster = {
             "students": [_make_student("s1")],
             "sections": [_make_section("sec1", students=["s1"])],
@@ -412,9 +417,14 @@ class TestBackgroundRosterSyncCallsSyncClassesToDb:
              patch("backend.routes.clever_routes.persist_sections_as_periods"), \
              patch("backend.routes.clever_routes._sync_classes_to_db") as mock_sync:
             from backend.routes.clever_routes import _background_roster_sync
-            _background_roster_sync("district_token_xyz", "teacher-001")
+            _background_roster_sync("district_token_xyz", "clever:t1")
 
-        mock_sync.assert_called_once_with(roster["sections"], roster["students"], "teacher-001")
+        assert mock_sync.call_count == 1
+        call_args = mock_sync.call_args[0]
+        # Same content, different list identity (post-filter)
+        assert call_args[0] == roster["sections"]
+        assert call_args[1] == roster["students"]
+        assert call_args[2] == "clever:t1"
 
     def test_does_not_call_sync_when_no_sections(self):
         """_background_roster_sync should not call _sync_classes_to_db when sections list is empty."""

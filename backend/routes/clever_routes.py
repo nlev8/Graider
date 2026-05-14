@@ -33,6 +33,8 @@ from backend.supabase_client import get_supabase as _get_supabase_safe
 from backend.utils.errors import handle_route_errors
 from backend.utils.auth_decorators import require_clever_session
 from backend.utils.redaction import redact_email
+from backend.utils.supabase_users import list_all_users
+from backend.services.clever_roster_scope import filter_roster_to_teacher
 
 logger = logging.getLogger(__name__)
 
@@ -248,10 +250,29 @@ def _background_roster_sync(district_token, teacher_id):
     """Run roster sync in a background thread so OAuth callback returns immediately."""
     try:
         roster = _run_async(sync_roster(district_token))
-        students = roster.get("students", [])
+
+        # Scope to this teacher's sections (2026-05-14 dimensional review
+        # S2, background-sync variant per Codex revised-plan review). Same
+        # helper as the manual route + periodic cron.
+        if teacher_id.startswith("clever:"):
+            teacher_clever_id = teacher_id[len("clever:"):]
+        else:
+            links = load_clever_links()
+            teacher_clever_id = next(
+                (cid for cid, tid in links.items() if tid == teacher_id),
+                None,
+            )
+        if not teacher_clever_id:
+            logger.warning(
+                "Background roster sync skipped: could not resolve "
+                "Clever ID for teacher_hash=%s",
+                hashlib.sha256(str(teacher_id).encode()).hexdigest()[:8],
+            )
+            return
+        sections, students = filter_roster_to_teacher(roster, teacher_clever_id)
+
         if students:
             persist_roster_as_csv(students, teacher_id)
-        sections = roster.get("sections", [])
         if sections:
             persist_sections_as_periods(sections, teacher_id)
             _sync_classes_to_db(sections, students, teacher_id)
@@ -391,9 +412,9 @@ def clever_callback():
             if sb:
                 # Look up Supabase user by email — collect all matches to avoid
                 # silently merging when multiple accounts share an email.
-                res = sb.auth.admin.list_users()
+                res = list_all_users(sb)
                 matches = [
-                    u for u in (res or [])
+                    u for u in res
                     if getattr(u, 'email', None) and u.email.lower() == clever_email.lower()
                 ]
                 if len(matches) == 1:
@@ -492,47 +513,38 @@ def clever_sync_roster():
         logger.error("Clever roster sync failed: %s", str(e))
         return jsonify({"error": "Failed to sync roster from Clever"}), 502
 
-    # SECURITY: Server-side section filtering — teachers only see their own sections
+    # SECURITY: scope roster to this teacher's own sections + students.
+    # Previously, students was only filtered when selected_section_ids was
+    # provided — a teacher syncing without a section filter received the
+    # full district roster (2026-05-14 dimensional review S2).
     clever_user = session.get("clever_user", {})
     teacher_clever_id = clever_user.get("clever_id", "")
+    own_sections, own_students = filter_roster_to_teacher(roster, teacher_clever_id)
+    # Mutate roster["sections"] so the downstream map_sections_to_periods
+    # call (~line 568) returns only own sections in the response payload,
+    # not the full district (Codex revised-plan review Q4).
+    roster["sections"] = own_sections
     if teacher_clever_id:
-        all_sections = roster.get("sections", [])
-        own_sections = []
-        for sec in all_sections:
-            sd = sec.get("data", sec)
-            section_teachers = sd.get("teachers", [])
-            # teachers can be a list of IDs or a list of dicts with 'id'
-            teacher_ids = []
-            for t in section_teachers:
-                if isinstance(t, str):
-                    teacher_ids.append(t)
-                elif isinstance(t, dict):
-                    teacher_ids.append(t.get("id", ""))
-            if teacher_clever_id in teacher_ids:
-                own_sections.append(sec)
-        roster["sections"] = own_sections
         logger.info(
-            "Filtered sections for teacher_hash=%s: %d of %d",
+            "Filtered roster for teacher_hash=%s: %d sections, %d students "
+            "(district had %d sections total)",
             hashlib.sha256(str(teacher_clever_id).encode()).hexdigest()[:8],
             len(own_sections),
-            len(all_sections),
+            len(own_students),
+            len(roster.get("sections", [])) if not own_sections else len(own_sections),
         )
 
-    # Filter sections if teacher selected specific ones
-    sections = roster.get("sections", [])
+    # Optional secondary filter: teacher selected a subset of their own sections
+    sections = own_sections
+    students = own_students
     if selected_section_ids is not None:
         selected_set = set(selected_section_ids)
         sections = [s for s in sections if s.get("data", s).get("id", "") in selected_set]
-
-    # Collect student IDs from selected sections to filter students
-    students = roster.get("students", [])
-    if selected_section_ids is not None and sections:
-        # Only include students enrolled in selected sections
         section_student_ids = set()
         for s in sections:
             sd = s.get("data", s)
             section_student_ids.update(sd.get("students", []))
-        students = [st for st in students
+        students = [st for st in own_students
                     if st.get("data", st).get("id", "") in section_student_ids]
 
     # Persist roster to CSV (same location as manual upload)

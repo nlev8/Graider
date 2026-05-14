@@ -17,6 +17,7 @@ from backend.extensions import limiter
 from backend.utils.errors import handle_route_errors
 
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
+from backend.utils.supabase_users import list_all_users
 
 
 def _get_hmac_secret():
@@ -157,7 +158,7 @@ def notify_signup_route():
         try:
             sb = _get_supabase()
             # List users filtered by email (admin API)
-            users_resp = sb.auth.admin.list_users()
+            users_resp = list_all_users(sb)
             user_id = None
             for u in users_resp:
                 if getattr(u, 'email', '') == email:
