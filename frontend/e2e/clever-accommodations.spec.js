@@ -25,7 +25,9 @@ test.describe('Clever SSO — API Endpoints', () => {
 
   test('GET /api/clever/login-url returns URL or error', async ({ request }) => {
     const response = await request.get('/api/clever/login-url')
-    expect([200, 400, 500]).toContain(response.status())
+    // 503 = Clever not configured (backend/routes/clever_routes.py:276).
+    // Returned in CI where CLEVER_CLIENT_ID env var is absent.
+    expect([200, 400, 500, 503]).toContain(response.status())
     const data = await response.json()
     // Should have either url or error
     expect(data.url || data.error || data.message).toBeDefined()
