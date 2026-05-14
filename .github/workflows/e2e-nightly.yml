@@ -22,11 +22,13 @@ name: E2E Nightly (Stage 3a)
 #   each Playwright invocation reuses the same backend instead of
 #   trying to spawn its own on port 3000.
 #
-# Baseline-collection mode (per load-weekly.yml pattern):
-#   continue-on-error on the playwright steps so the workflow reports
-#   results but does NOT gate. Stage 3a is the FIRST time these 13
-#   specs run in CI; some failures are expected. Threshold-gate
-#   revisited in 4-6 weeks once a noise floor exists.
+# Gating mode (promoted from baseline-collection 2026-05-14):
+#   The playwright steps now FAIL the workflow if any spec fails.
+#   The baseline-collection period (mid-May) surfaced one real bug
+#   (React-mount failure in CI — PR #365 fixed it via supabase.js
+#   dummy-fallback) and produced 5+ consecutive green nightly runs.
+#   With 75/75 specs passing consistently, continue-on-error: true
+#   was hiding the only signal this workflow exists to surface.
 
 on:
   schedule:
@@ -161,11 +163,11 @@ jobs:
           exit 1
 
       - name: Run Stage 3a — frontend/e2e specs (7 specs)
-        # Per audit MAJOR #5 Phase 3 plan, baseline-collection mode:
-        # continue-on-error: true so first-run failures surface in
-        # the HTML report but don't block the artifact upload or
-        # future scheduled runs. Threshold-gate revisited in 4-6
-        # weeks once a noise floor exists.
+        # Gating mode (2026-05-14): no continue-on-error — a spec
+        # failure here fails the workflow. Stage 3a baseline-collection
+        # ran from 2026-05-11 to 2026-05-13; PR #365 fixed the only
+        # surfaced regression (#362 supabase.js dummy fallback); 5+
+        # consecutive green nightly runs followed before promotion.
         #
         # --workers=1: per Gemini review, the single shared backend +
         # shared ~/.graider_* local-file storage means parallel
@@ -189,7 +191,6 @@ jobs:
         # out at exactly 45.2s due to trace overhead). Switching to
         # retain-on-failure: still captures rich data for failing
         # tests, but removes overhead on passing tests.
-        continue-on-error: true
         run: |
           cd frontend && npx playwright test \
             e2e/publish-flow.spec.js \
@@ -223,14 +224,17 @@ jobs:
         # the whole testDir. If a new Supabase-requiring spec is
         # ever added to tests/e2e/specs/, the inventory and this
         # workflow must be updated in tandem.
-        continue-on-error: true
+        #
+        # Gating mode (2026-05-14): same promotion as the frontend
+        # step above — a spec failure here fails the workflow.
         run: cd tests/e2e && npx playwright test --workers=1 --trace=retain-on-failure
 
       - name: Stop backend (detect mid-test crash)
-        # Per Codex+Gemini review: both Playwright steps are
-        # continue-on-error: true, so a backend crash mid-test would
-        # silently let the workflow report green with all specs
-        # failed. Fail loud if the backend PID is already gone.
+        # Backend-crash detector. Even now that the playwright steps
+        # gate the workflow on spec failures, a backend that crashed
+        # mid-test could plausibly look like "test failed" rather
+        # than "infra broken" — this step distinguishes them by
+        # failing loud with ::error:: if the PID is already gone.
         if: always()
         run: |
           if [ -f /tmp/backend.pid ]; then
