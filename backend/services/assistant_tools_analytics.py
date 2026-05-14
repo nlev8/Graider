@@ -155,6 +155,16 @@ def _compute_trend_direction(scores):
     return "stable"
 
 
+def _has_value(raw):
+    """Distinguish 'missing/blank' from 'explicit 0'.
+
+    Bug #2 (issue #345): `_safe_int_score` collapses None, "", and 0 all to 0,
+    so callers must guard on the RAW value before parsing to preserve explicit
+    zeros. Truthiness alone (`if r.get(cat)`) wrongly drops int 0.
+    """
+    return raw is not None and raw != ""
+
+
 def _assignment_stats(rows):
     """Compute compact stats for a set of grade rows."""
     scores = [_safe_int_score(r.get("score")) for r in rows]
@@ -162,7 +172,7 @@ def _assignment_stats(rows):
         return None
     cats = {}
     for cat in ("content", "completeness", "writing", "effort"):
-        vals = [_safe_int_score(r.get(cat)) for r in rows if r.get(cat)]
+        vals = [_safe_int_score(r.get(cat)) for r in rows if _has_value(r.get(cat))]
         if vals:
             cats[cat] = round(sum(vals) / len(vals), 1)
     dist = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
@@ -282,8 +292,9 @@ def get_rubric_weakness(period=None, teacher_id='local-dev'):
     for r in rows:
         assign = r.get("assignment", "")
         for cat in cat_labels:
-            val = _safe_int_score(r.get(cat))
-            if val > 0:
+            raw = r.get(cat)
+            if _has_value(raw):
+                val = _safe_int_score(raw)
                 cat_totals[cat].append(val)
                 per_assign_cats[assign][cat].append(val)
 
@@ -322,7 +333,15 @@ def get_rubric_weakness(period=None, teacher_id='local-dev'):
 
 
 def flag_at_risk_students(period=None, threshold=None, teacher_id='local-dev'):
-    """Combine signals to produce risk scores: declining trend + low scores + missing work."""
+    """Combine signals to produce risk scores: declining trend + low scores + missing work.
+
+    Missing-work scoring uses the GLOBAL union of assignments across all
+    periods as the denominator when ``period`` is None or 'all' (product
+    decision 2026-05-13, issue #345 bug #1). A student is therefore penalized
+    if their classmates in a *different* period received an assignment they
+    did not — by design, this surfaces students who transferred between
+    periods or whose period roster was inconsistent.
+    """
     require_teacher_id(teacher_id)
     threshold = threshold if threshold is not None else 30
     rows = _load_master_csv(period_filter=period or 'all', teacher_id=teacher_id)
@@ -377,7 +396,7 @@ def flag_at_risk_students(period=None, threshold=None, teacher_id='local-dev'):
         # Signal 4: Weak rubric categories (0-15 points)
         cat_avgs = {}
         for cat in ("content", "completeness", "writing", "effort"):
-            vals = [_safe_int_score(r.get(cat)) for r in entries if r.get(cat)]
+            vals = [_safe_int_score(r.get(cat)) for r in entries if _has_value(r.get(cat))]
             if vals:
                 cat_avgs[cat] = round(sum(vals) / len(vals), 1)
         weak_cats = [c for c, v in cat_avgs.items() if v < 65]
@@ -392,7 +411,9 @@ def flag_at_risk_students(period=None, threshold=None, teacher_id='local-dev'):
             risk_flags = []
             if direction == "declining":
                 risk_flags.append("declining")
-            if avg < 70:
+            # Bug #4 (issue #345): align flag threshold with the +10 risk band
+            # at avg < 75 so teachers see WHY a 70-74 student was flagged.
+            if avg < 75:
                 risk_flags.append(f"avg {avg}%")
             if missing > 0:
                 risk_flags.append(f"{missing} missing")
@@ -430,11 +451,13 @@ def compare_assignments(assignment_a, assignment_b, teacher_id='local-dev'):
     if not rows:
         return {"error": "No grade data found."}
 
-    norm_a = _normalize_assignment_name(assignment_a).lower()
-    norm_b = _normalize_assignment_name(assignment_b).lower()
+    norm_a = _normalize_assignment_name(assignment_a)
+    norm_b = _normalize_assignment_name(assignment_b)
 
-    rows_a = [r for r in rows if norm_a in _normalize_assignment_name(r.get("assignment", "")).lower()]
-    rows_b = [r for r in rows if norm_b in _normalize_assignment_name(r.get("assignment", "")).lower()]
+    # Bug #3 (issue #345): exact match — substring `in` collided "Quiz 1" with
+    # "Quiz 10". _normalize_assignment_name already lowercases.
+    rows_a = [r for r in rows if _normalize_assignment_name(r.get("assignment", "")) == norm_a]
+    rows_b = [r for r in rows if _normalize_assignment_name(r.get("assignment", "")) == norm_b]
 
     if not rows_a:
         return {"error": f"No grades found for '{assignment_a}'."}
@@ -483,8 +506,9 @@ def get_grade_distribution(assignment=None, period=None, group_by=None, teacher_
         return {"error": "No grade data found."}
 
     if assignment:
-        norm = _normalize_assignment_name(assignment).lower()
-        rows = [r for r in rows if norm in _normalize_assignment_name(r.get("assignment", "")).lower()]
+        # Bug #3 (issue #345): exact match avoids "Quiz 1" matching "Quiz 10".
+        norm = _normalize_assignment_name(assignment)
+        rows = [r for r in rows if _normalize_assignment_name(r.get("assignment", "")) == norm]
         if not rows:
             return {"error": f"No grades found for '{assignment}'."}
 
@@ -507,7 +531,11 @@ def get_grade_distribution(assignment=None, period=None, group_by=None, teacher_
                 buckets["F"] += 1
         pcts = {g: round(c / total * 100, 1) for g, c in buckets.items()}
         avg = round(sum(score_list) / total, 1)
-        pass_rate = round((buckets["A"] + buckets["B"] + buckets["C"]) / total * 100, 1)
+        # Bug #5 (issue #345): D (60-69) counts as passing — aligns with
+        # frontend AnalyticsTab which uses `s >= 60` for passing.
+        pass_rate = round(
+            (buckets["A"] + buckets["B"] + buckets["C"] + buckets["D"]) / total * 100, 1,
+        )
         return {
             "count": total,
             "mean": avg,
@@ -560,9 +588,10 @@ def detect_score_outliers(assignment=None, period=None, threshold=None, teacher_
         assign_groups[r.get("assignment", "unknown")].append(r)
 
     if assignment:
-        norm = _normalize_assignment_name(assignment).lower()
+        # Bug #3 (issue #345): exact match avoids "Quiz 1" matching "Quiz 10".
+        norm = _normalize_assignment_name(assignment)
         filtered = {a: rs for a, rs in assign_groups.items()
-                    if norm in _normalize_assignment_name(a).lower()}
+                    if _normalize_assignment_name(a) == norm}
         if not filtered:
             return {"error": f"No grades found for '{assignment}'."}
         assign_groups = filtered
