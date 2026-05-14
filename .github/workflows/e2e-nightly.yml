@@ -229,6 +229,23 @@ jobs:
             --reporter=list,html \
             --trace=retain-on-failure
 
+      - name: Re-seed onboarding flag (frontend/e2e clobbers settings)
+        # frontend/e2e/teacher-settings-save.spec.js:66 POSTs to
+        # /api/save-global-settings, and the backend's save_global_settings
+        # (backend/routes/settings_routes.py:208) does json.dump(data, f)
+        # — total file replacement, not a merge. The test posts
+        # `{ai_notes: "..."}` (note: also a wrong-key naming bug; React
+        # uses `globalAINotes`), wiping our pre-onboarded
+        # `config.onboarding_completed: true`. By the time tests/e2e
+        # runs, the modal is back. Re-write the flag here so the
+        # second playwright invocation gets a clean state.
+        #
+        # Cleaner long-term fix: make save_global_settings merge instead
+        # of replace, OR fix the spec to POST the full state. Out of
+        # scope for this PR (audit MAJOR #5 Phase 3 closeout).
+        run: |
+          echo '{"config": {"onboarding_completed": true}}' > "$HOME/.graider_settings.json"
+
       - name: Run Stage 3a — tests/e2e/specs (6 specs)
         # Separate Playwright project; runs from tests/e2e/ cwd.
         # NO --reporter= flag here — tests/e2e/playwright.config.js
