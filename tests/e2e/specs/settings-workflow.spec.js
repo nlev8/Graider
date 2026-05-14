@@ -71,12 +71,13 @@ test.describe('Settings Workflow', () => {
       await page.waitForTimeout(2000);
     }
 
-    // Should see some roster indicator
-    const pageText = await page.locator('body').textContent();
+    // Should see some roster indicator (case-insensitive; page renders
+    // "OneRoster", "Sync Roster", "Upload separate rosters" etc.).
+    const pageText = (await page.locator('body').textContent()).toLowerCase();
     const hasRosterIndicator = pageText.includes('student') ||
       pageText.includes('roster') ||
-      pageText.includes('Period') ||
-      pageText.includes('Upload');
+      pageText.includes('period') ||
+      pageText.includes('upload');
     expect(hasRosterIndicator).toBe(true);
   });
 });
