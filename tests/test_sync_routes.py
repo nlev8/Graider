@@ -146,6 +146,37 @@ class TestSyncWebhookAuth:
                                    headers={"Authorization": "Bearer test-secret-123"})
         assert resp.status_code == 200
 
+    def test_validate_secret_uses_only_constant_time_compare(self):
+        """_validate_secret must not contain any `==`/`!=` against the
+        secret — only hmac.compare_digest. Prevents both the original
+        timing bug and the 'length leak' refactor pitfall caught by
+        Gemini-proxy plan review (2026-05-14)."""
+        import inspect
+        import ast
+        from backend.routes.sync_routes import _validate_secret
+        src = inspect.getsource(_validate_secret)
+        assert "hmac.compare_digest" in src, (
+            "_validate_secret must call hmac.compare_digest"
+        )
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare):
+                for op in node.ops:
+                    assert not isinstance(op, (ast.Eq, ast.NotEq)), (
+                        f"_validate_secret contains a == or != compare at "
+                        f"line {node.lineno}; use hmac.compare_digest only "
+                        f"(2026-05-14 dimensional review S1)"
+                    )
+
+    def test_validate_secret_rejects_wrong_secret_with_correct_length(self):
+        """Behavioral test: equal-length wrong secret must still be rejected.
+        Catches a length-only check that would pass the AST test above."""
+        app = _make_sync_app(sync_secret="abcdef12345")
+        with app.test_client() as client:
+            resp = client.post('/api/sync/periodic-roster',
+                               headers={"Authorization": "Bearer xyzwvu67890"})
+        assert resp.status_code == 401
+
 
 class TestSyncWebhookOrchestration:
     def test_returns_summary_with_zero_teachers(self):

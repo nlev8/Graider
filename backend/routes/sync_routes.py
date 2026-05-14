@@ -7,6 +7,7 @@ Auth: Bearer token matching PERIODIC_SYNC_SECRET env var.
 Rate limited: 1 request per 5 minutes.
 """
 
+import hmac
 import os
 import time
 import logging
@@ -36,14 +37,21 @@ def get_supabase():
 
 
 def _validate_secret():
-    """Validate the Authorization: Bearer <secret> header."""
+    """Validate the Authorization: Bearer <secret> header.
+
+    Uses hmac.compare_digest for a constant-time compare. The prior
+    `==` operator was timing-dependent and vulnerable to byte-by-byte
+    secret extraction by an attacker measuring response latency
+    (closed 2026-05-14, dimensional review S1).
+    """
     expected = os.environ.get('PERIODIC_SYNC_SECRET')
     if not expected:
         return False
     auth = request.headers.get('Authorization', '')
     if not auth.startswith('Bearer '):
         return False
-    return auth[7:] == expected
+    return hmac.compare_digest(auth[7:].encode('utf-8'),
+                               expected.encode('utf-8'))
 
 
 def _discover_teachers():
