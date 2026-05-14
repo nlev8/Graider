@@ -201,6 +201,32 @@ def _sync_one_teacher(teacher):
             sections = roster_data.get('sections', [])
             students = roster_data.get('students', [])
 
+            # Tenancy filter: scope roster to this teacher's own sections.
+            # Closes the periodic-sync copy of the manual-sync leak
+            # (2026-05-14 dimensional review S2, periodic-sync variant
+            # flagged by Gemini-proxy plan review). Without this, the
+            # daily cron writes the FULL district roster to each
+            # eligible teacher's teacher_id.
+            from backend.services.clever_roster_scope import filter_roster_to_teacher
+            from backend.auth import load_clever_links
+            if teacher_id.startswith("clever:"):
+                teacher_clever_id = teacher_id[len("clever:"):]
+            else:
+                links = load_clever_links()  # {clever_id: graider_teacher_id}
+                teacher_clever_id = next(
+                    (cid for cid, tid in links.items() if tid == teacher_id),
+                    None,
+                )
+            if not teacher_clever_id:
+                return {"teacher_id": teacher_id, "provider": provider,
+                        "status": "skipped",
+                        "error": "Could not resolve Clever ID for teacher",
+                        "duration_s": round(time.time() - start, 1)}
+            sections, students = filter_roster_to_teacher(
+                {"sections": sections, "students": students},
+                teacher_clever_id,
+            )
+
             counts = _sync_classes_to_db(sections, students, teacher_id)
 
             # Collect current student external IDs for deactivation
