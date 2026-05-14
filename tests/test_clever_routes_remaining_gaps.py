@@ -73,9 +73,15 @@ class TestBackgroundRosterSync:
     def test_full_pipeline_with_contacts(self):
         from backend.routes.clever_routes import _background_roster_sync
 
+        # Post-2026-05-14 tenancy filter: teacher_id must resolve a Clever
+        # ID (via clever: prefix or clever_links reverse-lookup), and the
+        # section must list that Clever ID as an owner. Updated from the
+        # pre-fix shape (teach-1 + sectionless-teachers list) which pinned
+        # the district-roster leak.
         roster = {
             "students": [{"data": {"id": "s1"}}],
-            "sections": [{"data": {"id": "sec1"}}],
+            "sections": [{"data": {"id": "sec1", "teachers": ["teach-1"],
+                                   "students": ["s1"]}}],
             "contacts": [{"data": {"id": "c1"}}],
         }
 
@@ -89,7 +95,7 @@ class TestBackgroundRosterSync:
              patch(f"{MODULE}.extract_parent_contacts",
                    return_value={"s1": {"parent_emails": ["m@e.com"]}}), \
              patch(f"{MODULE}.persist_parent_contacts") as mock_persist_pc:
-            _background_roster_sync("token", "teach-1")
+            _background_roster_sync("token", "clever:teach-1")
 
         # All persist functions called
         mock_persist_r.assert_called_once()

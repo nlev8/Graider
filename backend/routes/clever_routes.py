@@ -250,10 +250,29 @@ def _background_roster_sync(district_token, teacher_id):
     """Run roster sync in a background thread so OAuth callback returns immediately."""
     try:
         roster = _run_async(sync_roster(district_token))
-        students = roster.get("students", [])
+
+        # Scope to this teacher's sections (2026-05-14 dimensional review
+        # S2, background-sync variant per Codex revised-plan review). Same
+        # helper as the manual route + periodic cron.
+        if teacher_id.startswith("clever:"):
+            teacher_clever_id = teacher_id[len("clever:"):]
+        else:
+            links = load_clever_links()
+            teacher_clever_id = next(
+                (cid for cid, tid in links.items() if tid == teacher_id),
+                None,
+            )
+        if not teacher_clever_id:
+            logger.warning(
+                "Background roster sync skipped: could not resolve "
+                "Clever ID for teacher_hash=%s",
+                hashlib.sha256(str(teacher_id).encode()).hexdigest()[:8],
+            )
+            return
+        sections, students = filter_roster_to_teacher(roster, teacher_clever_id)
+
         if students:
             persist_roster_as_csv(students, teacher_id)
-        sections = roster.get("sections", [])
         if sections:
             persist_sections_as_periods(sections, teacher_id)
             _sync_classes_to_db(sections, students, teacher_id)
