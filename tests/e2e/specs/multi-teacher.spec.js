@@ -20,11 +20,19 @@ async function clickTab(page, name) {
 test.describe('Concurrent Multi-Teacher Simulation', () => {
 
   test.skip('3 teachers complete full workflows concurrently', async ({ browser }) => {
-    // Spec assumes browser-context isolation = teacher isolation, but
-    // the backend's dev shim (backend/auth.py:184-190) maps all
-    // localhost requests to `local-dev` regardless of context. Fix
-    // requires setting X-Test-Teacher-Id header per context. Tracked
-    // in #370.
+    // Deeper than originally tracked: not just a header-injection issue.
+    // Even with X-Test-Teacher-Id forcing distinct teacher_ids:
+    //   1. approval_status (auth_routes.py:110) only bypasses for the
+    //      literal `local-dev` — other dev-shim teacher_ids would hit
+    //      Supabase admin.get_user_by_id which 500s in CI.
+    //   2. _use_supabase (storage.py:115) returns False when Supabase
+    //      isn't configured, falling back to the file backend.
+    //      _key_to_filepath uses HARDCODED paths (no per-teacher
+    //      directory), so all teacher_ids would still share
+    //      ~/.graider_settings.json — the race the test was trying to
+    //      avoid in the first place.
+    // True multi-teacher isolation in CI requires either a Supabase
+    // fixture or a per-teacher file-backend path scheme. Tracked in #370.
     test.setTimeout(120_000);
 
     const results = [];

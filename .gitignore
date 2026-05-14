@@ -230,6 +230,7 @@ student_emails/
 # Allow test fixture files (overrides above ignores)
 !tests/fixtures/master_grades.csv
 !tests/fixtures/roster_period_*.csv
+!tests/load/fixtures/rosters/*.csv
 
 # Uploaded assignments (student work)
 Assignments/
