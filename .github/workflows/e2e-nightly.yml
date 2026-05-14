@@ -136,6 +136,28 @@ jobs:
         # (e.g., os.path.expanduser('~/.graider_*')).
         run: mkdir -p "$HOME"
 
+      - name: Pre-onboard test teacher (suppress OnboardingWizard)
+        # The 8-step OnboardingWizard modal pops up on first run when
+        # `config.onboarding_completed` is unset (frontend/src/App.jsx:1712).
+        # On a developer machine, the flag has been set in a prior session
+        # and is read from ~/.graider_settings.json. In CI's isolated
+        # $HOME the file doesn't exist, so the modal blocks every spec
+        # that tries to click a sidebar tab.
+        #
+        # Surfaced by run 25865742713 (PR #369) after removing
+        # `continue-on-error: true` — 16 of 56 frontend specs failed
+        # because the modal was covering the target element. PR #365's
+        # supabase.js dummy fallback was a real but partial fix; this
+        # is the second half.
+        #
+        # Pre-write the settings file with `onboarding_completed: true`
+        # so the backend's /api/load-global-settings returns the flag
+        # set, and the React app skips the modal. The flag is the only
+        # required key; other settings remain at their defaults.
+        run: |
+          echo '{"onboarding_completed": true}' > "$HOME/.graider_settings.json"
+          ls -la "$HOME/.graider_settings.json"
+
       - name: Start backend in background
         # Same pattern as load-weekly.yml. The backend listens on
         # port 3000; both Playwright configs detect it via
