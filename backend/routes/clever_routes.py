@@ -33,6 +33,7 @@ from backend.supabase_client import get_supabase as _get_supabase_safe
 from backend.utils.errors import handle_route_errors
 from backend.utils.auth_decorators import require_clever_session
 from backend.utils.redaction import redact_email
+from backend.utils.supabase_users import list_all_users
 
 logger = logging.getLogger(__name__)
 
@@ -391,9 +392,9 @@ def clever_callback():
             if sb:
                 # Look up Supabase user by email — collect all matches to avoid
                 # silently merging when multiple accounts share an email.
-                res = sb.auth.admin.list_users()
+                res = list_all_users(sb)
                 matches = [
-                    u for u in (res or [])
+                    u for u in res
                     if getattr(u, 'email', None) and u.email.lower() == clever_email.lower()
                 ]
                 if len(matches) == 1:

@@ -15,6 +15,7 @@ stripe_bp = Blueprint('stripe', __name__)
 _logger = logging.getLogger(__name__)
 
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
+from backend.utils.supabase_users import list_all_users
 import sentry_sdk
 
 
@@ -251,7 +252,7 @@ def _sync_subscription_metadata(customer_id, subscription_id):
 
         # Find user by customer ID in Supabase
         sb = _get_supabase()
-        users = sb.auth.admin.list_users()
+        users = list_all_users(sb)
         target_user = None
         for u in users:
             meta = u.user_metadata or {}
