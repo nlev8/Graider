@@ -150,13 +150,16 @@ jobs:
         # supabase.js dummy fallback was a real but partial fix; this
         # is the second half.
         #
-        # Pre-write the settings file with `onboarding_completed: true`
-        # so the backend's /api/load-global-settings returns the flag
-        # set, and the React app skips the modal. The flag is the only
-        # required key; other settings remain at their defaults.
+        # Shape note: the frontend reads
+        # `data.settings.config.onboarding_completed`
+        # (frontend/src/App.jsx:1581-1587), so the flag must be nested
+        # under `config`. The first attempt at this fix (commit e93fd19)
+        # put the flag at top-level and didn't take effect — verified
+        # via run 25868340200 showing the same 16/40 split.
         run: |
-          echo '{"onboarding_completed": true}' > "$HOME/.graider_settings.json"
+          echo '{"config": {"onboarding_completed": true}}' > "$HOME/.graider_settings.json"
           ls -la "$HOME/.graider_settings.json"
+          cat "$HOME/.graider_settings.json"
 
       - name: Start backend in background
         # Same pattern as load-weekly.yml. The backend listens on
