@@ -56,9 +56,13 @@ test.describe('Settings Workflow', () => {
     await page.waitForTimeout(1000);
   });
 
-  test.skip('can upload a roster CSV', async ({ page }) => {
-    // Stale spec: looks for roster UI on Settings/General sub-tab, but
-    // it lives on Settings/Classroom. Tracked in #370.
+  test('can upload a roster CSV', async ({ page }) => {
+    // Settings has sub-tabs (General/Grading/AI/Classroom/Privacy/Billing/
+    // Resources). Roster upload lives on Classroom. The beforeEach lands
+    // on General by default — navigate to Classroom first.
+    await page.locator('button', { hasText: /^Classroom$/ }).click();
+    await page.waitForTimeout(500);
+
     const rosterPath = path.join(ROSTERS_DIR, teacher.roster);
     // Look for any file input (may be hidden)
     const fileInput = page.locator('input[type="file"]');
