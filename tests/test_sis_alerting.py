@@ -69,12 +69,17 @@ SIS_CAPTURES = [
     # delegation + +9 lines round-3 redaction = net +3 vs pre-PR. The
     # test allows a window=8 search so this is comfortably within margin.
     ("backend/routes/clever_routes.py", 241),
-    ("backend/routes/clever_routes.py", 265),
+    # 2026-05-14: shifted 265 -> 286 by the security-quintet PR (Task 4b
+    # added the Clever-ID resolver + filter_roster_to_teacher block to
+    # _background_roster_sync — ~21 lines). Capture site at 288 unchanged.
+    ("backend/routes/clever_routes.py", 286),
     # 2026-05-06: shifted 672 -> 692 by PR 3 of SIS compliance hardening sprint
     # (PII redaction in Clever logs added ~20 lines of helper code earlier in
     # the file). 2026-05-07: shifted 692 -> 699 by PR #227 same-as-above net
-    # ~+9 line addition in _clever_audit. Capture site itself is unchanged.
-    ("backend/routes/clever_routes.py", 699),
+    # ~+9 line addition in _clever_audit. 2026-05-14: shifted 699 -> 711 by
+    # the security-quintet PR (Task 4b additions to _background_roster_sync
+    # earlier in the file). Capture site at 713 unchanged.
+    ("backend/routes/clever_routes.py", 711),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
@@ -102,7 +107,10 @@ SIS_CAPTURES = [
     # 2026-05-02: shifted 145 -> 159 by the schema-audit fix that added a
     # two-step query in _discover_teachers (~14 lines). Pin tracks the
     # _save_cursor try-block.
-    ("backend/routes/sync_routes.py", 159),
+    # 2026-05-14: shifted 159 -> 169 by the security-quintet PR Task 1
+    # (added `import hmac` + ~10 lines of hardened _validate_secret).
+    # Capture site at 171 unchanged.
+    ("backend/routes/sync_routes.py", 169),
     ("backend/services/oneroster_gradebook.py", 95),
 ]
 
