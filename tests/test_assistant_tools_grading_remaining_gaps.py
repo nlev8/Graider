@@ -17,8 +17,12 @@ state setup — better covered by characterization tests):
 * `get_student_summary` student_id filter + longest-name display
   (lines 304-306) — see `tests/characterization/test_query_grades_golden.py`
   and `tests/test_grading_routes_unit.py`
-* `scan_submissions_folder` prefix-fuzzy graded match (944-945),
-  display_name fallback (957) — see follow-up issue #348
+
+Closed by #348 (2026-05-15):
+
+* `scan_submissions_folder` prefix-fuzzy graded match (944-945) and
+  display_name fallback (957) — see `TestScanSubmissionsFolderIssue348`
+  below.
 
 Per dual-rate-limit precedent: test-only PR merging on green CI.
 """
@@ -201,6 +205,142 @@ class TestScanSubmissionsFolderRemainingEdges:
         assert "error" not in result
         assert result["total_files"] == 1
         assert result["unique_students"] == 1
+
+
+# ──────────────────────────────────────────────────────────────────
+# Issue #348: prefix-fuzzy graded match + display_name fallback
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestScanSubmissionsFolderIssue348:
+    """Coverage gap-fill for two branches in `scan_submissions_folder`:
+
+      * Lines 944-945 — `ga.startswith(_anorm) or _anorm.startswith(ga)`
+        fires when a student's graded assignment norm is a prefix of
+        (or prefixed by) the staged filename's assignment norm.
+      * Line 957 — `display_name = assignment_norm` fallback when the
+        raw_parts comprehension finds no matching entry. In production
+        flow this is defensive dead code (the comprehension can only
+        come up empty if `_normalize_assignment_name` is non-idempotent
+        between Phase 2 and Phase 5). Exercised here via a side_effect
+        mock that returns different normalizations across calls — the
+        test pins the safety-net string so a future refactor that
+        removes the fallback breaks the assertion intentionally.
+    """
+
+    def test_prefix_fuzzy_graded_match_counts_submission_as_graded(
+        self, tmp_path,
+    ):
+        """Graded result `assignment="Quiz"` (`_anorm="quiz"`) marks
+        the staged file `Alice_Smith_Quiz1.docx` (`_anorm="quiz1"`) as
+        graded via the `_anorm.startswith(ga)` branch at line 944."""
+        from backend.services.assistant_tools_grading import (
+            scan_submissions_folder,
+        )
+        import json
+
+        folder = tmp_path / "assignments"
+        folder.mkdir()
+        (folder / "Alice_Smith_Quiz1.docx").touch()
+
+        settings_path = tmp_path / ".graider_settings.json"
+        settings_path.write_text(json.dumps(
+            {"config": {"assignments_folder": str(folder)}}
+        ))
+
+        # Graded result whose normalized assignment ("quiz") is a strict
+        # prefix of the file's normalized assignment ("quiz1"). The
+        # exact-membership check at line 941 fails ("quiz1" not in
+        # {"quiz"}); fuzzy fallback at 944 succeeds via
+        # "quiz1".startswith("quiz").
+        # NB: graded_by_student is keyed by f"{first}_{last}" lowered,
+        # built from the result row's student_name (line 916-918).
+        graded_results = [{
+            "student_name": "Alice Smith",
+            "assignment": "Quiz",
+            "score": 90,
+        }]
+
+        with patch(f"{MODULE}.os.path.expanduser",
+                   side_effect=lambda p: p.replace(
+                       "~", str(tmp_path),
+                   )), \
+             patch("backend.staging.stage_files",
+                   return_value={"staging_folder": str(folder),
+                                 "duplicates_skipped": 0}), \
+             patch(f"{MODULE}._load_results", return_value=graded_results):
+            result = scan_submissions_folder(teacher_id="t")
+
+        assert "error" not in result
+        # Exactly one assignment group, exactly one submission, and it
+        # should be flagged as graded via the fuzzy prefix match.
+        assert len(result["top_assignments"]) == 1
+        entry = result["top_assignments"][0]
+        assert entry["submissions"] == 1
+        assert entry["graded"] == 1, (
+            "Submission was not counted as graded — prefix-fuzzy match "
+            "at scan_submissions_folder:944-945 did not fire. "
+            f"entry={entry}"
+        )
+        assert entry["ungraded"] == 0
+
+    def test_display_name_fallback_when_normalize_non_idempotent(
+        self, tmp_path,
+    ):
+        """Line 957: `display_name = assignment_norm` when no parsed
+        entry's normalization equals `assignment_norm`. The only way to
+        trigger this in normal flow is for `_normalize_assignment_name`
+        to return different values across calls for the same input —
+        which doesn't happen with the real implementation but is a
+        valid defensive guardrail worth pinning."""
+        from backend.services.assistant_tools_grading import (
+            scan_submissions_folder,
+        )
+        import json
+
+        folder = tmp_path / "assignments"
+        folder.mkdir()
+        (folder / "Alice_Smith_Quiz1.docx").touch()
+
+        settings_path = tmp_path / ".graider_settings.json"
+        settings_path.write_text(json.dumps(
+            {"config": {"assignments_folder": str(folder)}}
+        ))
+
+        # Non-idempotent normalize:
+        #   Phase 2 (line 893) → "phase2-norm" (becomes the group key)
+        #   Phase 5 (line 953) → "phase5-norm" (mismatches the key)
+        # raw_parts comprehension returns [] → fallback at line 957
+        # sets display_name = assignment_norm ("phase2-norm").
+        calls = {"n": 0}
+
+        def non_idempotent_norm(_s):
+            calls["n"] += 1
+            # First call is during Phase 2 grouping. All subsequent calls
+            # are either Phase 3 results processing (skipped — no
+            # results) or Phase 5 raw_parts (return a different value).
+            return "phase2-norm" if calls["n"] == 1 else "phase5-norm"
+
+        with patch(f"{MODULE}.os.path.expanduser",
+                   side_effect=lambda p: p.replace(
+                       "~", str(tmp_path),
+                   )), \
+             patch("backend.staging.stage_files",
+                   return_value={"staging_folder": str(folder),
+                                 "duplicates_skipped": 0}), \
+             patch(f"{MODULE}._load_results", return_value=[]), \
+             patch(f"{MODULE}._normalize_assignment_name",
+                   side_effect=non_idempotent_norm):
+            result = scan_submissions_folder(teacher_id="t")
+
+        assert "error" not in result
+        assert len(result["top_assignments"]) == 1
+        # Without the fallback, display_name would be derived from
+        # Counter(raw_parts).most_common(1)[0][0] — but raw_parts is
+        # empty here, so the safety net hands us the assignment_norm
+        # group key instead. Pins the value so removing the fallback
+        # breaks this test intentionally.
+        assert result["top_assignments"][0]["assignment"] == "phase2-norm"
 
 
 # ──────────────────────────────────────────────────────────────────
