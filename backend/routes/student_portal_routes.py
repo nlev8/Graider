@@ -913,6 +913,13 @@ def publish_assessment():
     """
     try:
         db = _get_teacher_supabase()
+        if not db:
+            # Issue #355: was unhandled-AttributeError → 500. Match the
+            # district_routes.py:527 idiom so callers see 503 ("backend
+            # offline") instead of an opaque 500. Production-correct
+            # even outside the load-test scenario.
+            return jsonify({"error": "Supabase not configured"}), 503
+
         data = request.json
         assessment = data.get('assessment')
         settings = data.get('settings', {})

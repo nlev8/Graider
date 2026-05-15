@@ -105,16 +105,23 @@ async def run_student_portal_flow(client, persona, persona_data, results):
     test_assessment = _build_assessment(persona)
 
     # ── Step A: Publish assessment ───────────────────────────────────────
+    # Accept 503 alongside 200: when Supabase isn't configured (CI load
+    # test default), /api/publish-assessment returns 503 instead of 500
+    # per issue #355. 503 is the production-correct response for
+    # "persistence backend offline" and should not gate the load test.
+    # All dependent steps (join/submit/grade) skip via the existing
+    # `not join_code` guard below.
     resp_pub, step_pub = await timed_request(
         client, "POST", "/api/publish-assessment",
         persona_id=pid, scenario=SCENARIO, step="publish_assessment",
+        expected_status=(200, 503),
         json={"assessment": test_assessment},
         headers=headers,
     )
     results.append(step_pub)
 
     join_code = None
-    if resp_pub and step_pub.status == "pass":
+    if resp_pub and step_pub.status == "pass" and resp_pub.status_code == 200:
         pub_data = resp_pub.json()
         join_code = pub_data.get("join_code") or pub_data.get("code")
         missing = assert_json_has(pub_data, "join_code")

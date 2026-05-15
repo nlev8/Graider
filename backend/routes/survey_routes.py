@@ -59,13 +59,20 @@ def _generate_survey_code():
 @handle_route_errors
 def create_survey():
     """Create a new parent survey and return the link."""
+    db = get_supabase()
+    if not db:
+        # Issue #355: was unhandled-AttributeError → 500. Match the
+        # district_routes.py:527 idiom so callers see 503 ("backend is
+        # offline") instead of an opaque 500. Production-correct even
+        # when Supabase outages happen outside the load-test scenario.
+        return jsonify({"error": "Supabase not configured"}), 503
+
     data = request.json or {}
     teacher_name = data.get('teacher_name', 'Teacher')
     title = data.get('title', 'Parent Communication Survey')
     questions = data.get('questions', DEFAULT_QUESTIONS)
 
     code = _generate_survey_code()
-    db = get_supabase()
     db.table('published_assessments').insert({
         'join_code': code,
         'title': title,
@@ -99,6 +106,9 @@ def survey_results():
         return jsonify({'error': 'Missing code parameter'}), 400
 
     db = get_supabase()
+    if not db:
+        return jsonify({"error": "Supabase not configured"}), 503
+
     result = db.table('published_assessments') \
         .select('assessment, title, submission_count') \
         .eq('join_code', code) \
@@ -147,6 +157,9 @@ def survey_results():
 def list_surveys():
     """List all surveys created by the teacher."""
     db = get_supabase()
+    if not db:
+        return jsonify({"error": "Supabase not configured"}), 503
+
     result = db.table('published_assessments') \
         .select('join_code, title, submission_count, is_active, created_at') \
         .eq('settings->>content_type', 'survey') \
@@ -163,6 +176,13 @@ def list_surveys():
 def survey_page(code):
     """Serve the self-contained survey HTML page."""
     db = get_supabase()
+    if not db:
+        return make_response(
+            '<h1>Survey temporarily unavailable</h1>'
+            '<p>The persistence backend is offline. Please try again later.</p>',
+            503,
+        )
+
     result = db.table('published_assessments') \
         .select('assessment, title, teacher_name, is_active') \
         .eq('join_code', code) \
