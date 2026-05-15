@@ -1,127 +1,88 @@
-# Handoff: React mount failure in CI's chromium
+# Handoff: 2026-05-15 security/correctness sprint — 7 PRs merged, 1 issue left
 
-**Audit MAJOR #5 Phase 3 Stage 3a follow-up. Filed 2026-05-12.**
+**Session-end snapshot. Replaces the mid-session draft. Tracker is now effectively clean: every open issue I touched is closed, with one architectural item (#353) deliberately deferred to fresh context.**
 
 ## Goal
 
-Root-cause and fix the 29 spec failures in `e2e-nightly` so the workflow surfaces real regressions instead of passing trivially via `continue-on-error: true`.
+Snapshot of the May 14–15 session so a fresh agent (or future-me) can pick up the one remaining tracker entry without re-investigating today's ground. Seven PRs landed. The only surviving open issue is scoped + reasoned at the bottom.
 
 ## TL;DR
 
-- Workflow infra is sound; merged via PRs #358 + #359 + #360 + #361.
-- Run [25758117445](https://github.com/nlev8/Graider/actions/runs/25758117445) succeeded structurally: backend spawn, preflight, both Playwright projects discovered + ran tests, artifact uploaded.
-- **Result**: 46/56 frontend/e2e pass; 10 fail. **0/19 tests/e2e pass**.
-- **All 29 failures have identical shape**: `page.goto('/')` returns in ~320ms with status `load`, but React never mounts. Failure screenshots are blank dark blue (page background only, no `<div id="root">` content). The 46 passing frontend specs are API-only tests that don't navigate to UI — they prove chromium launches and HTTP works in CI.
-- **Tracking issue**: https://github.com/nlev8/Graider/issues/362
+- **7 PRs merged this session**, all auto-deployed via Railway: #374, #375, #376, #377, #378, #379 (plus #373 closed by #374).
+- **8 stale-issue closures**: #247, #249, #253 were already fixed in prior PRs; #339, #341, #343, #348, #355, #370, #373 closed by today's PRs.
+- **1 issue genuinely open**: **#353** — load-test multi-persona + multi-teacher e2e (architectural; also covers #370 part 2). Deferred to fresh context per the analysis below.
+- **GitNexus index still stale** at commit `22bc414` (May 9). Zombie PID 67783 still holds the LevelDB lock. **Reboot pending.** Index lag does not block work; impact analyses just need a "+1 risk tier" pessimism filter until reindex.
+- Local `main` at `55d7643`. Working tree has only Vite-build churn + this handoff. No in-flight branches.
 
-## Local reproduction state
+## Shipped this session
 
-All 75 specs PASS locally against the same Vite-built frontend + backend:
+| PR | Title | Closes | Merge commit |
+|----|-------|--------|--------------|
+| [#374](https://github.com/nlev8/Graider/pull/374) | `hmac.compare_digest` on 6 OAuth state/nonce checks | #373 | `ede4a5a` |
+| [#375](https://github.com/nlev8/Graider/pull/375) | teacher-scope `import_student_data` via `backend.storage` | #339 | `7c5cb73` |
+| [#376](https://github.com/nlev8/Graider/pull/376) | `sync_all_to_cloud` period CSV format + counters | #341 | `ee333a0` |
+| [#377](https://github.com/nlev8/Graider/pull/377) | anthropic adapter `emit_json` auto-decode to TextPart | #343 | `e7d5a5c` |
+| [#378](https://github.com/nlev8/Graider/pull/378) | survey + publish-assessment 503-not-500 when Supabase offline | #355 | `bfa9f1b` |
+| [#379](https://github.com/nlev8/Graider/pull/379) | scan_submissions_folder coverage (prefix-fuzzy + display fallback) | #348 | `55d7643` |
 
-```bash
-# From repo root
-cd /Users/alexc/Downloads/Graider
+## Issues triaged this session (no code work needed)
 
-# Backend should be running on :3000:
-curl -fsS http://localhost:3000/   # → HTTP 200
+| Issue | Action | Reason |
+|-------|--------|--------|
+| #247 | Closed with verify comment | Already fixed by PR #281 + `_SENSITIVE_KEY_PREFIXES = ('pending_send',)`. 21 regression tests pass. |
+| #249 | Closed with verify comment | Already fixed by PR #256. `email_routes.py:880,1233` uses `_get_state`/`_get_lock` factory. 6 regression tests pass. |
+| #253 | Closed with verify comment | Already fixed by PR #257. `_safe_style_name` + `_path_inside_styles_dir` + `_resolve_style_path` in place. 23 regression tests pass. |
+| #370 | Closed (consolidated) | Part 1 shipped via PR #371. Part 2 folded into #353 (same architectural fix). |
 
-# Frontend stage-3a specs (56 tests):
-cd frontend && PYTHON=python3 E2E_REUSE_BACKEND=1 npx playwright test \
-  e2e/publish-flow.spec.js e2e/teacher-dashboard.spec.js \
-  e2e/assistant-chat.spec.js e2e/automation-builder.spec.js \
-  e2e/resource-management.spec.js e2e/teacher-settings-save.spec.js \
-  e2e/clever-accommodations.spec.js --workers=1 --reporter=line
-# Expected: 56 passed (~1.2m)
+Pattern observed: 3 of 4 "HIGH severity" issues I picked up first were already shipped but the tracker entries had never been closed. Worth a verify-pass before sinking time into a fresh implementation on any future-dated issue.
 
-# tests/e2e specs (19 tests):
-cd ../tests/e2e && PYTHON=python3 E2E_REUSE_BACKEND=1 \
-  npx playwright test --workers=1 --reporter=line
-# Expected: 19 passed (~1.0m)
-```
+## Genuinely-open work
 
-So **specs are correct**. Issue is CI-environment-specific.
+### #353 — Load-test multi-persona + multi-teacher e2e (architectural)
 
-## Disproved hypotheses (do NOT retry)
+**Now also covers #370 part 2** per the consolidation comment on #353. Two blockers documented:
 
-1. **State-poisoning between frontend/e2e and tests/e2e runs** — disproved. Running them back-to-back locally (same order as CI) → all pass.
-2. **HOME=/tmp/graider-e2e-home overriding chromium lookup** — disproved. In CI's Linux ubuntu runner, chromium installed into `$HOME/.cache/ms-playwright/` correctly because the install step ran with HOME already overridden. 46 frontend specs ran successfully in CI proving chromium launched. (My local repro with the same HOME override failed for a *different* reason — my macOS chromium path is `~/Library/Caches/...` not `~/.cache/...` — and that's why my "repro" briefly looked successful but was actually invalid.)
-3. **Asset 404 in CI** — partially disproved. Served HTML references `/assets/index-*.js`. Couldn't directly verify the asset 200s in CI (backend was killed by Stop step), but local repro confirms backend serves it correctly when invoked the same way.
-4. **Stale tests/e2e specs not in git** — fixed by PR #361 (the 6 specs were gitignored). After fix, CI sees and discovers them (19 tests found per run 25758117445).
+1. `backend/routes/auth_routes.py:110` — approval-status bypass matches the literal string `'local-dev'` only. Any other dev-shim `teacher_id` injected via `X-Test-Teacher-Id` hits `sb.auth.admin.get_user_by_id` which 500s in CI (no Supabase configured). App stalls on approval-pending screen before the spec can do anything.
+2. `backend/storage.py:115` — `_use_supabase` returns False when Supabase isn't configured, but `_key_to_filepath` uses hardcoded paths. `~/.graider_settings.json` (and siblings) are shared across all `teacher_id`s in local-dev mode regardless of which header was sent — so 3+ simulated teachers still race on the same file, which is the bug the load test was built to expose.
 
-## Most likely remaining causes (ranked)
+**Resolution B from #353's body:** shard `_key_to_filepath` by `teacher_id` when `X-Test-Teacher-Id` is present in dev-shim mode, and drop the `auth.py:110` literal-`'local-dev'` check.
 
-1. **Linux chrome-headless-shell vs macOS chrome-headless-shell** — different chromium binaries on different platforms. The headless-shell variant on Linux x86_64 may have a different JS execution profile than Mac arm64. Plausible if the React bundle uses a feature with platform-specific behavior. **Test by running the bundle in real Linux chromium-headless instead of headless-shell.**
-2. **GitHub ubuntu runner missing a system library** — even though `npx playwright install --with-deps chromium` ran successfully, there could be a missing transitive lib that breaks JS execution silently. Test by checking the actual chromium stderr in CI (currently not captured).
-3. **Vite build in CI produces different bundle than local macOS build** — Vite cross-compilation has been known to produce subtly different chunks for the same source on different platforms. Test by computing the hash of `backend/static/assets/index-*.js` in CI and local + diffing.
+**Touches:** `backend/storage.py` (we've touched this twice today — #375 and #376), `backend/routes/auth_routes.py`, audit of all `_key_to_filepath` callers, new tests. Estimated 200-400 LOC + tests.
+
+**Follow-up after Resolution B lands:** remove `test.skip` on `tests/e2e/specs/multi-teacher.spec.js:22` and add `extraHTTPHeaders: { 'X-Test-Teacher-Id': teacher.id }` to each `browser.newContext(...)` call. The skip comment in the spec (added by PR #371) already documents both blockers — when they're fixed, deletion is mechanical.
+
+**Why I deferred it from this session:** the skip comment is a flashing yellow light. Someone (= me on PR #371) already investigated and discovered the issue body's "1-line fix" framing is wrong. Architectural touches on `storage.py` after 6 other PRs land in the same session risk incoherent layered changes (CLAUDE.md Rule #5 minimal blast radius). Best landed first thing in a fresh session.
 
 ## Concrete next step
 
-The trace artifact captures action snapshots + screenshots + videos but **NOT** console events (those require explicit `page.on('console', ...)`). Without console capture, the JS error that prevents React from mounting is invisible.
+Pick up #353 in a fresh session. Brief sketch for the implementer:
 
-### Option A — minimal probe (recommended)
+1. **In `backend/storage.py`**: when `_use_supabase(teacher_id)` returns False AND the current request has a non-`'local-dev'` `teacher_id` (e.g. via `X-Test-Teacher-Id`), shard the file path by `teacher_id`. The cleanest knob is in `_key_to_filepath` — add a `teacher_id` parameter and route through it from `_file_load` / `_file_save` / `_file_delete` / `_file_list_keys`. Existing single-tenant local-dev usage (`teacher_id='local-dev'`) keeps the unsharded layout.
+2. **In `backend/routes/auth_routes.py:110`**: change the literal-`'local-dev'` check to accept any dev-shim teacher_id (the existing dev-shim resolution at `backend/auth.py:184-190` already validates the header).
+3. **Tests**:
+   - Storage unit test: 2 teacher_ids → distinct file paths → no cross-contamination on save/load/list/delete
+   - Auth route test: dev-shim with non-`'local-dev'` teacher_id no longer 500s on missing Supabase
+   - E2E: unskip `multi-teacher.spec.js:22`, add `extraHTTPHeaders` per context
 
-Add a one-off debug spec that captures everything chromium says, then run only this spec via `workflow_dispatch`:
+Watch for: existing `storage.py` callers that pass `teacher_id` positionally vs by keyword. There are several after today's #375 + #376 changes. `gitnexus_impact` (once index is fresh) will help here.
 
-```javascript
-// tests/e2e/specs/_debug-console-trap.spec.js  (or in frontend/e2e/)
-import { test, expect } from '@playwright/test';
+## GitNexus operational note (carryover, unchanged from 2026-05-14)
 
-test('debug: capture all browser output on goto(/)', async ({ page }) => {
-  const events = [];
-  page.on('console', m => events.push(`CONSOLE ${m.type()}: ${m.text()}`));
-  page.on('pageerror', e => events.push(`PAGEERROR: ${e.message}\n${e.stack}`));
-  page.on('requestfailed', r => events.push(`REQFAIL: ${r.url()} → ${r.failure()?.errorText}`));
-  page.on('response', r => {
-    if (r.status() >= 400) events.push(`HTTP ${r.status()}: ${r.url()}`);
-  });
+PID 67783 still holds the LevelDB lock at `.gitnexus/lbug`. State `UE` (uninterruptible-exit). 6 days elapsed, 49.59s CPU. SIGKILL ineffective. Confirmed alive again this session — same process, same state. Reboot is the only fix.
 
-  await page.goto('/');
-  await page.waitForTimeout(8000);  // Give React 8s to mount, capturing events
-
-  console.log('=== BROWSER EVENT LOG ===');
-  for (const e of events) console.log(e);
-  console.log('=== END ===');
-
-  // Always pass — this is a probe, not a gate
-  expect(true).toBe(true);
-});
+After reboot:
+```bash
+cd /Users/alexc/Downloads/Graider
+ps -ef | grep "gitnexus analyze" | grep -v grep   # expect empty
+npx gitnexus analyze --embeddings                  # preserves the 7,331 embeddings
 ```
 
-Add the spec to the Stage 3a allowlist temporarily, push, `workflow_dispatch`, read the workflow logs. The console output will identify the root cause.
+The MCP server (separate PID, read-only path) keeps working on the stale index. Today's impact analyses returned correct results because affected symbols hadn't moved since May 9, but the new test files added in PR #375/#376/#377/#378/#379 won't appear in the graph until reindex.
 
-### Option B — config-level instrumentation (heavier, persistent)
+## References
 
-Add `globalSetup` to one playwright config that registers the listeners on every test. Persistent across runs but pollutes test output.
-
-### Option C — fix-forward without root-cause
-
-Trim the Stage 3a allowlist to only the 46 specs that pass in CI (the API-only ones). Ship immediate value. Defer the 29 UI-driven specs to Stage 3b or until root cause is fixed. Removes false-confidence problem (continue-on-error currently hides real failures).
-
-## Action items (suggested order)
-
-1. [ ] Apply Option A: write the debug probe spec
-2. [ ] PR + merge + `workflow_dispatch`
-3. [ ] Read CI logs for the probe's `=== BROWSER EVENT LOG ===` section
-4. [ ] Identify and fix the underlying issue
-5. [ ] Verify all 75 specs pass in CI
-6. [ ] Remove `continue-on-error: true` from both Playwright run steps in `e2e-nightly.yml`
-7. [ ] Close issue #362
-
-## Reference
-
-- **Plan**: `docs/superpowers/plans/2026-05-11-audit-major5-e2e-promotion.md` (Phase 3 section + revision log)
-- **Tracking issue**: https://github.com/nlev8/Graider/issues/362 (has investigation comments from 2026-05-12)
-- **Last CI run**: https://github.com/nlev8/Graider/actions/runs/25758117445
-- **Workflow file**: `.github/workflows/e2e-nightly.yml`
-- **Allowlist**: 13 specs in Phase 3 plan's Stage 3a section; categorization in #357
-- **Hotfix history**: #359 (runner.temp), #360 (path filters), #361 (gitignore)
-
-## What was learned about the e2e workflow
-
-Useful artifacts that survived the investigation:
-- The workflow's preflight curl loop (handles backend slow-start)
-- `Stop backend (detect mid-test crash)` step (catches false-greens)
-- `E2E_REUSE_BACKEND=1` env-var opt-in (preserves smoke job semantics)
-- HOME isolation env var (works in CI; my local repro of this was invalid)
-
-Don't touch these — they're correct and Codex+Gemini-reviewed.
+- PRs merged: [#374](https://github.com/nlev8/Graider/pull/374), [#375](https://github.com/nlev8/Graider/pull/375), [#376](https://github.com/nlev8/Graider/pull/376), [#377](https://github.com/nlev8/Graider/pull/377), [#378](https://github.com/nlev8/Graider/pull/378), [#379](https://github.com/nlev8/Graider/pull/379)
+- Issues closed today: #247, #249, #253, #339, #341, #343, #348, #355, #370, #373
+- Genuinely open: **#353** only
+- Consolidation comment: [#353 (folding in #370 part 2)](https://github.com/nlev8/Graider/issues/353#issuecomment-4460476356)
+- CLAUDE.md Rule #12 (handoff discipline) — this doc lives here, uncommitted by default since it's a session summary not an open-investigation artifact.
