@@ -161,6 +161,11 @@ class AnthropicAdapter:
                 }
                 for t in request.tools
             ]
+        # Track whether THIS call synthesized the emit_json tool. Only when
+        # we synthesized it do we auto-decode the response back into a
+        # TextPart (issue #343) — if a user passes their own tool named
+        # `emit_json` we must leave it alone.
+        synthesized_emit_json = False
         if request.response_format is not None:
             # Anthropic doesn't have a native response_format param, but a JSON
             # tool schema can enforce structured output. When response_format is
@@ -174,6 +179,7 @@ class AnthropicAdapter:
                     "input_schema": request.response_format.schema,
                 }]
                 kwargs["tool_choice"] = {"type": "tool", "name": "emit_json"}
+                synthesized_emit_json = True
 
         emit(
             "llm.call.start",
@@ -217,24 +223,37 @@ class AnthropicAdapter:
 
         duration_ms = int((time.monotonic() - t0) * 1000)
 
-        # Map response blocks into content_parts and tool_calls
+        # Map response blocks into content_parts and tool_calls.
+        # Issue #343: when we synthesized the emit_json tool to back a
+        # `response_format=json_schema` request, auto-decode the resulting
+        # tool_use block into a TextPart so callers see the same shape
+        # as the OpenAI / Gemini adapters (JSON in content_parts[0].text).
         content_parts = []
         tool_calls: list[ToolCall] = []
+        emit_json_auto_decoded = False
         for block in raw.content:
             if block.type == "text":
                 content_parts.append(TextPart(text=block.text))
             elif block.type == "tool_use":
+                args = block.input if isinstance(block.input, dict) else {}
+                if synthesized_emit_json and block.name == "emit_json":
+                    # Auto-decode: surface as TextPart only. Don't add to
+                    # tool_calls or content_parts as ToolUsePart — the caller
+                    # asked for JSON content, not a tool call.
+                    content_parts.append(TextPart(text=_json.dumps(args)))
+                    emit_json_auto_decoded = True
+                    continue
                 tool_calls.append(ToolCall(
                     tool_call_id=block.id,
                     name=block.name,
-                    args=block.input if isinstance(block.input, dict) else {},
+                    args=args,
                 ))
                 # Also surface as ToolUsePart in content_parts for callers
                 # that inspect content_parts (e.g. multi-turn reconstruction)
                 content_parts.append(ToolUsePart(
                     tool_call_id=block.id,
                     name=block.name,
-                    args=block.input if isinstance(block.input, dict) else {},
+                    args=args,
                 ))
 
         prompt_tokens = raw.usage.input_tokens if raw.usage else 0
@@ -246,6 +265,11 @@ class AnthropicAdapter:
         )
 
         finish_reason = normalize_finish_reason(raw.stop_reason)
+        # Issue #343: when emit_json was auto-decoded back into a TextPart,
+        # the caller never asked for a tool call — surface the same
+        # finish_reason as a normal json_schema response from OpenAI/Gemini.
+        if emit_json_auto_decoded and finish_reason == "tool_use":
+            finish_reason = "stop"
 
         emit(
             "llm.call.complete",
