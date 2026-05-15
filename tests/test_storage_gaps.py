@@ -353,16 +353,19 @@ class TestSyncAllToCloud:
         assert result["resources"] == "1 synced"
         assert result["student_history"] == "1 synced"
 
-        # Verify the period CSV was synced as a JSON-shaped payload
-        # (one of the _sb_save calls had the CSV's parsed shape)
+        # Issue #341: period CSV is synced as the RAW CSV string so it
+        # round-trips through `_file_load('period:*')`. The old dict
+        # shape (`{"headers": ..., "rows": ...}`) broke any downstream
+        # `load('period:foo.csv')` caller that expected a string.
         csv_calls = [
             c for c in mock_sb_save.call_args_list
             if c.args[0] == "period:P1.csv"
         ]
         assert len(csv_calls) == 1
         payload = csv_calls[0].args[1]
-        assert payload["headers"] == ["student_name", "id"]
-        assert payload["rows"] == [{"student_name": "Alice", "id": "1"}]
+        assert isinstance(payload, str)
+        assert "student_name,id" in payload
+        assert "Alice,1" in payload
 
         # Student history sync called once
         mock_sb_history.assert_called_once_with(
