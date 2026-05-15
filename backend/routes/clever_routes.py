@@ -2,6 +2,7 @@
 Clever SSO and Secure Sync routes.
 """
 import hashlib
+import hmac
 import os
 import asyncio
 import logging
@@ -329,8 +330,11 @@ def clever_callback():
     #   3. One side has state but not the other → session lost or spoofed, reject
     expected_state = session.pop("clever_oauth_state", None)
     if expected_state and state:
-        # Normal flow — both sides have state, must match
-        if state != expected_state:
+        # Normal flow — both sides have state, must match.
+        # Use hmac.compare_digest for constant-time compare (issue #373,
+        # closes 2026-05-14 dimensional-review state/nonce variant).
+        if not hmac.compare_digest(state.encode("utf-8"),
+                                   expected_state.encode("utf-8")):
             logger.warning("Clever OAuth state mismatch")
             return redirect("/?clever_error=state_mismatch")
     elif expected_state or state:
