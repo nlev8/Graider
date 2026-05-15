@@ -10,6 +10,7 @@ Endpoints:
   POST /api/classlink/logout     — Clear ClassLink session
 """
 
+import hmac
 import os
 import time
 import logging
@@ -233,8 +234,12 @@ def classlink_callback():
     # have no state requirement — id_token signature validation (below) is the
     # auth proof. This mirrors Clever's "Instant Login" pattern.
     if initiated_by_us:
-        # Strict mode: state must be present and match exactly.
-        if not state or state != expected_state:
+        # Strict mode: state must be present and match exactly. Use
+        # hmac.compare_digest for constant-time compare (issue #373).
+        if not state or not hmac.compare_digest(
+            state.encode("utf-8"),
+            (expected_state or "").encode("utf-8"),
+        ):
             # Log presence booleans only — state/nonce values are auth secrets
             # that should not be persisted in logs even on rejected requests.
             audit_log(
@@ -255,7 +260,9 @@ def classlink_callback():
         # Permissive mode: LaunchPad-initiated — id_token signature is the auth proof.
         # Only emit a warning + audit-log if both sides have state but they differ
         # (session pollution or attacker probe). Do NOT reject: LaunchPad is permissive.
-        if expected_state and state and state != expected_state:
+        if expected_state and state and not hmac.compare_digest(
+            state.encode("utf-8"), expected_state.encode("utf-8"),
+        ):
             logger.warning(
                 "ClassLink OAuth state mismatch (LaunchPad): "
                 "state_present=%s expected_present=%s",
@@ -345,7 +352,10 @@ def classlink_callback():
     # function; markers remain in session and are cleared on success below.
     if initiated_by_us:
         token_nonce = id_claims.get('nonce', '')
-        if not token_nonce or token_nonce != expected_nonce:
+        if not token_nonce or not hmac.compare_digest(
+            token_nonce.encode("utf-8"),
+            (expected_nonce or "").encode("utf-8"),
+        ):
             audit_log("CLASSLINK_OAUTH_NONCE_MISMATCH",
                       "ClassLink nonce mismatch on self-initiated flow",
                       user="anonymous", teacher_id="")

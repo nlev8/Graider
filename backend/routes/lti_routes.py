@@ -5,6 +5,7 @@ Endpoints for OIDC login initiation, launch callback, JWKS,
 platform configuration, and AGS grade sync.
 """
 
+import hmac
 import logging
 import os
 
@@ -108,9 +109,11 @@ def lti_launch():
     id_token = request.form.get("id_token", "")
     state = request.form.get("state", "")
 
-    # Validate state matches session
+    # Validate state matches session (constant-time, issue #373)
     expected_state = session.get("lti_state")
-    if not expected_state or state != expected_state:
+    if not expected_state or not hmac.compare_digest(
+        state.encode("utf-8"), expected_state.encode("utf-8"),
+    ):
         return jsonify({"error": "Invalid state parameter"}), 400
 
     issuer = session.get("lti_issuer", "")
@@ -125,10 +128,12 @@ def lti_launch():
         logger.warning("LTI launch JWT validation failed: %s", e)
         return jsonify({"error": str(e)}), 400
 
-    # Validate nonce
+    # Validate nonce (constant-time, issue #373)
     expected_nonce = session.get("lti_nonce")
-    token_nonce = claims.get("nonce")
-    if not expected_nonce or token_nonce != expected_nonce:
+    token_nonce = claims.get("nonce") or ""
+    if not expected_nonce or not hmac.compare_digest(
+        token_nonce.encode("utf-8"), expected_nonce.encode("utf-8"),
+    ):
         return jsonify({"error": "Invalid nonce"}), 400
 
     # Extract launch data
