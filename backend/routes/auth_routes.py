@@ -107,8 +107,16 @@ def approval_status():
     On localhost, always returns approved.
     """
     try:
-        # Localhost bypass
-        if g.user_id == 'local-dev':
+        # Localhost bypass — extends to any dev-shim teacher_id, not just
+        # the literal 'local-dev' (#353). The dev-shim path in
+        # `backend/auth.py::check_auth` sets `g.is_dev_shim = True`
+        # whenever it takes the FLASK_ENV=development + localhost +
+        # no-Bearer branch. Previously only `g.user_id == 'local-dev'`
+        # was bypassed, so multi-tenant simulations (load harness +
+        # `multi-teacher.spec.js`) 500'd here calling
+        # `sb.auth.admin.get_user_by_id('teach-A')` against either no
+        # Supabase (CI) or a real Supabase with no matching user.
+        if g.user_id == 'local-dev' or getattr(g, 'is_dev_shim', False):
             return jsonify({"approved": True})
 
         sb = _get_supabase()

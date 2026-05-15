@@ -219,12 +219,20 @@ class TestApproveUserRoute:
 
 class TestApprovalStatus:
     """The approval-status endpoint uses g.user_id (set by the
-    `before_request` hook in `backend/auth.py`). Tests use the
-    `X-Test-Teacher-Id` header which the dev-mode bypass at
-    `auth.py:187` honors.
+    `before_request` hook in `backend/auth.py`).
+
+    Issue #353 (2026-05-15): the dev-shim at `auth.py:185-190` now sets
+    `g.is_dev_shim = True` for any teacher_id resolved via the
+    `X-Test-Teacher-Id` header, not just the literal `'local-dev'`.
+    `approval_status` bypasses Supabase for any dev-shim user (the
+    load harness and `multi-teacher.spec.js` previously 500'd here).
+    To exercise the production Supabase lookup path these tests send a
+    Bearer JWT — the dev-shim explicitly skips it per `auth.py:185`
+    `and not has_bearer` — and mock `validate_token`.
     """
 
     def test_local_dev_always_approved(self, client, monkeypatch):
+        """Backward-compat: literal `local-dev` via dev-shim."""
         monkeypatch.setenv("FLASK_ENV", "development")
         resp = client.get(
             "/api/auth/approval-status",
@@ -232,6 +240,19 @@ class TestApprovalStatus:
         )
         body = resp.get_json()
         assert body["approved"] is True
+
+    def test_any_dev_shim_teacher_id_approved(self, client, monkeypatch):
+        """Issue #353: dev-shim teachers OTHER than 'local-dev' (e.g.
+        load harness or `multi-teacher.spec.js` `teach-A`) are also
+        approved without hitting Supabase. Pre-fix this 500'd because
+        only the literal `'local-dev'` was bypassed."""
+        monkeypatch.setenv("FLASK_ENV", "development")
+        resp = client.get(
+            "/api/auth/approval-status",
+            headers={"X-Test-Teacher-Id": "teach-A"},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["approved"] is True
 
     def test_real_user_supabase_metadata_lookup(self, client, monkeypatch):
         monkeypatch.setenv("FLASK_ENV", "development")
@@ -245,11 +266,14 @@ class TestApprovalStatus:
         mock_sb = MagicMock()
         mock_sb.auth.admin.get_user_by_id.return_value = mock_resp
 
-        with patch("backend.routes.auth_routes._get_supabase",
+        with patch("backend.auth.validate_token",
+                   return_value={"sub": "real-user-123",
+                                 "email": "alice@x.com"}), \
+             patch("backend.routes.auth_routes._get_supabase",
                    return_value=mock_sb):
             resp = client.get(
                 "/api/auth/approval-status",
-                headers={"X-Test-Teacher-Id": "real-user-123"},
+                headers={"Authorization": "Bearer fake-jwt"},
             )
 
         body = resp.get_json()
@@ -269,11 +293,14 @@ class TestApprovalStatus:
         mock_sb = MagicMock()
         mock_sb.auth.admin.get_user_by_id.return_value = mock_resp
 
-        with patch("backend.routes.auth_routes._get_supabase",
+        with patch("backend.auth.validate_token",
+                   return_value={"sub": "unapproved-user",
+                                 "email": "bob@x.com"}), \
+             patch("backend.routes.auth_routes._get_supabase",
                    return_value=mock_sb):
             resp = client.get(
                 "/api/auth/approval-status",
-                headers={"X-Test-Teacher-Id": "unapproved-user"},
+                headers={"Authorization": "Bearer fake-jwt"},
             )
 
         body = resp.get_json()
@@ -285,11 +312,14 @@ class TestApprovalStatus:
         mock_sb = MagicMock()
         mock_sb.auth.admin.get_user_by_id.side_effect = RuntimeError("supabase down")
 
-        with patch("backend.routes.auth_routes._get_supabase",
+        with patch("backend.auth.validate_token",
+                   return_value={"sub": "real-user",
+                                 "email": "real@x.com"}), \
+             patch("backend.routes.auth_routes._get_supabase",
                    return_value=mock_sb):
             resp = client.get(
                 "/api/auth/approval-status",
-                headers={"X-Test-Teacher-Id": "real-user"},
+                headers={"Authorization": "Bearer fake-jwt"},
             )
 
         assert resp.status_code == 500

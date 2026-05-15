@@ -10,6 +10,7 @@ Local-dev (teacher_id == 'local-dev') always uses files regardless.
 """
 
 import os
+import re
 import json
 import logging
 from pathlib import Path
@@ -37,14 +38,40 @@ GRAIDER_DATA_DIR = os.path.join(HOME, ".graider_data")
 PERIODS_DIR = os.path.join(GRAIDER_DATA_DIR, "periods")
 ACCOMMODATIONS_DIR = os.path.join(GRAIDER_DATA_DIR, "accommodations")
 LESSONS_DIR = os.path.join(HOME, ".graider_lessons")
+
+
+# Issue #353 (Resolution B): when Supabase isn't configured but a
+# non-`local-dev` teacher_id is in play (load harness, multi-teacher
+# e2e), shard the local-file layout under a per-tenant subdirectory so
+# concurrent teachers don't read/write each other's state. The canonical
+# `local-dev` single-tenant path stays unchanged.
+def _tenant_home(teacher_id):
+    """Return the per-tenant home directory for `teacher_id`.
+
+    - `local-dev` (or falsy) → global HOME (historical layout preserved)
+    - any other id → `HOME/.graider_tenants/<safe_id>/`
+
+    `<safe_id>` is sanitized to alphanumeric + dash/underscore so a
+    malicious teacher_id like `../../etc` can't escape the tenant root.
+    """
+    if not teacher_id or teacher_id == 'local-dev':
+        return HOME
+    safe_tid = re.sub(r'[^a-zA-Z0-9_-]', '_', str(teacher_id))
+    return os.path.join(HOME, ".graider_tenants", safe_tid)
 STUDENT_HISTORY_DIR = os.path.join(GRAIDER_DATA_DIR, "student_history")
 RESOURCES_DIR = os.path.join(GRAIDER_DATA_DIR, "resources")
 
 
-def _key_to_filepath(data_key):
-    """Map a data_key to its existing ~/.graider_* file path.
+def _key_to_filepath(data_key, teacher_id='local-dev'):
+    """Map a data_key to its on-disk file path, scoped by `teacher_id`.
 
-    Key patterns:
+    For `teacher_id='local-dev'` (or unset) the historical layout is
+    preserved verbatim. For any other id the same key resolves to the
+    equivalent path under `_tenant_home(teacher_id)` so concurrent
+    teachers don't share state when Supabase isn't configured (#353).
+
+    Key patterns (paths shown for `local-dev`; non-local-dev gets the
+    same subpath under `~/.graider_tenants/<safe_id>/`):
       'settings'                   -> ~/.graider_settings.json
       'rubric'                     -> ~/.graider_rubric.json
       'results'                    -> ~/.graider_results.json
@@ -60,54 +87,62 @@ def _key_to_filepath(data_key):
       'period_meta:{filename}'     -> ~/.graider_data/periods/{filename}.meta.json
       'lesson:{unit}:{title}'      -> ~/.graider_lessons/{unit}/{title}.json
     """
+    home = _tenant_home(teacher_id)
+    graider_data = os.path.join(home, ".graider_data")
+    accommodations = os.path.join(graider_data, "accommodations")
+    periods = os.path.join(graider_data, "periods")
+    resources = os.path.join(graider_data, "resources")
+    assignments = os.path.join(home, ".graider_assignments")
+    lessons = os.path.join(home, ".graider_lessons")
+
     if data_key == 'settings':
-        return os.path.join(HOME, ".graider_settings.json")
+        return os.path.join(home, ".graider_settings.json")
     elif data_key == 'rubric':
-        return os.path.join(HOME, ".graider_rubric.json")
+        return os.path.join(home, ".graider_rubric.json")
     elif data_key == 'results':
-        return os.path.join(HOME, ".graider_results.json")
+        return os.path.join(home, ".graider_results.json")
     elif data_key == 'accommodations':
-        return os.path.join(ACCOMMODATIONS_DIR, "student_accommodations.json")
+        return os.path.join(accommodations, "student_accommodations.json")
     elif data_key == 'accommodation_presets':
-        return os.path.join(ACCOMMODATIONS_DIR, "presets.json")
+        return os.path.join(accommodations, "presets.json")
     elif data_key == 'ell_students':
-        return os.path.join(GRAIDER_DATA_DIR, "ell_students.json")
+        return os.path.join(graider_data, "ell_students.json")
     elif data_key == 'parent_contacts':
-        return os.path.join(GRAIDER_DATA_DIR, "parent_contacts.json")
+        return os.path.join(graider_data, "parent_contacts.json")
     elif data_key == 'assistant_memory':
-        return os.path.join(GRAIDER_DATA_DIR, "assistant_memory.json")
+        return os.path.join(graider_data, "assistant_memory.json")
     elif data_key == 'teaching_calendar':
-        return os.path.join(GRAIDER_DATA_DIR, "teaching_calendar.json")
+        return os.path.join(graider_data, "teaching_calendar.json")
     elif data_key == 'api_keys':
-        return os.path.join(GRAIDER_DATA_DIR, ".api_keys.json")
+        return os.path.join(graider_data, ".api_keys.json")
     elif data_key == 'portal_credentials':
-        return os.path.join(GRAIDER_DATA_DIR, "portal_credentials.json")
+        return os.path.join(graider_data, "portal_credentials.json")
     elif data_key == 'pending_send':
-        return os.path.join(GRAIDER_DATA_DIR, "pending_send.json")
+        return os.path.join(graider_data, "pending_send.json")
     elif data_key == 'automations':
-        return os.path.join(GRAIDER_DATA_DIR, "automations.json")
+        return os.path.join(graider_data, "automations.json")
     elif data_key.startswith('assignment:'):
         title = data_key[len('assignment:'):]
-        return os.path.join(ASSIGNMENTS_DIR, f"{title}.json")
+        return os.path.join(assignments, f"{title}.json")
     elif data_key.startswith('period_meta:'):
         filename = data_key[len('period_meta:'):]
-        return os.path.join(PERIODS_DIR, f"{filename}.meta.json")
+        return os.path.join(periods, f"{filename}.meta.json")
     elif data_key.startswith('period:'):
         filename = data_key[len('period:'):]
-        return os.path.join(PERIODS_DIR, filename)
+        return os.path.join(periods, filename)
     elif data_key.startswith('lesson:'):
         # lesson:{unit}:{title}
         parts = data_key.split(':', 2)
         if len(parts) == 3:
             unit = parts[1]
             title = parts[2]
-            return os.path.join(LESSONS_DIR, unit, f"{title}.json")
+            return os.path.join(lessons, unit, f"{title}.json")
     elif data_key.startswith('resource:'):
         resource_id = data_key[len('resource:'):]
-        return os.path.join(RESOURCES_DIR, f"{resource_id}.json")
+        return os.path.join(resources, f"{resource_id}.json")
     elif data_key.startswith('clever_link:'):
         clever_id = data_key[len('clever_link:'):]
-        clever_dir = os.path.join(GRAIDER_DATA_DIR, "clever_links")
+        clever_dir = os.path.join(graider_data, "clever_links")
         return os.path.join(clever_dir, f"{clever_id}.json")
     return None
 
@@ -123,9 +158,9 @@ def _use_supabase(teacher_id):
 # FILE BACKEND
 # ══════════════════════════════════════════════════════════════
 
-def _file_load(data_key):
+def _file_load(data_key, teacher_id='local-dev'):
     """Load data from a local file. Returns parsed JSON, or raw text for CSVs."""
-    filepath = _key_to_filepath(data_key)
+    filepath = _key_to_filepath(data_key, teacher_id)
     if not filepath:
         return None
     if not os.path.exists(filepath):
@@ -142,9 +177,9 @@ def _file_load(data_key):
         return None
 
 
-def _file_save(data_key, data):
+def _file_save(data_key, data, teacher_id='local-dev'):
     """Save data to a local file. Returns True on success."""
-    filepath = _key_to_filepath(data_key)
+    filepath = _key_to_filepath(data_key, teacher_id)
     if not filepath:
         return False
     try:
@@ -162,9 +197,9 @@ def _file_save(data_key, data):
         return False
 
 
-def _file_delete(data_key):
+def _file_delete(data_key, teacher_id='local-dev'):
     """Delete a local file. Returns True on success."""
-    filepath = _key_to_filepath(data_key)
+    filepath = _key_to_filepath(data_key, teacher_id)
     if not filepath:
         return False
     try:
@@ -176,21 +211,30 @@ def _file_delete(data_key):
         return False
 
 
-def _file_list_keys(prefix):
+def _file_list_keys(prefix, teacher_id='local-dev'):
     """List data keys matching a prefix from local files."""
     keys = []
 
+    # Per-tenant directory roots (#353). For local-dev these reduce to
+    # the module-level constants; for any other id they shard under the
+    # tenant subdirectory.
+    home = _tenant_home(teacher_id)
+    assignments_dir = os.path.join(home, ".graider_assignments")
+    lessons_dir = os.path.join(home, ".graider_lessons")
+    periods_dir = os.path.join(home, ".graider_data", "periods")
+    resources_dir = os.path.join(home, ".graider_data", "resources")
+
     if prefix == 'assignment:' or prefix.startswith('assignment:'):
-        if os.path.exists(ASSIGNMENTS_DIR):
-            for f in os.listdir(ASSIGNMENTS_DIR):
+        if os.path.exists(assignments_dir):
+            for f in os.listdir(assignments_dir):
                 if f.endswith('.json'):
                     name = f[:-5]  # Strip .json
                     keys.append(f"assignment:{name}")
 
     elif prefix == 'lesson:' or prefix.startswith('lesson:'):
-        if os.path.exists(LESSONS_DIR):
-            for unit_name in os.listdir(LESSONS_DIR):
-                unit_path = os.path.join(LESSONS_DIR, unit_name)
+        if os.path.exists(lessons_dir):
+            for unit_name in os.listdir(lessons_dir):
+                unit_path = os.path.join(lessons_dir, unit_name)
                 if os.path.isdir(unit_path):
                     for f in os.listdir(unit_path):
                         if f.endswith('.json'):
@@ -198,22 +242,22 @@ def _file_list_keys(prefix):
                             keys.append(f"lesson:{unit_name}:{title}")
 
     elif prefix == 'period:' or prefix.startswith('period:'):
-        if os.path.exists(PERIODS_DIR):
-            for f in os.listdir(PERIODS_DIR):
+        if os.path.exists(periods_dir):
+            for f in os.listdir(periods_dir):
                 if f.endswith('.csv'):
                     keys.append(f"period:{f}")
 
     elif prefix == 'period_meta:' or prefix.startswith('period_meta:'):
-        if os.path.exists(PERIODS_DIR):
-            for f in os.listdir(PERIODS_DIR):
+        if os.path.exists(periods_dir):
+            for f in os.listdir(periods_dir):
                 if f.endswith('.meta.json'):
                     # Strip .meta.json to get original filename
                     orig = f[:-10]
                     keys.append(f"period_meta:{orig}")
 
     elif prefix == 'resource:' or prefix.startswith('resource:'):
-        if os.path.exists(RESOURCES_DIR):
-            for f in os.listdir(RESOURCES_DIR):
+        if os.path.exists(resources_dir):
+            for f in os.listdir(resources_dir):
                 if f.endswith('.json'):
                     resource_id = f[:-5]
                     keys.append(f"resource:{resource_id}")
@@ -308,10 +352,13 @@ def _sb_list_keys(prefix, teacher_id):
 # STUDENT HISTORY (separate table)
 # ══════════════════════════════════════════════════════════════
 
-def _file_load_student_history(student_id):
+def _file_load_student_history(student_id, teacher_id='local-dev'):
     """Load student history from local file."""
     safe_id = str(student_id).replace('/', '_').replace('\\', '_')
-    filepath = os.path.join(STUDENT_HISTORY_DIR, f"{safe_id}.json")
+    history_dir = os.path.join(
+        _tenant_home(teacher_id), ".graider_data", "student_history",
+    )
+    filepath = os.path.join(history_dir, f"{safe_id}.json")
     if not os.path.exists(filepath):
         return None
     try:
@@ -322,11 +369,14 @@ def _file_load_student_history(student_id):
         return None
 
 
-def _file_save_student_history(student_id, history):
+def _file_save_student_history(student_id, history, teacher_id='local-dev'):
     """Save student history to local file."""
     safe_id = str(student_id).replace('/', '_').replace('\\', '_')
-    os.makedirs(STUDENT_HISTORY_DIR, exist_ok=True)
-    filepath = os.path.join(STUDENT_HISTORY_DIR, f"{safe_id}.json")
+    history_dir = os.path.join(
+        _tenant_home(teacher_id), ".graider_data", "student_history",
+    )
+    os.makedirs(history_dir, exist_ok=True)
+    filepath = os.path.join(history_dir, f"{safe_id}.json")
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(history, f, indent=2)
@@ -398,9 +448,11 @@ def load(data_key, teacher_id='local-dev'):
         # Don't fall back to shared file for sensitive keys (prevents cross-teacher leakage)
         if _is_sensitive_key(data_key):
             return None
-        # Fallback: try local file (covers first-time migration)
-        return _file_load(data_key)
-    return _file_load(data_key)
+        # Fallback: try local file (covers first-time migration).
+        # Issue #353: per-tenant shard so the fallback respects teacher
+        # isolation when multiple dev-shim teachers share a host.
+        return _file_load(data_key, teacher_id)
+    return _file_load(data_key, teacher_id)
 
 
 _SENSITIVE_KEYS = {'api_keys', 'portal_credentials'}
@@ -441,13 +493,16 @@ def save(data_key, data, teacher_id='local-dev'):
     if _use_supabase(teacher_id):
         sb_ok = _sb_save(data_key, data, teacher_id)
         # Skip file write for sensitive data when not local-dev
-        # to prevent different teachers from overwriting each other's secrets
+        # to prevent different teachers from overwriting each other's secrets.
+        # Issue #353: even when the dual-write happens, it lands under the
+        # per-tenant subdirectory so the file backend stays isolated too.
         if not _is_sensitive_key(data_key):
-            _file_save(data_key, data)
+            _file_save(data_key, data, teacher_id)
         return sb_ok
 
-    # Local-dev: file only
-    return _file_save(data_key, data)
+    # Local-dev (or non-local-dev with Supabase unconfigured): file only,
+    # sharded by teacher_id when non-local-dev.
+    return _file_save(data_key, data, teacher_id)
 
 
 def delete(data_key, teacher_id='local-dev'):
@@ -456,7 +511,9 @@ def delete(data_key, teacher_id='local-dev'):
     Returns:
         True on success.
     """
-    file_ok = _file_delete(data_key)
+    # Issue #353: per-tenant shard so deleting in one tenant's namespace
+    # doesn't touch any other tenant's file.
+    file_ok = _file_delete(data_key, teacher_id)
 
     if _use_supabase(teacher_id):
         sb_ok = _sb_delete(data_key, teacher_id)
@@ -480,8 +537,8 @@ def list_keys(prefix, teacher_id='local-dev'):
             return keys  # Return even if empty — empty means no data for this teacher
         # Only fall back to files if Supabase query itself failed (returned None)
         logger.warning("list_keys: Supabase query returned None for prefix=%s, falling back to files", prefix)
-        return _file_list_keys(prefix)
-    return _file_list_keys(prefix)
+        return _file_list_keys(prefix, teacher_id)
+    return _file_list_keys(prefix, teacher_id)
 
 
 def load_student_history(teacher_id='local-dev', student_id=None):
@@ -500,9 +557,9 @@ def load_student_history(teacher_id='local-dev', student_id=None):
         result = _sb_load_student_history(teacher_id, student_id)
         if result is not None:
             return result
-        # Fallback to local file
-        return _file_load_student_history(student_id)
-    return _file_load_student_history(student_id)
+        # Fallback to local file (per-tenant sharded — #353)
+        return _file_load_student_history(student_id, teacher_id)
+    return _file_load_student_history(student_id, teacher_id)
 
 
 def save_student_history(teacher_id='local-dev', student_id=None, history=None):
@@ -514,8 +571,8 @@ def save_student_history(teacher_id='local-dev', student_id=None, history=None):
     if not student_id or history is None:
         return False
 
-    # Always write local file
-    _file_save_student_history(student_id, history)
+    # Always write local file (per-tenant sharded — #353)
+    _file_save_student_history(student_id, history, teacher_id)
 
     if _use_supabase(teacher_id):
         return _sb_save_student_history(teacher_id, student_id, history)
