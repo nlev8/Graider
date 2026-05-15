@@ -559,8 +559,8 @@ def sync_all_to_cloud(teacher_id):
     for key in assignment_keys:
         data = _file_load(key)
         if data is not None:
-            _sb_save(key, data, teacher_id)
-            synced_assignments += 1
+            if _sb_save(key, data, teacher_id):
+                synced_assignments += 1
     summary['assignments'] = f"{synced_assignments} synced"
 
     # Lessons
@@ -569,8 +569,8 @@ def sync_all_to_cloud(teacher_id):
     for key in lesson_keys:
         data = _file_load(key)
         if data is not None:
-            _sb_save(key, data, teacher_id)
-            synced_lessons += 1
+            if _sb_save(key, data, teacher_id):
+                synced_lessons += 1
     summary['lessons'] = f"{synced_lessons} synced"
 
     # Period metadata
@@ -579,23 +579,23 @@ def sync_all_to_cloud(teacher_id):
     for key in period_meta_keys:
         data = _file_load(key)
         if data is not None:
-            _sb_save(key, data, teacher_id)
-            synced_periods += 1
+            if _sb_save(key, data, teacher_id):
+                synced_periods += 1
     summary['periods'] = f"{synced_periods} synced"
 
-    # Period CSV data (store as JSON with rows)
+    # Period CSV data — must round-trip through `_file_load('period:*')`,
+    # which returns the raw CSV string (storage.py:135-137). Issue #341:
+    # was uploading `{"headers": ..., "rows": ...}` dicts, breaking any
+    # downstream `load('period:foo.csv')` caller that expected a string.
     period_keys = _file_list_keys('period:')
     for key in period_keys:
         filename = key[len('period:'):]
         filepath = os.path.join(PERIODS_DIR, filename)
         if os.path.exists(filepath):
             try:
-                import csv as csv_mod
                 with open(filepath, 'r', encoding='utf-8') as f:
-                    reader = csv_mod.DictReader(f)
-                    rows = list(reader)
-                    headers = reader.fieldnames or []
-                _sb_save(key, {"headers": headers, "rows": rows}, teacher_id)
+                    raw_csv = f.read()
+                _sb_save(key, raw_csv, teacher_id)
             except Exception as e:
                 logger.warning("Failed to sync period CSV %s: %s", key, e)
                 sentry_sdk.capture_exception(e)
@@ -609,8 +609,8 @@ def sync_all_to_cloud(teacher_id):
     for key in resource_keys:
         data = _file_load(key)
         if data is not None:
-            _sb_save(key, data, teacher_id)
-            synced_resources += 1
+            if _sb_save(key, data, teacher_id):
+                synced_resources += 1
     summary['resources'] = f"{synced_resources} synced"
 
     # Student history
@@ -623,8 +623,8 @@ def sync_all_to_cloud(teacher_id):
                 try:
                     with open(os.path.join(history_dir, f), 'r', encoding='utf-8') as fh:
                         history = json.load(fh)
-                    _sb_save_student_history(teacher_id, student_id, history)
-                    synced_history += 1
+                    if _sb_save_student_history(teacher_id, student_id, history):
+                        synced_history += 1
                 except Exception as e:
                     sentry_sdk.capture_exception(e)
     summary['student_history'] = f"{synced_history} synced"
