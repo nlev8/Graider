@@ -191,7 +191,15 @@ PR_B_EXPECTED_CAPTURES = {
     "backend/services/assistant_tools.py": 13,
     "backend/services/assistant_tools_behavior.py": 4,
     "backend/services/assistant_tools_reports.py": 5,
-    "backend/services/assistant_tools_student.py": 21,
+    # Issue #339 (2026-05-14): floor lowered 21 -> 16 after `import_student_data`
+    # was refactored to `backend.storage.{save,save_student_history}` for
+    # teacher-scoped persistence. The 5 removed captures wrapped raw file
+    # reads (`~/.graider_results.json`, history dir, accommodations, ELL,
+    # parent contacts); those file accesses now route through `_file_load`
+    # in `backend/storage.py`, which logs read failures via the storage
+    # logger instead of paging Sentry. Net signal preserved (warnings still
+    # land in logs), Sentry noise reduced.
+    "backend/services/assistant_tools_student.py": 16,
     # Phase 4 review cleanup: 5 -> 4. Removed the capture at
     # navigate_to_outlook's "New mail" wait_for fallback — that is an
     # expected label-mismatch path, not an error worth paging ops on.

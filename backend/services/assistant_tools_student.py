@@ -940,17 +940,21 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
 
     imported = {"results": 0, "history": False, "accommodations": False, "ell": False, "contacts": False}
 
+    # Issue #339: every persistent write must be teacher-scoped via
+    # backend.storage so SaaS deployments don't share data across tenants.
+    # The storage layer routes to per-teacher Supabase rows in production
+    # and to the local file backend in local-dev.
+    from backend.storage import (
+        load as storage_load,
+        save as storage_save,
+        load_student_history as storage_load_history,
+        save_student_history as storage_save_history,
+    )
+
     # 1. Grading results — append to saved results file, deduplicate by graded_at
     grading_results = data.get("grading_results") or []
     if grading_results:
-        results_file = os.path.expanduser("~/.graider_results.json")
-        all_results = []
-        if os.path.exists(results_file):
-            try:
-                with open(results_file, 'r') as f:
-                    all_results = json.load(f)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+        all_results = storage_load('results', teacher_id) or []
 
         existing_timestamps = set()
         for r in all_results:
@@ -967,28 +971,16 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
 
         if new_results:
             all_results.extend(new_results)
-            try:
-                with open(results_file, 'w') as f:
-                    json.dump(all_results, f, indent=2)
-            except Exception as e:
-                return {"error": f"Failed to save results: {e}"}
+            if not storage_save('results', all_results, teacher_id):
+                return {"error": "Failed to save results"}
             imported["results"] = len(new_results)
 
     # 2. Student history — merge
     student_history = data.get("student_history")
     if student_history:
-        history_dir = os.path.expanduser("~/.graider_data/student_history")
-        os.makedirs(history_dir, exist_ok=True)
-        safe_sid = re.sub(r'[^\w]', '_', sid.lower())
-        history_path = os.path.join(history_dir, f"{safe_sid}.json")
-
-        existing_history = None
-        if os.path.exists(history_path):
-            try:
-                with open(history_path, 'r') as f:
-                    existing_history = json.load(f)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+        existing_history = storage_load_history(
+            teacher_id=teacher_id, student_id=sid,
+        )
 
         if existing_history and existing_history.get("assignments"):
             existing_keys = set()
@@ -1002,65 +994,40 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
                 if skill not in existing_history.get("skill_scores", {}):
                     existing_history.setdefault("skill_scores", {})[skill] = val
             existing_history["last_updated"] = datetime.now().isoformat()
-            with open(history_path, 'w') as f:
-                json.dump(existing_history, f, indent=2)
+            storage_save_history(
+                teacher_id=teacher_id, student_id=sid, history=existing_history,
+            )
         else:
             student_history["student_id"] = sid
             student_history["last_updated"] = datetime.now().isoformat()
-            with open(history_path, 'w') as f:
-                json.dump(student_history, f, indent=2)
+            storage_save_history(
+                teacher_id=teacher_id, student_id=sid, history=student_history,
+            )
         imported["history"] = True
 
     # 3. Accommodations
     accommodations = data.get("accommodations")
     if accommodations:
-        accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
-        os.makedirs(os.path.dirname(accomm_file), exist_ok=True)
-        all_acc = {}
-        if os.path.exists(accomm_file):
-            try:
-                with open(accomm_file, 'r') as f:
-                    all_acc = json.load(f)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+        all_acc = storage_load('accommodations', teacher_id) or {}
         all_acc[sid] = accommodations
         all_acc[sid]["updated"] = datetime.now().isoformat()
-        with open(accomm_file, 'w') as f:
-            json.dump(all_acc, f, indent=2)
+        storage_save('accommodations', all_acc, teacher_id)
         imported["accommodations"] = True
 
     # 4. ELL data
     ell_data = data.get("ell_data")
     if ell_data:
-        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
-        os.makedirs(os.path.dirname(ell_file), exist_ok=True)
-        all_ell = {}
-        if os.path.exists(ell_file):
-            try:
-                with open(ell_file, 'r') as f:
-                    all_ell = json.load(f)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+        all_ell = storage_load('ell_students', teacher_id) or {}
         all_ell[sid] = ell_data
-        with open(ell_file, 'w') as f:
-            json.dump(all_ell, f, indent=2)
+        storage_save('ell_students', all_ell, teacher_id)
         imported["ell"] = True
 
     # 5. Parent contacts
     parent_contacts = data.get("parent_contacts")
     if parent_contacts:
-        contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
-        os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
-        all_contacts = {}
-        if os.path.exists(contacts_file):
-            try:
-                with open(contacts_file, 'r') as f:
-                    all_contacts = json.load(f)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+        all_contacts = storage_load('parent_contacts', teacher_id) or {}
         all_contacts[sid] = parent_contacts
-        with open(contacts_file, 'w') as f:
-            json.dump(all_contacts, f, indent=2)
+        storage_save('parent_contacts', all_contacts, teacher_id)
         imported["contacts"] = True
 
     # 6. Add to period roster if specified
