@@ -36,8 +36,46 @@ MODULE = "backend.services.assistant_tools_student"
 
 @pytest.fixture
 def isolated_home(tmp_path, monkeypatch):
-    """Redirect HOME so all `~/.graider_*` writes hit tmp_path."""
+    """Redirect HOME so all `~/.graider_*` writes hit tmp_path.
+
+    Issue #339 (2026-05-14): `backend.storage` captures `HOME = str(Path.home())`
+    at module-import time, so monkeypatching only the HOME env var leaves
+    the storage layer pointing at the real home directory. After
+    `import_student_data` moved to `backend.storage.{save,save_student_history}`,
+    we also redirect the storage module's path constants here.
+    """
     monkeypatch.setenv("HOME", str(tmp_path))
+
+    import backend.storage as storage
+    graider_data_dir = str(tmp_path / ".graider_data")
+    # Force the file backend regardless of dev-machine Supabase env vars —
+    # the tests below assert on file-backend behavior; per-tenant cloud
+    # routing is covered by tests/test_import_student_data_issue339.py.
+    monkeypatch.setattr(storage, "_is_supabase_configured", lambda: False)
+    monkeypatch.setattr(storage, "HOME", str(tmp_path))
+    monkeypatch.setattr(
+        storage, "ASSIGNMENTS_DIR", str(tmp_path / ".graider_assignments"),
+    )
+    monkeypatch.setattr(storage, "GRAIDER_DATA_DIR", graider_data_dir)
+    monkeypatch.setattr(
+        storage, "PERIODS_DIR", str(tmp_path / ".graider_data" / "periods"),
+    )
+    monkeypatch.setattr(
+        storage, "ACCOMMODATIONS_DIR",
+        str(tmp_path / ".graider_data" / "accommodations"),
+    )
+    monkeypatch.setattr(
+        storage, "LESSONS_DIR", str(tmp_path / ".graider_lessons"),
+    )
+    monkeypatch.setattr(
+        storage, "STUDENT_HISTORY_DIR",
+        str(tmp_path / ".graider_data" / "student_history"),
+    )
+    monkeypatch.setattr(
+        storage, "RESOURCES_DIR",
+        str(tmp_path / ".graider_data" / "resources"),
+    )
+
     return tmp_path
 
 
@@ -371,8 +409,10 @@ class TestImportStudentData:
         # Pre-seed history with one assignment
         history_dir = isolated_home / ".graider_data" / "student_history"
         history_dir.mkdir(parents=True)
-        # safe_sid for "sid-1" → "sid_1"
-        existing_path = history_dir / "sid_1.json"
+        # Issue #339: post-refactor uses `backend.storage.save_student_history`,
+        # which sanitizes only `/` and `\`, so "sid-1" → "sid-1.json"
+        # (was "sid_1.json" under the old re.sub-based normalization).
+        existing_path = history_dir / "sid-1.json"
         existing_path.write_text(json.dumps({
             "student_id": "sid-1",
             "assignments": [
