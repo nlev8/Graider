@@ -160,6 +160,19 @@ jobs:
           echo '{"config": {"onboarding_completed": true}}' > "$HOME/.graider_settings.json"
           ls -la "$HOME/.graider_settings.json"
           cat "$HOME/.graider_settings.json"
+          # multi-teacher.spec.js (unskipped, PR #386) injects
+          # X-Test-Teacher-Id headers. backend/storage.py _tenant_home()
+          # (#381) shards non-`local-dev` ids to
+          # ~/.graider_tenants/<safe_id>/, so the global file above does
+          # NOT suppress the wizard for those teachers. Seed each fixture
+          # teacher's sharded settings too. IDs mirror
+          # tests/e2e/fixtures/test-data.js TEACHERS[].id; safe_id == id
+          # since all chars match storage.py:59's [a-zA-Z0-9_-].
+          for tid in teacher-test-001 teacher-test-002 teacher-test-003; do
+            mkdir -p "$HOME/.graider_tenants/$tid"
+            echo '{"config": {"onboarding_completed": true}}' > "$HOME/.graider_tenants/$tid/.graider_settings.json"
+          done
+          ls -la "$HOME/.graider_tenants"/*/.graider_settings.json
 
       - name: Start backend in background
         # Same pattern as load-weekly.yml. The backend listens on
@@ -245,6 +258,15 @@ jobs:
         # scope for this PR (audit MAJOR #5 Phase 3 closeout).
         run: |
           echo '{"config": {"onboarding_completed": true}}' > "$HOME/.graider_settings.json"
+          # Re-seed sharded tenants too (see Pre-onboard step). The
+          # frontend/e2e clobber only hits the global default-teacher
+          # file, but keep this symmetric with the existing
+          # belt-and-suspenders pattern so a future per-tenant clobber
+          # can't silently reintroduce the wizard before tests/e2e.
+          for tid in teacher-test-001 teacher-test-002 teacher-test-003; do
+            mkdir -p "$HOME/.graider_tenants/$tid"
+            echo '{"config": {"onboarding_completed": true}}' > "$HOME/.graider_tenants/$tid/.graider_settings.json"
+          done
 
       - name: Run Stage 3a — tests/e2e/specs (6 specs)
         # Separate Playwright project; runs from tests/e2e/ cwd.
