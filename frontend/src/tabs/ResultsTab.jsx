@@ -1772,7 +1772,7 @@ export default React.memo(function ResultsTab({
                     {/* Portal Submissions Section */}
                     {portalSubmissions.length > 0 && (resultsFilter === "all" || resultsFilter === "portal_pending") && (
                       <div style={{
-                        background: "rgba(30,41,59,0.5)", borderRadius: "12px",
+                        background: "var(--glass-bg)", borderRadius: "12px",
                         border: "1px solid rgba(234,179,8,0.15)", padding: "16px", marginBottom: "20px",
                       }}>
                         <h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "12px", color: "#fbbf24", display: "flex", alignItems: "center", gap: "8px" }}>
