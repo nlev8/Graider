@@ -521,7 +521,8 @@ def clever_callback():
     # Trigger BACKGROUND roster sync on login (Clever requires daily data updates;
     # login-triggered sync satisfies this requirement). Runs in a separate thread
     # so the OAuth redirect returns immediately.
-    district_token = os.getenv("CLEVER_DISTRICT_TOKEN")
+    from backend.api_keys import resolve_clever_district_token
+    district_token = resolve_clever_district_token(clever_user.get("district", "") or None)
     teacher_id = resolve_clever_user_id(clever_id)
     if district_token:
         thread = threading.Thread(
@@ -584,7 +585,8 @@ def clever_sync_roster():
     Optional body: { "section_ids": ["id1", "id2"] } to sync only specific sections.
     If omitted, syncs all sections.
     """
-    district_token = os.getenv("CLEVER_DISTRICT_TOKEN")
+    from backend.api_keys import resolve_clever_district_token
+    district_token = resolve_clever_district_token(g.clever_user.get("district", "") or None)
     if not district_token:
         return jsonify({"error": "District token not configured"}), 503
 
