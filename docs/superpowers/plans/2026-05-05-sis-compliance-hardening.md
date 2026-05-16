@@ -1,6 +1,8 @@
 # SIS Compliance Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **STATUS: CLOSED 2026-05-15** — All 9 tasks shipped across multiple PRs (PR #281 et al). Verified on `main` (commit `3d45fdf`) via file inspection: `backend/services/classlink_oidc.py` (Task 1), id_token consumption in `classlink_routes.py:302` (Task 2), hmac.compare_digest state/nonce (Task 3, sealed via PR #374), `backend/utils/redaction.py` (Task 4), `App.jsx:470` ClassLink logout (Task 5), `deployment_ids` in `lti_routes.py:248` + `SettingsTab.jsx:2541` (Task 6), allowlist enforcement in `lti.py:258` (Task 7), audit calls in `clever.py:148` + `roster_sync.py:46` (Task 8). Checkboxes bulk-flipped during the 2026-05-15 plan-sweep.
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close 2 CRITICAL + 4 verified MAJOR SIS-integration compliance gaps so the SettingsTab extraction sprint can resume without compounding compliance debt.
 
@@ -59,7 +61,7 @@
 
 **Goal:** Provide a cached helper that returns `(issuer, jwks_uri, jwks_client)` for ClassLink, so the callback can validate id_tokens without per-request discovery overhead.
 
-- [ ] **Step 1.1: Write failing tests for OIDC discovery helper**
+- [x] **Step 1.1: Write failing tests for OIDC discovery helper**
 
 ```python
 # tests/test_classlink_oidc.py
@@ -128,7 +130,7 @@ def test_jwks_client_uses_discovered_uri():
         assert client is mock_jwks.return_value
 ```
 
-- [ ] **Step 1.2: Run tests, verify they fail**
+- [x] **Step 1.2: Run tests, verify they fail**
 
 ```bash
 source venv/bin/activate && pytest tests/test_classlink_oidc.py -v
@@ -136,7 +138,7 @@ source venv/bin/activate && pytest tests/test_classlink_oidc.py -v
 
 Expected: ImportError — `backend.services.classlink_oidc` does not exist.
 
-- [ ] **Step 1.3: Implement the helper**
+- [x] **Step 1.3: Implement the helper**
 
 ```python
 # backend/services/classlink_oidc.py
@@ -207,7 +209,7 @@ def get_classlink_jwks_client() -> PyJWKClient:
     return _cached_jwks_client
 ```
 
-- [ ] **Step 1.4: Run tests, verify they pass**
+- [x] **Step 1.4: Run tests, verify they pass**
 
 ```bash
 pytest tests/test_classlink_oidc.py -v
@@ -215,7 +217,7 @@ pytest tests/test_classlink_oidc.py -v
 
 Expected: 4/4 PASS.
 
-- [ ] **Step 1.5: Commit**
+- [x] **Step 1.5: Commit**
 
 ```bash
 git add backend/services/classlink_oidc.py tests/test_classlink_oidc.py
@@ -241,7 +243,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Goal:** Read `id_token` from token response, validate signature/iss/aud/exp, extract identity from id_token claims as the source of truth. Fail closed on missing or invalid id_token.
 
-- [ ] **Step 2.1: Write failing tests for id_token validation**
+- [x] **Step 2.1: Write failing tests for id_token validation**
 
 ```python
 # tests/test_classlink_sso.py — add to existing file
@@ -335,7 +337,7 @@ def test_callback_uses_id_token_claims_for_identity(client, monkeypatch):
     assert "classlink_login=success" in resp.headers["Location"]
 ```
 
-- [ ] **Step 2.2: Run tests, verify they fail**
+- [x] **Step 2.2: Run tests, verify they fail**
 
 ```bash
 pytest tests/test_classlink_sso.py -v -k "id_token"
@@ -343,7 +345,7 @@ pytest tests/test_classlink_sso.py -v -k "id_token"
 
 Expected: 3 FAIL — id_token-validation logic does not exist yet.
 
-- [ ] **Step 2.3: Modify callback to consume id_token**
+- [x] **Step 2.3: Modify callback to consume id_token**
 
 In `backend/routes/classlink_routes.py`, after line 226 (where `access_token` is extracted), add id_token validation before any session creation:
 
@@ -401,7 +403,7 @@ role = (id_claims.get('Role') or user_data.get('Role') or '').lower()
 tenant_id = str(user_data.get('TenantId', ''))  # not in id_token, keep userinfo
 ```
 
-- [ ] **Step 2.4: Run tests, verify they pass**
+- [x] **Step 2.4: Run tests, verify they pass**
 
 ```bash
 pytest tests/test_classlink_sso.py -v
@@ -409,7 +411,7 @@ pytest tests/test_classlink_sso.py -v
 
 Expected: All previously-passing tests + new id_token tests PASS.
 
-- [ ] **Step 2.5: Commit**
+- [x] **Step 2.5: Commit**
 
 ```bash
 git add backend/routes/classlink_routes.py tests/test_classlink_sso.py
@@ -426,7 +428,7 @@ PR 1 of SIS compliance hardening sprint.
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 2.6: PR submission gate**
+- [x] **Step 2.6: PR submission gate**
 
 Before opening PR, dispatch a Codex high-effort review against:
 - `backend/services/classlink_oidc.py`
@@ -446,7 +448,7 @@ Address findings, recommit if required.
 
 **Goal:** Reject CSRF on self-initiated flows by requiring state match when our `/login-url` was called. Bind a nonce so id_tokens can't be replayed across launches.
 
-- [ ] **Step 3.1: Write failing tests**
+- [x] **Step 3.1: Write failing tests**
 
 ```python
 # tests/test_classlink_sso.py — replace existing no-state test
@@ -504,7 +506,7 @@ def test_self_initiated_nonce_validated(client, signed_id_token_with_nonce_fixtu
 
 (Test fixture helpers `signed_id_token_fixture`, `patch_oidc_validation_success`, etc. land in a shared conftest.py in this task — extract from Task 2's inline helpers.)
 
-- [ ] **Step 3.2: Run tests, verify they fail**
+- [x] **Step 3.2: Run tests, verify they fail**
 
 ```bash
 pytest tests/test_classlink_sso.py -v -k "self_initiated or launchpad or nonce"
@@ -512,7 +514,7 @@ pytest tests/test_classlink_sso.py -v -k "self_initiated or launchpad or nonce"
 
 Expected: 4 FAIL.
 
-- [ ] **Step 3.3: Update `/login-url` to set initiated marker + nonce**
+- [x] **Step 3.3: Update `/login-url` to set initiated marker + nonce**
 
 ```python
 # backend/routes/classlink_routes.py — /login-url handler
@@ -539,7 +541,7 @@ def classlink_login_url():
     return jsonify({"url": f"{CLASSLINK_AUTH_URL}?{params}"})
 ```
 
-- [ ] **Step 3.4: Update callback state/nonce check**
+- [x] **Step 3.4: Update callback state/nonce check**
 
 Replace the existing block at lines 196-207:
 
@@ -571,7 +573,7 @@ if initiated_by_us and id_claims.get('nonce') != expected_nonce:
     return redirect("/?classlink_error=nonce_mismatch")
 ```
 
-- [ ] **Step 3.5: Run tests, verify they pass**
+- [x] **Step 3.5: Run tests, verify they pass**
 
 ```bash
 pytest tests/test_classlink_sso.py -v
@@ -579,7 +581,7 @@ pytest tests/test_classlink_sso.py -v
 
 Expected: All tests PASS.
 
-- [ ] **Step 3.6: Commit**
+- [x] **Step 3.6: Commit**
 
 ```bash
 git add backend/routes/classlink_routes.py tests/test_classlink_sso.py
@@ -598,7 +600,7 @@ PR 2 of SIS compliance hardening sprint. Depends on PR 1 (id_token validation).
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 3.7: PR submission gate** — Codex high-effort review.
+- [x] **Step 3.7: PR submission gate** — Codex high-effort review.
 
 ---
 
@@ -612,7 +614,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Goal:** Strip raw emails, raw SIS IDs, and full token-response bodies from logs/audit strings. Provide a `redact_email` helper for cases where partial signal is genuinely useful.
 
-- [ ] **Step 4.1: Write failing tests**
+- [x] **Step 4.1: Write failing tests**
 
 ```python
 # tests/test_clever_compliance.py — add new tests
@@ -670,7 +672,7 @@ def test_clever_login_does_not_log_raw_email(caplog):
     pass  # placeholder — implementer fills in based on actual call site shape
 ```
 
-- [ ] **Step 4.2: Run tests, verify they fail**
+- [x] **Step 4.2: Run tests, verify they fail**
 
 ```bash
 pytest tests/test_clever_compliance.py -v -k "redact or token_failure or raw_email"
@@ -678,7 +680,7 @@ pytest tests/test_clever_compliance.py -v -k "redact or token_failure or raw_ema
 
 Expected: ImportError + assertion failures.
 
-- [ ] **Step 4.3: Create redaction helper**
+- [x] **Step 4.3: Create redaction helper**
 
 ```python
 # backend/utils/redaction.py
@@ -695,7 +697,7 @@ def redact_email(email: str | None) -> str:
     return f"{local[0]}***@{domain}"
 ```
 
-- [ ] **Step 4.4: Update Clever token failure log**
+- [x] **Step 4.4: Update Clever token failure log**
 
 ```python
 # backend/clever.py:107 — change from
@@ -704,7 +706,7 @@ def redact_email(email: str | None) -> str:
 logger.error("Clever token exchange failed: status=%s", resp.status_code)
 ```
 
-- [ ] **Step 4.5: Update Clever login PII logs**
+- [x] **Step 4.5: Update Clever login PII logs**
 
 In `backend/routes/clever_routes.py:338,351` (the implementer reads the actual two log lines and replaces them). Pattern:
 
@@ -718,13 +720,13 @@ logger.info("Clever login: email=%s clever_id_hash=%s",
             hashlib.sha256(clever_id.encode()).hexdigest()[:8])
 ```
 
-- [ ] **Step 4.6: Run tests, verify they pass**
+- [x] **Step 4.6: Run tests, verify they pass**
 
 ```bash
 pytest tests/test_clever_compliance.py -v
 ```
 
-- [ ] **Step 4.7: Commit**
+- [x] **Step 4.7: Commit**
 
 ```bash
 git add backend/utils/redaction.py backend/clever.py backend/routes/clever_routes.py tests/test_clever_compliance.py
@@ -754,7 +756,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Goal:** App.jsx logout calls `/api/classlink/logout` for ClassLink-backed users in addition to existing Clever logout.
 
-- [ ] **Step 5.1: Write failing test**
+- [x] **Step 5.1: Write failing test**
 
 Locate the existing logout handler test (or create one in `frontend/src/__tests__/App.logout.test.jsx`). Test:
 
@@ -782,7 +784,7 @@ describe("logout", () => {
 });
 ```
 
-- [ ] **Step 5.2: Run test, verify it fails**
+- [x] **Step 5.2: Run test, verify it fails**
 
 ```bash
 cd frontend && npm test -- App.logout
@@ -790,7 +792,7 @@ cd frontend && npm test -- App.logout
 
 Expected: FAIL — `/api/classlink/logout` not in fetchMock call list.
 
-- [ ] **Step 5.3: Update logout handler**
+- [x] **Step 5.3: Update logout handler**
 
 In `frontend/src/App.jsx:466` area, locate the logout handler. Add unconditional ClassLink logout call alongside existing Clever logout (both endpoints are no-ops when not authenticated through that provider):
 
@@ -807,13 +809,13 @@ await Promise.allSettled([
 
 `Promise.allSettled` ensures one endpoint failing does not block the other. Both are idempotent.
 
-- [ ] **Step 5.4: Run test, verify it passes**
+- [x] **Step 5.4: Run test, verify it passes**
 
 ```bash
 cd frontend && npm test -- App.logout
 ```
 
-- [ ] **Step 5.5: Commit**
+- [x] **Step 5.5: Commit**
 
 ```bash
 git add frontend/src/App.jsx frontend/src/__tests__/App.logout.test.jsx
@@ -841,7 +843,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Goal:** Extend platform-config schema to include optional `deployment_ids: list[str]`. Persisted but not yet enforced (Task 7 enforces).
 
-- [ ] **Step 6.1: Write failing test**
+- [x] **Step 6.1: Write failing test**
 
 ```python
 # tests/test_lti_routes.py — add
@@ -875,13 +877,13 @@ def test_lti_config_omitted_deployment_ids_defaults_to_empty_list(client_with_te
     assert cfg["deployment_ids"] == []
 ```
 
-- [ ] **Step 6.2: Run tests, verify they fail**
+- [x] **Step 6.2: Run tests, verify they fail**
 
 ```bash
 pytest tests/test_lti_routes.py -v -k "deployment_ids"
 ```
 
-- [ ] **Step 6.3: Update config save to include deployment_ids**
+- [x] **Step 6.3: Update config save to include deployment_ids**
 
 ```python
 # backend/routes/lti_routes.py:237 — extend config dict
@@ -896,7 +898,7 @@ config = {
 }
 ```
 
-- [ ] **Step 6.4: Add SettingsTab form field**
+- [x] **Step 6.4: Add SettingsTab form field**
 
 In `frontend/src/tabs/SettingsTab.jsx` LTI block (lines ~2326-2747 per audit), add a single text input next to the existing fields:
 
@@ -915,13 +917,13 @@ And in the submit handler that POSTs to `/api/lti/config`, parse the comma-separ
 deployment_ids: ltiDeploymentIds.split(",").map(s => s.trim()).filter(Boolean),
 ```
 
-- [ ] **Step 6.5: Run tests, verify they pass**
+- [x] **Step 6.5: Run tests, verify they pass**
 
 ```bash
 pytest tests/test_lti_routes.py -v
 ```
 
-- [ ] **Step 6.6: Commit (don't push — Task 7 lands in same PR)**
+- [x] **Step 6.6: Commit (don't push — Task 7 lands in same PR)**
 
 ```bash
 git add backend/routes/lti_routes.py frontend/src/tabs/SettingsTab.jsx tests/test_lti_routes.py
@@ -946,7 +948,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Goal:** After id_token validation extracts `deployment_id` claim, check against platform config's `deployment_ids` allowlist. TOFU (trust on first use) when allowlist is empty — record claim's deployment_id and accept; subsequent launches with different deployment_id rejected.
 
-- [ ] **Step 7.1: Write failing tests**
+- [x] **Step 7.1: Write failing tests**
 
 ```python
 # tests/test_lti.py — add
@@ -991,13 +993,13 @@ def test_launch_after_tofu_rejects_different_deployment(
         validate_launch_jwt(token, cfg)
 ```
 
-- [ ] **Step 7.2: Run tests, verify they fail**
+- [x] **Step 7.2: Run tests, verify they fail**
 
 ```bash
 pytest tests/test_lti.py -v -k "deployment"
 ```
 
-- [ ] **Step 7.3: Add allowlist + TOFU logic**
+- [x] **Step 7.3: Add allowlist + TOFU logic**
 
 In `backend/lti.py:254-258`, after the `deployment_id` extraction:
 
@@ -1026,13 +1028,13 @@ elif deployment_id not in allowlist:
     )
 ```
 
-- [ ] **Step 7.4: Run tests, verify they pass**
+- [x] **Step 7.4: Run tests, verify they pass**
 
 ```bash
 pytest tests/test_lti.py -v
 ```
 
-- [ ] **Step 7.5: Commit + open PR 5**
+- [x] **Step 7.5: Commit + open PR 5**
 
 ```bash
 git add backend/lti.py tests/test_lti.py
@@ -1064,7 +1066,7 @@ PR 5 contains both Task 6 + Task 7 commits. Codex high-effort review pre-merge.
 
 **Goal:** Add audit-log calls on PII-touching Clever read paths and on roster-sync boundaries (entry + exit, not per-row).
 
-- [ ] **Step 8.1: Write failing tests**
+- [x] **Step 8.1: Write failing tests**
 
 ```python
 # tests/test_clever_compliance.py — add
@@ -1094,13 +1096,13 @@ def test_roster_sync_emits_start_and_complete_events(monkeypatch):
     assert "ROSTER_SYNC_COMPLETE" in event_types
 ```
 
-- [ ] **Step 8.2: Run tests, verify they fail**
+- [x] **Step 8.2: Run tests, verify they fail**
 
 ```bash
 pytest tests/test_clever_compliance.py -v -k "audit_event or sync_emits"
 ```
 
-- [ ] **Step 8.3: Add audit calls in `backend/clever.py`**
+- [x] **Step 8.3: Add audit calls in `backend/clever.py`**
 
 ```python
 # backend/clever.py — at top of file
@@ -1114,7 +1116,7 @@ audit_log(
 )
 ```
 
-- [ ] **Step 8.4: Add audit calls in `backend/roster_sync.py`**
+- [x] **Step 8.4: Add audit calls in `backend/roster_sync.py`**
 
 ```python
 # backend/roster_sync.py — at start + end of sync_roster_to_db:
@@ -1142,13 +1144,13 @@ def sync_roster_to_db(classes, students, enrollments, teacher_id, provider="clev
         raise
 ```
 
-- [ ] **Step 8.5: Run tests, verify they pass**
+- [x] **Step 8.5: Run tests, verify they pass**
 
 ```bash
 pytest tests/test_clever_compliance.py -v
 ```
 
-- [ ] **Step 8.6: Commit**
+- [x] **Step 8.6: Commit**
 
 ```bash
 git add backend/clever.py backend/roster_sync.py tests/test_clever_compliance.py
@@ -1176,17 +1178,17 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 - Modify: `CLEVER_INTEGRATION.md`
 - Modify: `CLAUDE.md` (the 40% vs 32% coverage drift)
 
-- [ ] **Step 9.1: Update CLEVER_COMPLIANCE_STATUS.md**
+- [x] **Step 9.1: Update CLEVER_COMPLIANCE_STATUS.md**
 
 - Line 5: change "Production-ready for Clever Library certification" → "Compliance hardening sprint completed 2026-05-05 (PRs #X-#Y)" with the actual PR numbers once landed.
 - Line ~94: mark "Periodic roster sync (24h)" as ✅ shipped, citing `backend/routes/sync_routes.py:269` + `.github/workflows/roster-sync.yml`.
 - Line 67: ensure audit-trail claim matches code — "all sync, delete, accommodation, key, /me, /users/{id} operations" (after Task 8 lands).
 
-- [ ] **Step 9.2: Update CLEVER_INTEGRATION.md**
+- [x] **Step 9.2: Update CLEVER_INTEGRATION.md**
 
 Line ~1287: mark scheduled sync as shipped.
 
-- [ ] **Step 9.3: Update CLAUDE.md coverage line**
+- [x] **Step 9.3: Update CLAUDE.md coverage line**
 
 CLAUDE.md says "Backend Tests job passes (pytest with 40% coverage floor)". CI actually enforces 32 (per `--cov-fail-under=32`). Either:
 - Bump CI floor to 40 (preferred — aligns with doc, requires verifying no failures)
@@ -1194,7 +1196,7 @@ CLAUDE.md says "Backend Tests job passes (pytest with 40% coverage floor)". CI a
 
 Implementer chooses based on actual current passing rate. Run `pytest --cov` first; if comfortably ≥40, raise CI floor; otherwise update doc.
 
-- [ ] **Step 9.4: Commit**
+- [x] **Step 9.4: Commit**
 
 ```bash
 git add docs/CLEVER_COMPLIANCE_STATUS.md CLEVER_INTEGRATION.md CLAUDE.md

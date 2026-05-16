@@ -307,10 +307,10 @@ The original draft proposed 1 → 2 (broad E2E) → 3 (load). Gemini's review co
 When all 3 phases ship, this issue is closeable:
 
 - [x] Phase 1 — promote smoke to required + reconcile docs (shipped 2026-05-12, PR #351)
-- [ ] Phase 2 — weekly load test
-- [ ] Phase 3 — nightly broader E2E
+- [x] Phase 2 — weekly load test (Resolution A shipped via PR #353; load-harness HTTP-500 cleanup PR #378)
+- [x] Phase 3 — nightly broader E2E (Stage 3a shipped PR #371; Stage 3b architectural blockers closed in PR #381 — mechanical `multi-teacher.spec.js:22` unskip remains, sketched in `handoff.md`)
 
-→ then close [GH #217](https://github.com/nlev8/Graider/issues/217) as all 3 original items (MAJOR #4, MAJOR #5, MINOR DOMPurify) are landed.
+→ [GH #217](https://github.com/nlev8/Graider/issues/217) **closed 2026-05-15** (all 3 original items MAJOR #4, MAJOR #5, MINOR DOMPurify shipped). [GH #353](https://github.com/nlev8/Graider/issues/353) also **closed 2026-05-15** via PR #381.
 
 ## Estimated total effort
 
