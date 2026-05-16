@@ -68,18 +68,28 @@ SIS_CAPTURES = [
     # unchanged. Net effect of PR #227 across rounds: -5 lines round-2
     # delegation + +9 lines round-3 redaction = net +3 vs pre-PR. The
     # test allows a window=8 search so this is comfortably within margin.
-    ("backend/routes/clever_routes.py", 241),
+    # 2026-05-16: shifted 241 -> 310 by PR #395 (Task A multi-enrollment SSO:
+    # _create_class_selection + _mint_clever_student_session helpers ~+50
+    # lines before _create_clever_student_session). Capture at 312 (outer
+    # except 310) unchanged — observability preserved, only the pin tracks.
+    ("backend/routes/clever_routes.py", 310),
     # 2026-05-14: shifted 265 -> 286 by the security-quintet PR (Task 4b
     # added the Clever-ID resolver + filter_roster_to_teacher block to
     # _background_roster_sync — ~21 lines). Capture site at 288 unchanged.
-    ("backend/routes/clever_routes.py", 286),
+    # 2026-05-16: shifted 286 -> 353 by PR #395 (same Task A helpers +
+    # enumeration logic earlier in the file). Capture at 355 (except 353
+    # in _background_roster_sync) unchanged.
+    ("backend/routes/clever_routes.py", 353),
     # 2026-05-06: shifted 672 -> 692 by PR 3 of SIS compliance hardening sprint
     # (PII redaction in Clever logs added ~20 lines of helper code earlier in
     # the file). 2026-05-07: shifted 692 -> 699 by PR #227 same-as-above net
     # ~+9 line addition in _clever_audit. 2026-05-14: shifted 699 -> 711 by
     # the security-quintet PR (Task 4b additions to _background_roster_sync
     # earlier in the file). Capture site at 713 unchanged.
-    ("backend/routes/clever_routes.py", 711),
+    # 2026-05-16: shifted 711 -> 796 by PR #395 (Task A: select_clever_class
+    # endpoint + the two helpers added ~85 lines earlier). Capture at 798
+    # (except sb_err 796, Clever data-deletion Supabase cleanup) unchanged.
+    ("backend/routes/clever_routes.py", 796),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
