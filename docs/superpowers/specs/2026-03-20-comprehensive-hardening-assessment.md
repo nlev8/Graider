@@ -134,3 +134,36 @@
 5. Single Clever district token — unchanged (Task B of the Clever→10 plan).
 
 *Next concrete plan: `docs/superpowers/plans/2026-05-16-clever-compliance-10.md` (Clever 9→10, two bounded PRs). No other dimension has a comparably small, well-defined path to 10 — the rest need the multi-week complexity-decomposition sprint described under "biggest lever."*
+
+---
+
+# 2026-05-16 Closing Re-Score — Clever Tasks A+B shipped (HEAD `71e66de`)
+
+**3-model DELTA re-score after PR #395 (Task A) + #397 (Task B) merged, to verify whether Clever Compliance reaches a true 10/10.** Same conservative-floor reconciliation. Codex + Claude + Gemini each independently verified in-code.
+
+**Verdict: Clever Compliance stays 9/10 — NOT a verified 10. Overall unchanged at 7.7/10.** The plan's premise ("these two tasks are the *only* verified blockers") was **incomplete** — 3-model verification found three in-code residuals. Tasks A & B did close their *planned scope*; the scope was under-drawn.
+
+| Model | Clever | Overall | Verdict |
+|---|---:|---:|---|
+| Codex | 9 | 7.7 | residual: duplicate-student-row first-pick |
+| Claude | 9 | 7.7 | residual: `sync_routes.py:189` |
+| Gemini | 10 | 7.8 | "minor debt" — but documented the same residuals |
+| **Reconciled** | **9** | **7.7** | 2/3 = 9; Gemini's 10 self-documents the residuals → conservative floor holds |
+
+All other 9 dimensions: **unanimously unchanged** (only Clever code + docs merged 63384d3→71e66de; no drift). Measured backend coverage **63.42%** (Claude, CI run 25971292023).
+
+### Tasks A & B — closed for their planned scope (verified)
+
+- **Task A** (#395 `b9eff4e`): `clever_routes.py` enumerates `class_students` (no `.limit(1)`), `needs_class_selection` + short-lived token, GET/POST `/api/clever/select-class`, `StudentApp.jsx` picker, 9+2 tests. ✓
+- **Task B** (#397 `71e66de`): `api_keys.resolve_clever_district_token`; both `clever_routes.py` sync sites use it not `os.getenv`; 6 tests. ✓
+- Periodic roster sync: `.github/workflows/roster-sync.yml` present. ✓
+
+### The three verified residuals blocking a true Clever 10/10 (→ Task C)
+
+1. **`backend/routes/clever_routes.py:248`** (Codex; orchestrator-verified). `student_row = res.data[0]` — the `students` lookup is still **first-row-wins when the same Clever ID exists under multiple teachers' rosters**. Task A disambiguated *enrollments for one student row*, not *duplicate student rows*. The original baseline defect ("same Clever student under multiple teachers, first DB row wins") is only **partially** closed. The comment at `:244-247` is now stale (describes the fix as not-done).
+2. **`backend/routes/sync_routes.py:189`** (Claude + Gemini, independent). `config.get('district_token') or os.environ.get('CLEVER_DISTRICT_TOKEN')` — the daily periodic-cron path is a **third token-resolution site that bypasses `resolve_clever_district_token`** (per-teacher config + env only; never the per-district store). Multi-district daily sync still can't pick up a district-scoped token.
+3. **`backend/api_keys.py::save_district_keys`** (Gemini; orchestrator-verified). Filters to `('openai','anthropic','gemini')` — **`clever_district_token` has no supported write path**, so Task B's per-district resolver branch is unreachable end-to-end (single-district env path works; true multi-district does not).
+
+**Net:** Tasks A+B are real improvements (the common single-row/single-district cases are fixed and tested), but a *verified* Clever 10/10 requires Task C closing all three. The conservative scorecard does not credit a 10 on partial closure.
+
+*Plan reopened: `docs/superpowers/plans/2026-05-16-clever-compliance-10.md` now carries **Task C** with these three file:line items.*

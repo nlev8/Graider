@@ -1,6 +1,6 @@
 # Clever Compliance → 10/10 — Close the Two Verified Baseline Gaps
 
-> **STATUS: Task A ✅ CLOSED 2026-05-16 (PR #395 `b9eff4e`) · Task B ⬜ NOT STARTED.** Scoped 2026-05-16 from the 3-model dimensional re-score (Claude 8.1 / Gemini 7.8 reconciled; Clever Compliance held at **9/10**). The two items below are the *only* verified blockers to a true 10/10. Periodic roster sync (3rd baseline item) is already DONE (`.github/workflows/roster-sync.yml`). Plan fully closes (→ Clever 10/10 re-score) only after Task B + the §"Verification" re-score.
+> **STATUS: Task A ✅ CLOSED (#395 `b9eff4e`) · Task B ✅ CLOSED (#397 `71e66de`) — but PLAN NOT CLOSED: Clever stayed 9/10.** The 2026-05-16 closing 3-model re-score (Codex 9 / Claude 9 / Gemini 10 → reconciled **9**) proved this plan's original premise WRONG: "the two items below are the *only* verified blockers" was **incomplete**. Tasks A & B closed their *planned scope* but verification found **three** in-code residuals (see **Task C**). A verified Clever 10/10 requires Task C. Honest lesson: the plan under-drew the scope; the 3-model verification is what caught it (a single-model pass would have shipped a false 10).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development per task and superpowers:executing-plans (or subagent-driven-development) to implement task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -21,7 +21,9 @@ Clever Library certification (external) is *not* sufficient evidence for an inte
 
 ---
 
-## Task B: Per-district token resolution (PR 1 — backend only)
+## Task B: Per-district token resolution — ✅ CLOSED 2026-05-16 (PR #397, `71e66de`)
+
+Shipped per spec (resolver in `api_keys.py` — documented deviation from "clever.py"; both `clever_routes.py` sync sites wired; 6 TDD tests; single-district byte-identical). **Closed-but-incomplete:** the closing re-score found Task B's per-district branch is unreachable end-to-end (no write path for `clever_district_token`) + a 3rd token site bypasses the resolver — folded into **Task C** below. Steps below kept for history (not re-flipped).
 
 ### Step 1 — Failing test
 - [ ] Add `tests/test_clever_district_token_resolution.py`:
@@ -65,11 +67,21 @@ Shipped FIRST (not "PR 2") — per the user's strategic call that A is the only 
 
 ---
 
+## Task C: Close the 3 residuals the closing re-score found (the real path to Clever 10)
+
+> Discovered by the 2026-05-16 closing 3-model re-score (each verified in-code; all 3 orchestrator-confirmed). Tasks A+B fixed the common single-row/single-district cases; these three close the rest. **NOT STARTED.** TDD per item.
+
+- [ ] **C1 — duplicate student rows across teachers** (`backend/routes/clever_routes.py:248`, Codex). `student_row = res.data[0]` is still first-row-wins when the same Clever ID exists under multiple teachers' rosters; Task A only disambiguated *enrollments for one row*. Enumerate across ALL matching `students` rows (and the email-fallback row), fold each (student_row × class) into the existing `needs_class_selection` candidate flow so the picker surfaces enough context (e.g. class/teacher) to choose correctly. **Also fix the now-stale comment at `:244-247`** (it claims the fix is not-done). RED test: same Clever ID → 2 student rows under different teachers → disambiguation, not first-row session.
+- [ ] **C2 — periodic-cron token site** (`backend/routes/sync_routes.py:189`, Claude+Gemini). `config.get('district_token') or os.environ.get('CLEVER_DISTRICT_TOKEN')` bypasses `resolve_clever_district_token`. Route it through the resolver (derive `district_id` from the teacher's sync config / Clever identity; env fallback preserved → single-district unchanged). RED test mirrors `test_clever_district_token_resolution.py`'s integration test for the cron path.
+- [ ] **C3 — write path for `clever_district_token`** (`backend/api_keys.py::save_district_keys`, Gemini). Provider filter `('openai','anthropic','gemini')` means the resolver's per-district key can never be persisted via any API → multi-district unreachable end-to-end. Allow persisting `clever_district_token` (extend the allowlist or a dedicated setter) and expose it via the `/api/clever/district-keys` admin path. RED test: save then `resolve_clever_district_token` returns it.
+
+Acceptance: C1+C2+C3 shipped (TDD, CI green) → re-run §Verification. Only then does Clever → 10.
+
 ## Verification (dimension closure)
 
-- [ ] After both PRs merge: re-run the 3-model dimensional re-score (Codex + Claude + Gemini) per the established reconcile process. Clever Compliance moves 9 → **10** only if all models verify both items closed in-code.
-- [ ] Update `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` with the new dated row.
-- [ ] Flip this plan's STATUS to CLOSED with the PR numbers (bulk-flip + STATUS-stamp, handoff heuristic #2).
+- [x] **2026-05-16 closing 3-model re-score RAN** (Codex 9 / Claude 9 / Gemini 10 → reconciled **9, NOT 10**). Result + the 3 residuals recorded in `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` ("2026-05-16 Closing Re-Score" section). Overall unchanged 7.7 (conservative floor).
+- [x] Assessment doc updated with the dated section.
+- [ ] **Plan does NOT close yet** — reopened with Task C. Re-run the re-score after C1+C2+C3; flip to fully CLOSED only if all models then verify Clever 10/10.
 
 ## Out-of-scope / risks
 
