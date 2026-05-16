@@ -12,7 +12,7 @@ Run an autonomous issue-closing / PR-shipping sprint on Graider: clear the GitHu
 - **16 issue closures** + **4 plan docs closed**. `gh issue list --state open` → **0 rows**.
 - **multi-teacher.spec.js followup fully CLOSED** (#386): unskipped, header-injected, and the e2e regression it surfaced (OnboardingWizard modal) root-caused + fixed at the workflow-seed layer. RED→GREEN trail preserved in §5.
 - **Light-mode bug fixed** (#388): `ResultsTab.jsx:1775` hardcoded a dark-only background; swapped to theme-aware `var(--glass-bg)`. Rebuilt Vite bundle committed (required — see heuristic #6).
-- **GitNexus index still stale** at `22bc414` (May 9). Zombie PID 67783 holds the LevelDB lock; reboot pending. Work proceeds with a "+1 risk tier" pessimism filter.
+- **GitNexus index REFRESHED** 2026-05-16 to HEAD `6e26b45` (17,586 nodes / 49,463 edges; embeddings 7,331→10,653 — preserved + grown via `--embeddings`). The earlier "zombie PID 67783 / reboot pending" note was a **misdiagnosis** propagated across handoff refreshes: no unkillable process ever existed; a plain `kill -TERM` stopped the MCP server and `npx gitnexus analyze` ran fine. MCP `gitnexus_*` tools dropped when the server stopped and resume **next session** (Claude Code relaunches it against the fresh index); unavailable for the rest of this one.
 - Local `main` at **`879f8e7`** (PR #388 merge). Working tree: only Vite-build churn + `.claude/scheduled_tasks.lock` + `tests/reports/` (untracked, unrelated). No in-flight branches.
 
 ## 3. Current state
@@ -85,7 +85,7 @@ Light-mode fix (#388) verification: switch the app to light mode → Results tab
 
 Ranked by likelihood of biting a future session:
 
-1. **GitNexus stale index** — impact analyses miss symbols added in #381/#382/#386/#388. Mitigation in place: "+1 risk tier" pessimism. Real fix needs a reboot (zombie PID 67783, state `UE`, holds `.gitnexus/lbug`).
+1. **GitNexus `analyze` exits non-zero on a benign teardown crash.** The index is now fresh (rebuilt 2026-05-16, reflects HEAD). But `npx gitnexus analyze` prints `Repository indexed successfully`, writes `meta.json`, *then* crashes in shutdown with `libc++abi: … mutex lock failed: Invalid argument` → exit 1. **The index is good despite exit 1** — verify via `.gitnexus/meta.json` stats + data-file mtime, NOT the exit code. (`lastIndexedCommit` is always `None` in this gitnexus build — not a staleness signal.)
 2. **~13 conditionally-skipped `frontend/e2e/*` specs** (student-*, teacher-publish-modal, automation-builder, resource-management, etc.) — UNVERIFIED whether these are intentional per-test skips or latent holdouts. Not in scope this session, not tracked in any issue/plan. If a future session wants more e2e coverage, triage these first.
 3. **Frontend deploy footgun** — any frontend fix that doesn't commit the rebuilt `backend/static/` bundle will pass CI (CI rebuilds) but **not reach users** (Railway/NIXPACKS serves committed static, no build step at deploy). See heuristic #6.
 
@@ -93,14 +93,10 @@ Ranked by likelihood of biting a future session:
 
 **There is no required next step — the sprint goal is met.** If a fresh agent wants productive work, in priority order:
 
-1. **GitNexus reboot + reindex** (unblocks accurate impact analysis for all future work):
-   ```bash
-   cd /Users/alexc/Downloads/Graider
-   ps -ef | grep "gitnexus analyze" | grep -v grep   # expect empty after reboot
-   npx gitnexus analyze --embeddings                  # preserves the 7,331 embeddings
-   ```
-2. **Close the older April plans** with the same bulk-flip + STATUS-stamp pattern (heuristic #2) — purely doc, low risk, ~30 min.
-3. **Triage the ~13 skipped frontend/e2e specs** — read each `test.skip` reason; unskip + fix the genuinely-stale ones following the #386 RED→GREEN playbook (always check the failure screenshot first).
+1. **Close the older April plans** with the same bulk-flip + STATUS-stamp pattern (heuristic #2) — purely doc, low risk, ~30 min.
+2. **Triage the ~13 skipped frontend/e2e specs** — read each `test.skip` reason; unskip + fix the genuinely-stale ones following the #386 RED→GREEN playbook (always check the failure screenshot first).
+
+_(GitNexus reindex is DONE this session — index fresh at `6e26b45`. Procedure for when it goes stale again: `kill -TERM` the `gitnexus mcp` PIDs → `npx gitnexus analyze --embeddings` from repo root → ignore the benign exit-1 / `mutex lock failed` teardown crash → verify `.gitnexus/meta.json` stats + mtime. **No reboot, ever** — see heuristic #7.)_
 
 Otherwise: await user direction. Do not invent work.
 
@@ -112,6 +108,7 @@ Otherwise: await user direction. Do not invent work.
 4. **`_supabase_raw` singleton poisoning** — tests setting a fake `SUPABASE_URL` without also mocking `_sb_load`/`_sb_save` lazy-init the real client against the fake host and poison later tests. Always mock `_sb_*`.
 5. **e2e per-tenant sharding needs a per-tenant onboarding seed.** A spec injecting `X-Test-Teacher-Id` shards to `~/.graider_tenants/<safe_id>/`; the global `$HOME/.graider_settings.json` seed doesn't cover it → OnboardingWizard modal silently blocks nav. **Symptom lies**: `locator.click` timeout on a present-but-obscured button, not a missing one. **Read the Playwright failure screenshot first**, not the stack trace.
 6. **Frontend fixes must commit the rebuilt `backend/static/` bundle.** Railway/NIXPACKS deploy is gunicorn-only (no `npm run build` at deploy); the committed bundle is what's served. CI's Frontend Build rebuilds for verification but does NOT commit back. Workflow: edit `frontend/src/` → `cd frontend && npm run build` → `git add frontend/src/... backend/static/index.html backend/static/assets/` (this stages the hashed-bundle rename/delete/add set) → PR. Skipping the bundle = green CI, unchanged production. (Also: theme bugs are almost always a hardcoded color where a `var(--*)` belongs. `--card-bg-light` exists only in `:root`/dark, NOT in `[data-theme="light"]`; `--glass-bg` is the theme-aware panel background convention.)
+7. **GitNexus needs no reboot — that belief was a multi-handoff misdiagnosis.** "Zombie PID holding the LevelDB lock, reboot pending" propagated across ≥4 handoff refreshes *unverified*. Reality: it was the normal client-spawned `gitnexus mcp` server; `kill -TERM` stops it instantly (a true zombie ignores TERM — that's the test). `npx gitnexus analyze --embeddings` then reindexes (~5 min) and **exits 1 with `libc++abi … mutex lock failed` AFTER printing "indexed successfully" + writing meta.json** — a teardown-only crash; trust `meta.json` stats + data-file mtime, never the exit code. Stopping the MCP server drops `gitnexus_*` tools until next session (Claude Code respawns it); do NOT manually relaunch (orphans a process nothing talks to). **General lesson: re-verify carried-over operational claims with a live check before repeating them in a handoff.**
 
 ## 9. References
 
@@ -120,4 +117,5 @@ Otherwise: await user direction. Do not invent work.
 - Plans closed: 2026-05-14-security-trio, 2026-05-11-audit-major5-e2e-promotion, 2026-05-05-sis-compliance-hardening, 2026-05-01-phase4.3-sprint2-per-dok-mastery
 - e2e debug runs: [25964874545](https://github.com/nlev8/Graider/actions/runs/25964874545) (RED, root-cause evidence) → [25965070445](https://github.com/nlev8/Graider/actions/runs/25965070445) (GREEN)
 - Key files: `backend/storage.py:48-60` (`_tenant_home`), `.github/workflows/e2e-nightly.yml` (onboarding-seed steps), `frontend/src/styles/globals.css` (theme vars), `frontend/src/tabs/ResultsTab.jsx:1775` (#388 fix), `railway.json`/`nixpacks.toml`/`Procfile` (deploy = gunicorn only)
-- CLAUDE.md Rule #12 — this doc is committable as an artifact (tracker-empty state + RED→GREEN record + 6 heuristics qualify).
+- GitNexus: index rebuilt 2026-05-16 (`.gitnexus/meta.json` — 17,586 nodes / 49,463 edges / 10,653 embeddings); `npx gitnexus analyze` exits 1 on a benign post-success teardown crash (see §6.1 / heuristic #7)
+- CLAUDE.md Rule #12 — this doc is committable as an artifact (tracker-empty state + RED→GREEN record + GitNexus-reindex correction + 7 heuristics qualify).
