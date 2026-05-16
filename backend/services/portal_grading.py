@@ -182,6 +182,15 @@ def grade_written_questions(questions, answers, ai_notes, grade_level, subject,
             )
             results.append(result)
         except Exception as e:
+            # Issue #224: TransientError must bubble up so Celery's
+            # `autoretry_for=(TransientError,)` can retry the whole
+            # submission instead of locking in a per-question fallback
+            # during an AI 5xx storm. Non-transient errors (ValueError
+            # etc.) still fall back so one bad question doesn't kill
+            # the whole submission.
+            from backend.tasks.grading_tasks import TransientError
+            if isinstance(e, TransientError):
+                raise
             logger.error("Failed to grade question %d (key=%s): %s", i, answer_key, str(e))
             results.append({
                 "grade": {
@@ -255,6 +264,11 @@ def _safe_generate_feedback(**kwargs):
     try:
         return generate_feedback(**kwargs)
     except Exception as e:
+        # Issue #224: TransientError must bubble so Celery's autoretry
+        # can fire — same rationale as `grade_written_questions` above.
+        from backend.tasks.grading_tasks import TransientError
+        if isinstance(e, TransientError):
+            raise
         logger.error("Feedback generation failed: %s", e)
         sentry_sdk.capture_exception(e)
         return {

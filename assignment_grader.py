@@ -4672,6 +4672,19 @@ Read these FIRST, then score accordingly:
                 return parsed.model_dump()
 
     except Exception as e:
+        # Issue #224: don't swallow AI transients. If the provider is
+        # having a 5xx storm (or network is down), bubble up as
+        # TransientError so Celery's `autoretry_for=(TransientError,)`
+        # in `backend/tasks/grading_tasks.py` can retry instead of
+        # silently producing a 0-score "grading error" submission.
+        # Non-transient errors (ValueError, schema bugs) still hit the
+        # fallback so one bad question doesn't kill the whole run.
+        from backend.retry import is_retryable_error
+        if is_retryable_error(e):
+            from backend.tasks.grading_tasks import TransientError
+            raise TransientError(
+                f"Transient per-question grading failure ({ai_provider}): {e}"
+            ) from e
         print(f"    ⚠️ Per-question grading error ({ai_provider}): {e}")
 
     return {
@@ -4946,6 +4959,16 @@ Also identify:
                 return result
 
     except Exception as e:
+        # Issue #224 (same pattern as `grade_per_question` above): if
+        # the provider is transient-down, propagate as TransientError
+        # so Celery's autoretry sees it. Non-transient errors fall
+        # through to the encouraging fallback below.
+        from backend.retry import is_retryable_error
+        if is_retryable_error(e):
+            from backend.tasks.grading_tasks import TransientError
+            raise TransientError(
+                f"Transient feedback generation failure ({ai_provider}): {e}"
+            ) from e
         print(f"  ⚠️ Feedback generation error ({ai_provider}): {e}")
 
     return {
