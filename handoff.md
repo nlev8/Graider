@@ -1,18 +1,19 @@
-# Handoff: 2026-05-14/15 session — 10 PRs merged, tracker empty
+# Handoff: 2026-05-14/15 session — 12 PRs merged, tracker empty, 4 plans closed
 
-**Session-end snapshot. Replaces the prior draft (which still listed #353 as open and the `multi-teacher.spec.js` unskip as a followup). The tracker is now fully empty after the #217 / #218 umbrella sweep.**
+**Session-end snapshot. Replaces the prior draft (PR #383, when totals were 10 PRs / tracker empty / plans untouched). Since then PR #382 was the 11th merge and PR #384 (plan-checkbox sweep) was the 12th. This refresh adds the plan-closure layer to the artifact.**
 
 ## Goal
 
-Snapshot of the May 14–15 sprint so a fresh agent (or future-me) can pick up cleanly. **Nothing is genuinely open on the tracker.** One spec-level cleanup item is captured below as the only thing left worth doing if the next session wants something to ship; otherwise this is a natural stop.
+Snapshot of the May 14–15 sprint so a fresh agent (or future-me) can pick up cleanly. **Nothing is genuinely open on the tracker, and the 4 most-recent plans are now marked CLOSED with verifiable STATUS stamps.** One spec-level cleanup item remains as the only sketched follow-on if the next session wants something to ship.
 
 ## TL;DR
 
-- **10 PRs merged this session**, all auto-deployed via Railway: #374, #375, #376, #377, #378, #379, #380, #381, #382 (plus #373 closed by #374).
+- **12 PRs merged this session**, all auto-deployed via Railway: #374, #375, #376, #377, #378, #379, #380, #381, #382, #383, #384 (plus #373 closed by #374).
 - **16 stale/real issue closures**: #217, #218, #224, #229, #234, #245, #247, #249, #253, #339, #341, #343, #348, #353, #355, #370, #373.
+- **4 plan docs closed** with STATUS stamps + bulk-flipped checkboxes (PR #384): security-trio, audit-major5 e2e, SIS compliance, Phase 4.3 Sprint 2.
 - **Tracker is empty** — `gh issue list --state open` returns 0 rows.
 - **GitNexus index still stale** at commit `22bc414` (May 9). Zombie PID 67783 still holds the LevelDB lock. **Reboot pending.** Index lag does not block work; impact analyses just need a "+1 risk tier" pessimism filter until reindex.
-- Local `main` at `129a49f`. Working tree has only Vite-build churn + this handoff. No in-flight branches.
+- Local `main` at `0435f69`. Working tree has only Vite-build churn + this handoff. No in-flight branches.
 
 ## Shipped this session (code work)
 
@@ -27,6 +28,19 @@ Snapshot of the May 14–15 sprint so a fresh agent (or future-me) can pick up c
 | [#380](https://github.com/nlev8/Graider/pull/380) | docs: refresh handoff.md (interim) | — | `2df703b` |
 | [#381](https://github.com/nlev8/Graider/pull/381) | shard local-file storage by teacher_id + dev-shim approval bypass | #353 + #370 part 2 | `b991ed0` |
 | [#382](https://github.com/nlev8/Graider/pull/382) | classify+propagate AI transients in inner catches | #224 | `129a49f` |
+| [#383](https://github.com/nlev8/Graider/pull/383) | docs: refresh handoff.md (prior version of this file) | — | `3d45fdf` |
+| [#384](https://github.com/nlev8/Graider/pull/384) | docs(plans): close 4 shipped plans — checkbox sweep | — | `0435f69` |
+
+## Plans closed this session (PR #384)
+
+Doc-only sweep: top-of-file STATUS stamps + bulk-flipped checkboxes for plans whose work was already shipped:
+
+- `docs/superpowers/plans/2026-05-14-security-trio.md` — closed by PR #372 + PR #374
+- `docs/superpowers/plans/2026-05-11-audit-major5-e2e-promotion.md` — closed by PRs #351, #353, #371, #378, #381
+- `docs/superpowers/plans/2026-05-05-sis-compliance-hardening.md` — all 9 tasks verified shipped across earlier PRs (file-inspection of `classlink_oidc.py`, `redaction.py`, `lti.py` allowlist, audit_log calls, etc.)
+- `docs/superpowers/plans/2026-05-01-phase4.3-sprint2-per-dok-mastery.md` — `dok.py` + 3 test files (20 tests green) + `by_dok` plumbing through grading_service.py and student_portal_routes.py
+
+Older April plans (Phase 3a Gradebook, Phase 3b Assessment Comparison, Phase 4 Quick Click Remediation, Grade Tab + Planner Tab extractions) were spot-checked and appear shipped per file-existence (Gradebook.jsx, GradeTab.jsx, PlannerTab.jsx all exist) but NOT flipped — stayed scoped to the 4-plan commitment. Next session could close those out with the same bulk-flip + STATUS-stamp pattern if desired.
 
 ## Stale issues closed (no code work — already shipped in earlier PRs)
 
@@ -82,12 +96,16 @@ npx gitnexus analyze --embeddings                  # preserves the 7,331 embeddi
 
 The MCP server (separate PID, read-only path) keeps working on the stale index. Today's impact analyses returned correct results, but new tests from #381 / #382 won't appear in the graph until reindex.
 
-## Concrete heuristic earned this session
+## Concrete heuristics earned this session
 
-When picking up any issue >2 weeks old, **first grep for `"Closes GH #N"` / `"fix(#N)"` in the codebase and run the regression test if one exists**. Close-with-verification-comment if shipped; only branch off if truly open. Of 16 issues touched this session, ~half were already-shipped. Verify-before-implement saved hours.
+1. **Verify-before-implement** for any issue >2 weeks old. Grep for `"Closes GH #N"` / `"fix(#N)"` in the codebase and run the regression test if one exists. Close-with-verification-comment if shipped; only branch off if truly open. Of 16 issues touched this session, ~half were already-shipped — verify-before-implement saved hours.
+2. **Bulk-flip + STATUS-stamp** for retrospectively closing executed plans. Don't toggle individual checkboxes; sed-replace `- [ ]` → `- [x]` and add a top-of-file STATUS block linking to the PRs that closed each task. Auditors can verify post-hoc via the linked commits.
+3. **`backend/app.py` calls `load_dotenv(override=True)` at import time** — `monkeypatch.setenv` on .env-controlled keys (e.g. `DEV_USER_ID`) loses to the override. Workaround: send the value via header (e.g. `X-Test-Teacher-Id`) instead of relying on env-var precedence.
+4. **`_supabase_raw` singleton poisoning** — tests that monkeypatch `SUPABASE_URL` to a fake host but DON'T also mock `_sb_load`/`_sb_save` cause lazy-init of the real Supabase client against the fake URL, which then poisons later tests' Supabase calls with DNS failures. Always mock the `_sb_*` ops in tests that set fake URLs.
 
 ## References
 
-- PRs merged: [#374](https://github.com/nlev8/Graider/pull/374) → [#382](https://github.com/nlev8/Graider/pull/382)
+- PRs merged: [#374](https://github.com/nlev8/Graider/pull/374) → [#384](https://github.com/nlev8/Graider/pull/384)
 - All issues closed this session: #217, #218, #224, #229, #234, #245, #247, #249, #253, #339, #341, #343, #348, #353, #355, #370, #373
-- CLAUDE.md Rule #12 (handoff discipline) — this doc is committable when it serves as an artifact. Tracker-empty-state + the multi-teacher.spec.js followup sketch qualifies.
+- Plans closed: 2026-05-14-security-trio, 2026-05-11-audit-major5-e2e-promotion, 2026-05-05-sis-compliance-hardening, 2026-05-01-phase4.3-sprint2-per-dok-mastery
+- CLAUDE.md Rule #12 (handoff discipline) — this doc is committable when it serves as an artifact. Tracker-empty-state + the multi-teacher.spec.js followup sketch + the 4 heuristics above all qualify.
