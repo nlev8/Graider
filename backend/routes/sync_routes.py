@@ -186,7 +186,13 @@ def _sync_one_teacher(teacher):
             from backend.clever import sync_roster as clever_sync_roster
             from backend.routes.clever_routes import _sync_classes_to_db
 
-            district_token = config.get('district_token') or os.environ.get('CLEVER_DISTRICT_TOKEN')
+            # Task C / C2: route through resolve_clever_district_token so the
+            # daily cron honors a per-district stored token (multi-district),
+            # not just the single env var. Explicit per-teacher config token
+            # still wins; resolver owns the env fallback (single-district
+            # installs byte-identical).
+            from backend.api_keys import resolve_clever_district_token
+            district_token = config.get('district_token') or resolve_clever_district_token(config.get('district_id'))
             if not district_token:
                 return {"teacher_id": teacher_id, "provider": provider,
                         "status": "skipped", "error": "No Clever district token",

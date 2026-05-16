@@ -269,7 +269,11 @@ def save_district_keys(district_id: str, keys: dict) -> bool:
     cache_key = f"{_DISTRICT_KEY_PREFIX}{district_id}"
     existing = load('api_keys', cache_key) or {}
 
-    for provider in ('openai', 'anthropic', 'gemini'):
+    # 'clever_district_token' (Task C / C3): the Clever Secure-Sync
+    # per-district roster token — not an AI provider, but persisted in
+    # the same per-district dict so resolve_clever_district_token() has
+    # a write path (the closing re-score found it had none).
+    for provider in ('openai', 'anthropic', 'gemini', 'clever_district_token'):
         val = keys.get(provider, '')
         if val:
             existing[provider] = val

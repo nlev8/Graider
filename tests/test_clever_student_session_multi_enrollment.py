@@ -195,6 +195,98 @@ def test_select_class_rejects_unknown_token():
     assert resp.status_code == 401
 
 
+def _make_sb_multi_rows(student_rows, enroll_by_student_id, capture=None):
+    """Mock where the students lookup returns MANY rows and class_students
+    returns per-student_id rows (keyed by the .eq('student_id', X) arg)."""
+    sb = MagicMock()
+
+    def _table(name):
+        if name == "students":
+            q = MagicMock()
+            q.select.return_value = q
+            q.eq.return_value = q
+            q.execute.return_value = MagicMock(data=list(student_rows))
+            return q
+        if name == "class_students":
+            q = MagicMock()
+            q.select.return_value = q
+            holder = {}
+            def _eq(col, val):
+                holder["sid"] = val
+                return q
+            q.eq.side_effect = _eq
+            q.limit.return_value = q
+            q.execute.side_effect = lambda: MagicMock(
+                data=list(enroll_by_student_id.get(holder.get("sid"), [])))
+            return q
+        if name == "student_sessions":
+            q = MagicMock()
+            def _insert(payload):
+                if capture is not None:
+                    capture["session_payload"] = payload
+                return q
+            q.insert.side_effect = _insert
+            q.execute.return_value = MagicMock(data=[{"id": "sess"}])
+            return q
+        return MagicMock()
+
+    sb.table.side_effect = _table
+    return sb
+
+
+def test_duplicate_student_rows_across_teachers_disambiguate():
+    """C1: same Clever ID exists as TWO student rows (different teachers'
+    rosters). The defect: `res.data[0]` first-row-wins only saw row A's
+    class. Fixed: enumerate across ALL rows → both classes offered, no
+    PII leaked in the candidate list."""
+    rows = [
+        {"id": "db-A", "first_name": "Al", "last_name": "Pha",
+         "email": "x@s.edu", "student_id_number": "clever-X", "period": "1"},
+        {"id": "db-B", "first_name": "Be", "last_name": "Ta",
+         "email": "x@s.edu", "student_id_number": "clever-X", "period": "2"},
+    ]
+    enroll = {
+        "db-A": [{"class_id": "clsA", "classes": {"id": "clsA", "name": "Hist A", "subject": "history"}}],
+        "db-B": [{"class_id": "clsB", "classes": {"id": "clsB", "name": "Math B", "subject": "math"}}],
+    }
+    sb = _make_sb_multi_rows(rows, enroll)
+    with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        result = _create_clever_student_session("clever-X", "x@s.edu")
+
+    assert result is not None and result.get("status") == "needs_class_selection", result
+    assert sorted(c["name"] for c in result["classes"]) == ["Hist A", "Math B"]
+    # no PII / internal student_row leaked to the browser
+    for c in result["classes"]:
+        assert set(c.keys()) <= {"class_id", "name", "subject"}, c
+
+
+def test_finalize_mints_for_the_correct_student_row():
+    """C1: picking the class that belongs to the SECOND student row must
+    mint the session against db-B (not db-A's first-row-wins)."""
+    rows = [
+        {"id": "db-A", "first_name": "Al", "last_name": "Pha",
+         "email": "x@s.edu", "student_id_number": "clever-X", "period": "1"},
+        {"id": "db-B", "first_name": "Be", "last_name": "Ta",
+         "email": "x@s.edu", "student_id_number": "clever-X", "period": "2"},
+    ]
+    enroll = {
+        "db-A": [{"class_id": "clsA", "classes": {"id": "clsA", "name": "Hist A", "subject": "history"}}],
+        "db-B": [{"class_id": "clsB", "classes": {"id": "clsB", "name": "Math B", "subject": "math"}}],
+    }
+    capture = {}
+    sb = _make_sb_multi_rows(rows, enroll, capture)
+    app = _make_app()
+    with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
+        result = _create_clever_student_session("clever-X", "x@s.edu")
+        sel = result["selection_token"]
+        with app.test_client() as client:
+            resp = client.post("/api/clever/select-class",
+                                json={"selection_token": sel, "class_id": "clsB"})
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    assert capture["session_payload"]["student_id"] == "db-B", capture
+    assert capture["session_payload"]["class_id"] == "clsB"
+
+
 def test_select_class_rejects_class_not_in_candidates():
     from backend.routes import clever_routes
     clever_routes._pending_class_selections["seltok-2"] = {
