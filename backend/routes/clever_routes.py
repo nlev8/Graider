@@ -93,12 +93,26 @@ _pending_class_selections = {}
 _CLASS_SELECTION_TTL = 120  # seconds
 
 
-def _create_class_selection(student_row, candidates):
+def _public_candidates(candidates):
+    """Browser-safe projection of selection candidates — strips the
+    server-only `_student_row` (PII) so the picker never sees it
+    (Task C/C1)."""
+    return [
+        {"class_id": c["class_id"], "name": c.get("name", ""),
+         "subject": c.get("subject", "")}
+        for c in candidates
+    ]
+
+
+def _create_class_selection(candidates):
     """Mint a short-lived token the student exchanges (with a chosen
-    class_id) for a real scoped session. Returns the raw token."""
+    class_id) for a real scoped session. Returns the raw token.
+
+    Task C/C1: each candidate carries its own `_student_row` (a Clever
+    student may exist under multiple teachers' rosters), so the finalize
+    endpoint mints against the row that owns the chosen class."""
     code = secrets.token_urlsafe(32)
     _pending_class_selections[code] = {
-        "student_row": student_row,
         "candidates": candidates,
         "expires": _time.time() + _CLASS_SELECTION_TTL,
     }
@@ -236,77 +250,78 @@ def _create_clever_student_session(clever_id, email):
         return None
 
     try:
-        # Look up student by Clever ID (stored as student_id_number)
-        # NOTE: Not scoped by teacher_id because this runs during student SSO
-        # (OAuth callback) where we only have the student's Clever identity —
-        # teacher_id is unknown.  If the same Clever student exists under
-        # multiple teachers, the first DB row wins.  The subsequent enrollment
-        # lookup (class_students join) naturally narrows to a valid class, so
-        # the session is still usable.  A fully correct fix would query
-        # class_students joined with students to find all enrollments, then
-        # let the student pick a class — but that requires a UI flow change.
+        # Look up the student by Clever ID. A Clever student can exist as
+        # MULTIPLE `students` rows — the same kid imported by several
+        # teachers' rosters. Task C/C1: enumerate ALL matching rows (NOT
+        # res.data[0] first-row-wins, the residual the closing re-score
+        # found Task A left open) and disambiguate when the resulting
+        # (student_row × class) set is ambiguous. teacher_id is unknown
+        # during student SSO, so a student-facing picker is the correct fix.
         res = sb.table("students").select("*").eq("student_id_number", clever_id).execute()
-        student_row = res.data[0] if res and res.data else None
+        student_rows = list(res.data) if res and res.data else []
 
         # Fallback: look up by email
-        if student_row is None and email:
+        if not student_rows and email:
             res2 = sb.table("students").select("*").eq("email", email).execute()
-            student_row = res2.data[0] if res2 and res2.data else None
+            student_rows = list(res2.data) if res2 and res2.data else []
 
-        if student_row is None:
+        if not student_rows:
             logger.info("Clever student not found: email=%s clever_id_hash=%s",
                         redact_email(email),
                         hashlib.sha256(str(clever_id).encode()).hexdigest()[:8])
             return None
 
-        student_db_id = student_row["id"]
+        _cid_hash = hashlib.sha256(str(clever_id).encode()).hexdigest()[:8]
 
-        # Find ALL class enrollments. Previously this used `.limit(1)` so
-        # "the first DB row wins" — a student enrolled in multiple classes
-        # was silently dropped into whichever one the DB returned first
-        # (Task A defect). Enumerate, then disambiguate if ambiguous.
-        enroll_res = (
-            sb.table("class_students")
-            .select("class_id, classes(id, name, subject)")
-            .eq("student_id", student_db_id)
-            .execute()
-        )
-        enroll_rows = enroll_res.data if enroll_res and enroll_res.data else []
-        if not enroll_rows:
-            logger.info("Clever student %s has no class enrollment", student_db_id)
-            return None
-
-        # Distinct candidate classes (dedupe by class_id, preserve order)
+        # Build candidates across ALL student rows; each carries its own
+        # student_row so the finalize endpoint mints against the row that
+        # owns the chosen class. Dedupe by class_id (globally unique).
         candidates = []
         _seen_cids = set()
-        for er in enroll_rows:
-            ci = er.get("classes") or {}
-            cid = ci.get("id") or er.get("class_id")
-            if not cid or cid in _seen_cids:
+        for srow in student_rows:
+            srow_id = srow.get("id")
+            if not srow_id:
                 continue
-            _seen_cids.add(cid)
-            candidates.append({
-                "class_id": cid,
-                "name": ci.get("name", ""),
-                "subject": ci.get("subject", ""),
-            })
+            enroll_res = (
+                sb.table("class_students")
+                .select("class_id, classes(id, name, subject)")
+                .eq("student_id", srow_id)
+                .execute()
+            )
+            for er in (enroll_res.data if enroll_res and enroll_res.data else []):
+                ci = er.get("classes") or {}
+                cid = ci.get("id") or er.get("class_id")
+                if not cid or cid in _seen_cids:
+                    continue
+                _seen_cids.add(cid)
+                candidates.append({
+                    "class_id": cid,
+                    "name": ci.get("name", ""),
+                    "subject": ci.get("subject", ""),
+                    "_student_row": srow,
+                })
+
+        if not candidates:
+            logger.info("Clever student (clever_id_hash=%s) has no class enrollment", _cid_hash)
+            return None
 
         if len(candidates) > 1:
             # Ambiguous — do NOT mint a session. Return a short-lived
             # selection token; the student picks via the finalize endpoint.
-            selection_token = _create_class_selection(student_row, candidates)
+            selection_token = _create_class_selection(candidates)
             logger.info(
-                "Clever student %s enrolled in %d classes — needs selection",
-                student_db_id, len(candidates),
+                "Clever student (clever_id_hash=%s) has %d class options — needs selection",
+                _cid_hash, len(candidates),
             )
             return {
                 "status": "needs_class_selection",
-                "classes": candidates,
+                "classes": _public_candidates(candidates),
                 "selection_token": selection_token,
             }
 
-        # Exactly one class — mint the session exactly as before.
-        return _mint_clever_student_session(sb, student_row, candidates[0])
+        # Exactly one (student_row, class) — mint against the owning row.
+        chosen = candidates[0]
+        return _mint_clever_student_session(sb, chosen["_student_row"], chosen)
     except Exception as e:
         logger.warning("Failed to create clever student session: %s", str(e))
         sentry_sdk.capture_exception(e)
@@ -845,7 +860,10 @@ def clever_save_district_keys():
 
     data = request.get_json(silent=True) or {}
     keys = {}
-    for provider in ("openai", "anthropic", "gemini"):
+    # clever_district_token (Task C / C3): lets a district admin set the
+    # Clever Secure-Sync roster token so multi-district sync works
+    # end-to-end (resolve_clever_district_token now has a write path).
+    for provider in ("openai", "anthropic", "gemini", "clever_district_token"):
         val = data.get(provider, "").strip()
         if val:
             keys[provider] = val
@@ -894,7 +912,7 @@ def select_clever_class():
         return jsonify({"error": "Selection expired"}), 401
 
     if request.method == "GET":
-        return jsonify({"classes": entry["candidates"]})
+        return jsonify({"classes": _public_candidates(entry["candidates"])})
 
     chosen = next((c for c in entry["candidates"] if c["class_id"] == class_id), None)
     if chosen is None:
@@ -904,7 +922,11 @@ def select_clever_class():
     if sb is None:
         return jsonify({"error": "Supabase not configured"}), 503
 
-    session_info = _mint_clever_student_session(sb, entry["student_row"], chosen)
+    # Task C/C1: mint against the student_row that owns the chosen class
+    # (candidates carry _student_row). Fall back to a legacy top-level
+    # student_row for any pre-C1 stored entry shape (defensive).
+    mint_row = chosen.get("_student_row") or entry.get("student_row")
+    session_info = _mint_clever_student_session(sb, mint_row, chosen)
     _pending_class_selections.pop(token, None)  # single-use, success only
     return jsonify({"token": session_info["token"]})
 
