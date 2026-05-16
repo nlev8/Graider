@@ -294,3 +294,23 @@ def check_district_keys(district_id: str) -> dict:
         f'{provider}_configured': bool(district_keys.get(provider, ''))
         for provider in _ENV_MAP
     }
+
+
+def resolve_clever_district_token(district_id: str | None) -> str:
+    """Resolve the Clever Secure-Sync district roster token (Task B).
+
+    A per-district stored ``clever_district_token`` wins (enables true
+    multi-district roster sync); otherwise the single
+    ``CLEVER_DISTRICT_TOKEN`` env var — so single-district installs (no
+    district scoping / nothing stored) are byte-identical to before.
+
+    NOT an `_ENV_MAP` provider key: the Secure-Sync bearer token is
+    roster-scoped, stored in the same per-district dict as (but distinct
+    from) the AI provider keys. Lives here, not in clever.py, because
+    this module owns `_load_district_keys` + its cache.
+    """
+    if district_id:
+        tok = _load_district_keys(district_id).get('clever_district_token', '')
+        if tok:
+            return tok
+    return os.getenv('CLEVER_DISTRICT_TOKEN', '')
