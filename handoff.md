@@ -1,6 +1,6 @@
-# Handoff: 2026-05-14/16 — 19 PRs merged, tracker empty, dimensions re-scored 7.7/10, Clever→10 plan ready
+# Handoff: 2026-05-14/16 — 22 PRs, dimensions 7.7/10, Clever Tasks A+B shipped (NOT 10 — Task C scoped)
 
-> **State: GREEN / idle, with a clear next move.** Tracker empty, tree clean, GitNexus index fresh, dimension scorecard freshly re-measured by 3 independent models. The next actionable is **Task A of the Clever→10 plan** (a real, scoped correctness defect — not debt). Read §5 (disproved hypotheses) and §8 (heuristics) before touching e2e, frontend deploy, GitNexus, or Codex subagents.
+> **State: GREEN / idle, clear next move.** Tracker empty, tree clean. Clever Tasks A (#395) + B (#397) shipped via TDD; the **closing 3-model re-score (Codex 9 / Claude 9 / Gemini 10 → reconciled 9) proved the Clever plan's premise incomplete** — 3 in-code residuals remain, scoped as **Task C** in `docs/superpowers/plans/2026-05-16-clever-compliance-10.md`. Clever stayed **9/10**, overall **7.7** unchanged. Next actionable = Task C (3 bounded items) for a verified Clever 10. Read §5 + §8 before touching e2e/frontend deploy/GitNexus/Codex subagents.
 
 ## 1. Goal
 
@@ -8,12 +8,12 @@ Autonomous issue/PR sprint on Graider: clear the tracker, ship every fix through
 
 ## 2. TL;DR
 
-- **19 PRs merged (#374–#393)**, all auto-deployed via Railway (+#373 closed by #374). Code: #374–#382, #386 (e2e), #388 (light-mode). Docs/ops: handoff refreshes, #384 plan-sweep, #390 GitNexus correction, #391 gitnexus stat block, **#393 dimension re-score + Clever→10 plan**.
-- **Dimensions re-measured at HEAD `a25fcc5`'s parent `63384d3`** (3 independent code-verified models): reconciled **7.7/10** conservative floor (Codex 8.1 / Claude 8.1 / Gemini 7.8), baseline was 5.9. Measured backend coverage **63.37%**.
+- **22 PRs merged (#374–#397)**, all auto-deployed via Railway (+#373 closed by #374). Since the 19-PR mark: **#395 Clever Task A** (multi-enrollment SSO disambiguation, TDD, b9eff4e), **#396** plan-close doc, **#397 Clever Task B** (per-district token resolution, TDD, 71e66de).
+- **Dimensions: reconciled 7.7/10 (conservative floor), unchanged.** Two re-scores: (1) 2026-05-16 @ `63384d3` → 7.7 (Codex 8.1/Claude 8.1/Gemini 7.8); (2) 2026-05-16 **closing** @ `71e66de` → still 7.7, Clever held **9 (NOT 10)**: Codex 9 / Claude 9 / Gemini 10, reconciled 9. Both sections in `comprehensive-hardening-assessment.md`. Measured backend coverage **63.42%**.
 - **Tracker empty.** Working tree clean (only untracked `.claude/scheduled_tasks.lock`, `tests/reports/`). No in-flight branches.
 - **GitNexus index fresh** (reindexed this session — the "reboot needed" claim was a debunked misdiagnosis; see §5.A). MCP `gitnexus_*` tools are DOWN this session (server stopped for the reindex); they auto-return next session.
-- **Next move is decided & scoped:** Task A of `docs/superpowers/plans/2026-05-16-clever-compliance-10.md` — the only actual *defect* on the board (multi-enrolled Clever student can land in the wrong class session), as opposed to the debt everywhere else.
-- Local `main` at **`a25fcc5`**.
+- **Next move = Task C** (`docs/superpowers/plans/2026-05-16-clever-compliance-10.md`): 3 verified in-code residuals to a true Clever 10 — **C1** `clever_routes.py:248` duplicate student-rows across teachers still first-row-wins (Task A only fixed enrollments-for-one-row; stale comment :244-247); **C2** `sync_routes.py:189` periodic-cron bypasses `resolve_clever_district_token`; **C3** `save_district_keys` can't persist `clever_district_token` (Task B's per-district branch unreachable). NOT STARTED — needs explicit go-ahead (new code).
+- Local `main` at **`71e66de`**.
 
 ## 3. Current state
 
@@ -114,6 +114,7 @@ Pinned dep, installed in venv; user ran non-venv Python. Guarding the import wou
 8. **`gh pr merge --auto` does NOT arm on an already-green PR** (no pending→green transition) — leaves `autoMerge=false`, PR sits MERGEABLE/CLEAN unmerged. Checks pending → `--auto` works; already green → direct `gh pr merge --squash`. Base merge ⇒ stacked PR goes `BEHIND` → `gh pr update-branch`.
 9. **A missing subagent completion-notification ≠ a hung agent.** Codex finished in 3.6 min but the wrapper never relayed it; result was in `~/.codex/sessions/**/rollout-*.jsonl` (§5.B). Check the session file before declaring a Codex agent hung; don't block indefinitely.
 10. **Don't inflate a scorecard dimension on external validation** (Clever cert ≠ internal 10). Conservative-floor reconciliation (lower wins on splits, uncredit unverifiable) beats averaging — and use ≥3 independent code-verifying models so one model's optimism can't set the record.
+11. **A plan's "these are the only blockers" is a hypothesis, not fact — run the closing verification re-score before declaring a dimension closed.** Clever Tasks A+B shipped exactly to plan, yet the 2026-05-16 closing 3-model re-score found the plan under-drew scope: 3 residuals (`clever_routes.py:248` duplicate student-rows, `sync_routes.py:189` cron, `save_district_keys` no write-path) → Clever stayed 9, not 10. Two independent models found the same residuals from different angles; the conservative floor (2/3=9 vs 1 optimistic 10) prevented shipping a false 10. The verification step is not ceremony — it is the step that catches incomplete plans.
 
 ## 9. References
 
@@ -124,4 +125,5 @@ Pinned dep, installed in venv; user ran non-venv Python. Guarding the import wou
 - e2e debug runs: [25964874545](https://github.com/nlev8/Graider/actions/runs/25964874545) RED → [25965070445](https://github.com/nlev8/Graider/actions/runs/25965070445) GREEN
 - Codex re-score session: `~/.codex/sessions/2026/05/16/rollout-2026-05-16T13-34-04-*.jsonl` (duration_ms 219046)
 - Key files: `backend/routes/clever_routes.py:156-205` (Task A), `backend/clever.py:204` + `backend/api_keys.py` (Task B), `backend/storage.py:48-60`, `frontend/src/styles/globals.css`
-- CLAUDE.md Rule #12 — committable artifact (measured scorecard + RED→GREEN + 10 heuristics qualify).
+- Closing re-score (2026-05-16, HEAD `71e66de`): Codex 9 / Claude 9 / Gemini 10 → reconciled Clever **9**, overall **7.7**; 3 residuals → Task C. Sections in `comprehensive-hardening-assessment.md`; plan reopened.
+- CLAUDE.md Rule #12 — committable artifact (measured scorecards + RED→GREEN + 11 heuristics + the closing-re-score honesty record qualify).
