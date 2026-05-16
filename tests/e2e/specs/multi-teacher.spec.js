@@ -19,26 +19,22 @@ async function clickTab(page, name) {
 
 test.describe('Concurrent Multi-Teacher Simulation', () => {
 
-  test.skip('3 teachers complete full workflows concurrently', async ({ browser }) => {
-    // Deeper than originally tracked: not just a header-injection issue.
-    // Even with X-Test-Teacher-Id forcing distinct teacher_ids:
-    //   1. approval_status (auth_routes.py:110) only bypasses for the
-    //      literal `local-dev` — other dev-shim teacher_ids would hit
-    //      Supabase admin.get_user_by_id which 500s in CI.
-    //   2. _use_supabase (storage.py:115) returns False when Supabase
-    //      isn't configured, falling back to the file backend.
-    //      _key_to_filepath uses HARDCODED paths (no per-teacher
-    //      directory), so all teacher_ids would still share
-    //      ~/.graider_settings.json — the race the test was trying to
-    //      avoid in the first place.
-    // True multi-teacher isolation in CI requires either a Supabase
-    // fixture or a per-teacher file-backend path scheme. Tracked in #370.
+  test('3 teachers complete full workflows concurrently', async ({ browser }) => {
+    // Both former blockers (tracked in #370) were closed by PR #381:
+    //   1. approval_status (auth_routes.py:119) now bypasses for ANY
+    //      dev-shim teacher_id via `g.is_dev_shim`, not just `local-dev`.
+    //   2. storage.py shards the file backend per teacher_id under
+    //      `~/.graider_tenants/<safe_id>/` (_tenant_home), so distinct
+    //      X-Test-Teacher-Id values no longer race on shared config.
     test.setTimeout(120_000);
 
     const results = [];
 
     const teacherRuns = TEACHERS.map(async (teacher) => {
-      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const context = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        extraHTTPHeaders: { 'X-Test-Teacher-Id': teacher.id },
+      });
       const page = await context.newPage();
       const log = (step, status, detail = '') => {
         results.push({ teacher: teacher.name, step, status, detail });
