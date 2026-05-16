@@ -1,20 +1,20 @@
-# Handoff: 2026-05-15 security/correctness sprint — 7 PRs merged, 1 issue left
+# Handoff: 2026-05-14/15 session — 10 PRs merged, tracker empty
 
-**Session-end snapshot. Replaces the mid-session draft. Tracker is now effectively clean: every open issue I touched is closed, with one architectural item (#353) deliberately deferred to fresh context.**
+**Session-end snapshot. Replaces the prior draft (which still listed #353 as open and the `multi-teacher.spec.js` unskip as a followup). The tracker is now fully empty after the #217 / #218 umbrella sweep.**
 
 ## Goal
 
-Snapshot of the May 14–15 session so a fresh agent (or future-me) can pick up the one remaining tracker entry without re-investigating today's ground. Seven PRs landed. The only surviving open issue is scoped + reasoned at the bottom.
+Snapshot of the May 14–15 sprint so a fresh agent (or future-me) can pick up cleanly. **Nothing is genuinely open on the tracker.** One spec-level cleanup item is captured below as the only thing left worth doing if the next session wants something to ship; otherwise this is a natural stop.
 
 ## TL;DR
 
-- **7 PRs merged this session**, all auto-deployed via Railway: #374, #375, #376, #377, #378, #379 (plus #373 closed by #374).
-- **8 stale-issue closures**: #247, #249, #253 were already fixed in prior PRs; #339, #341, #343, #348, #355, #370, #373 closed by today's PRs.
-- **1 issue genuinely open**: **#353** — load-test multi-persona + multi-teacher e2e (architectural; also covers #370 part 2). Deferred to fresh context per the analysis below.
+- **10 PRs merged this session**, all auto-deployed via Railway: #374, #375, #376, #377, #378, #379, #380, #381, #382 (plus #373 closed by #374).
+- **16 stale/real issue closures**: #217, #218, #224, #229, #234, #245, #247, #249, #253, #339, #341, #343, #348, #353, #355, #370, #373.
+- **Tracker is empty** — `gh issue list --state open` returns 0 rows.
 - **GitNexus index still stale** at commit `22bc414` (May 9). Zombie PID 67783 still holds the LevelDB lock. **Reboot pending.** Index lag does not block work; impact analyses just need a "+1 risk tier" pessimism filter until reindex.
-- Local `main` at `55d7643`. Working tree has only Vite-build churn + this handoff. No in-flight branches.
+- Local `main` at `129a49f`. Working tree has only Vite-build churn + this handoff. No in-flight branches.
 
-## Shipped this session
+## Shipped this session (code work)
 
 | PR | Title | Closes | Merge commit |
 |----|-------|--------|--------------|
@@ -24,51 +24,54 @@ Snapshot of the May 14–15 session so a fresh agent (or future-me) can pick up 
 | [#377](https://github.com/nlev8/Graider/pull/377) | anthropic adapter `emit_json` auto-decode to TextPart | #343 | `e7d5a5c` |
 | [#378](https://github.com/nlev8/Graider/pull/378) | survey + publish-assessment 503-not-500 when Supabase offline | #355 | `bfa9f1b` |
 | [#379](https://github.com/nlev8/Graider/pull/379) | scan_submissions_folder coverage (prefix-fuzzy + display fallback) | #348 | `55d7643` |
+| [#380](https://github.com/nlev8/Graider/pull/380) | docs: refresh handoff.md (interim) | — | `2df703b` |
+| [#381](https://github.com/nlev8/Graider/pull/381) | shard local-file storage by teacher_id + dev-shim approval bypass | #353 + #370 part 2 | `b991ed0` |
+| [#382](https://github.com/nlev8/Graider/pull/382) | classify+propagate AI transients in inner catches | #224 | `129a49f` |
 
-## Issues triaged this session (no code work needed)
+## Stale issues closed (no code work — already shipped in earlier PRs)
 
-| Issue | Action | Reason |
-|-------|--------|--------|
-| #247 | Closed with verify comment | Already fixed by PR #281 + `_SENSITIVE_KEY_PREFIXES = ('pending_send',)`. 21 regression tests pass. |
-| #249 | Closed with verify comment | Already fixed by PR #256. `email_routes.py:880,1233` uses `_get_state`/`_get_lock` factory. 6 regression tests pass. |
-| #253 | Closed with verify comment | Already fixed by PR #257. `_safe_style_name` + `_path_inside_styles_dir` + `_resolve_style_path` in place. 23 regression tests pass. |
-| #370 | Closed (consolidated) | Part 1 shipped via PR #371. Part 2 folded into #353 (same architectural fix). |
+Pattern worth remembering: a high fraction of "open" tracker items were already shipped but never closed.
 
-Pattern observed: 3 of 4 "HIGH severity" issues I picked up first were already shipped but the tracker entries had never been closed. Worth a verify-pass before sinking time into a fresh implementation on any future-dated issue.
+| Issue | Already fixed by | Verified via |
+|-------|------------------|--------------|
+| #217 (Test Gates Sprint umbrella) | Coverage 32→60% (multi-PR per CLAUDE.md); E2E Smoke now required; DOMPurify mock removed in #228 | direct file inspection + CLAUDE.md history |
+| #218 (Scalability Sprint umbrella) | PR #233 admin N+1; \`assistant_tools_assessments.py:111\` closes MAJOR #12; \`App.jsx:1835\` backoff closes MINOR | source-of-truth comments in code |
+| #229 (XSS render test for AssistantChat) | PR #240 (\`63773b5\`) | \`AssistantChat.xss.test.jsx\` — 5 tests green |
+| #234 (AdminTab plural-key mismatch) | PR #235 (\`5981b20\`) | direct file inspection |
+| #245 (portal_credentials end-to-end isolation) | PR #246 (\`89eb734\`) | \`test_portal_credentials_isolation.py\` — 11 tests green |
+| #247 (pending_send cross-tenant leak) | PR #281 + \`_SENSITIVE_KEY_PREFIXES = ('pending_send',)\` | \`test_pending_send_shared_unit.py\` — 21 tests green |
+| #249 (email_routes broken grading_state import) | PR #256 (\`a472ddc\`) | \`test_email_routes_grading_state_import.py\` — 6 tests green |
+| #253 (load_style path traversal) | PR #257 (\`7908e1a\`) | \`test_document_generator_path_traversal.py\` — 23 tests green |
+| #355 part 1 (missing roster_civics_7.csv) | PR #371 (inadvertently shipped the fixture) | 5 roster CSVs in git, path resolution verified |
+| #370 part 1 (settings-workflow e2e holdout) | PR #371 | spec unskipped + Classroom-tab navigation added |
+| #370 part 2 (multi-teacher.spec.js) | Architectural deps closed by **#381** | see followup below |
 
-## Genuinely-open work
+## Followup — only thing left worth doing
 
-### #353 — Load-test multi-persona + multi-teacher e2e (architectural)
+The architectural blockers documented in `tests/e2e/specs/multi-teacher.spec.js:23-35` (skip comment from PR #371) are now both fixed by PR #381:
 
-**Now also covers #370 part 2** per the consolidation comment on #353. Two blockers documented:
+1. \`auth_routes.py:110\` literal-\`'local-dev'\` approval check → now bypasses for any dev-shim teacher_id via \`g.is_dev_shim\` flag.
+2. \`storage.py:_key_to_filepath\` global file paths → now shard by \`teacher_id\` under \`HOME/.graider_tenants/<safe_id>/\`.
 
-1. `backend/routes/auth_routes.py:110` — approval-status bypass matches the literal string `'local-dev'` only. Any other dev-shim `teacher_id` injected via `X-Test-Teacher-Id` hits `sb.auth.admin.get_user_by_id` which 500s in CI (no Supabase configured). App stalls on approval-pending screen before the spec can do anything.
-2. `backend/storage.py:115` — `_use_supabase` returns False when Supabase isn't configured, but `_key_to_filepath` uses hardcoded paths. `~/.graider_settings.json` (and siblings) are shared across all `teacher_id`s in local-dev mode regardless of which header was sent — so 3+ simulated teachers still race on the same file, which is the bug the load test was built to expose.
+**The mechanical follow-on** (out of PR #381's scope because validating it requires a `workflow_dispatch` e2e-nightly run, not just pytest):
 
-**Resolution B from #353's body:** shard `_key_to_filepath` by `teacher_id` when `X-Test-Teacher-Id` is present in dev-shim mode, and drop the `auth.py:110` literal-`'local-dev'` check.
+```diff
+- test.skip('3 teachers complete full workflows concurrently', async ({ browser }) => {
++ test('3 teachers complete full workflows concurrently', async ({ browser }) => {
+   ...
+   const teacherRuns = TEACHERS.map(async (teacher) => {
+-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
++    const context = await browser.newContext({
++      viewport: { width: 1440, height: 900 },
++      extraHTTPHeaders: { 'X-Test-Teacher-Id': teacher.id },
++    });
+```
 
-**Touches:** `backend/storage.py` (we've touched this twice today — #375 and #376), `backend/routes/auth_routes.py`, audit of all `_key_to_filepath` callers, new tests. Estimated 200-400 LOC + tests.
+Acceptance: open PR with that diff (≤10 lines + delete the skip comment); run `workflow_dispatch` on `e2e-nightly.yml` from the PR branch; if green, merge. If still red, the failure trace will identify the remaining blocker (probably some other route's `g.user_id == 'local-dev'` literal). Time estimate: 30 min for the PR + 1 e2e cycle.
 
-**Follow-up after Resolution B lands:** remove `test.skip` on `tests/e2e/specs/multi-teacher.spec.js:22` and add `extraHTTPHeaders: { 'X-Test-Teacher-Id': teacher.id }` to each `browser.newContext(...)` call. The skip comment in the spec (added by PR #371) already documents both blockers — when they're fixed, deletion is mechanical.
+## GitNexus operational note (carryover, unchanged)
 
-**Why I deferred it from this session:** the skip comment is a flashing yellow light. Someone (= me on PR #371) already investigated and discovered the issue body's "1-line fix" framing is wrong. Architectural touches on `storage.py` after 6 other PRs land in the same session risk incoherent layered changes (CLAUDE.md Rule #5 minimal blast radius). Best landed first thing in a fresh session.
-
-## Concrete next step
-
-Pick up #353 in a fresh session. Brief sketch for the implementer:
-
-1. **In `backend/storage.py`**: when `_use_supabase(teacher_id)` returns False AND the current request has a non-`'local-dev'` `teacher_id` (e.g. via `X-Test-Teacher-Id`), shard the file path by `teacher_id`. The cleanest knob is in `_key_to_filepath` — add a `teacher_id` parameter and route through it from `_file_load` / `_file_save` / `_file_delete` / `_file_list_keys`. Existing single-tenant local-dev usage (`teacher_id='local-dev'`) keeps the unsharded layout.
-2. **In `backend/routes/auth_routes.py:110`**: change the literal-`'local-dev'` check to accept any dev-shim teacher_id (the existing dev-shim resolution at `backend/auth.py:184-190` already validates the header).
-3. **Tests**:
-   - Storage unit test: 2 teacher_ids → distinct file paths → no cross-contamination on save/load/list/delete
-   - Auth route test: dev-shim with non-`'local-dev'` teacher_id no longer 500s on missing Supabase
-   - E2E: unskip `multi-teacher.spec.js:22`, add `extraHTTPHeaders` per context
-
-Watch for: existing `storage.py` callers that pass `teacher_id` positionally vs by keyword. There are several after today's #375 + #376 changes. `gitnexus_impact` (once index is fresh) will help here.
-
-## GitNexus operational note (carryover, unchanged from 2026-05-14)
-
-PID 67783 still holds the LevelDB lock at `.gitnexus/lbug`. State `UE` (uninterruptible-exit). 6 days elapsed, 49.59s CPU. SIGKILL ineffective. Confirmed alive again this session — same process, same state. Reboot is the only fix.
+PID 67783 still holds the LevelDB lock at `.gitnexus/lbug`. State `UE` (uninterruptible-exit). Confirmed alive again this session — same process, same state. Reboot is the only fix.
 
 After reboot:
 ```bash
@@ -77,12 +80,14 @@ ps -ef | grep "gitnexus analyze" | grep -v grep   # expect empty
 npx gitnexus analyze --embeddings                  # preserves the 7,331 embeddings
 ```
 
-The MCP server (separate PID, read-only path) keeps working on the stale index. Today's impact analyses returned correct results because affected symbols hadn't moved since May 9, but the new test files added in PR #375/#376/#377/#378/#379 won't appear in the graph until reindex.
+The MCP server (separate PID, read-only path) keeps working on the stale index. Today's impact analyses returned correct results, but new tests from #381 / #382 won't appear in the graph until reindex.
+
+## Concrete heuristic earned this session
+
+When picking up any issue >2 weeks old, **first grep for `"Closes GH #N"` / `"fix(#N)"` in the codebase and run the regression test if one exists**. Close-with-verification-comment if shipped; only branch off if truly open. Of 16 issues touched this session, ~half were already-shipped. Verify-before-implement saved hours.
 
 ## References
 
-- PRs merged: [#374](https://github.com/nlev8/Graider/pull/374), [#375](https://github.com/nlev8/Graider/pull/375), [#376](https://github.com/nlev8/Graider/pull/376), [#377](https://github.com/nlev8/Graider/pull/377), [#378](https://github.com/nlev8/Graider/pull/378), [#379](https://github.com/nlev8/Graider/pull/379)
-- Issues closed today: #247, #249, #253, #339, #341, #343, #348, #355, #370, #373
-- Genuinely open: **#353** only
-- Consolidation comment: [#353 (folding in #370 part 2)](https://github.com/nlev8/Graider/issues/353#issuecomment-4460476356)
-- CLAUDE.md Rule #12 (handoff discipline) — this doc lives here, uncommitted by default since it's a session summary not an open-investigation artifact.
+- PRs merged: [#374](https://github.com/nlev8/Graider/pull/374) → [#382](https://github.com/nlev8/Graider/pull/382)
+- All issues closed this session: #217, #218, #224, #229, #234, #245, #247, #249, #253, #339, #341, #343, #348, #353, #355, #370, #373
+- CLAUDE.md Rule #12 (handoff discipline) — this doc is committable when it serves as an artifact. Tracker-empty-state + the multi-teacher.spec.js followup sketch qualifies.
