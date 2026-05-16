@@ -1,6 +1,6 @@
 # Clever Compliance → 10/10 — Close the Two Verified Baseline Gaps
 
-> **STATUS: NOT STARTED** — Scoped 2026-05-16 from the 3-model dimensional re-score (Claude 8.1 / Gemini 7.8 reconciled; Clever Compliance held at **9/10**). The two items below are the *only* verified blockers to a true 10/10. Periodic roster sync (3rd baseline item) is already DONE (`.github/workflows/roster-sync.yml`).
+> **STATUS: Task A ✅ CLOSED 2026-05-16 (PR #395 `b9eff4e`) · Task B ⬜ NOT STARTED.** Scoped 2026-05-16 from the 3-model dimensional re-score (Claude 8.1 / Gemini 7.8 reconciled; Clever Compliance held at **9/10**). The two items below are the *only* verified blockers to a true 10/10. Periodic roster sync (3rd baseline item) is already DONE (`.github/workflows/roster-sync.yml`). Plan fully closes (→ Clever 10/10 re-score) only after Task B + the §"Verification" re-score.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development per task and superpowers:executing-plans (or subagent-driven-development) to implement task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -42,25 +42,26 @@ Clever Library certification (external) is *not* sufficient evidence for an inte
 
 ---
 
-## Task A: Multi-enrollment student-SSO disambiguation (PR 2 — backend + minimal UI)
+## Task A: Multi-enrollment student-SSO disambiguation — ✅ CLOSED 2026-05-16 (PR #395, `b9eff4e`)
+
+Shipped FIRST (not "PR 2") — per the user's strategic call that A is the only actual *defect* (B is debt). Strict TDD: 3 backend RED→GREEN cycles + 1 frontend cycle.
 
 ### Step 1 — Failing test
-- [ ] Add `tests/test_clever_student_session_multi_enrollment.py`:
-  - `test_single_enrollment_unchanged`: one matching student row, one class → returns `{token, student, class}` exactly as today (no regression).
-  - `test_multiple_enrollments_returns_disambiguation`: same Clever student enrolled in 2 classes (under different teachers) → returns a `needs_class_selection` payload listing both candidate classes + a short-lived selection token, NOT a silently-picked session.
-  - `test_finalize_with_selected_class_issues_session`: posting the selection token + chosen class_id → issues the real session scoped to that class.
-- [ ] Run; confirm RED (current code returns first-row session, no disambiguation).
+- [x] Added `tests/test_clever_student_session_multi_enrollment.py` (9 backend tests) + `frontend/src/__tests__/StudentApp.cleverSelect.test.jsx` (2 tests). All watched RED first.
 
 ### Step 2 — Implement
-- [ ] Replace the `:185` first-row lookup with a `students` ⋈ `class_students` ⋈ `classes` query enumerating **all** enrollments for the Clever id (email fallback preserved).
-- [ ] 0 matches → `None` (unchanged). 1 → issue session as today (unchanged path). >1 → return `{"status": "needs_class_selection", "classes": [...], "selection_token": <short-lived hashed token>}`.
-- [ ] Add finalize endpoint (e.g. `POST /api/clever/select-class`) that validates the selection token + class_id and issues the scoped session via the existing token-mint path.
-- [ ] Frontend: in the Clever student callback handler (`StudentPortal.jsx` / wherever the callback resolves), if `needs_class_selection` → render a minimal class-picker that POSTs the choice to the finalize endpoint. Reuse existing card/list styling (theme-aware `var(--glass-bg)` — see handoff heuristic #6; do NOT hardcode colors).
+- [x] Replaced the first-row lookup with full enrollment enumeration (dedupe by class_id). 0 → `None`; 1 → byte-identical to before; >1 → `{"status":"needs_class_selection","classes":[…],"selection_token":…}`, **no session minted**.
+- [x] Finalize endpoint — **deviation:** plan said `POST` only; shipped **GET + POST** on `/api/clever/select-class`. Mid-impl design gap (caught per CLAUDE.md #8): the picker needs the candidate list, which the callback only forwarded as a token → added GET to list candidates (no-consume) + POST to finalize. Single-use on success only; bad class_id → 400 keeps token for retry.
+- [x] OAuth caller now handles the new branch (was a latent `KeyError`/500 for exactly these users) → redirect `/student?clever_select=1&sel=…`.
+- [x] Frontend — **deviation:** plan guessed `StudentPortal.jsx` + `var(--glass-bg)`; actual = **`StudentApp.jsx`** (the real Clever student callback handler) styled to **match that file's existing dark palette** (`#0f172a`/`#1e293b`). StudentApp uses literal colors, not `var(--*)`; matching surrounding code beats imposing an unused convention (CLAUDE.md "match surrounding style").
+- [x] Selection-token store mirrors the existing `_pending_student_auth_codes` primitive (in-process/TTL/inline cleanup) — no DB/migration/dependency.
+- [x] Shared `_mint_clever_student_session` helper extracted (no mint drift between single-enroll path and the endpoint).
 
 ### Step 3 — Verify
-- [ ] Tests GREEN. Manual: simulate a 2-teacher Clever student → picker appears → chosen class yields correct scoped session.
-- [ ] Single-enrollment students see **no** behavior change (the common case).
-- [ ] Commit; PR 2; CI green; merge.
+- [x] Backend 9 tests + frontend 2 tests GREEN; 221 clever/student-session + 871 sis/clever regression green; ruff clean; bundle rebuilt + committed (Railway/NIXPACKS serves committed `backend/static/`).
+- [x] Single-enrollment path byte-identical (regression-guarded).
+- [x] **Out-of-plan fix shipped in the same PR:** `test_sis_alerting.py` 3 clever_routes pins retracked (241→310, 286→353, 711→796) — Task A's ~85 inserted lines shifted the flagged SIS `except` blocks; `capture_exception` calls intact, only the manually-maintained pins needed updating (same pattern every prior shifting PR used). This was caught by CI (`-k` filter missed the meta-test) and fixed before merge.
+- [x] Merged via `--auto --squash` after the 9 required checks (incl. Backend Tests w/ the pin fix) went green.
 
 ---
 
