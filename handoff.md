@@ -1,110 +1,123 @@
-# Handoff: 2026-05-14/16 session — 14 PRs merged, tracker empty, 4 plans closed, last followup shipped
+# Handoff: 2026-05-14/16 session — 15 PRs merged, tracker empty, all followups shipped
 
-**Session-end snapshot. Replaces the prior draft (PR #385, totals were 12 PRs / tracker empty / 4 plans closed / multi-teacher followup still OPEN). Since then PR #386 unskipped `multi-teacher.spec.js` AND fixed the e2e regression it surfaced — the sole sketched follow-on is now SHIPPED + e2e-validated. This refresh records that closure with the full RED→GREEN debug trail (do not re-investigate; see the CLOSED section below).**
+> **State: GREEN / idle.** Nothing is failing, nothing is blocked, no spec is skipped for architectural reasons, the issue tracker is empty. This is a clean-slate handoff, not a stuck-investigation one. The most valuable parts for a fresh agent are the **Disproved hypotheses** (a real debug detour where the stack trace lied) and the **6 heuristics** at the bottom — read those before touching e2e or frontend deploy.
 
-## Goal
+## 1. Goal
 
-Snapshot of the May 14–16 sprint so a fresh agent (or future-me) can pick up cleanly. **Nothing is open on the tracker, the 4 most-recent plans are CLOSED with verifiable STATUS stamps, and the last sketched follow-on (multi-teacher.spec.js unskip) is SHIPPED + e2e-validated via PR #386.** No known follow-on remains — the older April plans (§ "Plans closed") are the only optional cleanup if a future session wants the same bulk-flip treatment.
+Run an autonomous issue-closing / PR-shipping sprint on Graider: clear the GitHub tracker, ship every fix through the 9 required CI checks, keep `handoff.md` an accurate artifact. **Achieved — tracker empty, all sketched follow-ons shipped + validated.**
 
-## TL;DR
+## 2. TL;DR
 
-- **14 PRs merged this session**, all auto-deployed via Railway: #374–#386 (plus #373 closed by #374). #380/#383/#385 are handoff refreshes; #386 = multi-teacher unskip + its e2e seed fix.
-- **16 stale/real issue closures**: #217, #218, #224, #229, #234, #245, #247, #249, #253, #339, #341, #343, #348, #353, #355, #370, #373. **#370 is now FULLY closed** — part 2 shipped + e2e-validated via #386 (was "deps closed by #381, followup pending").
-- **4 plan docs closed** with STATUS stamps + bulk-flipped checkboxes (PR #384): security-trio, audit-major5 e2e, SIS compliance, Phase 4.3 Sprint 2.
-- **Tracker is empty** — `gh issue list --state open` returns 0 rows.
-- **GitNexus index still stale** at commit `22bc414` (May 9). Zombie PID 67783 still holds the LevelDB lock. **Reboot pending.** Index lag does not block work; impact analyses just need a "+1 risk tier" pessimism filter until reindex.
-- Local `main` at `52b08c3` (PR #386 merge). Working tree has only Vite-build churn + this handoff. No in-flight branches.
+- **15 PRs merged this session (#374–#388)**, all auto-deployed via Railway (plus #373 closed by #374, not merged). Breakdown: #374–#382 = issue-closure code work; #384 = plan-sweep doc; #380/#383/#385/#387 = handoff refreshes; #386 = multi-teacher e2e unskip + its regression fix; **#388 = light-mode UI fix (Portal Submissions panel)**.
+- **16 issue closures** + **4 plan docs closed**. `gh issue list --state open` → **0 rows**.
+- **multi-teacher.spec.js followup fully CLOSED** (#386): unskipped, header-injected, and the e2e regression it surfaced (OnboardingWizard modal) root-caused + fixed at the workflow-seed layer. RED→GREEN trail preserved in §5.
+- **Light-mode bug fixed** (#388): `ResultsTab.jsx:1775` hardcoded a dark-only background; swapped to theme-aware `var(--glass-bg)`. Rebuilt Vite bundle committed (required — see heuristic #6).
+- **GitNexus index still stale** at `22bc414` (May 9). Zombie PID 67783 holds the LevelDB lock; reboot pending. Work proceeds with a "+1 risk tier" pessimism filter.
+- Local `main` at **`879f8e7`** (PR #388 merge). Working tree: only Vite-build churn + `.claude/scheduled_tasks.lock` + `tests/reports/` (untracked, unrelated). No in-flight branches.
 
-## Shipped this session (code work)
+## 3. Current state
 
-| PR | Title | Closes | Merge commit |
-|----|-------|--------|--------------|
+### PRs merged (code work)
+
+| PR | Title | Closes | Merge |
+|----|-------|--------|-------|
 | [#374](https://github.com/nlev8/Graider/pull/374) | `hmac.compare_digest` on 6 OAuth state/nonce checks | #373 | `ede4a5a` |
 | [#375](https://github.com/nlev8/Graider/pull/375) | teacher-scope `import_student_data` via `backend.storage` | #339 | `7c5cb73` |
 | [#376](https://github.com/nlev8/Graider/pull/376) | `sync_all_to_cloud` period CSV format + counters | #341 | `ee333a0` |
 | [#377](https://github.com/nlev8/Graider/pull/377) | anthropic adapter `emit_json` auto-decode to TextPart | #343 | `e7d5a5c` |
 | [#378](https://github.com/nlev8/Graider/pull/378) | survey + publish-assessment 503-not-500 when Supabase offline | #355 | `bfa9f1b` |
-| [#379](https://github.com/nlev8/Graider/pull/379) | scan_submissions_folder coverage (prefix-fuzzy + display fallback) | #348 | `55d7643` |
-| [#380](https://github.com/nlev8/Graider/pull/380) | docs: refresh handoff.md (interim) | — | `2df703b` |
-| [#381](https://github.com/nlev8/Graider/pull/381) | shard local-file storage by teacher_id + dev-shim approval bypass | #353 + #370 part 2 | `b991ed0` |
+| [#379](https://github.com/nlev8/Graider/pull/379) | scan_submissions_folder coverage | #348 | `55d7643` |
+| [#381](https://github.com/nlev8/Graider/pull/381) | shard local-file storage by teacher_id + dev-shim approval bypass | #353 + #370 p2 | `b991ed0` |
 | [#382](https://github.com/nlev8/Graider/pull/382) | classify+propagate AI transients in inner catches | #224 | `129a49f` |
-| [#383](https://github.com/nlev8/Graider/pull/383) | docs: refresh handoff.md (prior version of this file) | — | `3d45fdf` |
-| [#384](https://github.com/nlev8/Graider/pull/384) | docs(plans): close 4 shipped plans — checkbox sweep | — | `0435f69` |
-| [#385](https://github.com/nlev8/Graider/pull/385) | docs: refresh handoff.md after plan-sweep | — | `2976292` |
-| [#386](https://github.com/nlev8/Graider/pull/386) | unskip multi-teacher.spec.js + sharded-tenant onboarding seed fix | #370 part 2 | `52b08c3` |
+| [#386](https://github.com/nlev8/Graider/pull/386) | unskip multi-teacher.spec.js + sharded-tenant onboarding seed fix | #370 p2 | `52b08c3` |
+| [#388](https://github.com/nlev8/Graider/pull/388) | **fix(results): Portal Submissions panel unreadable in light mode** | (screenshot bug) | `879f8e7` |
 
-## Plans closed this session (PR #384)
+Doc-only: #380 `2df703b`, #383 `3d45fdf`, #384 `0435f69` (plan sweep), #385 `2976292`, #387 `08ae9c3`.
 
-Doc-only sweep: top-of-file STATUS stamps + bulk-flipped checkboxes for plans whose work was already shipped:
+### Plans closed (PR #384 — bulk-flip + STATUS-stamp)
 
-- `docs/superpowers/plans/2026-05-14-security-trio.md` — closed by PR #372 + PR #374
-- `docs/superpowers/plans/2026-05-11-audit-major5-e2e-promotion.md` — closed by PRs #351, #353, #371, #378, #381
-- `docs/superpowers/plans/2026-05-05-sis-compliance-hardening.md` — all 9 tasks verified shipped across earlier PRs (file-inspection of `classlink_oidc.py`, `redaction.py`, `lti.py` allowlist, audit_log calls, etc.)
-- `docs/superpowers/plans/2026-05-01-phase4.3-sprint2-per-dok-mastery.md` — `dok.py` + 3 test files (20 tests green) + `by_dok` plumbing through grading_service.py and student_portal_routes.py
+`2026-05-14-security-trio` (PR #372+#374), `2026-05-11-audit-major5-e2e-promotion` (#351,#353,#371,#378,#381), `2026-05-05-sis-compliance-hardening` (file-verified across earlier PRs), `2026-05-01-phase4.3-sprint2-per-dok-mastery` (`dok.py` + 3 test files + `by_dok` plumbing). **Not flipped (optional next):** older April plans — Phase 3a Gradebook, Phase 3b Assessment Comparison, Phase 4 Quick Click Remediation, Grade/Planner Tab extractions. Spot-checked as shipped (Gradebook.jsx/GradeTab.jsx/PlannerTab.jsx exist) but left scoped to the 4-plan commitment.
 
-Older April plans (Phase 3a Gradebook, Phase 3b Assessment Comparison, Phase 4 Quick Click Remediation, Grade Tab + Planner Tab extractions) were spot-checked and appear shipped per file-existence (Gradebook.jsx, GradeTab.jsx, PlannerTab.jsx all exist) but NOT flipped — stayed scoped to the 4-plan commitment. Next session could close those out with the same bulk-flip + STATUS-stamp pattern if desired.
+### Stale issues closed (no code — already shipped, verified)
 
-## Stale issues closed (no code work — already shipped in earlier PRs)
+#217, #218 (umbrellas, code-comment + CLAUDE.md verified); #229→#240; #234→#235; #245→#246; #247→#281; #249→#256; #253→#257; #355 p1→#371; #370 p1→#371; **#370 p2→#386** (e2e run 25965070445 green). Each verified via the named regression test or direct file inspection.
 
-Pattern worth remembering: a high fraction of "open" tracker items were already shipped but never closed.
+### Follow-up issues filed
 
-| Issue | Already fixed by | Verified via |
-|-------|------------------|--------------|
-| #217 (Test Gates Sprint umbrella) | Coverage 32→60% (multi-PR per CLAUDE.md); E2E Smoke now required; DOMPurify mock removed in #228 | direct file inspection + CLAUDE.md history |
-| #218 (Scalability Sprint umbrella) | PR #233 admin N+1; \`assistant_tools_assessments.py:111\` closes MAJOR #12; \`App.jsx:1835\` backoff closes MINOR | source-of-truth comments in code |
-| #229 (XSS render test for AssistantChat) | PR #240 (\`63773b5\`) | \`AssistantChat.xss.test.jsx\` — 5 tests green |
-| #234 (AdminTab plural-key mismatch) | PR #235 (\`5981b20\`) | direct file inspection |
-| #245 (portal_credentials end-to-end isolation) | PR #246 (\`89eb734\`) | \`test_portal_credentials_isolation.py\` — 11 tests green |
-| #247 (pending_send cross-tenant leak) | PR #281 + \`_SENSITIVE_KEY_PREFIXES = ('pending_send',)\` | \`test_pending_send_shared_unit.py\` — 21 tests green |
-| #249 (email_routes broken grading_state import) | PR #256 (\`a472ddc\`) | \`test_email_routes_grading_state_import.py\` — 6 tests green |
-| #253 (load_style path traversal) | PR #257 (\`7908e1a\`) | \`test_document_generator_path_traversal.py\` — 23 tests green |
-| #355 part 1 (missing roster_civics_7.csv) | PR #371 (inadvertently shipped the fixture) | 5 roster CSVs in git, path resolution verified |
-| #370 part 1 (settings-workflow e2e holdout) | PR #371 | spec unskipped + Classroom-tab navigation added |
-| #370 part 2 (multi-teacher.spec.js) | Unskipped + sharded-tenant seed fix in **#386** | e2e-nightly run 25965070445 green: `30 pass, 0 fail, 0 skip` (was `12/3` pre-fix) |
+None. Nothing exceeded PR scope (CLAUDE.md Rule #11).
 
-## Last followup — CLOSED (PR #386). Full RED→GREEN trail (do NOT re-investigate)
+## 4. Local repro / verify-what-works
 
-The sole sketched follow-on is **done**. Recorded here unsanitized so the next agent doesn't retrace it.
-
-**What shipped (PR #386, merge `52b08c3`):**
-1. `tests/e2e/specs/multi-teacher.spec.js`: `test.skip` → `test`; stale blocker comment → PR #381 closure note; injected `extraHTTPHeaders: { 'X-Test-Teacher-Id': teacher.id }` into each `browser.newContext()`. (Premise verified before unskipping: `auth.py:187,195` reads the header + sets `g.is_dev_shim`; `auth_routes.py:119` approval bypass; `storage.py:48-60` `_tenant_home` sharding — all grep-confirmed.)
-2. `.github/workflows/e2e-nightly.yml`: extended **both** onboarding-seed steps to also write the 3 sharded per-tenant settings files.
-
-**The RED run (the part worth keeping):** First branch e2e-nightly [25964874545](https://github.com/nlev8/Graider/actions/runs/25964874545) failed `12 pass / 3 fail` — all 3 fixture teachers timed out at step 5 `clickTab('Analytics')` with `locator.click: Timeout 10000ms — waiting for locator('nav button').filter({ hasText: 'Analytics' })`. Single-teacher specs (`full-workflow`, `smoke`) passed, so Analytics itself was fine.
-
-**Root cause (found via the Playwright failure SCREENSHOT, not the stack trace):** `test-failed-1.png` showed the **OnboardingWizard "STEP 1 OF 8" modal** over the dashboard. The nav buttons existed *behind* the modal backdrop → `.click()` waited forever for actionability. Why only here: the header injection routes the 3 teachers through `storage.py _tenant_home()` (#381) to `~/.graider_tenants/teacher-test-00N/.graider_settings.json`, but the workflow only seeded the default `$HOME/.graider_settings.json`. Those tenants had no `config.onboarding_completed` → wizard rendered. Single-teacher specs (no header → default id) read the seeded global file, which is why this never surfaced before unskipping.
-
-**Fix layer choice:** workflow-only seed extension — deliberately NOT touching app/storage/test logic, because a storage fallback-to-global would defeat the per-tenant isolation #381 was built to add (and that this very test exists to prove).
-
-**GREEN:** post-fix run [25965070445](https://github.com/nlev8/Graider/actions/runs/25965070445) `completed / success`; `Multi-teacher results: 30 pass, 0 fail, 0 skip`; `✓ multi-teacher.spec.js:22:3 … (10.0s)`; no regression (frontend/e2e 56 passed, tests/e2e 19 passed). All 9 required PR checks green; merged via `--auto --squash`.
-
-**No remaining follow-on.** The tracker is empty and no spec is skipped for architectural reasons.
-
-## GitNexus operational note (carryover, unchanged)
-
-PID 67783 still holds the LevelDB lock at `.gitnexus/lbug`. State `UE` (uninterruptible-exit). Confirmed alive again this session — same process, same state. Reboot is the only fix.
-
-After reboot:
 ```bash
 cd /Users/alexc/Downloads/Graider
-ps -ef | grep "gitnexus analyze" | grep -v grep   # expect empty
-npx gitnexus analyze --embeddings                  # preserves the 7,331 embeddings
+git checkout main && git pull --ff-only          # expect HEAD = 879f8e7
+gh issue list --state open --limit 50             # expect 0 rows
+grep -rl "test.skip" tests/e2e/specs/             # expect: multi-teacher.spec.js ABSENT
+
+# Backend (the sentry_sdk error users hit = wrong interpreter, NOT a bug):
+source venv/bin/activate                          # venv exists, has all deps
+python -m backend.app                             # run from repo root so `from backend...` resolves
+
+# Frontend build (must commit the bundle — see heuristic #6):
+cd frontend && npm run build                      # ~2s; outputs to ../backend/static/
+
+# Re-validate the multi-teacher e2e (the only spec needing manual dispatch):
+gh workflow run e2e-nightly.yml --ref main
+gh run watch <id> --exit-status                   # expect: Multi-teacher results: 30 pass, 0 fail, 0 skip
 ```
 
-The MCP server (separate PID, read-only path) keeps working on the stale index. Today's impact analyses returned correct results, but new tests from #381 / #382 won't appear in the graph until reindex.
+Light-mode fix (#388) verification: switch the app to light mode → Results tab → Portal Submissions panel should be a clean white card with readable text (was dark slate box + invisible text).
 
-## Concrete heuristics earned this session
+## 5. Disproved hypotheses (the valuable part — do NOT re-try these)
 
-1. **Verify-before-implement** for any issue >2 weeks old. Grep for `"Closes GH #N"` / `"fix(#N)"` in the codebase and run the regression test if one exists. Close-with-verification-comment if shipped; only branch off if truly open. Of 16 issues touched this session, ~half were already-shipped — verify-before-implement saved hours.
-2. **Bulk-flip + STATUS-stamp** for retrospectively closing executed plans. Don't toggle individual checkboxes; sed-replace `- [ ]` → `- [x]` and add a top-of-file STATUS block linking to the PRs that closed each task. Auditors can verify post-hoc via the linked commits.
-3. **`backend/app.py` calls `load_dotenv(override=True)` at import time** — `monkeypatch.setenv` on .env-controlled keys (e.g. `DEV_USER_ID`) loses to the override. Workaround: send the value via header (e.g. `X-Test-Teacher-Id`) instead of relying on env-var precedence.
-4. **`_supabase_raw` singleton poisoning** — tests that monkeypatch `SUPABASE_URL` to a fake host but DON'T also mock `_sb_load`/`_sb_save` cause lazy-init of the real Supabase client against the fake URL, which then poisons later tests' Supabase calls with DNS failures. Always mock the `_sb_*` ops in tests that set fake URLs.
-5. **e2e per-tenant sharding needs a per-tenant onboarding seed.** Any spec that injects `X-Test-Teacher-Id` routes that id through `storage.py _tenant_home()` (#381) to `~/.graider_tenants/<safe_id>/` — the workflow's global `$HOME/.graider_settings.json` onboarding seed does NOT cover it, so the OnboardingWizard modal silently blocks every nav click. **Symptom is misleading**: `locator.click` *timeout* on a nav button that's present-but-backdrop-obscured, NOT a missing element — so the stack trace points at the click, not the cause. **Go straight to the Playwright failure screenshot** (`gh run download <id>` → `test-failed-*.png`); it shows the modal immediately. Seed each sharded tenant's `.graider_settings.json` in the same workflow steps that seed the default.
+**multi-teacher.spec.js RED run ([25964874545](https://github.com/nlev8/Graider/actions/runs/25964874545)), `12 pass / 3 fail`:**
 
-## References
+- ❌ *"Unskipping just needs the `X-Test-Teacher-Id` header injection (the handoff sketch said ≤10 lines)."* — Wrong. The header was necessary but insufficient; it surfaced a second, hidden blocker.
+- ❌ *"The failure is `locator.click` timing out → the Analytics nav button is missing / not rendered for sharded teachers."* — **The stack trace actively misled here.** The button *was* present; it was behind a modal backdrop. Reading the trace points you at the click site, not the cause.
+- ❌ *"It's another `g.user_id == 'local-dev'` literal somewhere (the handoff predicted this)."* — Not the cause. The approval bypass (#381) was working fine.
+- ✅ **Actual root cause, found only by looking at the Playwright failure SCREENSHOT** (`gh run download <id>` → `test-failed-1.png`): the OnboardingWizard "STEP 1 OF 8" modal was covering the dashboard. The 3 sharded teacher_ids route to `~/.graider_tenants/teacher-test-00N/.graider_settings.json` (storage.py `_tenant_home`, #381), but the workflow only seeded the *default* `$HOME/.graider_settings.json` → no `config.onboarding_completed` → wizard. Fixed at the workflow-seed layer (#386), NOT in app/storage (which would defeat the per-tenant isolation the test exists to prove). GREEN: [25965070445](https://github.com/nlev8/Graider/actions/runs/25965070445).
 
-- PRs merged: [#374](https://github.com/nlev8/Graider/pull/374) → [#386](https://github.com/nlev8/Graider/pull/386)
-- All issues closed this session: #217, #218, #224, #229, #234, #245, #247, #249, #253, #339, #341, #343, #348, #353, #355, #370, #373
+**sentry_sdk `ModuleNotFoundError` (user hit it running the backend):**
+
+- ❌ *"Hard `import sentry_sdk` in `auth_decorators.py` should be guarded as optional."* — Rejected. `sentry-sdk[flask]==2.58.0` is a pinned dep and is installed in the venv; the error was the user launching with a non-venv Python. Guarding it would mask a misconfig and is a high-blast-radius change to a module `app.py` imports. Root cause was operational, not code.
+
+## 6. Most likely remaining causes / latent risks (nothing failing — forward-looking only)
+
+Ranked by likelihood of biting a future session:
+
+1. **GitNexus stale index** — impact analyses miss symbols added in #381/#382/#386/#388. Mitigation in place: "+1 risk tier" pessimism. Real fix needs a reboot (zombie PID 67783, state `UE`, holds `.gitnexus/lbug`).
+2. **~13 conditionally-skipped `frontend/e2e/*` specs** (student-*, teacher-publish-modal, automation-builder, resource-management, etc.) — UNVERIFIED whether these are intentional per-test skips or latent holdouts. Not in scope this session, not tracked in any issue/plan. If a future session wants more e2e coverage, triage these first.
+3. **Frontend deploy footgun** — any frontend fix that doesn't commit the rebuilt `backend/static/` bundle will pass CI (CI rebuilds) but **not reach users** (Railway/NIXPACKS serves committed static, no build step at deploy). See heuristic #6.
+
+## 7. Concrete next step
+
+**There is no required next step — the sprint goal is met.** If a fresh agent wants productive work, in priority order:
+
+1. **GitNexus reboot + reindex** (unblocks accurate impact analysis for all future work):
+   ```bash
+   cd /Users/alexc/Downloads/Graider
+   ps -ef | grep "gitnexus analyze" | grep -v grep   # expect empty after reboot
+   npx gitnexus analyze --embeddings                  # preserves the 7,331 embeddings
+   ```
+2. **Close the older April plans** with the same bulk-flip + STATUS-stamp pattern (heuristic #2) — purely doc, low risk, ~30 min.
+3. **Triage the ~13 skipped frontend/e2e specs** — read each `test.skip` reason; unskip + fix the genuinely-stale ones following the #386 RED→GREEN playbook (always check the failure screenshot first).
+
+Otherwise: await user direction. Do not invent work.
+
+## 8. Heuristics earned (carry forward — these are the real deliverable)
+
+1. **Verify-before-implement** for any issue >2 weeks old. Grep `"Closes GH #N"` / `"fix(#N)"` + run the regression test. ~half of 16 issues were already-shipped.
+2. **Bulk-flip + STATUS-stamp** for retro-closing executed plans: sed `- [ ]` → `- [x]` + a top-of-file STATUS block linking the closing PRs.
+3. **`backend/app.py` calls `load_dotenv(override=True)` at import** — `monkeypatch.setenv` on .env keys (e.g. `DEV_USER_ID`) loses. Pass via header (`X-Test-Teacher-Id`) instead.
+4. **`_supabase_raw` singleton poisoning** — tests setting a fake `SUPABASE_URL` without also mocking `_sb_load`/`_sb_save` lazy-init the real client against the fake host and poison later tests. Always mock `_sb_*`.
+5. **e2e per-tenant sharding needs a per-tenant onboarding seed.** A spec injecting `X-Test-Teacher-Id` shards to `~/.graider_tenants/<safe_id>/`; the global `$HOME/.graider_settings.json` seed doesn't cover it → OnboardingWizard modal silently blocks nav. **Symptom lies**: `locator.click` timeout on a present-but-obscured button, not a missing one. **Read the Playwright failure screenshot first**, not the stack trace.
+6. **Frontend fixes must commit the rebuilt `backend/static/` bundle.** Railway/NIXPACKS deploy is gunicorn-only (no `npm run build` at deploy); the committed bundle is what's served. CI's Frontend Build rebuilds for verification but does NOT commit back. Workflow: edit `frontend/src/` → `cd frontend && npm run build` → `git add frontend/src/... backend/static/index.html backend/static/assets/` (this stages the hashed-bundle rename/delete/add set) → PR. Skipping the bundle = green CI, unchanged production. (Also: theme bugs are almost always a hardcoded color where a `var(--*)` belongs. `--card-bg-light` exists only in `:root`/dark, NOT in `[data-theme="light"]`; `--glass-bg` is the theme-aware panel background convention.)
+
+## 9. References
+
+- PRs: [#374](https://github.com/nlev8/Graider/pull/374) → [#388](https://github.com/nlev8/Graider/pull/388)
+- Issues closed: #217, #218, #224, #229, #234, #245, #247, #249, #253, #339, #341, #343, #348, #353, #355, #370, #373
 - Plans closed: 2026-05-14-security-trio, 2026-05-11-audit-major5-e2e-promotion, 2026-05-05-sis-compliance-hardening, 2026-05-01-phase4.3-sprint2-per-dok-mastery
-- e2e-nightly debug runs: [25964874545](https://github.com/nlev8/Graider/actions/runs/25964874545) (RED, root-cause evidence) → [25965070445](https://github.com/nlev8/Graider/actions/runs/25965070445) (GREEN, post-fix)
-- CLAUDE.md Rule #12 (handoff discipline) — this doc is committable when it serves as an artifact. Tracker-empty-state + the closed-followup RED→GREEN debug record + the 5 heuristics above all qualify.
+- e2e debug runs: [25964874545](https://github.com/nlev8/Graider/actions/runs/25964874545) (RED, root-cause evidence) → [25965070445](https://github.com/nlev8/Graider/actions/runs/25965070445) (GREEN)
+- Key files: `backend/storage.py:48-60` (`_tenant_home`), `.github/workflows/e2e-nightly.yml` (onboarding-seed steps), `frontend/src/styles/globals.css` (theme vars), `frontend/src/tabs/ResultsTab.jsx:1775` (#388 fix), `railway.json`/`nixpacks.toml`/`Procfile` (deploy = gunicorn only)
+- CLAUDE.md Rule #12 — this doc is committable as an artifact (tracker-empty state + RED→GREEN record + 6 heuristics qualify).
