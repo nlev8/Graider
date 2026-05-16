@@ -83,6 +83,69 @@ def _create_student_auth_code(raw_token):
     return code
 
 
+# Short-lived class-selection tokens for the multi-enrollment Clever SSO
+# disambiguation flow (Task A). Mirrors the _pending_student_auth_codes
+# pattern above: in-process, TTL-bounded, inline cleanup. Same
+# not-shared-across-workers property as the auth-code store (acceptable —
+# the pick round-trip is immediate; a shared store is a separate baseline
+# item, not Task A's scope).
+_pending_class_selections = {}
+_CLASS_SELECTION_TTL = 120  # seconds
+
+
+def _create_class_selection(student_row, candidates):
+    """Mint a short-lived token the student exchanges (with a chosen
+    class_id) for a real scoped session. Returns the raw token."""
+    code = secrets.token_urlsafe(32)
+    _pending_class_selections[code] = {
+        "student_row": student_row,
+        "candidates": candidates,
+        "expires": _time.time() + _CLASS_SELECTION_TTL,
+    }
+    now = _time.time()
+    expired = [k for k, v in _pending_class_selections.items() if v["expires"] < now]
+    for k in expired:
+        del _pending_class_selections[k]
+    return code
+
+
+def _mint_clever_student_session(sb, student_row, chosen):
+    """Insert a hashed `student_sessions` row for `student_row` scoped to
+    `chosen` ({class_id,name,subject}) and return {token,student,class}.
+
+    Shared by the single-enrollment path and the multi-enrollment finalize
+    endpoint so the session-mint stays identical and secure in both.
+    """
+    import secrets as _secrets
+    from datetime import datetime, timezone, timedelta
+
+    raw_token = _secrets.token_urlsafe(48)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires = datetime.now(tz=timezone.utc) + timedelta(hours=8)
+
+    sb.table("student_sessions").insert({
+        "student_id": student_row["id"],
+        "class_id": chosen["class_id"],
+        "session_token": token_hash,
+        "expires_at": expires.isoformat(),
+    }).execute()
+
+    return {
+        "token": raw_token,
+        "student": {
+            "first_name": student_row.get("first_name", ""),
+            "last_name": student_row.get("last_name", ""),
+            "email": student_row.get("email", ""),
+            "student_id": student_row.get("student_id_number", ""),
+            "period": student_row.get("period", ""),
+        },
+        "class": {
+            "name": chosen.get("name", ""),
+            "subject": chosen.get("subject", ""),
+        },
+    }
+
+
 def _run_async(coro):
     """Run an async coroutine from sync Flask context."""
     loop = asyncio.new_event_loop()
@@ -198,12 +261,14 @@ def _create_clever_student_session(clever_id, email):
 
         student_db_id = student_row["id"]
 
-        # Find class enrollment
+        # Find ALL class enrollments. Previously this used `.limit(1)` so
+        # "the first DB row wins" — a student enrolled in multiple classes
+        # was silently dropped into whichever one the DB returned first
+        # (Task A defect). Enumerate, then disambiguate if ambiguous.
         enroll_res = (
             sb.table("class_students")
             .select("class_id, classes(id, name, subject)")
             .eq("student_id", student_db_id)
-            .limit(1)
             .execute()
         )
         enroll_rows = enroll_res.data if enroll_res and enroll_res.data else []
@@ -211,36 +276,37 @@ def _create_clever_student_session(clever_id, email):
             logger.info("Clever student %s has no class enrollment", student_db_id)
             return None
 
-        enrollment = enroll_rows[0]
-        class_info = enrollment.get("classes") or {}
-        class_id = class_info.get("id") or enrollment.get("class_id")
+        # Distinct candidate classes (dedupe by class_id, preserve order)
+        candidates = []
+        _seen_cids = set()
+        for er in enroll_rows:
+            ci = er.get("classes") or {}
+            cid = ci.get("id") or er.get("class_id")
+            if not cid or cid in _seen_cids:
+                continue
+            _seen_cids.add(cid)
+            candidates.append({
+                "class_id": cid,
+                "name": ci.get("name", ""),
+                "subject": ci.get("subject", ""),
+            })
 
-        # Create session: store hash, return raw token
-        raw_token = _secrets.token_urlsafe(48)
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        expires = datetime.now(tz=timezone.utc) + timedelta(hours=8)
+        if len(candidates) > 1:
+            # Ambiguous — do NOT mint a session. Return a short-lived
+            # selection token; the student picks via the finalize endpoint.
+            selection_token = _create_class_selection(student_row, candidates)
+            logger.info(
+                "Clever student %s enrolled in %d classes — needs selection",
+                student_db_id, len(candidates),
+            )
+            return {
+                "status": "needs_class_selection",
+                "classes": candidates,
+                "selection_token": selection_token,
+            }
 
-        sb.table("student_sessions").insert({
-            "student_id": student_db_id,
-            "class_id": class_id,
-            "session_token": token_hash,
-            "expires_at": expires.isoformat(),
-        }).execute()
-
-        return {
-            "token": raw_token,
-            "student": {
-                "first_name": student_row.get("first_name", ""),
-                "last_name": student_row.get("last_name", ""),
-                "email": student_row.get("email", ""),
-                "student_id": student_row.get("student_id_number", ""),
-                "period": student_row.get("period", ""),
-            },
-            "class": {
-                "name": class_info.get("name", ""),
-                "subject": class_info.get("subject", ""),
-            },
-        }
+        # Exactly one class — mint the session exactly as before.
+        return _mint_clever_student_session(sb, student_row, candidates[0])
     except Exception as e:
         logger.warning("Failed to create clever student session: %s", str(e))
         sentry_sdk.capture_exception(e)
@@ -362,6 +428,21 @@ def clever_callback():
             clever_user["clever_id"],
             clever_user.get("email", ""),
         )
+        if student_session and student_session.get("status") == "needs_class_selection":
+            # Multi-enrolled — hand the student to the class picker instead
+            # of silently choosing for them (Task A). No session minted yet.
+            from urllib.parse import urlencode
+            params = urlencode({
+                "clever_select": "1",
+                "sel": student_session["selection_token"],
+            })
+            logger.info(
+                "AUDIT: Clever student multi-enrollment, selection required: "
+                "email=%s clever_id_hash=%s",
+                redact_email(clever_user.get("email", "")),
+                hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8],
+            )
+            return redirect("/student?" + params)
         if student_session:
             from urllib.parse import urlencode
             auth_code = _create_student_auth_code(student_session["token"])
@@ -782,6 +863,39 @@ def clever_save_district_keys():
         return jsonify({"status": "saved", "district_id": district_id})
     else:
         return jsonify({"error": "Failed to save district keys"}), 500
+
+
+@clever_bp.route("/api/clever/select-class", methods=["POST"])
+@handle_route_errors
+def select_clever_class():
+    """Finalize multi-enrollment Clever SSO (Task A): exchange a selection
+    token + the student's chosen class_id for a real scoped session.
+
+    Mirrors /api/clever/student-token. Single-use on success only — a bad
+    class_id (400) does NOT consume the token so the student can retry.
+    """
+    data = request.json or {}
+    token = data.get("selection_token", "")
+    class_id = data.get("class_id", "")
+
+    entry = _pending_class_selections.get(token)
+    if not entry:
+        return jsonify({"error": "Invalid or expired selection"}), 401
+    if _time.time() > entry["expires"]:
+        _pending_class_selections.pop(token, None)
+        return jsonify({"error": "Selection expired"}), 401
+
+    chosen = next((c for c in entry["candidates"] if c["class_id"] == class_id), None)
+    if chosen is None:
+        return jsonify({"error": "Class not among offered choices"}), 400
+
+    sb = _get_supabase_safe()
+    if sb is None:
+        return jsonify({"error": "Supabase not configured"}), 503
+
+    session_info = _mint_clever_student_session(sb, entry["student_row"], chosen)
+    _pending_class_selections.pop(token, None)  # single-use, success only
+    return jsonify({"token": session_info["token"]})
 
 
 @clever_bp.route("/api/clever/student-token", methods=["POST"])
