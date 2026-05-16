@@ -865,18 +865,24 @@ def clever_save_district_keys():
         return jsonify({"error": "Failed to save district keys"}), 500
 
 
-@clever_bp.route("/api/clever/select-class", methods=["POST"])
+@clever_bp.route("/api/clever/select-class", methods=["GET", "POST"])
 @handle_route_errors
 def select_clever_class():
-    """Finalize multi-enrollment Clever SSO (Task A): exchange a selection
-    token + the student's chosen class_id for a real scoped session.
+    """Multi-enrollment Clever SSO finalize (Task A).
+
+    GET  ?selection_token=…  → list the candidate classes for the picker
+                               (does NOT consume the token).
+    POST {selection_token, class_id} → mint the scoped session.
 
     Mirrors /api/clever/student-token. Single-use on success only — a bad
     class_id (400) does NOT consume the token so the student can retry.
     """
-    data = request.json or {}
-    token = data.get("selection_token", "")
-    class_id = data.get("class_id", "")
+    if request.method == "GET":
+        token = request.args.get("selection_token", "")
+    else:
+        data = request.json or {}
+        token = data.get("selection_token", "")
+        class_id = data.get("class_id", "")
 
     entry = _pending_class_selections.get(token)
     if not entry:
@@ -884,6 +890,9 @@ def select_clever_class():
     if _time.time() > entry["expires"]:
         _pending_class_selections.pop(token, None)
         return jsonify({"error": "Selection expired"}), 401
+
+    if request.method == "GET":
+        return jsonify({"classes": entry["candidates"]})
 
     chosen = next((c for c in entry["candidates"] if c["class_id"] == class_id), None)
     if chosen is None:

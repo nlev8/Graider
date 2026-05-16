@@ -209,3 +209,34 @@ def test_select_class_rejects_class_not_in_candidates():
     assert resp.status_code == 400
     # rejected attempt must not consume the token
     assert "seltok-2" in clever_routes._pending_class_selections
+
+
+def test_select_class_get_lists_candidates_without_consuming():
+    """GET /api/clever/select-class?selection_token=… returns the candidate
+    classes so the picker can render — and does NOT consume the token."""
+    from backend.routes import clever_routes
+    candidates = [
+        {"class_id": "cls-001", "name": "Math 9", "subject": "math"},
+        {"class_id": "cls-002", "name": "Science 9", "subject": "science"},
+    ]
+    clever_routes._pending_class_selections["seltok-3"] = {
+        "student_row": {"id": "db-stu-001"},
+        "candidates": candidates,
+        "expires": clever_routes._time.time() + 120,
+    }
+    app = _make_app()
+    with app.test_client() as client:
+        resp = client.get("/api/clever/select-class?selection_token=seltok-3")
+
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    names = sorted(c["name"] for c in body["classes"])
+    assert names == ["Math 9", "Science 9"]
+    assert "seltok-3" in clever_routes._pending_class_selections  # not consumed
+
+
+def test_select_class_get_unknown_token_401():
+    app = _make_app()
+    with app.test_client() as client:
+        resp = client.get("/api/clever/select-class?selection_token=ghost")
+    assert resp.status_code == 401
