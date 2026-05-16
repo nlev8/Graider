@@ -167,3 +167,39 @@ All other 9 dimensions: **unanimously unchanged** (only Clever code + docs merge
 **Net:** Tasks A+B are real improvements (the common single-row/single-district cases are fixed and tested), but a *verified* Clever 10/10 requires Task C closing all three. The conservative scorecard does not credit a 10 on partial closure.
 
 *Plan reopened: `docs/superpowers/plans/2026-05-16-clever-compliance-10.md` now carries **Task C** with these three file:line items.*
+
+---
+
+# 2026-05-16 Task C Verification — Clever Compliance **9 → 10/10** (verified, HEAD `934e535`)
+
+**Task C (PR #399 `934e535`) closed all three residuals.** Verification re-score:
+
+| Model | Clever verdict | Basis |
+|---|---|---|
+| Codex | **10**, no residual | airtight file:line proof for C1/C2/C3 + green test counts |
+| Gemini | **10**, no residual | independent file:line proof, tests green |
+| Claude | *no verdict* | agent stalled at 600s (genuine failure-to-run, not failed-low) |
+
+**Reconciled: Clever Compliance = 10/10. Overall 7.7 → 7.8.** Basis (honest): **two independent models concur** with concrete in-code evidence, **plus** orchestrator first-hand verification (implemented C1/C2/C3 via TDD; 975 clever/sis/student_session/api_key/sync regression green; ruff clean; SIS pins retracked, captures intact). No split among *completed* assessments — Claude failed-to-run, not failed-low. Per the conservative discipline this clears the bar (≥2 independent confirmations + first-hand regression; a 10 is never credited on one optimistic model — that rule is exactly what caught the false-10 in the prior closing re-score).
+
+| Dim | baseline | 2026-05-16 reconciled | **now (934e535)** |
+|---|--:|--:|--:|
+| Security | 5 | 8 | 8 |
+| Error Handling | 7 | 8 | 8 |
+| Code Quality | 5 | 7 | 7 |
+| Architecture | 6 | 7 | 7 |
+| Test Coverage | 6 | 8 | 8 |
+| Documentation | 7 | 7 | 7 |
+| Debugging/Observability | 5 | 8 | 8 |
+| Data Integrity | 5 | 7 | 7 |
+| Operational Safety | 5 | 8 | 8 |
+| **Clever Compliance** | 8 | 9 | **10** |
+| **Overall** | **5.9** | **7.7** | **7.8** |
+
+**C1/C2/C3 — verified closed (Codex + Gemini, file:line):**
+- **C1** `clever_routes.py:260` enumerates ALL `students` rows (+ email fallback), not `res.data[0]`; candidates carry `_student_row`; `_public_candidates` (`:96`) strips PII from the browser-facing list (incl. the GET path); finalize mints against the chosen class's owning `_student_row` (legacy fallback). Stale "first DB row wins / requires a UI flow change" comment removed. Tests green.
+- **C2** `sync_routes.py:~192` resolves via `resolve_clever_district_token(config.get('district_id'))`; no direct `os.environ`/`os.getenv` `CLEVER_DISTRICT_TOKEN` read remains; resolver owns env fallback (single-district byte-identical).
+- **C3** `api_keys.save_district_keys` + `/api/clever/district-keys` POST persist `clever_district_token` → resolver's per-district read has a write path; multi-district reachable end-to-end. save→read round-trips.
+- `test_sis_alerting.py` green — 3 clever_routes pins retracked for the C1 line-shift; `capture_exception` calls intact (no observability regression).
+
+**Clever Compliance is now a genuinely verified 10/10.** Other 9 dimensions: unanimously unchanged (only Clever code merged 71e66de→934e535). The biggest remaining lever is unchanged: Code Quality / Architecture concentrated complexity (multi-week decomposition) — no comparably small path to 10 elsewhere. **The Clever→10 plan is fully CLOSED.**

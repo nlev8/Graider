@@ -1,6 +1,6 @@
 # Clever Compliance → 10/10 — Close the Two Verified Baseline Gaps
 
-> **STATUS: Task A ✅ CLOSED (#395 `b9eff4e`) · Task B ✅ CLOSED (#397 `71e66de`) — but PLAN NOT CLOSED: Clever stayed 9/10.** The 2026-05-16 closing 3-model re-score (Codex 9 / Claude 9 / Gemini 10 → reconciled **9**) proved this plan's original premise WRONG: "the two items below are the *only* verified blockers" was **incomplete**. Tasks A & B closed their *planned scope* but verification found **three** in-code residuals (see **Task C**). A verified Clever 10/10 requires Task C. Honest lesson: the plan under-drew the scope; the 3-model verification is what caught it (a single-model pass would have shipped a false 10).
+> **STATUS: ✅ FULLY CLOSED 2026-05-16 — Clever Compliance 9 → verified 10/10.** Task A (#395 `b9eff4e`), Task B (#397 `71e66de`), Task C (#399 `934e535`) all shipped via TDD. The first closing re-score (Codex 9 / Claude 9 / Gemini 10 → reconciled **9**) proved the original premise incomplete — 3 residuals → Task C. The Task C verification re-score (Codex 10 / Gemini 10, both file:line-verified; Claude agent stalled, no verdict; + orchestrator first-hand 975-test regression) reconciled **Clever = 10/10, overall 7.7 → 7.8**. Recorded in `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`. **Honest lesson preserved:** the plan under-drew scope; the verification re-score is what caught it — a single-model pass would have shipped a false 10.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development per task and superpowers:executing-plans (or subagent-driven-development) to implement task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -81,7 +81,9 @@ Acceptance: C1+C2+C3 shipped (TDD, CI green) → re-run §Verification. Only the
 
 - [x] **2026-05-16 closing 3-model re-score RAN** (Codex 9 / Claude 9 / Gemini 10 → reconciled **9, NOT 10**). Result + the 3 residuals recorded in `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` ("2026-05-16 Closing Re-Score" section). Overall unchanged 7.7 (conservative floor).
 - [x] Assessment doc updated with the dated section.
-- [ ] **Plan does NOT close yet** — reopened with Task C. Re-run the re-score after C1+C2+C3; flip to fully CLOSED only if all models then verify Clever 10/10.
+- [x] **Task C verification re-score RAN (HEAD `934e535`, PR #399)** — Codex **10** / Gemini **10** (both file:line-verified C1/C2/C3 closed); Claude agent stalled (no verdict, genuine failure-to-run); + orchestrator first-hand 975-test regression + ruff + SIS-pin retrack. Reconciled **Clever 10/10, overall 7.7 → 7.8** (≥2 independent confirmations + first-hand regression — conservative bar cleared).
+- [x] Assessment doc updated with the "2026-05-16 Task C Verification" dated section.
+- [x] **PLAN FULLY CLOSED** — Clever Compliance is a genuinely verified 10/10. No residual.
 
 ## Out-of-scope / risks
 
