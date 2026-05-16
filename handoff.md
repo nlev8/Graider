@@ -1,6 +1,6 @@
-# Handoff: 2026-05-14/16 — 22 PRs, dimensions 7.7/10, Clever Tasks A+B shipped (NOT 10 — Task C scoped)
+# Handoff: 2026-05-14/16 — 23 PRs, dimensions 7.8/10, Clever Compliance verified 10/10, plan CLOSED
 
-> **State: GREEN / idle, clear next move.** Tracker empty, tree clean. Clever Tasks A (#395) + B (#397) shipped via TDD; the **closing 3-model re-score (Codex 9 / Claude 9 / Gemini 10 → reconciled 9) proved the Clever plan's premise incomplete** — 3 in-code residuals remain, scoped as **Task C** in `docs/superpowers/plans/2026-05-16-clever-compliance-10.md`. Clever stayed **9/10**, overall **7.7** unchanged. Next actionable = Task C (3 bounded items) for a verified Clever 10. Read §5 + §8 before touching e2e/frontend deploy/GitNexus/Codex subagents.
+> **State: GREEN / idle, no pending plan.** Tracker empty, tree clean. Clever Tasks A (#395) + B (#397) + C (#399) all shipped via TDD; the Task-C verification re-score (Codex 10 / Gemini 10 file:line-verified; Claude agent stalled, no verdict; + orchestrator 975-test regression) reconciled **Clever Compliance = verified 10/10, overall 7.7 → 7.8**. The `2026-05-16-clever-compliance-10.md` plan is **FULLY CLOSED**. No pending plan; biggest remaining lever (unchanged) is the multi-week Code-Quality/Architecture decomposition — no comparably small path to 10 elsewhere. Read §5 + §8 before touching e2e/frontend deploy/GitNexus/Codex subagents.
 
 ## 1. Goal
 
@@ -8,12 +8,12 @@ Autonomous issue/PR sprint on Graider: clear the tracker, ship every fix through
 
 ## 2. TL;DR
 
-- **22 PRs merged (#374–#397)**, all auto-deployed via Railway (+#373 closed by #374). Since the 19-PR mark: **#395 Clever Task A** (multi-enrollment SSO disambiguation, TDD, b9eff4e), **#396** plan-close doc, **#397 Clever Task B** (per-district token resolution, TDD, 71e66de).
+- **23 PRs merged (#374–#399)**, all auto-deployed via Railway (+#373 closed by #374). Clever arc: **#395** Task A (multi-enrollment SSO), **#396** plan-close doc, **#397** Task B (per-district token), **#398** closing re-score (found 3 residuals), **#399** Task C (`934e535`, closed all 3 → verified Clever 10).
 - **Dimensions: reconciled 7.7/10 (conservative floor), unchanged.** Two re-scores: (1) 2026-05-16 @ `63384d3` → 7.7 (Codex 8.1/Claude 8.1/Gemini 7.8); (2) 2026-05-16 **closing** @ `71e66de` → still 7.7, Clever held **9 (NOT 10)**: Codex 9 / Claude 9 / Gemini 10, reconciled 9. Both sections in `comprehensive-hardening-assessment.md`. Measured backend coverage **63.42%**.
 - **Tracker empty.** Working tree clean (only untracked `.claude/scheduled_tasks.lock`, `tests/reports/`). No in-flight branches.
 - **GitNexus index fresh** (reindexed this session — the "reboot needed" claim was a debunked misdiagnosis; see §5.A). MCP `gitnexus_*` tools are DOWN this session (server stopped for the reindex); they auto-return next session.
-- **Next move = Task C** (`docs/superpowers/plans/2026-05-16-clever-compliance-10.md`): 3 verified in-code residuals to a true Clever 10 — **C1** `clever_routes.py:248` duplicate student-rows across teachers still first-row-wins (Task A only fixed enrollments-for-one-row; stale comment :244-247); **C2** `sync_routes.py:189` periodic-cron bypasses `resolve_clever_district_token`; **C3** `save_district_keys` can't persist `clever_district_token` (Task B's per-district branch unreachable). NOT STARTED — needs explicit go-ahead (new code).
-- Local `main` at **`71e66de`**.
+- **No pending plan.** Clever→10 plan FULLY CLOSED (Task C #399 closed C1 multi-student-row enumeration, C2 cron resolver, C3 `clever_district_token` write path; Codex+Gemini file:line-verified; SIS pins retracked, observability intact). Next productive work, if any: the multi-week Code-Quality/Architecture decomposition (biggest lever; needs a design spike first per §6) — or the older April plan-doc bulk-flip janitorial. Neither is urgent; tracker empty.
+- Local `main` at **`934e535`**.
 
 ## 3. Current state
 
