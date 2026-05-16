@@ -508,14 +508,42 @@ class TestPublicAPI:
     ):
         # Configure Supabase env, but mock _sb_load to return None →
         # fall back to file backend.
+        # Issue #353: file backend is now sharded by teacher_id. The
+        # fallback finds the teacher's OWN sharded file, NOT local-dev's
+        # shared file (that would be a cross-teacher leak).
         monkeypatch.setenv('SUPABASE_URL', 'https://x.supabase.co')
         monkeypatch.setenv('SUPABASE_SERVICE_KEY', 'sk-test')
         from backend.storage import save, load
-        # Save to file directly via local-dev path
-        save('settings', {'k': 'file-data'}, teacher_id='local-dev')
-        with patch('backend.storage._sb_load', return_value=None):
+        # Pre-fix: save via 'local-dev'; teacher-uuid-1's load
+        # inherited it via the shared file. Post-fix: save via the
+        # SAME teacher_id; fallback finds the teacher's own shard.
+        # Mock both Supabase ops across the entire test so the
+        # lazy-cached `_supabase_raw` singleton never gets created
+        # against the fake URL (which would poison later tests).
+        with patch('backend.storage._sb_save', return_value=True), \
+             patch('backend.storage._sb_load', return_value=None):
+            save('settings', {'k': 'file-data'}, teacher_id='teacher-uuid-1')
             result = load('settings', teacher_id='teacher-uuid-1')
         assert result == {'k': 'file-data'}
+
+    def test_load_real_teacher_does_NOT_see_local_dev_file_via_fallback(
+        self, tmp_home, monkeypatch,
+    ):
+        # Issue #353 negative pin: a Supabase teacher's file fallback
+        # MUST NOT return the local-dev file's contents. Pre-fix it did
+        # — that was the same cross-tenant leak the issue closes.
+        monkeypatch.setenv('SUPABASE_URL', 'https://x.supabase.co')
+        monkeypatch.setenv('SUPABASE_SERVICE_KEY', 'sk-test')
+        from backend.storage import save, load
+        # local-dev save is file-only (no Supabase singleton init).
+        save('settings', {'k': 'local-dev-data'}, teacher_id='local-dev')
+        with patch('backend.storage._sb_load', return_value=None):
+            # teacher-uuid-1 has nothing in their shard; fallback to
+            # local-dev's file must NOT happen.
+            result = load('settings', teacher_id='teacher-uuid-1')
+        assert result is None, (
+            f"sharded fallback leaked local-dev's file: {result}"
+        )
 
     def test_load_real_teacher_does_NOT_fall_back_for_sensitive_keys(
         self, tmp_home, monkeypatch,
@@ -537,8 +565,13 @@ class TestPublicAPI:
         with patch('backend.storage._sb_save', return_value=True) as mock_sb:
             assert save('settings', {'k': 'v'}, teacher_id='t-1') is True
         mock_sb.assert_called_once()
-        # File also written (non-sensitive)
-        assert _file_load('settings') == {'k': 'v'}
+        # File also written (non-sensitive). Issue #353: post-shard the
+        # dual-write lands under t-1's tenant subdir, not the global
+        # local-dev path — verified by `_file_load` with the same
+        # teacher_id.
+        assert _file_load('settings', teacher_id='t-1') == {'k': 'v'}
+        # And the local-dev global path is NOT polluted with t-1's data.
+        assert _file_load('settings', teacher_id='local-dev') is None
 
     def test_save_real_teacher_skips_file_for_sensitive_keys(
         self, tmp_home, monkeypatch,
@@ -576,10 +609,15 @@ class TestPublicAPI:
     def test_list_keys_supabase_failure_falls_back_to_files(
         self, tmp_home, monkeypatch,
     ):
+        # Issue #353: fallback respects sharding. Save under t-1; list
+        # under t-1 with Supabase mocked to return None → t-1's
+        # sharded files are listed. Local-dev's files are NOT
+        # cross-leaked.
         monkeypatch.setenv('SUPABASE_URL', 'https://x.supabase.co')
         monkeypatch.setenv('SUPABASE_SERVICE_KEY', 'sk-test')
         from backend.storage import save, list_keys
-        save('assignment:Q1', {}, teacher_id='local-dev')
+        with patch('backend.storage._sb_save', return_value=True):
+            save('assignment:Q1', {}, teacher_id='t-1')
         # _sb_list_keys returns None → fall back to file
         with patch('backend.storage._sb_list_keys', return_value=None):
             keys = list_keys('assignment:', teacher_id='t-1')
@@ -615,10 +653,16 @@ class TestStudentHistoryAPI:
         assert load_student_history('local-dev', 'alice') == {'h': 1}
 
     def test_load_real_teacher_falls_back_to_file(self, tmp_home, monkeypatch):
+        # Issue #353: student-history file fallback respects sharding.
+        # Save under t-1 → load under t-1 falls back to t-1's shard,
+        # not local-dev's shared student_history dir.
         monkeypatch.setenv('SUPABASE_URL', 'https://x.supabase.co')
         monkeypatch.setenv('SUPABASE_SERVICE_KEY', 'sk-test')
         from backend.storage import save_student_history, load_student_history
-        save_student_history('local-dev', 'alice', {'h': 'file'})
+        with patch(
+            'backend.storage._sb_save_student_history', return_value=True,
+        ):
+            save_student_history('t-1', 'alice', {'h': 'file'})
         with patch('backend.storage._sb_load_student_history', return_value=None):
             assert load_student_history('t-1', 'alice') == {'h': 'file'}
 

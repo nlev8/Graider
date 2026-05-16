@@ -200,7 +200,9 @@ class TestLoadStudentHistorySupabase:
                 teacher_id="teach-1", student_id="sid-1",
             )
         assert result == {"from": "file"}
-        mock_file.assert_called_once_with("sid-1")
+        # Issue #353: file fallback now threads teacher_id so the
+        # student-history dir is sharded under the tenant subdir.
+        mock_file.assert_called_once_with("sid-1", "teach-1")
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -222,8 +224,12 @@ class TestSaveStudentHistorySupabase:
                 history={"assignments": []},
             )
         assert ok is True
-        # File write always happens
-        mock_file.assert_called_once_with("sid-1", {"assignments": []})
+        # File write always happens. Issue #353: now also passes
+        # teacher_id so the dual-write lands under the tenant subdir
+        # instead of the global student_history dir.
+        mock_file.assert_called_once_with(
+            "sid-1", {"assignments": []}, "teach-1",
+        )
         # Supabase write happens too
         mock_sb.assert_called_once_with("teach-1", "sid-1", {"assignments": []})
 

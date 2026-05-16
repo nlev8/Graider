@@ -90,7 +90,7 @@ class TestExportStudentData:
             export_student_data,
         )
 
-        result = export_student_data(student_name="", teacher_id="t")
+        result = export_student_data(student_name="", teacher_id="local-dev")
         assert result == {"error": "student_name is required."}
 
     def test_no_match_returns_error(self, isolated_home):
@@ -101,7 +101,7 @@ class TestExportStudentData:
         with patch(f"{MODULE}._load_roster", return_value=[]), \
              patch(f"{MODULE}._load_master_csv", return_value=[]):
             result = export_student_data(
-                student_name="Ghost", teacher_id="t",
+                student_name="Ghost", teacher_id="local-dev",
             )
         assert "error" in result
         assert "No student found" in result["error"]
@@ -217,7 +217,7 @@ class TestExportStudentData:
              patch(f"{MODULE}._load_settings", return_value={}), \
              patch(f"{MODULE}._load_parent_contacts", return_value={}):
             result = export_student_data(
-                student_name="Alice", teacher_id="t",
+                student_name="Alice", teacher_id="local-dev",
             )
         decoded = json.loads(base64.b64decode(result["data_base64"]).decode())
         assert decoded["student_history"] is None
@@ -238,7 +238,7 @@ class TestExportStudentData:
              patch(f"{MODULE}._load_settings", return_value={}), \
              patch(f"{MODULE}._load_parent_contacts", return_value={}):
             result = export_student_data(
-                student_name="Mary", teacher_id="t",
+                student_name="Mary", teacher_id="local-dev",
             )
         # Apostrophe stripped, hyphen kept (regex r'[^\w\s-]')
         assert result["filename"] == "Mary-Jane_OBrien_data.json"
@@ -255,7 +255,7 @@ class TestImportStudentData:
             import_student_data,
         )
 
-        result = import_student_data(file_path="", teacher_id="t")
+        result = import_student_data(file_path="", teacher_id="local-dev")
         assert result == {"error": "file_path is required."}
 
     def test_file_not_found_returns_error(self, isolated_home, tmp_path):
@@ -264,7 +264,7 @@ class TestImportStudentData:
         )
 
         result = import_student_data(
-            file_path=str(tmp_path / "nope.json"), teacher_id="t",
+            file_path=str(tmp_path / "nope.json"), teacher_id="local-dev",
         )
         assert "File not found" in result["error"]
 
@@ -275,7 +275,7 @@ class TestImportStudentData:
 
         bad = tmp_path / "bad.txt"
         bad.write_text("not json")
-        result = import_student_data(file_path=str(bad), teacher_id="t")
+        result = import_student_data(file_path=str(bad), teacher_id="local-dev")
         assert "must be a .json file" in result["error"]
 
     def test_invalid_json_returns_error(self, isolated_home, tmp_path):
@@ -285,7 +285,7 @@ class TestImportStudentData:
 
         bad = tmp_path / "bad.json"
         bad.write_text("{not valid json")
-        result = import_student_data(file_path=str(bad), teacher_id="t")
+        result = import_student_data(file_path=str(bad), teacher_id="local-dev")
         assert "Invalid JSON" in result["error"]
 
     def test_missing_student_name_returns_error(self, isolated_home, tmp_path):
@@ -295,7 +295,7 @@ class TestImportStudentData:
 
         path = tmp_path / "nostudent.json"
         path.write_text(json.dumps({"grading_results": []}))
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert "Missing 'student_name'" in result["error"]
 
     def test_no_data_sections_returns_error(self, isolated_home, tmp_path):
@@ -305,7 +305,7 @@ class TestImportStudentData:
 
         path = tmp_path / "empty.json"
         path.write_text(json.dumps({"student_name": "Alice"}))
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert "no importable data sections" in result["error"]
 
     def test_imports_grading_results(self, isolated_home, tmp_path):
@@ -326,7 +326,7 @@ class TestImportStudentData:
         path = tmp_path / "alice.json"
         path.write_text(json.dumps(export))
 
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert result["status"] == "success"
         assert result["student_name"] == "Alice Smith"
         assert result["imported_sections"]["results"] == 2
@@ -363,7 +363,7 @@ class TestImportStudentData:
         path = tmp_path / "alice.json"
         path.write_text(json.dumps(export))
 
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert result["imported_sections"]["results"] == 1  # only the new one
 
         saved = json.loads(results_file.read_text())
@@ -387,7 +387,7 @@ class TestImportStudentData:
         path = tmp_path / "bob.json"
         path.write_text(json.dumps(export))
 
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert result["imported_sections"]["history"] is True
 
         # File persisted with student_id key derived from student_id field
@@ -440,7 +440,7 @@ class TestImportStudentData:
         path = tmp_path / "alice.json"
         path.write_text(json.dumps(export))
 
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert result["imported_sections"]["history"] is True
 
         merged = json.loads(existing_path.read_text())
@@ -467,7 +467,7 @@ class TestImportStudentData:
         path = tmp_path / "carol.json"
         path.write_text(json.dumps(export))
 
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert result["imported_sections"]["accommodations"] is True
 
         accomm_file = (
@@ -492,7 +492,7 @@ class TestImportStudentData:
         path = tmp_path / "dan.json"
         path.write_text(json.dumps(export))
 
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert result["imported_sections"]["ell"] is True
 
         ell_file = isolated_home / ".graider_data" / "ell_students.json"
@@ -515,7 +515,7 @@ class TestImportStudentData:
         path = tmp_path / "eve.json"
         path.write_text(json.dumps(export))
 
-        result = import_student_data(file_path=str(path), teacher_id="t")
+        result = import_student_data(file_path=str(path), teacher_id="local-dev")
         assert result["imported_sections"]["contacts"] is True
 
         contacts_file = isolated_home / ".graider_data" / "parent_contacts.json"
@@ -538,7 +538,7 @@ class TestImportStudentData:
         result = import_student_data(
             file_path=str(path),
             student_id="NEW_ID",
-            teacher_id="t",
+            teacher_id="local-dev",
         )
         assert result["student_id"] == "NEW_ID"
 
@@ -585,7 +585,7 @@ class TestImportStudentData:
             result = import_student_data(
                 file_path=str(path),
                 period="P1.csv",
-                teacher_id="t",
+                teacher_id="local-dev",
             )
 
         assert result["status"] == "success"
@@ -626,7 +626,7 @@ class TestImportStudentData:
             result = import_student_data(
                 file_path=str(path),
                 period="P1.csv",
-                teacher_id="t",
+                teacher_id="local-dev",
             )
 
         # Still status=success but the roster doesn't grow

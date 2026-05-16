@@ -187,6 +187,12 @@ def init_auth(app):
             g.user_id = request.headers.get('X-Test-Teacher-Id',
                                             os.getenv('DEV_USER_ID', 'local-dev'))
             g.user_email = os.getenv('DEV_EMAIL', 'dev@localhost')
+            # Issue #353: flag the request as a dev-shim teacher so
+            # downstream gates (e.g. `approval_status`) can bypass
+            # Supabase user-lookup paths that 500 in CI for any non-
+            # 'local-dev' teacher_id. Was previously detectable only
+            # via the literal `g.user_id == 'local-dev'` check.
+            g.is_dev_shim = True
             return None
 
         # Clever SSO session (cookie-based, set during OAuth callback)
