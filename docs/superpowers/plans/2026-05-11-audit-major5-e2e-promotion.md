@@ -1,7 +1,7 @@
 # Audit MAJOR #5 — E2E + load/stress gating
 
 **Source:** [GH #217](https://github.com/nlev8/Graider/issues/217) — "Audit 2026-05-06 Test Gates Sprint", MAJOR #5
-**Status:** Plan, not yet started. Drafted 2026-05-11. Revised after Gemini review + direct verification of every claim.
+**Status:** ✅ **CLOSED 2026-05-15** — all tasks shipped across PRs #351 / #353 / #371 / #378 / #381; GH #217 + #353 closed 2026-05-15 (see end-of-file note). Drafted 2026-05-11, revised after Gemini review + direct verification of every claim. (Top-of-file stamp added 2026-05-16 — PR #384 flipped the checkboxes + appended the closure note but missed this line.)
 **Author:** Claude Opus 4.7
 
 > **Verification note:** Every claim below was checked against the actual codebase before this revision. Earlier draft conflated `frontend/e2e/` with `tests/e2e/`, treated `tests/stress/` as a real directory (it's not), and falsely equated the `migrations-smoke` Postgres container with a Supabase fixture. Those errors are corrected here.
