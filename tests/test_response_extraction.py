@@ -86,3 +86,14 @@ def test_is_question_or_prompt_question_vs_answer():
 
 def test_strip_emojis_mixed_text():
     assert rx.strip_emojis("Hello \U0001F600 World \U0001F680") == "Hello  World"
+
+
+def test_large_fns_importable_from_service():
+    from backend.services.response_extraction import (  # noqa: F401
+        extract_student_responses,
+        extract_student_responses_legacy,
+        format_extracted_for_grading,
+        extract_student_work,
+        STUDENT_WORK_MARKERS,
+    )
+    assert isinstance(STUDENT_WORK_MARKERS, list) and STUDENT_WORK_MARKERS

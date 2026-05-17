@@ -12,7 +12,7 @@ Pre-existing bugs surfaced (DO NOT FIX HERE, pin as-is):
 
 import pytest
 
-from assignment_grader import (
+from backend.services.response_extraction import (
     extract_student_responses,
     extract_student_responses_legacy,
     extract_student_work,
