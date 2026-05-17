@@ -237,6 +237,23 @@ class TestBoxPlot:
         result = viz.create_box_plot(data=[], blank=True)
         _assert_png_data_url(result)
 
+    def test_create_box_plot_no_matplotlib_deprecation(self):
+        import warnings
+        import matplotlib  # noqa: F401  (imported to ensure MatplotlibDeprecationWarning is registered)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = viz.create_box_plot([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]])
+        deprecations = [
+            w for w in caught
+            if issubclass(w.category, DeprecationWarning)
+            and ("boxplot" in str(w.message).lower() or "tick_labels" in str(w.message).lower())
+        ]
+        assert not deprecations, (
+            "create_box_plot emitted boxplot/labels deprecation(s): "
+            + "; ".join(str(w.message) for w in deprecations)
+        )
+        assert isinstance(result, str) and len(result) > 0
+
 
 class TestBarChart:
     def test_with_data(self):
