@@ -712,7 +712,7 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
                 rad = _math.radians(d)
                 px, py = _math.cos(rad), _math.sin(rad)
                 ax.plot(px, py, 'o', color='#6366f1', markersize=4)
-                ax.plot([0, px], [0, py], '--', color='rgba(99,102,241,0.2)', linewidth=0.5)
+                ax.plot([0, px], [0, py], '--', color='#6366f1', alpha=0.2, linewidth=0.5)
                 if show_answer:
                     ax.annotate(f'{d}\u00b0', xy=(px, py), xytext=(px * 1.15, py * 1.15), fontsize=7, ha='center')
             ax.set_xlim(-1.4, 1.4)
