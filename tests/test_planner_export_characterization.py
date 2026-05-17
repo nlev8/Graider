@@ -22,7 +22,10 @@ Post-extraction additions (PR fix/unit-circle-visual-rgba):
 """
 import sys
 import os
+import warnings
 import pytest
+
+import matplotlib
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -220,3 +223,25 @@ def test_visual_branch_minimal_returns_image(q_type):
 ])
 def test_non_visual_types_return_none_export(q_type):
     assert _create_visual_export({'question_type': q_type}, False) is None
+
+
+# ---------------------------------------------------------------------------
+# Deprecation-strict regression: box_plot must not emit MatplotlibDeprecationWarning
+# ax.boxplot(labels=...) was renamed tick_labels= in mpl 3.9 and removed in 3.11.
+# ---------------------------------------------------------------------------
+
+def test_box_plot_no_matplotlib_deprecation():
+    q = {"question_type": "box_plot", "data": [[50, 60, 70, 75, 80, 85, 90]]}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = _create_visual_export(q, False)
+    deprecations = [
+        w for w in caught
+        if issubclass(w.category, DeprecationWarning)
+        and ("boxplot" in str(w.message).lower() or "tick_labels" in str(w.message).lower())
+    ]
+    assert not deprecations, (
+        "box_plot emitted MatplotlibDeprecationWarning(s): "
+        + "; ".join(str(w.message) for w in deprecations)
+    )
+    assert isinstance(result, Image)

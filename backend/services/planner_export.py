@@ -612,7 +612,7 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
             fig, ax = plt.subplots(figsize=(6, 2.5))
             data = question.get('data', [[50, 60, 70, 75, 80, 85, 90]])
             labels = question.get('data_labels', [f'Set {i+1}' for i in range(len(data))])
-            bp = ax.boxplot(data, patch_artist=True, labels=labels)
+            bp = ax.boxplot(data, patch_artist=True, tick_labels=labels)
             colors = plt.cm.Pastel1(np.linspace(0, 1, len(data)))
             for patch, color in zip(bp['boxes'], colors):
                 patch.set_facecolor(color)
