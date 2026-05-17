@@ -1493,6 +1493,12 @@ def submit_assessment(code):
 
         # Caller-generated UUID + upsert on id makes this retry-safe.
         submission_row['id'] = str(uuid.uuid4())
+        # Forward-only dedup (Data Integrity Tier 1): single-attempt
+        # assessments get a unique key so concurrent double-submits hit
+        # the partial unique index uq_submissions_dedup_key. Matches the
+        # existing case-insensitive ilike pre-check semantics above.
+        if not settings.get('allow_multiple_attempts', False):
+            submission_row['dedup_key'] = f"{code}|{student_name.strip().lower()}"
         try:
             submission_result = db.table('submissions').upsert(
                 submission_row, on_conflict='id'

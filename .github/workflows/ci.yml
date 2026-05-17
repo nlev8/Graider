@@ -205,11 +205,33 @@ jobs:
       - name: Seed Supabase auth stubs
         run: psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f .github/ci/supabase_stubs.sql
 
+      - name: Apply base schema
+        # Forward Alembic migrations (0002+) ALTER real tables, so the
+        # base schema must exist first. Same SCHEMA_APPLY_ORDER as
+        # tests/test_schema_tightening_applies.py / test_rls_migration_applies.py.
+        run: |
+          for f in supabase_student_portal_schema.sql \
+                   backend/database/supabase_schema.sql \
+                   backend/database/supabase_teacher_schema.sql \
+                   supabase_submission_confirmations.sql \
+                   supabase_roster_rls.sql; do
+            psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
       - name: Apply migrations
         run: alembic upgrade head
 
       - name: Show current revision
         run: alembic current --verbose
+
+      - name: Assert dedup unique indexes exist
+        # Provability gate (Data Integrity Tier 1): the forward-only
+        # submission dedup constraint must be reproducible by Alembic.
+        run: |
+          for idx in uq_submissions_dedup_key uq_student_submissions_dedup_key; do
+            psql "$PSQL_URL" -tAc "SELECT 1 FROM pg_indexes WHERE indexname='$idx';" \
+              | grep -q 1 || { echo "::error::missing index $idx after alembic upgrade head"; exit 1; }
+          done
 
   lockfile-drift-check:
     name: Lockfile Drift Check

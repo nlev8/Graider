@@ -1197,6 +1197,16 @@ def submit_student_work(content_id):
         # transient error drops the response after the server committed,
         # the retry merges-duplicates on the same id (no double-write).
         submission_row['id'] = str(uuid.uuid4())
+        # Forward-only dedup (Data Integrity Tier 1), keyed by the
+        # intentional attempt model: concurrent same-attempt
+        # double-submits collide on uq_student_submissions_dedup_key; a
+        # genuine new attempt (incremented attempt_number) has a distinct
+        # key and still succeeds.
+        submission_row['dedup_key'] = (
+            f"{submission_row['student_id']}|"
+            f"{submission_row['content_id']}|"
+            f"{submission_row['attempt_number']}"
+        )
         try:
             result = db.table('student_submissions').upsert(
                 submission_row, on_conflict='id'
