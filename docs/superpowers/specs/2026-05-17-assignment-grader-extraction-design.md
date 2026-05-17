@@ -36,17 +36,19 @@ This is the defining constraint, retargeted from Slice 1's Flask focus to this f
 **Leaf helpers (PR 1, lowest risk, proves the harness):**
 `is_question_or_prompt` (179), `filter_questions_from_response` (360), `_strip_template_lines` (430), `strip_emojis` (530), `fuzzy_find_marker` (550), `extract_fitb_by_template_comparison` (628), `parse_numbered_questions` (728), `parse_vocab_terms` (829).
 
-**Large/entangled (PR 2, biggest LOC and Code-Quality win):**
-`extract_student_responses` (915, roughly 868 LOC), `extract_student_responses_legacy` (1783), `format_extracted_for_grading` (2076), `extract_from_tables` (3242), `extract_from_graider_text` (3391), `extract_student_work` (3656).
+**Large (PR 2, biggest LOC and Code-Quality win):**
+`extract_student_responses` (915, roughly 866 LOC), `extract_student_responses_legacy` (1783), `format_extracted_for_grading` (2076), `extract_student_work` (3656), plus the module-level constant `STUDENT_WORK_MARKERS` (2434 to 2492) which `extract_student_work` reads and which an external consumer (`backend/grading/pipeline.py:564`) imports.
 
-A thin `# noqa: F401` shim in `assignment_grader.py` re-exports every moved name so all callers keep resolving with no call-site changes. Only four external import sites exist, but all moved names are re-exported (the Slice 1 pattern) so no path can break.
+**Stays per §3 (discovered during planning, recorded here):** `extract_from_tables` (3242) and `extract_from_graider_text` (3391). `extract_from_tables` calls `read_docx_file_structured`, a file-reading I/O function that is explicitly out of scope and stays; moving `extract_from_tables` would require importing a staying I/O function back into the service, creating an import cycle. `extract_from_graider_text` calls `extract_from_tables`, so it is transitively bound and also stays. Twelve functions move; these two stay with this reason, exactly as the §3 escape hatch intends (the Slice 1 analogue was `_save_grading_config_for_export`).
+
+A thin `# noqa: F401` shim in `assignment_grader.py` re-exports every moved name plus `STUDENT_WORK_MARKERS` so all callers keep resolving with no call-site changes. Only a few external import sites exist, but all moved names are re-exported (the Slice 1 pattern) so no path can break.
 
 ## 5. Sequencing and PR structure
 
 Three sequenced PRs, in order 1 then 2 then 3, mirroring Slice 1's standards then export then prompts shape (small and pure first to prove the methodology and the no-network test harness, then the larger entangled move under the net).
 
 - **PR 1:** move the 8 leaf helpers; add the shim re-export; add focused unit plus characterization tests for each leaf; keep all existing tests green; full regression plus the 9 required CI checks.
-- **PR 2:** build the exhaustive characterization net for the 6 large functions and pin it against pre-move code first, then move the 6 functions verbatim under that net; extend the shim; full regression plus 9 CI checks.
+- **PR 2:** build the exhaustive characterization net for the 4 large functions and pin it against pre-move code first, then move the 4 functions plus `STUDENT_WORK_MARKERS` verbatim under that net; extend the shim; full regression plus 9 CI checks.
 - **PR 3:** verify shim and caller integrity; slice closeout (dated note in the assessment doc, plan STATUS CLOSED, any functions left behind per §3 recorded with reason).
 
 Each PR runs through subagent-driven-development with continuous execution and two-stage review (spec-compliance first, then code-quality), the same as Slice 1.
@@ -69,9 +71,9 @@ Assertions pin the exact returned dict/tuple structure and values. The output is
 
 ## 8. Scope
 
-**In:** the one `response_extraction.py` module; the 14 listed functions moved verbatim; the thin shim; per-function no-network/no-I/O unit tests; the exhaustive characterization net for the 6 large functions before their move.
+**In:** the one `response_extraction.py` module; the 12 movable functions (8 leaves plus `extract_student_responses`, `extract_student_responses_legacy`, `format_extracted_for_grading`, `extract_student_work`) moved verbatim, plus the `STUDENT_WORK_MARKERS` constant; the thin shim; per-function no-network/no-I/O unit tests; the exhaustive characterization net for the 4 large functions before their move.
 
-**Out (explicitly):** the writing-style cluster (`analyze_writing_style`, `compare_writing_styles`, `update_writing_profile`, `get_writing_profile`); the PII cluster (`sanitize_pii_for_ai`, `log_pii_sanitization`, `preprocess_for_ai_detection`); the pure grading helpers (`_parse_expected_answers`, `_distribute_points`, `_is_math_subject`, `build_section_rubric`, `_try_parse_json_fallback`); all AI-calling orchestration (`grade_with_ensemble`, `grade_with_parallel_detection`, `grade_per_question`, `generate_feedback`, `grade_multipass`, `grade_assignment`, `detect_ai_plagiarism`, `_translate_feedback`); the file-reading I/O functions (`read_docx_file`, `read_docx_file_structured`, `read_image_file`, `read_assignment_file`, `load_roster`, `build_roster_from_periods`, `parse_filename`); the output/email/export functions; any behavior change; redoing the already-extracted service modules. These are candidates for later slices.
+**Out (explicitly):** `extract_from_tables` and `extract_from_graider_text` (stay per §3, recorded above: I/O-coupled via `read_docx_file_structured`, moving them would create an import cycle); the writing-style cluster (`analyze_writing_style`, `compare_writing_styles`, `update_writing_profile`, `get_writing_profile`); the PII cluster (`sanitize_pii_for_ai`, `log_pii_sanitization`, `preprocess_for_ai_detection`); the pure grading helpers (`_parse_expected_answers`, `_distribute_points`, `_is_math_subject`, `build_section_rubric`, `_try_parse_json_fallback`); all AI-calling orchestration (`grade_with_ensemble`, `grade_with_parallel_detection`, `grade_per_question`, `generate_feedback`, `grade_multipass`, `grade_assignment`, `detect_ai_plagiarism`, `_translate_feedback`); the file-reading I/O functions (`read_docx_file`, `read_docx_file_structured`, `read_image_file`, `read_assignment_file`, `load_roster`, `build_roster_from_periods`, `parse_filename`); the output/email/export functions; any behavior change; redoing the already-extracted service modules. These are candidates for later slices.
 
 ## 9. Risks and handling
 
