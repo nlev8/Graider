@@ -275,7 +275,7 @@ def create_box_plot(
     fig, ax = plt.subplots(figsize=(10, 4))
 
     if not blank and data:
-        bp = ax.boxplot(data, patch_artist=True, labels=labels or [f'Set {i+1}' for i in range(len(data))])
+        bp = ax.boxplot(data, patch_artist=True, tick_labels=labels or [f'Set {i+1}' for i in range(len(data))])
 
         # Color the boxes
         colors = plt.cm.Pastel1(np.linspace(0, 1, len(data)))
