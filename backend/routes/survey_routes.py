@@ -4,7 +4,7 @@ Teachers create a survey link, parents click it and rate 4-5 questions.
 Responses stored in published_assessments with content_type="survey".
 """
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, make_response
 from backend.supabase_client_scoped import get_request_supabase as get_supabase
 from backend.utils.auth_decorators import require_teacher
@@ -363,7 +363,7 @@ def submit_survey(code):
         return jsonify({'error': 'Not a survey'}), 400
 
     response_data = request.json or {}
-    response_data['submitted_at'] = datetime.utcnow().isoformat()
+    response_data['submitted_at'] = datetime.now(timezone.utc).isoformat()
 
     responses = assessment.get('responses', [])
     responses.append(response_data)
@@ -372,7 +372,7 @@ def submit_survey(code):
     db.table('published_assessments').update({
         'assessment': assessment,
         'submission_count': len(responses),
-        'updated_at': datetime.utcnow().isoformat(),
+        'updated_at': datetime.now(timezone.utc).isoformat(),
     }).eq('id', record['id']).execute()
 
     return jsonify({'success': True})
