@@ -54,6 +54,11 @@ def upgrade() -> None:
             op.execute(stmt)
 
 
+# destructive: downgrade() only — DROP INDEX / DROP COLUMN reverses this
+# purely additive migration. No existing-row data is lost: dedup_key was
+# forward-only (NULL for all legacy rows), so dropping it discards only
+# the new dedup keys written after this migration. upgrade() is
+# non-destructive (ADD COLUMN IF NOT EXISTS + CREATE UNIQUE INDEX).
 def downgrade() -> None:
     with op.get_context().autocommit_block():
         for stmt in _STATEMENTS_DOWN:
