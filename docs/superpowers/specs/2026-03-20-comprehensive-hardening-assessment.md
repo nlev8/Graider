@@ -219,3 +219,24 @@ Tier 1 of the dimension roadmap, executed from the 3-model reconciled, user-appr
 **Reconciled effect:** Data Integrity moves from the reconciled **7 → ~9** (the dedup race is closed forward-only and the constraint is reproducible + CI-asserted; 2 residual timestamps fixed). No multi-model re-score was run, by design: unlike Clever, this fix is mechanically CI-proven, not a judgement call. Overall scorecard nudges from **7.8 → ~7.9**. The biggest remaining lever is unchanged (Code Quality / Architecture decomposition). Scope held: full Alembic rebaseline and historical dup cleanup were deliberately out.
 
 **One honest note:** CI surfaced that migration `0002` needed the project's `# destructive:` acknowledgment (the `DROP INDEX`/`DROP COLUMN` in `downgrade()`, flagged by `test_alembic_destructive_ops.py`). Fixed in the same branch with an accurate justification (destructive ops are downgrade-only; no existing-row data loss since `dedup_key` was forward-only). Same class of project-meta-convention catch as the SIS-pin retracks earlier this sprint.
+
+---
+
+# 2026-05-17 Tier 2 Slice 1: planner_routes.py service extraction shipped (PR #406 / #407 / #408 / #409)
+
+The largest backend route file in the codebase was decomposed across four merged PRs. `backend/routes/planner_routes.py` went from 6,050 to 4,598 LOC (1,452 lines moved out). The logic moved into three single-responsibility, Flask-free service modules: `backend/services/planner_standards.py` (243 LOC), `backend/services/planner_export.py` (1,095 LOC), and `backend/services/planner_prompts.py` (172 LOC). Each module ships with unit tests that import and run with no Flask app or test client present, proving the coupling was severed rather than relocated.
+
+**PR sequence:** PR1 (#406, `planner_standards`), PR2 (#407, `planner_export`), PR3 (#409, `planner_prompts`), plus #408 (export characterization broadening + pre-existing bug fix, described below).
+
+**Coupling-reduction rule (plan §3) held.** Two functions were correctly left behind in `planner_routes.py` rather than force-relocated:
+
+- `_get_openai_context` (planner_routes.py:123) reads Flask `g` (`getattr(g, 'user_id', 'local-dev')` at line 131). Parameterizing it cleanly would have required updating every call site in the route handlers; a verbatim move would have carried the Flask dependency into the new service, defeating the purpose.
+- `_save_grading_config_for_export` (planner_routes.py:1820) contains an inner `from flask import g` at line 1941 for a best-effort Supabase save path. Same constraint: the Flask dependency is load-bearing inside the function body rather than only in the signature.
+
+Both are recorded in the PR descriptions per the plan's §3 convention.
+
+**PR #408 and the unit_circle bug.** Broadening the export characterization test net to cover all visual question types surfaced a genuine pre-existing production bug: `unit_circle` questions passed a CSS `rgba(...)` string as a matplotlib color argument, which raised a `ValueError`. The function-wide `except` block swallowed it silently, so no visual was rendered in either the student copy or the answer key for HS trig and precalc assignments. This had been invisible because no test covered that branch. The fix was implemented under full TDD (RED confirmed, then GREEN), and the 28-branch characterization net now pins every visual `q_type` so no branch can silently regress again. This directly satisfies the "works for all subjects and grades / nothing coded in error" requirement from the slice spec.
+
+**Reconciled dimension effect.** Code Quality and Architecture each receive a modest nudge upward. The 3-model re-score from 2026-05-16 named Code Quality / Architecture concentrated complexity as the unanimous biggest remaining lever, with `planner_routes.py` cited as a primary example. This is the first delivery against that lever: the largest route file now has a tested, Flask-free service layer beneath it. No multi-model re-score was run, by design; the change is mechanically test-guarded (verbatim moves with characterization and unit tests proving zero behavior change), consistent with how the Data Integrity Tier 1 closeout was handled. The overall stays at approximately 7.9 with Code Quality and Architecture trending up.
+
+**One honest note:** The original PR3 test called `_build_assignment_prompt` with `assignment_type="assignment"`, which returns `None` by documented design (that type is not implemented). The test passed a no-op smoke assertion without actually exercising real behavior. Caught during review, corrected test-only to `assignment_type="essay"` with assertions pinning the real config interpolation. Production code was byte-identical throughout. Same class of self-correction as the migration `# destructive:` and SIS-pin catches earlier in this sprint.
