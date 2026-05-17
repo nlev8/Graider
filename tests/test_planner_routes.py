@@ -156,7 +156,9 @@ class TestBuildPeriodDifferentiationBlock:
 @pytest.fixture
 def standards_dir(tmp_path, monkeypatch):
     """Create a temporary standards data directory and patch DATA_DIR."""
-    import backend.routes.planner_routes as pr
+    # Tier 2 PR1: standards logic moved to backend.services.planner_standards;
+    # patch the constant/cache where the logic now reads them.
+    import backend.services.planner_standards as pr
     monkeypatch.setattr(pr, 'DATA_DIR', tmp_path)
     # Reset the cached standards map so tests use the temp directory
     pr._standards_map_cache = None
@@ -313,7 +315,7 @@ class TestGetStandardsRoute:
 
     def test_valid_subject_returns_standards(self, client, tmp_path, monkeypatch):
         """POST with valid subject returns standards array."""
-        import backend.routes.planner_routes as pr
+        import backend.services.planner_standards as pr
         monkeypatch.setattr(pr, 'DATA_DIR', tmp_path)
 
         data = {
@@ -334,7 +336,7 @@ class TestGetStandardsRoute:
 
     def test_nonexistent_subject_returns_empty(self, client, tmp_path, monkeypatch):
         """Non-existent subject returns empty standards list."""
-        import backend.routes.planner_routes as pr
+        import backend.services.planner_standards as pr
         monkeypatch.setattr(pr, 'DATA_DIR', tmp_path)
 
         resp = client.post('/api/get-standards', json={
@@ -346,7 +348,7 @@ class TestGetStandardsRoute:
 
     def test_response_includes_grade_and_subject(self, client, tmp_path, monkeypatch):
         """Response includes grade and subject fields."""
-        import backend.routes.planner_routes as pr
+        import backend.services.planner_standards as pr
         monkeypatch.setattr(pr, 'DATA_DIR', tmp_path)
 
         resp = client.post('/api/get-standards', json={
@@ -358,7 +360,7 @@ class TestGetStandardsRoute:
 
     def test_default_values_used_when_fields_missing(self, client, tmp_path, monkeypatch):
         """Default values are used when request fields are missing."""
-        import backend.routes.planner_routes as pr
+        import backend.services.planner_standards as pr
         monkeypatch.setattr(pr, 'DATA_DIR', tmp_path)
 
         # Send empty JSON - should use defaults: state=FL, grade=7, subject=Civics

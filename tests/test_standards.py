@@ -5,7 +5,9 @@ import pytest
 @pytest.fixture(autouse=True)
 def reset_standards_cache():
     """Reset the module-level standards map cache between tests."""
-    import backend.routes.planner_routes as pr
+    # Tier 2 PR1: standards logic moved to backend.services.planner_standards;
+    # the cache now lives there, so reset it on the service module.
+    import backend.services.planner_standards as pr
     pr._standards_map_cache = None
     yield
     pr._standards_map_cache = None
