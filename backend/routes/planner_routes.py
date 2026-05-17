@@ -1622,6 +1622,14 @@ def export_lesson_plan():
     data = request.json
     plan = data.get('plan', data)
 
+    if not isinstance(plan, dict) or not any(
+        plan.get(k) for k in (
+            'overview', 'essential_questions', 'days',
+            'unit_assessment', 'resources', 'sections',
+        )
+    ):
+        return jsonify({"error": "Nothing to export: the lesson plan has no content."}), 400
+
     try:
         from docx import Document
         from docx.shared import Pt, Inches
@@ -1956,6 +1964,10 @@ def export_generated_assignment():
     """Export a generated assignment to PDF or DOCX (with Graider tables) format."""
     data = request.json
     assignment = data.get('assignment', {})
+
+    if not isinstance(assignment, dict) or not assignment.get('sections'):
+        return jsonify({"error": "Nothing to export: the assignment has no questions."}), 400
+
     format_type = data.get('format', 'pdf')  # Default to PDF now
     include_answers = data.get('include_answers', False)
 
