@@ -203,3 +203,19 @@ All other 9 dimensions: **unanimously unchanged** (only Clever code + docs merge
 - `test_sis_alerting.py` green — 3 clever_routes pins retracked for the C1 line-shift; `capture_exception` calls intact (no observability regression).
 
 **Clever Compliance is now a genuinely verified 10/10.** Other 9 dimensions: unanimously unchanged (only Clever code merged 71e66de→934e535). The biggest remaining lever is unchanged: Code Quality / Architecture concentrated complexity (multi-week decomposition) — no comparably small path to 10 elsewhere. **The Clever→10 plan is fully CLOSED.**
+
+---
+
+# 2026-05-16 Data Integrity Tier 1 — shipped (PR #402, `6a231db`)
+
+Tier 1 of the dimension roadmap, executed from the 3-model reconciled, user-approved forward-only plan (`docs/superpowers/plans/2026-05-16-data-integrity.md`, now CLOSED). TDD, 6 tasks, all merged.
+
+**What shipped:**
+- Submission dedup is now a provable, concurrency-safe, forward-only DB guarantee. Nullable `dedup_key` on `submissions` + `student_submissions` with a partial `UNIQUE … WHERE dedup_key IS NOT NULL` index (Alembic `0002`, reversible). Legacy rows stay NULL, so the migration cannot fail on history and rewrites nothing.
+- Join-code submit sets the key only when `allow_multiple_attempts` is false (matches the existing case-insensitive pre-check). Class submit keys it by `student_id|content_id|attempt_number` (multi-attempt stays intentional). The racy TOCTOU pre-checks and the previously-dead `23505` catches now have a real constraint behind them.
+- Migrations Smoke now applies the base schema before `alembic upgrade head` and asserts the two dedup indexes exist. This both closes the provability gap and fixes that the gate was previously hollow (it only seeded auth stubs, so forward migrations had no tables).
+- The last 2 naive `datetime.utcnow()` calls (`survey_routes.py`) are tz-aware. Repo-wide non-test `utcnow()` count is now 0.
+
+**Reconciled effect:** Data Integrity moves from the reconciled **7 → ~9** (the dedup race is closed forward-only and the constraint is reproducible + CI-asserted; 2 residual timestamps fixed). No multi-model re-score was run, by design: unlike Clever, this fix is mechanically CI-proven, not a judgement call. Overall scorecard nudges from **7.8 → ~7.9**. The biggest remaining lever is unchanged (Code Quality / Architecture decomposition). Scope held: full Alembic rebaseline and historical dup cleanup were deliberately out.
+
+**One honest note:** CI surfaced that migration `0002` needed the project's `# destructive:` acknowledgment (the `DROP INDEX`/`DROP COLUMN` in `downgrade()`, flagged by `test_alembic_destructive_ops.py`). Fixed in the same branch with an accurate justification (destructive ops are downgrade-only; no existing-row data loss since `dedup_key` was forward-only). Same class of project-meta-convention catch as the SIS-pin retracks earlier this sprint.

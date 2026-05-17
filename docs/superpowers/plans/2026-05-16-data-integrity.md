@@ -1,5 +1,7 @@
 # Data Integrity → ~9 — Forward-Only Submission Dedup + Temporal Hardening — Implementation Plan
 
+> **STATUS: ✅ CLOSED 2026-05-16 — shipped in PR #402 (`6a231db`).** All 6 tasks executed TDD inline (coupled DB-migration work; the subagent-driven skill's own diagram routes coupled tasks to manual execution). One CI-surfaced fix landed in the same branch: migration 0002 needed the project's `# destructive:` acknowledgment (caught by `test_alembic_destructive_ops.py`, the same class of meta-convention as the SIS pins). Migrations Smoke now applies base schema + asserts the two dedup indexes (the provability gate). Local 1092 tests / 0 failed; all 9 required checks green. Verification re-score deliberately NOT run — the fix is mechanically CI-proven, not a multi-model judgement call like Clever.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make submission dedup a provable, concurrency-safe, forward-only DB guarantee; make CI prove it; fix the 2 remaining naive timestamps.
@@ -455,10 +457,10 @@ git commit -m "feat(class-submit): forward-only attempt-scoped dedup_key"
 
 ### Task 6: Full regression + PR
 
-- [ ] **Step 1:** `source venv/bin/activate && python -m pytest tests/ -q -k "submission or dedup or survey or schema_tightening or migration_applies or sis or clever" 2>&1 | tail -3` → 0 failed.
-- [ ] **Step 2:** `ruff check backend/` → All checks passed.
-- [ ] **Step 3:** Open PR `feature/data-integrity-tier1`; the 9 required checks (incl. Migrations Smoke now asserting the indexes) must be green. Squash-merge.
-- [ ] **Step 4:** After merge, append a dated "Data Integrity Tier 1 shipped" note to `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` and STATUS-stamp this plan CLOSED. (A verification re-score is optional — Data Integrity 7→~9 is bounded and CI-proven; not a multi-model gate like Clever was.)
+- [x] **Step 1:** regression green — 1092 passed / 0 failed (broader slice than specified).
+- [x] **Step 2:** `ruff check backend/` → All checks passed.
+- [x] **Step 3:** PR #402 opened; 9 required checks green (incl. stricter Migrations Smoke + Backend Tests after the `# destructive:` fix); squash-merged `6a231db`.
+- [x] **Step 4:** assessment doc dated note appended + this plan STATUS-stamped CLOSED. Verification re-score not run (mechanically CI-proven, by design).
 
 ---
 
