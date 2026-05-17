@@ -28,6 +28,9 @@
 25. [Tips for Best Results](#tips-for-best-results)
 26. [Keyboard Shortcuts](#keyboard-shortcuts)
 27. [Support](#support)
+28. [SSO Login and Roster Sync](#sso-login-and-roster-sync)
+29. [District and School Admin](#district-and-school-admin)
+30. [Parent Surveys](#parent-surveys)
 
 ---
 
@@ -2420,4 +2423,105 @@ AI grading now calibrates to each teacher's corrections over time.
 - **Sitemap Cleanup**: Only `graider.live` URLs remain — removed `app.graider.live` entries since the app is behind auth and shouldn't be indexed.
 - **`www` → `graider.live` 301**: Added in Vercel domain settings to fix the "duplicate without canonical" issue Google Search Console flagged.
 
-*Last updated: April 10, 2026*
+---
+
+## SSO Login and Roster Sync
+
+Graider supports single sign-on and automatic class rosters, so you do not have to upload CSV files by hand.
+
+### Signing in with Clever or ClassLink
+
+1. On the login screen, click **Sign in with Clever** or **Sign in with ClassLink**.
+2. Authorize Graider in your district's sign-on window.
+3. You land in Graider already linked to your district account.
+
+Students sign in the same way. If a student is enrolled in more than one of your classes, Graider asks them to pick which class to open before they start. This stops a student from landing in the wrong class.
+
+### Automatic roster sync
+
+Once your district is connected, Graider pulls your classes and students for you.
+
+- **On login**: your roster loads when you sign in through Clever or ClassLink.
+- **Manual sync**: open **Settings**, find the roster area, and click **Sync Roster** to refresh on demand.
+- **Nightly sync**: Graider also refreshes rosters automatically on weekday mornings, so new or dropped students stay current with no action from you.
+
+### OneRoster and LTI
+
+Districts on a OneRoster-compliant SIS connect through the district setup page (see the next section). After that, the roster syncs the same way as Clever and ClassLink.
+
+If your school launches Graider from an LMS using LTI 1.3, you start Graider from inside the LMS and grades pass back to the LMS gradebook. There is no separate export step.
+
+### Accommodations from your SIS
+
+When your roster syncs from Clever, ClassLink, or OneRoster, any IEP, 504, or ELL flags on a student come with it. Graider applies those accommodations to grading on its own, so you do not re-enter them. You can review and adjust them in **Settings** under IEP/504 Accommodations.
+
+---
+
+## District and School Admin
+
+Graider has two admin roles for staff who manage more than their own classroom.
+
+### District Admin
+
+A district administrator sets up the district connection once, and every teacher in the district benefits.
+
+1. Go to the district setup page at `/district`.
+2. Sign in with the district admin password. The first person to set it up creates that password.
+3. Enter the district's SIS connection settings (Clever, ClassLink, or OneRoster) and, if the district provides them, the district AI keys.
+4. Click **Test Connection** to confirm the settings work, then save.
+
+After this, teachers in the district get automatic rosters and SSO without configuring anything themselves.
+
+### School Admin (Principal)
+
+A principal or assistant principal can see a school-wide view without touching any teacher's individual grading.
+
+1. Ask your district admin for a school admin invite code.
+2. In Graider, open the admin area and click **Claim Admin Role**.
+3. Enter the invite code.
+
+Once claimed, the school admin gets a school overview with aggregate stats. Each teacher has a summary you can open for more detail, and there is a recent-activity view across the school's teachers. A school admin sees summaries and trends only. They cannot see or change individual student feedback.
+
+---
+
+## Parent Surveys
+
+You can collect structured feedback from parents with a short survey.
+
+### Creating a survey
+
+1. Open the survey tool and click **Create Survey**.
+2. Add your questions. Parents rate each one.
+3. Save the survey to get a share link.
+
+### Sharing and collecting
+
+Send the link to parents by email or through your normal class communication. Parents open the link, answer the questions, and submit. Parents do not need a login.
+
+### Viewing results
+
+Open the survey from your survey list to see responses and a summary of the ratings. You can keep a survey open for a window of time and review results as they come in.
+
+---
+
+## Recent Updates (May 2026)
+
+### Clever Multi-Enrollment Sign-In
+
+A student who exists in more than one teacher's roster, or in more than one of your classes, is now asked to choose which class to open when they sign in with Clever. Before this change the student could land in the wrong class. Graider handles it for you with no setup.
+
+### Per-District Clever Token
+
+Multi-district installs can sync each district's roster with its own Clever token, including the nightly automatic sync. Single-district setups are not affected.
+
+### Submission Integrity Hardened
+
+The database now enforces duplicate-submission protection. If a student submits the same assessment twice, including a fast double-click, Graider rejects the second attempt and shows a clear "you have already submitted" message. This does not affect assessments that allow multiple attempts.
+
+### Timestamp Consistency
+
+Survey timestamps are now timezone-aware, which keeps submission and update times consistent across regions.
+
+---
+
+*Last updated: May 16, 2026*
