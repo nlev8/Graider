@@ -21,6 +21,7 @@ from flask import Blueprint, request, jsonify, Response, stream_with_context, g
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.extensions import limiter
+from backend.paths import graider_export_dir
 
 try:
     import anthropic
@@ -668,7 +669,7 @@ def _load_analytics_snapshot():
     from collections import defaultdict
 
     # Locate master_grades.csv
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    output_folder = graider_export_dir("Results")
     settings_file = os.path.expanduser("~/.graider_global_settings.json")
     if os.path.exists(settings_file):
         try:

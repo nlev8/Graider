@@ -31,6 +31,7 @@ load_dotenv(os.path.join(_root_dir, '.env'), override=True)
 
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.paths import graider_export_dir
 import sentry_sdk
 
 # Import student history for progress tracking
@@ -648,7 +649,7 @@ def grade_individual():
 def _remove_from_master_csv(result):
     """Remove a deleted result from master_grades.csv so the Assistant sees fresh data."""
     import re
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    output_folder = graider_export_dir("Results")
     master_file = os.path.join(output_folder, "master_grades.csv")
     if not os.path.exists(master_file):
         return
@@ -699,7 +700,7 @@ def _remove_from_master_csv(result):
 def _sync_approval_to_master_csv(result, approval_status):
     """Update the Approved column in master_grades.csv for a specific result."""
     import re
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    output_folder = graider_export_dir("Results")
     master_file = os.path.join(output_folder, "master_grades.csv")
     if not os.path.exists(master_file):
         return

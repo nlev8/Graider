@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify
 from backend.services.assistant_tools import _normalize_assignment_name
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+from backend.paths import graider_export_dir
 import sentry_sdk
 
 analytics_bp = Blueprint('analytics', __name__)
@@ -37,7 +38,7 @@ def _find_master_grades():
     # Check common locations
     candidates = [
         os.path.expanduser("~/.graider_data/output/master_grades.csv"),
-        os.path.expanduser("~/Downloads/Graider/Results/master_grades.csv"),
+        graider_export_dir("Results", "master_grades.csv"),
     ]
     for path in candidates:
         if os.path.exists(path):

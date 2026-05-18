@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.retry import with_retry
+from backend.paths import graider_export_dir
 import sentry_sdk
 
 _logger = logging.getLogger(__name__)
@@ -307,7 +308,7 @@ def export_assignment():
                 })
     table_structured = assignment.get('tableStructured', False)
 
-    output_folder = os.path.expanduser("~/Downloads/Graider/Assignments")
+    output_folder = graider_export_dir("Assignments")
     os.makedirs(output_folder, exist_ok=True)
 
     safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
@@ -549,7 +550,7 @@ def download_document(filename):
     filename = secure_filename(filename)
     if not filename:
         return jsonify({"error": "Invalid filename"}), 400
-    docs_dir = os.path.expanduser("~/Downloads/Graider/Documents")
+    docs_dir = graider_export_dir("Documents")
     if not os.path.exists(os.path.join(docs_dir, filename)):
         return jsonify({"error": "Document not found"}), 404
     return send_from_directory(docs_dir, filename, as_attachment=True)
@@ -563,7 +564,7 @@ def download_worksheet(filename):
     filename = secure_filename(filename)
     if not filename:
         return jsonify({"error": "Invalid filename"}), 400
-    worksheets_dir = os.path.expanduser("~/Downloads/Graider/Worksheets")
+    worksheets_dir = graider_export_dir("Worksheets")
     if not os.path.exists(os.path.join(worksheets_dir, filename)):
         return jsonify({"error": "Worksheet not found"}), 404
     return send_from_directory(worksheets_dir, filename, as_attachment=True)
@@ -577,7 +578,7 @@ def download_csv(filename):
     filename = secure_filename(filename)
     if not filename:
         return jsonify({"error": "Invalid filename"}), 400
-    csv_dir = os.path.expanduser("~/Downloads/Graider/Exports")
+    csv_dir = graider_export_dir("Exports")
     if not os.path.exists(os.path.join(csv_dir, filename)):
         return jsonify({"error": "CSV not found"}), 404
     return send_from_directory(csv_dir, filename, as_attachment=True)

@@ -19,6 +19,7 @@ from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.utils.audit import audit_log
 from backend.retry import with_retry
+from backend.paths import graider_export_dir
 import sentry_sdk
 
 grading_bp = Blueprint('grading', __name__)
@@ -132,7 +133,7 @@ def clear_results():
     import os
     import json
     results_file = os.path.expanduser("~/.graider_results.json")
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    output_folder = graider_export_dir("Results")
     master_file = os.path.join(output_folder, "master_grades.csv")
 
     if filenames_filter and isinstance(filenames_filter, list):
@@ -249,7 +250,7 @@ def _match_assignment_in_csv(csv_assign, target_assign):
 
 def _sync_result_to_master_csv(result):
     """Sync an updated result back to master_grades.csv so the Assistant sees fresh data."""
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    output_folder = graider_export_dir("Results")
     master_file = os.path.join(output_folder, "master_grades.csv")
     if not os.path.exists(master_file):
         return

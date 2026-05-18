@@ -481,12 +481,12 @@ class TestSyncResultToMasterCsv:
         """When master_grades.csv doesn't exist, function silently returns."""
         from backend.routes.grading_routes import _sync_result_to_master_csv
 
-        # Redirect Downloads/Graider/Results to tmp_path
-        with patch("os.path.expanduser", return_value=str(tmp_path)):
-            # No master file written → function should no-op without error
-            _sync_result_to_master_csv({
-                "student_id": "1", "assignment": "x", "score": 50,
-            })
+        # Redirect export base to tmp_path so Results dir has no master file
+        monkeypatch.setenv("GRAIDER_EXPORT_DIR", str(tmp_path))
+        # No master file written → function should no-op without error
+        _sync_result_to_master_csv({
+            "student_id": "1", "assignment": "x", "score": 50,
+        })
 
     def test_missing_student_id_or_assignment_no_op(self):
         from backend.routes.grading_routes import _sync_result_to_master_csv
@@ -499,7 +499,7 @@ class TestSyncResultToMasterCsv:
         import csv
         from backend.routes.grading_routes import _sync_result_to_master_csv
 
-        results_dir = tmp_path / "Downloads" / "Graider" / "Results"
+        results_dir = tmp_path / "Results"
         results_dir.mkdir(parents=True)
         master_file = results_dir / "master_grades.csv"
 
@@ -518,18 +518,18 @@ class TestSyncResultToMasterCsv:
                 "Feedback": "old",
             })
 
-        with patch("os.path.expanduser", return_value=str(tmp_path / "Downloads" / "Graider" / "Results")):
-            _sync_result_to_master_csv({
-                "student_id": "123",
-                "assignment": "Quiz",
-                "score": 95,
-                "letter_grade": "A",
-                "feedback": "great work!",
-                "breakdown": {
-                    "content_accuracy": 9, "completeness": 10,
-                    "writing_quality": 8, "effort_engagement": 10,
-                },
-            })
+        monkeypatch.setenv("GRAIDER_EXPORT_DIR", str(tmp_path))
+        _sync_result_to_master_csv({
+            "student_id": "123",
+            "assignment": "Quiz",
+            "score": 95,
+            "letter_grade": "A",
+            "feedback": "great work!",
+            "breakdown": {
+                "content_accuracy": 9, "completeness": 10,
+                "writing_quality": 8, "effort_engagement": 10,
+            },
+        })
 
         # Re-read and verify update
         with open(master_file, 'r', newline='', encoding='utf-8') as f:

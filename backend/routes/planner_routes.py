@@ -17,6 +17,7 @@ from backend.extensions import limiter
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 from backend.retry import with_retry
+from backend.paths import graider_export_dir
 
 ALLOWED_DOC_EXTENSIONS = {'.docx', '.pdf', '.txt', '.doc', '.rtf', '.png', '.jpg', '.jpeg'}
 
@@ -1809,7 +1810,7 @@ def export_lesson_plan():
 
         # Save file
         filename = f"Lesson_Plan_{int(time.time())}.docx"
-        output_folder = os.path.expanduser("~/Downloads/Graider")
+        output_folder = graider_export_dir()
         os.makedirs(output_folder, exist_ok=True)
         filepath = os.path.join(output_folder, filename)
         doc.save(filepath)
@@ -1989,7 +1990,7 @@ def export_generated_assignment():
     if format_type == 'docx' and not include_answers:
         try:
             safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
-            output_folder = os.path.expanduser("~/Downloads/Graider/Assignments")
+            output_folder = graider_export_dir("Assignments")
             os.makedirs(output_folder, exist_ok=True)
             filepath = _export_assignment_docx_graider(assignment, output_folder, safe_title)
             _save_grading_config_for_export(assignment)
@@ -2082,7 +2083,7 @@ def export_generated_assignment():
         safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
         suffix = "_ANSWER_KEY" if include_answers else "_Student"
         filename = f"{safe_title}{suffix}.pdf"
-        output_folder = os.path.expanduser("~/Downloads/Graider/Assignments")
+        output_folder = graider_export_dir("Assignments")
         os.makedirs(output_folder, exist_ok=True)
         filepath = os.path.join(output_folder, filename)
 

@@ -22,6 +22,7 @@ from backend.services.assistant_tools import (
     ASSIGNMENTS_DIR,
 )
 from backend.utils.compliance import require_teacher_id
+from backend.paths import graider_export_dir
 
 # Import storage abstraction
 try:
@@ -841,7 +842,7 @@ def scan_submissions_folder(top_n=None, assignment_filter=None,
         gs = _load_settings(teacher_id)
         folder = gs.get('config', {}).get('assignments_folder', '')
     if not folder:
-        folder = os.path.expanduser("~/Downloads/Graider/Assignments")
+        folder = graider_export_dir("Assignments")
     if not os.path.isdir(folder):
         return {"error": f"Assignments folder not found: {folder}. Configure it in Settings > General."}
 

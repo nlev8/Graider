@@ -28,6 +28,7 @@ from backend.services.assistant_tools import (
 )
 from backend.services.assistant_tools_grading import get_missing_assignments
 from backend.utils.compliance import audit_tool_action, require_teacher_id
+from backend.paths import graider_export_dir
 from backend.utils.pending_send import (
     pending_send_path as _pending_send_path,
     assert_pending_belongs_to as _assert_pending_belongs_to,
@@ -1607,7 +1608,7 @@ def generate_csv_tool(filename, headers, rows, teacher_id='local-dev'):
     require_teacher_id(teacher_id)
     from urllib.parse import quote
 
-    EXPORT_DIR = os.path.expanduser("~/Downloads/Graider/Exports")
+    EXPORT_DIR = graider_export_dir("Exports")
     os.makedirs(EXPORT_DIR, exist_ok=True)
 
     # Sanitize filename
