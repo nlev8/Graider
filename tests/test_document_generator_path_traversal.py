@@ -22,8 +22,8 @@ import pytest
 def isolated_dirs(tmp_path, monkeypatch):
     import backend.services.document_generator as dg
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("GRAIDER_EXPORT_DIR", str(tmp_path / "Downloads" / "Graider"))
     monkeypatch.setattr(dg, "STYLES_DIR", str(tmp_path / "doc_styles"))
-    monkeypatch.setattr(dg, "DOCUMENTS_DIR", str(tmp_path / "documents"))
     monkeypatch.setattr(dg, "ASSIGNMENTS_DIR", str(tmp_path / "assignments"))
     return tmp_path, dg
 

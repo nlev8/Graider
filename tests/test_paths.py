@@ -41,3 +41,14 @@ def test_creates_no_directory(monkeypatch, tmp_path):
 def test_empty_env_var_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("GRAIDER_EXPORT_DIR", "")
     assert graider_export_dir() == os.path.expanduser("~/Downloads/Graider")
+
+
+def test_document_and_worksheet_dirs_byte_identical_default(monkeypatch):
+    monkeypatch.delenv("GRAIDER_EXPORT_DIR", raising=False)
+    base = os.path.expanduser("~/Downloads/Graider")
+    assert graider_export_dir("Documents") == os.path.join(base, "Documents")
+    assert graider_export_dir("Worksheets") == os.path.join(base, "Worksheets")
+    import backend.services.document_generator as dg
+    import backend.services.worksheet_generator as wg
+    assert not hasattr(dg, "DOCUMENTS_DIR"), "import-time DOCUMENTS_DIR must be removed"
+    assert not hasattr(wg, "WORKSHEETS_DIR"), "import-time WORKSHEETS_DIR must be removed"

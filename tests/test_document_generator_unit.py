@@ -42,11 +42,10 @@ def isolated_dirs(tmp_path, monkeypatch):
     import backend.services.document_generator as dg
 
     monkeypatch.setenv("HOME", str(tmp_path))
-    documents_dir = str(tmp_path / "Downloads" / "Graider" / "Documents")
+    monkeypatch.setenv("GRAIDER_EXPORT_DIR", str(tmp_path / "Downloads" / "Graider"))
     styles_dir = str(tmp_path / ".graider_data" / "doc_styles")
     assignments_dir = str(tmp_path / ".graider_assignments")
 
-    monkeypatch.setattr(dg, "DOCUMENTS_DIR", documents_dir)
     monkeypatch.setattr(dg, "STYLES_DIR", styles_dir)
     monkeypatch.setattr(dg, "ASSIGNMENTS_DIR", assignments_dir)
 
