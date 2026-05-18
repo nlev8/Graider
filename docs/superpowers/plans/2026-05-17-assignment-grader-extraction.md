@@ -3,6 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move the pure text-parsing/extraction cluster (12 functions plus the `STUDENT_WORK_MARKERS` constant) out of `assignment_grader.py` into a new dependency-closed `backend/services/response_extraction.py`, with zero behavior change, behind an exhaustive characterization net.
+**Status:** CLOSED 2026-05-17. Shipped via PR #414 (spec+plan), #415 (PR1 leaves), #416 (PR2 large + exhaustive net), #<PR3 number assigned at PR-open>. assignment_grader.py 7,444 to 5,345 LOC; new backend/services/response_extraction.py 2,123 LOC. Left behind per §3: extract_from_tables, extract_from_graider_text (call staying read_docx_file_structured). Follow-up: delete dead extract_student_responses_legacy (NameError, 0 callers) in a separate PR.
 
 **Architecture:** Verbatim byte-identical function moves into one network-free, I/O-free service module, mirroring the proven Slice 1 (`planner_routes.py`) pattern and the seven existing `backend/services/` modules carved from this area. A thin `# noqa: F401` re-export shim in `assignment_grader.py` keeps every caller resolving unchanged. Three sequenced PRs: leaf helpers first (proves the harness), then the large functions under an exhaustive characterization net pinned before the move, then shim/caller verification and slice closeout.
 
@@ -37,12 +38,12 @@ Intra-cluster calls (all within this set, so the move is closed): `filter_questi
 
 **Files:** none (read-only).
 
-- [ ] **Step 1: Record current callers**
+- [x] **Step 1: Record current callers**
 
 Run: `git grep -nE "\b(is_question_or_prompt|filter_questions_from_response|_strip_template_lines|strip_emojis|fuzzy_find_marker|extract_fitb_by_template_comparison|parse_numbered_questions|parse_vocab_terms)\b" -- ':!docs' ':!tests'`
 Expected: hits are the definitions in `assignment_grader.py`, internal call sites, and any `from assignment_grader import ...` consumers. Note every consuming file (the shim must keep them working).
 
-- [ ] **Step 2: Confirm boundaries unchanged**
+- [x] **Step 2: Confirm boundaries unchanged**
 
 Run: `grep -nE "^(def|class) " assignment_grader.py | grep -E "is_question_or_prompt|filter_questions_from_response|_strip_template_lines|strip_emojis|fuzzy_find_marker|extract_fitb_by_template_comparison|parse_numbered_questions|parse_vocab_terms"`
 Expected: starts at 179, 360, 430, 530, 550, 628, 728, 829. If any shifted, re-derive the exact body end (next top-level `def`/`class` minus trailing blank lines) before moving.
@@ -52,7 +53,7 @@ Expected: starts at 179, 360, 430, 530, 550, 628, 728, 829. If any shifted, re-d
 **Files:**
 - Test: `tests/test_response_extraction.py` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 from backend.services import response_extraction as rx
@@ -74,7 +75,7 @@ def test_is_question_or_prompt_returns_bool():
     assert isinstance(rx.is_question_or_prompt("What is 2+2?"), bool)
 ```
 
-- [ ] **Step 2: Run, confirm RED**
+- [x] **Step 2: Run, confirm RED**
 
 Run: `source venv/bin/activate && python -m pytest tests/test_response_extraction.py -q`
 Expected: FAIL; `ModuleNotFoundError: No module named 'backend.services.response_extraction'`.
@@ -85,15 +86,15 @@ Expected: FAIL; `ModuleNotFoundError: No module named 'backend.services.response
 - Create: `backend/services/response_extraction.py`
 - Modify: `assignment_grader.py`
 
-- [ ] **Step 1: Create `backend/services/response_extraction.py`**
+- [x] **Step 1: Create `backend/services/response_extraction.py`**
 
 First line: the module docstring exactly `"""Pure student-response text parsing and extraction. No Flask, no network, no file I/O."""`. Then a blank line. Then the stdlib imports the moved bodies actually use (determine by reading the 8 bodies: at minimum `re`; include `difflib`/`string`/others only if a moved body references them; do not add unused imports, do not import from `assignment_grader`). Then the 8 functions pasted byte-identically from `assignment_grader.py` line ranges 179-357, 360-427, 430-527, 530-547, 550-625, 628-725, 728-826, 829-912. Preserve every character, blank line within each function, and the existing two-blank-line separation between functions.
 
-- [ ] **Step 2: Delete the 8 definitions from `assignment_grader.py`**
+- [x] **Step 2: Delete the 8 definitions from `assignment_grader.py`**
 
 Remove exactly lines 179-357, 360-427, 430-527, 530-547, 550-625, 628-725, 728-826, 829-912 (delete from the highest line range downward so earlier ranges do not shift). Leave surrounding two-blank-line spacing between the remaining module-level defs correct.
 
-- [ ] **Step 3: Add the shim re-export to `assignment_grader.py`**
+- [x] **Step 3: Add the shim re-export to `assignment_grader.py`**
 
 Place immediately before the first class/def in the file (`class GradingBreakdown` at original line 39), after the module's top import block. Exact block:
 
@@ -114,7 +115,7 @@ from backend.services.response_extraction import (  # noqa: F401
 )
 ```
 
-- [ ] **Step 4: Verbatim-integrity check**
+- [x] **Step 4: Verbatim-integrity check**
 
 Run:
 ```bash
@@ -122,7 +123,7 @@ git show HEAD:assignment_grader.py | sed -n '179,357p;360,427p;430,527p;530,547p
 ```
 Then extract the same 8 function bodies from `backend/services/response_extraction.py` into `/tmp/leaves_new.txt` and `diff /tmp/leaves_orig.txt /tmp/leaves_new.txt`. Expected: no differences inside any function body (the module docstring/imports/blank-line separators are outside the compared ranges). Any in-body diff means the move was not verbatim; fix to byte-identical.
 
-- [ ] **Step 5: Run unit test → GREEN + regression**
+- [x] **Step 5: Run unit test → GREEN + regression**
 
 Run: `source venv/bin/activate && python -m pytest tests/test_response_extraction.py -q` → PASS.
 Run: `python -m pytest tests/ -q -k "grading or extraction or pipeline or factors or portal or assignment or worksheet" 2>&1 | tail -3` → 0 failed (the 9 existing grading-pipeline test files are the behavior guard).
@@ -134,15 +135,15 @@ Run: `grep -n "assignment_grader" backend/services/response_extraction.py` → e
 **Files:**
 - Test: `tests/test_response_extraction.py` (extend)
 
-- [ ] **Step 1: Add per-leaf characterization tests**
+- [x] **Step 1: Add per-leaf characterization tests**
 
 For each of the 8 leaves, add a test that calls it with a realistic input and pins the ACTUAL observed return value. Probe first with a one-off `python -c` to observe the real output, then assert exactly that (characterization discipline: pin reality, never assume). Cover at least: `parse_numbered_questions` on a 3-question block; `parse_vocab_terms` on a 3-term block; `fuzzy_find_marker` exact-match and near-match; `extract_fitb_by_template_comparison` with one blank; `_strip_template_lines` removing a template line; `filter_questions_from_response` dropping a question line; `is_question_or_prompt` on a question vs an answer; `strip_emojis` on mixed text. No xfail/skip; assertions must be specific (not just `is not None`).
 
-- [ ] **Step 2: Run → PASS**
+- [x] **Step 2: Run → PASS**
 
 Run: `source venv/bin/activate && python -m pytest tests/test_response_extraction.py -q` → all PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/services/response_extraction.py assignment_grader.py tests/test_response_extraction.py
@@ -151,7 +152,7 @@ git commit -m "$(printf 'refactor(grader): extract parsing/extraction leaves to 
 
 ### Task 1.5: Open PR 1
 
-- [ ] Push branch, open PR (verbatim-extraction framing, both review gates), 9 CI checks green, squash-merge, sync main.
+- [x] Push branch, open PR (verbatim-extraction framing, both review gates), 9 CI checks green, squash-merge, sync main.
 
 ---
 
@@ -166,7 +167,7 @@ Intra-cluster calls (all to PR1-moved leaves, now in `response_extraction.py`): 
 **Files:**
 - Test: `tests/test_response_extraction_characterization.py` (create)
 
-- [ ] **Step 1: Build the net against the CURRENT (pre-move) code**
+- [x] **Step 1: Build the net against the CURRENT (pre-move) code**
 
 Import the four functions from their current location: `from assignment_grader import extract_student_responses, extract_student_responses_legacy, format_extracted_for_grading, extract_student_work`. Build a parametrized fixture matrix over the cross-product the spec §6 requires: **extraction_mode** {structured, legacy} × **document shape** {docx-table-derived text, graider-marked text, plain numbered, vocab-term, FITB, summary/written} × **subject/grade spread** {math gr5, ELA gr8, science gr10, social studies gr12}. For each cell, construct a representative literal input string (and `marker_config`/`template_text` where the signature needs them; read each function signature first), call the function, and pin the EXACT returned object with a strict equality assertion. Probe each cell with a one-off `python -c` to capture the real output before writing the assertion (characterization discipline: pin observed reality, never assume; if a cell raises today, pin that it raises; do not "fix" it here). Add a determinism assertion per representative cell (same input twice → equal output). Skeleton:
 
@@ -199,7 +200,7 @@ def test_extraction_deterministic(cid, fn, argskw, expected):
     assert fn(*args, **kw) == fn(*args, **kw)
 ```
 
-- [ ] **Step 2: Run the net against pre-move code → GREEN baseline**
+- [x] **Step 2: Run the net against pre-move code → GREEN baseline**
 
 Run: `source venv/bin/activate && python -m pytest tests/test_response_extraction_characterization.py -q` → all PASS (this is the pinned pre-move contract). Commit this net on the branch before moving anything.
 
@@ -208,7 +209,7 @@ Run: `source venv/bin/activate && python -m pytest tests/test_response_extractio
 **Files:**
 - Test: `tests/test_response_extraction.py` (extend)
 
-- [ ] **Step 1: Add failing import-from-new-location test**
+- [x] **Step 1: Add failing import-from-new-location test**
 
 ```python
 def test_large_fns_importable_from_service():
@@ -222,7 +223,7 @@ def test_large_fns_importable_from_service():
     assert isinstance(STUDENT_WORK_MARKERS, list) and STUDENT_WORK_MARKERS
 ```
 
-- [ ] **Step 2: Run, confirm RED**
+- [x] **Step 2: Run, confirm RED**
 
 Run: `source venv/bin/activate && python -m pytest tests/test_response_extraction.py::test_large_fns_importable_from_service -q`
 Expected: FAIL; ImportError (names not yet in the service module).
@@ -232,20 +233,20 @@ Expected: FAIL; ImportError (names not yet in the service module).
 **Files:**
 - Modify: `backend/services/response_extraction.py`, `assignment_grader.py`
 
-- [ ] **Step 1: Re-confirm boundaries**
+- [x] **Step 1: Re-confirm boundaries**
 
 Run: `grep -nE "^(def |STUDENT_WORK_MARKERS)" assignment_grader.py | grep -E "extract_student_responses|extract_student_responses_legacy|format_extracted_for_grading|extract_student_work|STUDENT_WORK_MARKERS"`
 Expected starts: 915, 1783, 2076, 3656, and `STUDENT_WORK_MARKERS = [` at 2434 (closes at 2492). Re-derive exact ends (next top-level def minus trailing blanks) if shifted.
 
-- [ ] **Step 2: Move into `response_extraction.py`**
+- [x] **Step 2: Move into `response_extraction.py`**
 
 Append, byte-identical: the `STUDENT_WORK_MARKERS = [ ... ]` block (2434-2492), then `extract_student_responses` (915-1780), `extract_student_responses_legacy` (1783-2073), `format_extracted_for_grading` (2076-2197), `extract_student_work` (3656-3704). Add any additional stdlib imports these bodies use that are not already in the module header (read the bodies; no `assignment_grader` import). Delete those exact ranges from `assignment_grader.py` (highest-to-lowest order so ranges do not shift). Extend the existing shim block in `assignment_grader.py` to also re-export `extract_student_responses`, `extract_student_responses_legacy`, `format_extracted_for_grading`, `extract_student_work`, `STUDENT_WORK_MARKERS` (keep the block sorted, all under the one `# noqa: F401` import).
 
-- [ ] **Step 3: Verbatim-integrity check**
+- [x] **Step 3: Verbatim-integrity check**
 
 `git show HEAD:assignment_grader.py | sed -n '2434,2492p;915,1780p;1783,2073p;2076,2197p;3656,3704p' > /tmp/big_orig.txt`; extract the same five blocks from `response_extraction.py` into `/tmp/big_new.txt`; `diff /tmp/big_orig.txt /tmp/big_new.txt` → no in-body differences.
 
-- [ ] **Step 4: Net stays GREEN unchanged + regression**
+- [x] **Step 4: Net stays GREEN unchanged + regression**
 
 Repoint `tests/test_response_extraction_characterization.py`'s import from `from assignment_grader import ...` to `from backend.services.response_extraction import ...` (the ONLY change to that file; every pinned `expected` must still pass byte-identical; that equivalence is the zero-behavior-change proof).
 Run: `source venv/bin/activate && python -m pytest tests/test_response_extraction_characterization.py tests/test_response_extraction.py -q` → all PASS.
@@ -254,7 +255,7 @@ Run: `ruff check backend/services/response_extraction.py assignment_grader.py te
 Run: `grep -n "assignment_grader" backend/services/response_extraction.py` → empty.
 Run: `git grep -nE "from assignment_grader import" -- ':!docs' | grep -E "extract_student_responses|STUDENT_WORK_MARKERS|format_extracted_for_grading"` → every hit resolves via the shim (no broken consumer; `backend/grading/pipeline.py:564` in particular).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/services/response_extraction.py assignment_grader.py tests/test_response_extraction.py tests/test_response_extraction_characterization.py
@@ -263,7 +264,7 @@ git commit -m "$(printf 'refactor(grader): extract large parsing/extraction fns 
 
 ### Task 2.4: Open PR 2
 
-- [ ] Push, open PR (verbatim framing, net-pinned-pre-move evidence, both review gates), 9 CI checks green, squash-merge, sync main.
+- [x] Push, open PR (verbatim framing, net-pinned-pre-move evidence, both review gates), 9 CI checks green, squash-merge, sync main.
 
 ---
 
@@ -271,17 +272,17 @@ git commit -m "$(printf 'refactor(grader): extract large parsing/extraction fns 
 
 **Files:** `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`, `docs/superpowers/plans/2026-05-17-assignment-grader-extraction.md`
 
-- [ ] **Step 1: Verify shim + caller integrity end to end**
+- [x] **Step 1: Verify shim + caller integrity end to end**
 
 Run: `git grep -nE "\b(is_question_or_prompt|filter_questions_from_response|_strip_template_lines|strip_emojis|fuzzy_find_marker|extract_fitb_by_template_comparison|parse_numbered_questions|parse_vocab_terms|extract_student_responses|extract_student_responses_legacy|format_extracted_for_grading|extract_student_work|STUDENT_WORK_MARKERS)\b" -- ':!docs' ':!tests'`
 Confirm: the only definitions live in `backend/services/response_extraction.py`; every other production hit is a call site or the one shim re-export; `extract_from_tables`/`extract_from_graider_text` still defined in `assignment_grader.py` and still call the (re-exported) `extract_student_responses` fine.
 Run: `source venv/bin/activate && python -m pytest tests/ -q -k "grading or extraction or pipeline or factors or portal or assignment or worksheet or response_extraction" 2>&1 | tail -3` → 0 failed. Record `wc -l assignment_grader.py backend/services/response_extraction.py`.
 
-- [ ] **Step 2: Assessment-doc dated note**
+- [x] **Step 2: Assessment-doc dated note**
 
 Append a dated section to `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` (match the existing dated-section house style; no em-dashes; no AI-tell phrasing): Tier 2 Slice 2 shipped (PR numbers, assignment_grader.py LOC before/after, the new module LOC), a Code Quality / Architecture nudge, no multi-model re-score (mechanically test-guarded like Slice 1 / Data Integrity Tier 1), overall stays ~7.9 with Code Quality / Architecture trending up. Record the two functions left behind per §3 (`extract_from_tables`, `extract_from_graider_text`) and the exact reason (call staying I/O `read_docx_file_structured`; moving would create an import cycle).
 
-- [ ] **Step 3: STATUS-stamp this plan CLOSED**
+- [x] **Step 3: STATUS-stamp this plan CLOSED**
 
 Add a `**Status:** CLOSED 2026-05-17; shipped via PR #<n1> (PR1 leaves), #<n2> (PR2 large), #<n3> (closeout). assignment_grader.py <before> → <after> LOC. Left behind per §3: extract_from_tables, extract_from_graider_text (call staying read_docx_file_structured).` line right after the **Goal:** line of this plan. Commit docs; open PR 3; 9 CI checks green; squash-merge; sync main.
 
