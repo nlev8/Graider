@@ -5,7 +5,6 @@ Zero network calls — all data from local fixtures.
 """
 import os
 import json
-import csv
 import shutil
 import tempfile
 import pytest

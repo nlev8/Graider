@@ -558,6 +558,7 @@ python graider_app.py
 - `ANTHROPIC_API_KEY` — Default Anthropic key (fallback)
 - `FLASK_ENV` — Set to "development" for dev mode
 - `REDIS_URL` — Redis for session storage in production
+- `GRAIDER_EXPORT_DIR` — Base directory for generated exports (docx/csv/etc.); defaults to `~/Downloads/Graider`; override to redirect all export output (the test suite sets it to a temp dir for isolation)
 
 ---
 
