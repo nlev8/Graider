@@ -17,9 +17,9 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn, nsdecls
 from docx.oxml import parse_xml
 import sentry_sdk
+from backend.paths import graider_export_dir
 
 
-DOCUMENTS_DIR = os.path.expanduser("~/Downloads/Graider/Documents")
 STYLES_DIR = os.path.expanduser("~/.graider_data/doc_styles")
 
 
@@ -739,13 +739,13 @@ def generate_document(title, content, style_name=None, save_to_builder=False):
     Returns:
         Dict with status, filepath, download_url, and style_used.
     """
-    os.makedirs(DOCUMENTS_DIR, exist_ok=True)
+    os.makedirs(graider_export_dir("Documents"), exist_ok=True)
 
     style = load_style(style_name)
 
     safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
     filename = safe_title + '.docx'
-    filepath = os.path.join(DOCUMENTS_DIR, filename)
+    filepath = os.path.join(graider_export_dir("Documents"), filename)
 
     content_blocks = content or []
     create_document_docx(filepath, title, content_blocks, style)

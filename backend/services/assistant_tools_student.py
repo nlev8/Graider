@@ -24,6 +24,7 @@ from backend.services.assistant_tools import (
     ROSTERS_DIR,
 )
 from backend.utils.compliance import audit_tool_action, require_teacher_id
+from backend.paths import graider_export_dir
 import sentry_sdk
 
 
@@ -547,7 +548,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
     # --- Remove from master_grades.csv ---
     try:
         master_paths = [
-            os.path.expanduser("~/Downloads/Graider/Results/master_grades.csv"),
+            graider_export_dir("Results", "master_grades.csv"),
             os.path.expanduser("~/.graider_data/output/master_grades.csv"),
         ]
         for master_file in master_paths:

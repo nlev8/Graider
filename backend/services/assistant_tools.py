@@ -27,6 +27,8 @@ from collections import defaultdict
 from datetime import datetime
 import sentry_sdk
 
+from backend.paths import graider_export_dir
+
 # Import storage abstraction
 try:
     from backend.storage import load as storage_load, save as storage_save, list_keys as storage_list_keys
@@ -204,7 +206,7 @@ def _get_period_assignments(rows):
 
 def _get_output_folder(teacher_id='local-dev'):
     """Get the configured output folder for grading results."""
-    output_folder = os.path.expanduser("~/Downloads/Graider/Results")
+    output_folder = graider_export_dir("Results")
     settings = _load_settings(teacher_id)
     if settings:
         output_folder = settings.get('output_folder', output_folder)

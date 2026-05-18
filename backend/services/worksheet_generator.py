@@ -22,9 +22,9 @@ from backend.services.document_generator import (
 )
 from backend.services.visualization import add_image_to_docx
 import sentry_sdk
+from backend.paths import graider_export_dir
 
 
-WORKSHEETS_DIR = os.path.expanduser("~/Downloads/Graider/Worksheets")
 ASSIGNMENTS_DIR = os.path.expanduser("~/.graider_assignments")
 
 
@@ -624,7 +624,7 @@ def generate_worksheet(title, worksheet_type, vocab_terms=None, questions=None,
 
     Returns dict with status, filepath, download_url, etc.
     """
-    os.makedirs(WORKSHEETS_DIR, exist_ok=True)
+    os.makedirs(graider_export_dir("Worksheets"), exist_ok=True)
 
     # Load visual style
     style = load_style(style_name)
@@ -632,7 +632,7 @@ def generate_worksheet(title, worksheet_type, vocab_terms=None, questions=None,
     # Match naming convention used by assignment_routes.py (spaces, not underscores)
     safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
     filename = safe_title + '.docx'
-    filepath = os.path.join(WORKSHEETS_DIR, filename)
+    filepath = os.path.join(graider_export_dir("Worksheets"), filename)
 
     vterms = vocab_terms or []
     qs = questions or []

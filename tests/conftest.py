@@ -5,93 +5,28 @@ Zero network calls — all data from local fixtures.
 """
 import os
 import json
-import csv
 import shutil
 import tempfile
-import unittest.mock
 import pytest
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 GRADING_FIXTURES_DIR = os.path.join(FIXTURES_DIR, "grading")
 
-# ---------------------------------------------------------------------------
-# Session-wide redirect: ~/Downloads/Graider output dirs → per-session tmp
-#
-# Many production routes call os.path.expanduser("~/Downloads/Graider...")
-# at request time (inside the handler body, not at import time), so patching
-# os.path.expanduser globally is effective for the whole test suite.
-#
-# IMPORTANT: The project itself lives at ~/Downloads/Graider, so we cannot
-# naively redirect ALL paths under that prefix — that would break venv paths,
-# matplotlib style lookups, etc.  Instead we redirect only the known runtime
-# output subtrees that export handlers write into:
-#   ~/Downloads/Graider                  (root, for Lesson_Plan_*.docx etc.)
-#   ~/Downloads/Graider/Results/
-#   ~/Downloads/Graider/Assignments/
-#   ~/Downloads/Graider/Documents/
-#   ~/Downloads/Graider/Worksheets/
-#   ~/Downloads/Graider/Exports/
-#
-# Paths that go deeper into the project tree (venv/, backend/, tests/, etc.)
-# pass through unchanged.
-#
-# Modules that did `from os.path import expanduser` would bypass this patch.
-# Audit: no export-writer in backend/ uses that form — all call
-# os.path.expanduser(...) through the os.path namespace.
-# ---------------------------------------------------------------------------
-
-_real_downloads_graider = os.path.expanduser("~/Downloads/Graider")
-# Known output subdirectory names that export handlers write into.
-_OUTPUT_SUBDIRS = frozenset(
-    ["Results", "Assignments", "Documents", "Worksheets", "Exports"]
-)
-
-
-def _is_output_path(real: str) -> bool:
-    """Return True iff *real* is a path we should redirect to the test tmp dir.
-
-    Matches the root dir itself, any file sitting directly in the Graider root
-    (e.g. Lesson_Plan_1.docx), and any path whose first component is a known
-    output subdir (Results, Assignments, etc.).
-    """
-    if real == _real_downloads_graider:
-        # Exact match — e.g. os.path.expanduser("~/Downloads/Graider")
-        return True
-    prefix = _real_downloads_graider + os.sep
-    if not real.startswith(prefix):
-        return False
-    rest = real[len(prefix):]
-    parts = rest.split(os.sep)
-    if len(parts) == 1:          # a file sitting directly in the Graider root
-        return True
-    return parts[0] in _OUTPUT_SUBDIRS
-
-
+# Export-dir isolation: backend.paths.graider_export_dir() honors
+# GRAIDER_EXPORT_DIR (call-time). Setting it session-wide before any test
+# body runs guarantees no test writes to a real ~/Downloads/Graider. All
+# production sites were migrated to the resolver, so this single mechanism
+# replaces the prior global os.path.expanduser monkeypatch.
 @pytest.fixture(scope="session", autouse=True)
-def _redirect_downloads_graider():
-    """Redirect all ~/Downloads/Graider output writes to a session temp dir.
-
-    Wraps os.path.expanduser so that any path that resolves into a known
-    ~/Downloads/Graider output subtree (Results, Assignments, Documents,
-    Worksheets, Exports, or the root itself) is transparently rebased under a
-    throwaway temp directory for the entire pytest session.  Every other path
-    (including venv/, backend/, tests/, matplotlib styles, etc.) passes through
-    unchanged.  The temp dir is cleaned up on session teardown.
-    """
-    _orig_expanduser = os.path.expanduser  # captured BEFORE patching
-    tmp = tempfile.mkdtemp(prefix="graider_test_downloads_")
-
-    def _wrapper(path):
-        real = _orig_expanduser(path)
-        if _is_output_path(real):
-            suffix = real[len(_real_downloads_graider):]
-            return tmp + suffix
-        return real
-
-    patcher = unittest.mock.patch("os.path.expanduser", new=_wrapper)
-    patcher.start()
+def _redirect_graider_export_dir():
+    prior = os.environ.get("GRAIDER_EXPORT_DIR")
+    tmp = tempfile.mkdtemp(prefix="graider_test_exports_")
+    os.environ["GRAIDER_EXPORT_DIR"] = tmp
     yield tmp
-    patcher.stop()
+    if prior is None:
+        os.environ.pop("GRAIDER_EXPORT_DIR", None)
+    else:
+        os.environ["GRAIDER_EXPORT_DIR"] = prior
     shutil.rmtree(tmp, ignore_errors=True)
 
 
