@@ -27,7 +27,7 @@ def isolated_dirs(tmp_path, monkeypatch):
     import backend.services.worksheet_generator as wg
 
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("GRAIDER_EXPORT_DIR", str(tmp_path / "Downloads" / "Graider"))
+    monkeypatch.setenv("GRAIDER_EXPORT_DIR", str(tmp_path))
     monkeypatch.setattr(wg, "ASSIGNMENTS_DIR", str(tmp_path / "assignments"))
     return tmp_path, wg
 

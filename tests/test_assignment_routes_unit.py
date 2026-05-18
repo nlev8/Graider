@@ -95,6 +95,10 @@ def patch_dirs(monkeypatch, tmp_path, flask_app):  # noqa: F811
         "backend.routes.assignment_routes.os.path.expanduser",
         fake_expanduser,
     )
+    # graider_export_dir() reads GRAIDER_EXPORT_DIR at call time; override
+    # per-test so exports land in this fixture's downloads dir, not the
+    # session-level isolation dir set by _redirect_graider_export_dir.
+    monkeypatch.setenv("GRAIDER_EXPORT_DIR", str(downloads))
 
     return {
         "ar": ar,
