@@ -3,18 +3,10 @@ Exhaustive characterization net for Slice 2 PR2.
 
 Pinned against PRE-MOVE code from assignment_grader. Every expected value was
 observed by running the function and capturing its output. No value was assumed.
-
-Pre-existing bugs surfaced (DO NOT FIX HERE, pin as-is):
-- extract_student_responses_legacy always raises NameError('response_sections')
-  regardless of input. The function body references `response_sections` which is
-  never defined. Pinned with pytest.raises below.
 """
-
-import pytest
 
 from backend.services.response_extraction import (
     extract_student_responses,
-    extract_student_responses_legacy,
     extract_student_work,
     format_extracted_for_grading,
 )
@@ -429,60 +421,6 @@ class TestExtractStudentResponses:
             "2. The largest ocean is ___Pacific___"
         )
         assert extract_student_responses(doc) == extract_student_responses(doc)
-
-
-# ===========================================================================
-# extract_student_responses_legacy — always raises NameError (pre-existing bug)
-# ===========================================================================
-
-class TestExtractStudentResponsesLegacy:
-    """
-    Pre-existing bug: the function body references `response_sections` which is
-    never defined as a local or global variable. Every call raises NameError.
-    DO NOT fix this here — pin actual observed behavior.
-    """
-
-    def test_plain_text_raises_nameerror(self):
-        with pytest.raises(NameError, match="response_sections"):
-            extract_student_responses_legacy(
-                "1. Why was the Louisiana Purchase important? It doubled the size."
-            )
-
-    def test_ela_gr8_raises_nameerror(self):
-        with pytest.raises(NameError, match="response_sections"):
-            extract_student_responses_legacy(
-                "REFLECTION\nI believe the author was conveying hope.",
-                custom_markers=None,
-            )
-
-    def test_science_gr10_raises_nameerror(self):
-        with pytest.raises(NameError, match="response_sections"):
-            extract_student_responses_legacy(
-                "Photosynthesis: plants convert sunlight to energy.",
-                custom_markers=["Vocabulary"],
-            )
-
-    def test_social_studies_gr12_raises_nameerror(self):
-        with pytest.raises(NameError, match="response_sections"):
-            extract_student_responses_legacy(
-                "The New Deal had lasting economic effects.",
-                custom_markers=None,
-            )
-
-    def test_math_gr5_raises_nameerror(self):
-        with pytest.raises(NameError, match="response_sections"):
-            extract_student_responses_legacy("1. 5 + 3 = 8")
-
-    def test_empty_string_raises_nameerror(self):
-        with pytest.raises(NameError, match="response_sections"):
-            extract_student_responses_legacy("")
-
-    def test_custom_markers_list_raises_nameerror(self):
-        with pytest.raises(NameError, match="response_sections"):
-            extract_student_responses_legacy(
-                "SUMMARY\nSome student text.",
-                custom_markers=["SUMMARY"],
-            )
 
 
 # ===========================================================================

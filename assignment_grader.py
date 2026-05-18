@@ -44,7 +44,6 @@ from backend.services.response_extraction import (  # noqa: F401
     _strip_template_lines as _strip_template_lines,
     extract_fitb_by_template_comparison as extract_fitb_by_template_comparison,
     extract_student_responses as extract_student_responses,
-    extract_student_responses_legacy as extract_student_responses_legacy,
     extract_student_work as extract_student_work,
     filter_questions_from_response as filter_questions_from_response,
     format_extracted_for_grading as format_extracted_for_grading,
