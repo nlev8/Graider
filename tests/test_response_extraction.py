@@ -91,9 +91,17 @@ def test_strip_emojis_mixed_text():
 def test_large_fns_importable_from_service():
     from backend.services.response_extraction import (  # noqa: F401
         extract_student_responses,
-        extract_student_responses_legacy,
         format_extracted_for_grading,
         extract_student_work,
         STUDENT_WORK_MARKERS,
     )
     assert isinstance(STUDENT_WORK_MARKERS, list) and STUDENT_WORK_MARKERS
+
+
+def test_legacy_extractor_is_removed():
+    assert not hasattr(rx, "extract_student_responses_legacy"), (
+        "dead extract_student_responses_legacy must be deleted"
+    )
+    import pytest
+    with pytest.raises(ImportError):
+        from assignment_grader import extract_student_responses_legacy  # noqa: F401
