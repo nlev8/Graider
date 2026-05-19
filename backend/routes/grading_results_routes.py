@@ -11,16 +11,23 @@ full stacked decorator order are byte-identical to the pre-move app-module
 code; the ONLY change is the decorator token ``@app.route`` ->
 ``@grading_results_bp.route``.
 
-Import discipline: this module imports ONLY the symbols the moved bodies
-reference that also resolved in the app module's namespace pre-move
+Import discipline: this module imports every symbol the moved bodies
+reference that pre-move ``backend/app.py`` resolved in its namespace
 (logging, os, csv, datetime, flask, the auth/error decorators, _get_state,
-graider_export_dir, sentry_sdk, limiter). Symbols that were NOT importable in
-the app module pre-move (e.g. save_results, grade_with_parallel_detection,
-audit_log, the student-history helpers) are intentionally NOT imported here
-either, so the deep code paths raise exactly as they did before — preserving
-the verbatim contract the characterization net pins. ``base64`` / ``re`` are
-imported inside the bodies (unchanged) and need no module-level import. This
-module must never import the app module (no cycle).
+graider_export_dir, sentry_sdk, limiter, plus ``audit_log`` and the
+student-history helpers ``add_assignment_to_history`` /
+``build_history_context``). Pre-move ``app.py`` bound ``audit_log`` directly
+(``from backend.utils.audit import audit_log``) and bound the student-history
+helpers via a try/except ImportError fallback; this module replicates that
+resolution exactly (audit_log direct; the two history helpers via the same
+try/except ImportError fallback) so the namespace is equivalent and the move
+introduces no behavior change. ``save_results`` and
+``grade_with_parallel_detection`` are intentionally left unimported because
+pre-move ``app.py`` never bound them either (no import or def site, only
+usage refs), so their pre-existing NameError is faithfully preserved (a
+separate documented follow-up, out of scope for this verbatim move).
+``base64`` / ``re`` are imported inside the bodies (unchanged) and need no
+module-level import. This module must never import the app module (no cycle).
 """
 import csv
 import json
@@ -34,8 +41,14 @@ from flask import Blueprint, g, jsonify, request
 from backend.extensions import limiter
 from backend.grading.state import _get_state
 from backend.paths import graider_export_dir
+from backend.utils.audit import audit_log
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
+
+try:
+    from backend.student_history import add_assignment_to_history, build_history_context
+except ImportError:  # pragma: no cover - fallback mirrors pre-move app.py
+    from student_history import add_assignment_to_history, build_history_context
 
 grading_results_bp = Blueprint('grading_results', __name__)
 _logger = logging.getLogger(__name__)
