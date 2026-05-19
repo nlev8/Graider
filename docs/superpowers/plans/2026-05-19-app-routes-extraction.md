@@ -4,6 +4,8 @@
 
 **Goal:** Move the 16 domain API routes (grading-results CRUD, FERPA data, student-history/roster) out of `backend/app.py` (1,935 LOC) into three responsibility-named Flask Blueprints, with zero behavior change, behind an exhaustive route-level characterization net.
 
+**STATUS: CLOSED 2026-05-19** -> shipped via PR1 #424, PR2 #425, PR3 (this PR). app.py 1935 -> 585 LOC; 16 routes extracted into grading_results_routes / ferpa_routes / roster_routes; only the SPA/factory shell remains.
+
 **Architecture:** Verbatim `@app.route` to `@bp.route` moves into `backend/routes/{grading_results,ferpa,roster}_routes.py`, each a `Blueprint` registered through the existing `backend/routes/__init__.py` `register_routes()` aggregator (one import line plus one `app.register_blueprint(...)` line per PR, no `url_prefix`, byte-identical paths and decorator stacks). Three sequenced PRs small to big, mirroring the proven Slice 1 and 2 shape. The SPA/static shell and factory stay in `app.py`.
 
 **Tech Stack:** Python 3.14, Flask Blueprints, pytest with the existing `tests/conftest_routes.py` authed `client` fixture, ruff. venv `/Users/alexc/Downloads/Graider/venv/` (`source venv/bin/activate`). One slice, three PRs.
