@@ -17,6 +17,7 @@ from .email_routes import email_bp
 from .grading_routes import grading_bp, init_grading_routes
 from .grading_results_routes import grading_results_bp
 from .ferpa_routes import ferpa_bp
+from .roster_routes import roster_bp
 from .assignment_player_routes import assignment_player_bp
 from .student_portal_routes import student_portal_bp
 from .lesson_routes import lesson_bp
@@ -55,6 +56,7 @@ def register_routes(app, get_state_fn=None, run_grading_fn=None, reset_fn=None, 
     app.register_blueprint(grading_bp)
     app.register_blueprint(grading_results_bp)
     app.register_blueprint(ferpa_bp)
+    app.register_blueprint(roster_bp)
     app.register_blueprint(assignment_player_bp)
     app.register_blueprint(student_portal_bp)
     app.register_blueprint(lesson_bp)
@@ -87,6 +89,7 @@ __all__ = [
     'grading_bp',
     'grading_results_bp',
     'ferpa_bp',
+    'roster_bp',
     'init_grading_routes',
     'lesson_bp',
     'assistant_bp',

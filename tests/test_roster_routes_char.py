@@ -1,8 +1,8 @@
 """Characterization net for the student-history/roster route cluster.
 
 Tier 2 Slice 3 PR3 pins the EXACT observed status + JSON contract of the six
-routes in this cluster BEFORE the verbatim ``@app.route`` ->
-``@roster_bp.route`` move, so the move can be proven zero-behavior-change:
+routes in this cluster around the verbatim ``@app.route`` ->
+``@roster_bp.route`` move, so the move is proven zero-behavior-change:
 
   * ``GET  /api/student-history/<student_id>``  (get_student_history_api)
   * ``GET  /api/student-baseline/<student_id>`` (get_student_baseline_api)
@@ -12,24 +12,25 @@ routes in this cluster BEFORE the verbatim ``@app.route`` ->
   * ``GET  /api/list-periods``                  (list_periods)
 
 Harness note (characterization discipline, pin reality, never assume).
-The six routes are currently wired via bare ``@app.route`` decorators on the
-``backend.app.app`` object. The ``client`` fixture in tests/conftest_routes.py
-builds its app purely from ``register_routes(...)`` (pre-move that aggregator
-does NOT include this cluster), so that fixture is NOT byte-identical across
-the move and cannot characterize a zero-behavior-change relocation. The only
-harness that yields byte-identical status+JSON both before and after the
-verbatim move is the real ``backend.app.app`` object, because pre-move the
-cluster is registered there via ``@app.route`` and post-move the cluster is
-registered there via the blueprint ``register_routes()`` mounts (app.py calls
-``register_routes`` on the same app), and the route bodies are byte-identical.
-So the authed contract assertions run against ``backend.app.app`` with a
-``before_request`` that authenticates a teacher (the current ``@app.route``
-wiring named by Task 3.1 Step 1). Task 3.2 rewrites this file to the
-suite-safe ``_fresh_blueprint_app`` pattern once the blueprint exists, while
-keeping every pinned status+JSON value identical. The auth-missing case
-reuses the canonical existing pattern (a Flask app with NO g.user_id
-before_request, so the stacked ``@require_teacher`` rejects with the plain
-401 envelope), byte-identical 401 JSON pre and post move.
+The contract assertions below were captured against the real pre-move
+``@app.route`` wiring (the baseline commit pinned them green BEFORE the
+move). Post-move they run against a FRESH ``flask.Flask`` app with the
+extracted ``roster_bp`` blueprint mounted (the suite-safe PR1/PR2 pattern:
+NEVER mutate the shared ``backend.app.app`` singleton, since touching
+``before_request`` on it after another suite test issued a request raises
+Flask's "setup method can no longer be called" error, breaking full-suite
+collection). In isolation ``roster_bp`` serves all six URLs from its own
+verbatim-moved bodies with no grading/settings collision, so the
+fresh-app + ``register_blueprint(roster_bp)`` harness pins each moved body
+byte-identical to its pre-move ``@app.route`` form (route bodies are
+byte-identical, so identical inputs produce identical outputs). The authed
+harness adds a ``before_request`` that sets ``g.user_id``; the auth-missing
+harness registers the same blueprint with NO such hook, so the stacked
+``@require_teacher`` rejects with the exact canonical 401
+{"error": "Authentication required"}. The production registration-order
+behavior (the two collided URLs, below) is pinned separately by the
+``real_wiring_client`` harness built from the conftest ``flask_app`` (the
+real ``register_routes()`` aggregator).
 
 PRE-EXISTING SHADOWING (faithfully preserved, pinned exactly as observed).
 Two of the six URLs are already shadowed in production and were before this
@@ -46,10 +47,11 @@ settings_routes, and ``roster_bp`` is registered AFTER both ``grading_bp``
 and ``settings_bp`` in ``register_routes()``, so the moved copies stay
 shadowed by exactly the same winners post-move: the production contract for
 those two URLs is unchanged. This net therefore pins, for those two URLs, the
-production winner (``grading``/``settings``) via the real-wiring harness
-(``test_collided_urls_production_winner_unchanged`` / ``test_urls_unchanged``)
-AND, separately, the moved app.py-cluster body in isolation (a fresh app
-mounting only the cluster view) so the verbatim body itself is also proven
+production winner (``grading``/``settings``) via the real-wiring
+``real_wiring_client`` harness (``TestProductionContract``,
+``test_collided_winners_unchanged``, ``test_urls_unchanged``) AND, separately,
+``roster_bp``'s own (shadowed-in-production) body in isolation (the
+fresh-blueprint harness) so the verbatim body itself is also proven
 byte-identical. Both are pinned exactly as observed pre-move. This is the
 same honest-note discipline PR2 applied to its pre-existing ``save_results``
 NameError (issue #423): a verbatim relocation preserves pre-existing latent
@@ -59,11 +61,11 @@ Machine-variant field: production ``GET /api/list-periods`` is served by
 ``settings.list_periods``, which reads the developer's real
 ``~/.graider_data/periods`` directory; its body is machine-variant and is NOT
 pinned by exact value. It is pinned by status 200, the ``periods`` key
-presence, and the unchanged winning endpoint. The app.py cluster's own
-``list_periods`` body IS pinned exactly, in isolation, against a hermetic tmp
-periods directory (the route resolves the path from ``os.path.expanduser``,
-monkeypatched to tmp), so the verbatim body is a true zero-behavior-change
-proof without depending on machine state.
+presence, and the unchanged winning endpoint. ``roster_bp``'s own (verbatim
+-moved) ``list_periods`` body IS pinned exactly, in isolation, against a
+hermetic tmp periods directory (the route resolves the path from
+``os.path.expanduser``, monkeypatched to tmp), so the verbatim body is a true
+zero-behavior-change proof without depending on machine state.
 """
 import csv
 import os
@@ -71,89 +73,59 @@ import os
 import pytest
 from flask import Flask, g
 
+# flask_app (+ its fixture deps) from the shared route-test conftest, used by
+# the URL-map / collided-winner gates to prove the real register_routes
+# wiring is unchanged post-extraction.
+from tests.conftest_routes import (  # noqa: F401
+    flask_app,
+    grading_lock,
+    mock_grading_state,
+)
 
-# -- Authed harness: the real backend.app.app, teacher authenticated --------
-@pytest.fixture
-def authed_client():
-    """Real backend.app.app with a teacher authenticated.
 
-    This is the current ``@app.route`` wiring pre-move and the
-    register_routes-mounted blueprint post-move, byte-identical responses
-    either way for a verbatim relocation. char-teacher has no persisted
-    Supabase data, so the per-teacher grading state stays a clean slate
-    (suite-stable, machine-independent).
+def _fresh_blueprint_app(*, with_auth):
+    """Build a fresh Flask app with the extracted roster blueprint mounted.
+
+    Never mutates the shared backend.app.app singleton (suite-safe: touching
+    before_request on it after another suite test issued a request raises
+    Flask's "setup method can no longer be called" error). In isolation
+    roster_bp serves all six URLs from its own (verbatim-moved) bodies with
+    no grading/settings collision, so this pins each moved body byte-identical
+    to its pre-move app.py form. The production registration-order shadowing
+    of the two collided URLs is pinned separately by the real-wiring
+    flask_app gates below.
     """
-    import backend.app as bapp
-
-    app = bapp.app
-    app.config["TESTING"] = True
-
-    # Idempotent: only attach the auth before_request once.
-    if not getattr(app, "_char_roster_authed_hook", False):
-        @app.before_request
-        def _char_set_user():  # pragma: no cover - trivial test hook
-            g.user_id = "char-teacher"
-
-        app._char_roster_authed_hook = True
-
-    st = bapp._get_state("char-teacher")
-    st["is_running"] = False
-    st["results"] = []
-
-    return app.test_client()
-
-
-def _cluster_only_app(*, with_auth, periods_dir=None):
-    """Fresh Flask app mounting ONLY the six app.py-cluster view functions.
-
-    Used to pin each verbatim-moved body in isolation (no grading/settings
-    blueprint collision), so the body itself is proven byte-identical
-    pre/post move independent of registration-order shadowing. Pre-move the
-    views come from ``backend.app``; Task 3.2 repoints this to
-    ``backend.routes.roster_routes`` while keeping every pinned value
-    identical.
-    """
-    import backend.app as bapp
+    from backend.routes.roster_routes import roster_bp
 
     app = Flask(__name__)
     app.config["TESTING"] = True
-    app.add_url_rule(
-        "/api/student-history/<student_id>", "ch_hist",
-        bapp.get_student_history_api, methods=["GET"],
-    )
-    app.add_url_rule(
-        "/api/student-baseline/<student_id>", "ch_base",
-        bapp.get_student_baseline_api, methods=["GET"],
-    )
-    app.add_url_rule(
-        "/api/retranslate-feedback", "ch_retr",
-        bapp.retranslate_feedback, methods=["POST"],
-    )
-    app.add_url_rule(
-        "/api/extract-student-from-image", "ch_extract",
-        bapp.extract_student_from_image, methods=["POST"],
-    )
-    app.add_url_rule(
-        "/api/add-student-to-roster", "ch_add",
-        bapp.add_student_to_roster, methods=["POST"],
-    )
-    app.add_url_rule(
-        "/api/list-periods", "ch_list",
-        bapp.list_periods, methods=["GET"],
-    )
+    app.register_blueprint(roster_bp)
 
     if with_auth:
         @app.before_request
-        def _u():  # pragma: no cover - trivial test hook
+        def _char_set_user():  # pragma: no cover - trivial test hook
             g.user_id = "char-teacher"
 
     return app
 
 
 @pytest.fixture
+def authed_client():
+    """Fresh-app roster-blueprint harness with a teacher authenticated.
+
+    Byte-identical responses to the pre-move @app.route wiring for this
+    verbatim relocation (route bodies are byte-identical). Used for the four
+    production-live routes' contract. For the two collided URLs this harness
+    serves roster_bp's own (shadowed-in-production) body in isolation; the
+    production winner is pinned by the flask_app gates.
+    """
+    return _fresh_blueprint_app(with_auth=True).test_client()
+
+
+@pytest.fixture
 def cluster_client():
-    """Authed isolated-cluster client (no blueprint collision)."""
-    return _cluster_only_app(with_auth=True).test_client()
+    """Authed isolated-cluster client (roster_bp alone, no collision)."""
+    return _fresh_blueprint_app(with_auth=True).test_client()
 
 
 @pytest.fixture
@@ -165,7 +137,22 @@ def noauth_cluster_client():
     plain 401 {"error": "Authentication required"} (NOT the RFC 7807
     envelope: require_teacher short-circuits before handle_route_errors).
     """
-    return _cluster_only_app(with_auth=False).test_client()
+    return _fresh_blueprint_app(with_auth=False).test_client()
+
+
+@pytest.fixture
+def real_wiring_client(flask_app):
+    """Test client over the real register_routes() aggregator wiring.
+
+    This is the production-faithful harness: every blueprint mounted in the
+    exact registration order app.py uses, with the conftest before_request
+    authenticating a teacher. It pins the true production contract for the
+    two collided URLs (grading/settings blueprint winners shadow the moved
+    roster bodies, before and after this PR) and for the four
+    production-live routes (served by the moved roster bodies). Byte-identical
+    pre and post move: the move does not touch grading_routes/settings_routes
+    and roster_bp registers after both, so the winners are unchanged."""
+    return flask_app.test_client()
 
 
 # A nonexistent student id: load_student_history returns a default empty
@@ -420,55 +407,102 @@ class TestListPeriodsClusterBody:
 
 # == Production-faithful contract on the real register_routes wiring =========
 class TestProductionContract:
-    """The four app.py-only routes are production-live and served by the
-    cluster body on the real backend.app.app; the two collided URLs are
-    served by the grading/settings blueprint winners. All pinned exactly as
-    observed pre-move; all unchanged by the verbatim move (it does not touch
-    grading_routes/settings_routes and roster_bp registers after both)."""
+    """Under the real register_routes wiring, the four non-collided routes
+    are production-live and served by roster_bp's (verbatim-moved) body; the
+    two collided URLs are served by the grading/settings blueprint winners.
+    All pinned exactly as observed pre-move; all unchanged by the verbatim
+    move (it does not touch grading_routes/settings_routes and roster_bp
+    registers after both)."""
 
     def test_student_history_collided_winner_is_grading_404(
-        self, authed_client
+        self, real_wiring_client
     ):
-        """On the real app, GET /api/student-history/<id> is served by the
-        first-registered rule = grading.get_student_history (registered via
-        register_routes before the app.py @app.route). For an unknown id it
-        returns the grading view's 404, NOT the app.py cluster's 200 empty
-        history. Pinned exactly; unchanged post-move."""
-        r = authed_client.get(f"/api/student-history/{_NX_ID}")
+        """Under the real register_routes wiring, GET
+        /api/student-history/<id> is served by the first-registered rule =
+        grading.get_student_history (grading_bp is registered before
+        roster_bp). For an unknown id it returns the grading view's 404, NOT
+        roster_bp's 200 empty history. Pinned exactly; unchanged post-move
+        because roster_bp registers after grading_bp."""
+        r = real_wiring_client.get(f"/api/student-history/{_NX_ID}")
         assert r.status_code == 404
         assert r.get_json() == {"error": "Student history not found"}
 
-    def test_student_baseline_is_404(self, authed_client):
-        r = authed_client.get(f"/api/student-baseline/{_NX_ID}")
+    def test_student_baseline_is_404(self, real_wiring_client):
+        r = real_wiring_client.get(f"/api/student-baseline/{_NX_ID}")
         assert r.status_code == 404
         assert r.get_json() == {
             "error": "Insufficient history for baseline (need 3+ assignments)"
         }
 
-    def test_retranslate_no_feedback_is_200_error(self, authed_client):
-        r = authed_client.post("/api/retranslate-feedback", json={})
+    def test_retranslate_no_feedback_is_200_error(self, real_wiring_client):
+        r = real_wiring_client.post("/api/retranslate-feedback", json={})
         assert r.status_code == 200
         assert r.get_json() == {"error": "No feedback provided"}
 
-    def test_extract_no_image_is_200_error(self, authed_client):
-        r = authed_client.post("/api/extract-student-from-image", json={})
+    def test_extract_no_image_is_200_error(self, real_wiring_client):
+        r = real_wiring_client.post(
+            "/api/extract-student-from-image", json={}
+        )
         assert r.status_code == 200
         assert r.get_json() == {"error": "No image provided"}
 
-    def test_add_student_no_period_is_200_error(self, authed_client):
-        r = authed_client.post("/api/add-student-to-roster", json={})
+    def test_add_student_no_period_is_200_error(self, real_wiring_client):
+        r = real_wiring_client.post("/api/add-student-to-roster", json={})
         assert r.status_code == 200
         assert r.get_json() == {"error": "Period is required"}
 
     def test_list_periods_collided_winner_is_settings_200(
-        self, authed_client
+        self, real_wiring_client
     ):
-        """On the real app, GET /api/list-periods is served by the
-        first-registered rule = settings.list_periods. Its body reads the
+        """Under the real register_routes wiring, GET /api/list-periods is
+        served by the first-registered rule = settings.list_periods
+        (settings_bp is registered before roster_bp). Its body reads the
         developer's real periods dir (machine-variant), so pin only status
         200 and the periods key presence. Unchanged post-move (roster_bp
         registers after settings_bp, so it stays shadowed by the same
         winner)."""
-        r = authed_client.get("/api/list-periods")
+        r = real_wiring_client.get("/api/list-periods")
         assert r.status_code == 200
         assert "periods" in r.get_json()
+
+
+# == Blueprint / URL-map extraction gates ===================================
+def test_roster_bp_importable():
+    from backend.routes.roster_routes import roster_bp
+    assert roster_bp.name == 'roster'
+
+
+def test_collided_winners_unchanged(flask_app):
+    """The two collided URLs resolve to the grading/settings blueprint
+    endpoints under the real register_routes wiring (roster_bp registers
+    after grading_bp and settings_bp, so it stays shadowed by exactly the
+    same winners). Werkzeug iter_rules yields rules in registration order;
+    the first matching rule per (url, method) is the live handler."""
+
+    def first_endpoint(rule, method):
+        for r in flask_app.url_map.iter_rules():
+            if r.rule == rule and method in r.methods:
+                return r.endpoint
+        return None
+
+    assert (
+        first_endpoint("/api/student-history/<student_id>", "GET")
+        == "grading.get_student_history"
+    )
+    assert (
+        first_endpoint("/api/list-periods", "GET")
+        == "settings.list_periods"
+    )
+
+
+def test_urls_unchanged(flask_app):  # flask_app from tests/conftest_routes.py
+    rules = {r.rule for r in flask_app.url_map.iter_rules()}
+    for u in (
+        "/api/student-history/<student_id>",
+        "/api/student-baseline/<student_id>",
+        "/api/retranslate-feedback",
+        "/api/extract-student-from-image",
+        "/api/add-student-to-roster",
+        "/api/list-periods",
+    ):
+        assert u in rules
