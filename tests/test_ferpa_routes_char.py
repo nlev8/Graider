@@ -4,61 +4,63 @@ Tier 2 Slice 3 PR2 pins the EXACT observed status + JSON contract of the six
 FERPA routes (`/api/ferpa/delete-all-data`, `/api/ferpa/audit-log`,
 `/api/ferpa/data-summary`, `/api/ferpa/export-data`,
 `/api/ferpa/export-student`, `/api/ferpa/import-student`) plus the
-auth-missing behavior, BEFORE the verbatim `@app.route` ->
-`@ferpa_bp.route` move, so the move can be proven zero-behavior-change.
+auth-missing behavior, around the verbatim `@app.route` -> `@ferpa_bp.route`
+move, so the move is proven zero-behavior-change.
 
 Harness note (characterization discipline, pin reality, never assume):
-The six routes are currently wired via bare `@app.route` decorators on the
-`backend.app.app` object. The `client` fixture in tests/conftest_routes.py
-builds its app from `register_routes(...)`, which (pre-move) does NOT include
-this cluster, so that fixture returns 404 for these paths pre-move and real
-responses post-move, i.e. it is NOT byte-identical across the move and
-therefore cannot characterize a zero-behavior-change relocation.
-
-The only harness that yields byte-identical status+JSON both before and after
-the verbatim move is the real `backend.app.app` object, because:
-  * pre-move the cluster is registered there via `@app.route`;
-  * post-move the cluster is registered there via the blueprint that
-    `register_routes()` mounts (app.py calls register_routes on the same app);
-  * the route bodies are byte-identical, so the responses are identical.
-So the contract assertions below run against `backend.app.app` with a
-`before_request` that authenticates a teacher (the "current @app.route
-wiring" Task 2.1 Step 1 names). This mirrors the exact pre-move baseline
-harness PR1 used; Task 2.2 rewrites this file to the suite-safe
-`_fresh_blueprint_app` pattern once the blueprint exists. The auth-missing
-case reuses the canonical existing pattern (see tests/test_admin_routes.py):
-the real app with NO g.user_id before_request, so the stacked
-`@require_teacher` decorator rejects with 401. Both yield byte-identical
-401 JSON pre and post move.
+The contract assertions below were captured against the real pre-move
+`@app.route` wiring (the baseline commit pinned them green BEFORE the move).
+Post-move they run against a FRESH `flask.Flask` app with the extracted
+`ferpa_bp` blueprint mounted (the suite-safe PR1 pattern: NEVER mutate the
+shared `backend.app.app` singleton, since touching `before_request` on it
+after another suite test issued a request raises Flask's "setup method can no
+longer be called" error, breaking full-suite collection). Post-move the
+blueprint IS the canonical wiring `register_routes()` mounts, so a
+fresh-app + `register_blueprint(ferpa_bp)` serves byte-identical responses
+to the pre-move `@app.route` wiring (the route bodies are byte-identical, so
+identical inputs produce identical outputs). The authed harness adds a
+`before_request` that sets `g.user_id`; the auth-missing harness registers
+the same blueprint with NO such hook, so the stacked `@require_teacher`
+rejects with the exact canonical 401 {"error": "Authentication required"}.
 
 Machine-variant fields: `/api/ferpa/data-summary` and `/api/ferpa/audit-log`
 embed absolute filesystem paths and existence flags derived from the route's
 own module constants (`RESULTS_FILE`, `SETTINGS_FILE`, `AUDIT_LOG_FILE`).
 Those constant VALUES are byte-identical pre and post move (the canonical
 `backend.utils.audit.AUDIT_LOG_FILE` equals the pre-move app.py copy;
-`RESULTS_FILE`/`SETTINGS_FILE` are co-moved byte-identically). So those
-fields are pinned against the same constants the route resolves, making the
-assertion both machine-independent and a true zero-behavior-change proof.
+`RESULTS_FILE`/`SETTINGS_FILE` are co-moved byte-identically into
+`backend.routes.ferpa_routes`). So those fields are pinned against the same
+constants the route resolves, making the assertion both machine-independent
+and a true zero-behavior-change proof.
 
-A non-preview `/api/ferpa/import-student` with new grading results reaches an
-app.py `save_results(...)` call that pre-move app.py never bound (no import
-or def site, only a usage ref): it raises NameError, caught by
-`@handle_route_errors` -> the RFC 7807 500 envelope. This pre-existing latent
-bug (issue #423) is faithfully preserved by the verbatim move and pinned
-below exactly as observed.
+A non-preview `/api/ferpa/import-student` with new grading results reaches a
+`save_results(...)` call that pre-move app.py never bound (no import or def
+site, only a usage ref) and that the verbatim move deliberately does NOT
+import: it raises NameError, caught by `@handle_route_errors` -> the RFC 7807
+500 envelope. This pre-existing latent bug (issue #423) is faithfully
+preserved by the verbatim move and pinned below exactly as observed.
 """
 import io
 import json
 
 import pytest
-from flask import g
+from flask import Flask, g
 
-# The route's own resolved constants (byte-identical pre/post move). Pre-move
-# all three live on backend.app; AUDIT_LOG_FILE is the canonical
-# backend.utils.audit value the route uses post-move (verified equal to the
-# pre-move app.py copy). Importing them here makes path/existence assertions
-# machine-independent while still proving zero behavior change.
-from backend.app import RESULTS_FILE, SETTINGS_FILE
+# flask_app (+ its fixture deps) from the shared route-test conftest, used by
+# test_urls_unchanged to assert the URL map is unchanged post-extraction.
+from tests.conftest_routes import (  # noqa: F401
+    flask_app,
+    grading_lock,
+    mock_grading_state,
+)
+
+# The route's own resolved constants (byte-identical pre/post move). Post-move
+# RESULTS_FILE/SETTINGS_FILE are co-moved into backend.routes.ferpa_routes;
+# AUDIT_LOG_FILE is the canonical backend.utils.audit value the route uses
+# (verified equal to the removed app.py copy). Importing them here makes the
+# path/existence assertions machine-independent while still proving zero
+# behavior change.
+from backend.routes.ferpa_routes import RESULTS_FILE, SETTINGS_FILE
 from backend.utils.audit import AUDIT_LOG_FILE
 
 # Deterministic RFC 7807 internal-error envelope produced by
@@ -77,105 +79,82 @@ def _expected_500(path):
     }
 
 
-# -- Authed harness: the real backend.app.app, teacher authenticated --------
-@pytest.fixture
-def authed_client():
-    """Real backend.app.app with a teacher authenticated.
+def _fresh_blueprint_app(*, with_auth):
+    """Build a fresh Flask app with the extracted FERPA blueprint mounted.
 
-    This is the "current @app.route wiring" pre-move and the
-    register_routes-mounted blueprint post-move, byte-identical responses
-    either way for a verbatim relocation. char-teacher has no persisted
-    Supabase data, so the per-teacher grading state stays a clean slate
-    (suite-stable, machine-independent).
+    Never mutates the shared backend.app.app singleton (suite-safe). Post-move
+    the blueprint is the canonical wiring register_routes() mounts, so this
+    serves byte-identical responses to the pre-move @app.route wiring.
     """
-    import backend.app as bapp
+    from backend.routes.ferpa_routes import ferpa_bp
 
-    app = bapp.app
+    app = Flask(__name__)
     app.config["TESTING"] = True
+    app.register_blueprint(ferpa_bp)
 
-    # Idempotent: only attach the auth before_request once.
-    if not getattr(app, "_char_ferpa_authed_hook", False):
+    if with_auth:
         @app.before_request
         def _char_set_user():  # pragma: no cover - trivial test hook
             g.user_id = "char-teacher"
 
-        app._char_ferpa_authed_hook = True
+    return app
 
-    # Reset this teacher's grading state to a clean slate per test.
-    st = bapp._get_state("char-teacher")
+
+def _reset_char_state():
+    """Reset the char-teacher per-teacher grading state to a clean slate.
+
+    char-teacher has no persisted Supabase data, so the state stays empty
+    (suite-stable, machine-independent).
+    """
+    from backend.grading.state import _get_state
+
+    st = _get_state("char-teacher")
     st["is_running"] = False
     st["results"] = []
+    return st
 
+
+# -- Authed harness: fresh app + ferpa blueprint, teacher authenticated -----
+@pytest.fixture
+def authed_client():
+    """Fresh-app blueprint harness with a teacher authenticated.
+
+    Byte-identical responses to the pre-move @app.route wiring for this
+    verbatim relocation (route bodies are byte-identical).
+    """
+    app = _fresh_blueprint_app(with_auth=True)
+    _reset_char_state()
     return app.test_client()
 
 
 @pytest.fixture
 def authed_app():
-    """Same as authed_client but exposes the app for direct state mutation."""
-    import backend.app as bapp
+    """Same as authed_client but exposes (client-factory, state) for tests
+    that need to seed grading results before the request."""
+    app = _fresh_blueprint_app(with_auth=True)
 
-    app = bapp.app
-    app.config["TESTING"] = True
-    if not getattr(app, "_char_ferpa_authed_hook", False):
-        @app.before_request
-        def _char_set_user():  # pragma: no cover - trivial test hook
-            g.user_id = "char-teacher"
+    class _Bridge:
+        def _get_state(self, tid):
+            from backend.grading.state import _get_state as gs
 
-        app._char_ferpa_authed_hook = True
-    st = bapp._get_state("char-teacher")
-    st["is_running"] = False
-    st["results"] = []
-    return app, bapp
+            return gs(tid)
+
+    _reset_char_state()
+    return app, _Bridge()
 
 
 # -- No-auth harness for the require_teacher rejection (canonical pattern) ---
 @pytest.fixture
 def noauth_client():
-    """Real backend.app.app WITHOUT any g.user_id before_request.
+    """Fresh-app blueprint harness WITHOUT any g.user_id before_request.
 
+    Mirrors the canonical require_teacher-rejection mechanism used by
+    tests/test_admin_routes.py (a blueprint app with no auth before_request);
     require_teacher returns plain 401 {"error": "Authentication required"}
     (NOT the RFC 7807 envelope: require_teacher wraps handle_route_errors and
     short-circuits before it).
     """
-    import backend.app as bapp
-
-    # A separate process-shared singleton would already have the authed hook
-    # from another test; require_teacher only rejects when g.user_id is unset.
-    # The canonical pattern (tests/test_admin_routes.py) uses a minimal app
-    # with NO auth hook. Build one here mounting the same view functions so
-    # the stacked @require_teacher decorator is exercised identically.
-    from flask import Flask
-
-    app = Flask(__name__)
-    app.config["TESTING"] = True
-    app.add_url_rule(
-        "/api/ferpa/delete-all-data",
-        view_func=bapp.delete_all_student_data,
-        methods=["POST"],
-    )
-    app.add_url_rule(
-        "/api/ferpa/audit-log", view_func=bapp.get_audit_log, methods=["GET"]
-    )
-    app.add_url_rule(
-        "/api/ferpa/data-summary",
-        view_func=bapp.get_data_summary,
-        methods=["GET"],
-    )
-    app.add_url_rule(
-        "/api/ferpa/export-data",
-        view_func=bapp.export_student_data,
-        methods=["GET"],
-    )
-    app.add_url_rule(
-        "/api/ferpa/export-student",
-        view_func=bapp.export_individual_student_data,
-        methods=["POST"],
-    )
-    app.add_url_rule(
-        "/api/ferpa/import-student",
-        view_func=bapp.import_individual_student_data,
-        methods=["POST"],
-    )
+    app = _fresh_blueprint_app(with_auth=False)
     return app.test_client()
 
 
@@ -216,12 +195,29 @@ class TestDeleteAllData:
             "error": "Cannot delete data while grading is in progress"
         }
 
-    def test_confirm_true_empty_state_success(self, authed_client):
-        """confirm:true with empty state -> 200 success, empty deleted list.
+    def test_confirm_true_no_results_file_success(
+        self, authed_client, tmp_path, monkeypatch
+    ):
+        """confirm:true with RESULTS_FILE absent -> 200 success, empty
+        deleted list, fixed message; timestamp an ISO string.
 
-        timestamp is a wall-clock ISO string (the only non-deterministic
-        field); pinned by shape, the rest pinned exactly.
-        """
+        RESULTS_FILE/SETTINGS_FILE are repointed at a fresh tmp dir (the
+        route resolves them from its own module namespace). This both
+        isolates the assertion from suite-order/machine state AND keeps this
+        destructive route from deleting the developer's real
+        ~/.graider_results.json during the test run. The route logic is
+        byte-identical pre and post move (only the
+        @app.route->@ferpa_bp.route decorator token changed); pointing the
+        constant at tmp does not alter behavior, it just makes the
+        deterministic empty-state branch reproducible."""
+        monkeypatch.setattr(
+            "backend.routes.ferpa_routes.RESULTS_FILE",
+            str(tmp_path / "results.json"),
+        )
+        monkeypatch.setattr(
+            "backend.routes.ferpa_routes.SETTINGS_FILE",
+            str(tmp_path / "settings.json"),
+        )
         r = authed_client.post(
             "/api/ferpa/delete-all-data", json={"confirm": True}
         )
@@ -236,6 +232,34 @@ class TestDeleteAllData:
         assert body["status"] == "success"
         assert body["message"] == "All student data has been securely deleted"
         assert body["deleted"] == []
+        assert isinstance(body["timestamp"], str) and body["timestamp"]
+
+    def test_confirm_true_with_results_file_reports_entry(
+        self, authed_client, tmp_path, monkeypatch
+    ):
+        """confirm:true with RESULTS_FILE present -> the route deletes it and
+        reports the in-memory record count (char-teacher results are reset
+        empty, so 0 records). Pins the other deterministic branch of the
+        same byte-identical route body, hermetically (tmp file, never the
+        developer's real ~/.graider_results.json)."""
+        rf = tmp_path / "results.json"
+        rf.write_text("[]")
+        monkeypatch.setattr(
+            "backend.routes.ferpa_routes.RESULTS_FILE", str(rf)
+        )
+        monkeypatch.setattr(
+            "backend.routes.ferpa_routes.SETTINGS_FILE",
+            str(tmp_path / "settings.json"),
+        )
+        r = authed_client.post(
+            "/api/ferpa/delete-all-data", json={"confirm": True}
+        )
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["status"] == "success"
+        assert body["message"] == "All student data has been securely deleted"
+        assert body["deleted"] == ["Grading results (0 records)"]
+        assert not rf.exists()  # route securely removed it
         assert isinstance(body["timestamp"], str) and body["timestamp"]
 
     def test_auth_missing_is_401(self, noauth_client):
@@ -588,3 +612,22 @@ class TestImportStudent:
         )
         assert r.status_code == 401
         assert r.get_json() == {"error": "Authentication required"}
+
+
+# -- Blueprint extraction gates ---------------------------------------------
+def test_ferpa_bp_importable():
+    from backend.routes.ferpa_routes import ferpa_bp
+    assert ferpa_bp.name == 'ferpa'
+
+
+def test_urls_unchanged(flask_app):  # flask_app from tests/conftest_routes.py
+    rules = {r.rule for r in flask_app.url_map.iter_rules()}
+    for u in (
+        "/api/ferpa/delete-all-data",
+        "/api/ferpa/audit-log",
+        "/api/ferpa/data-summary",
+        "/api/ferpa/export-data",
+        "/api/ferpa/export-student",
+        "/api/ferpa/import-student",
+    ):
+        assert u in rules
