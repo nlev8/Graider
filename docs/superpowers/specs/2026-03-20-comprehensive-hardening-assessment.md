@@ -328,3 +328,37 @@ After Slice 3 the only `@app.route` decorators left in `backend/app.py` are the 
 **Recorded out-of-scope (unchanged from the slice spec section 8).** The broader 4x `AUDIT_LOG_FILE` duplication across the codebase, the dual publish-path consolidation (`published_assessments`/`submissions` vs `published_content`/`student_submissions`), and `frontend/src/tabs/PlannerTab.jsx` (the single largest source file in the repository) are each the explicitly sequenced subsequent levers and were deliberately not touched here; each needs its own dedicated design rather than a mechanical slice. The issue #423 `save_results` / `grade_with_parallel_detection` latent NameError is likewise tracked separately.
 
 **Reconciled dimension effect.** Architecture stayed at 7 in the 2026-05-18 reconciled re-score on concrete grounds, the holdout objection being that `app.py` was still 1,935 lines with roughly 40 route functions. That specific objection is now removed: the app module is 585 lines and carries zero domain API routes. Whether that moves Architecture 7 to 8 is a judgment call, not a mechanical fact, so no nudge is asserted here. A 3-model reconciled re-score (Codex, Gemini, Claude, conservative-floor reconciliation against the 2026-05-18 baseline) follows as its own dated section and is the established post-slice judgment step, separate from this mechanically-test-guarded extraction. Consistent with how Slice 1, Slice 2, and Data Integrity Tier 1 were handled, this closeout asserts only the verifiable mechanical facts: three verbatim PRs, the pre-move-pinned characterization nets that stayed byte-identical post-move, the full suite at 0 failed, and the 9 CI checks.
+
+---
+
+# 2026-05-19 Post-Slice-3 3-Model Reconciled Re-Score (HEAD `d54ee8e`)
+
+The deferred judgment step the Slice 3 closeout said would follow. Codex, Gemini, and Claude each re-scored independently against the 2026-05-18 reconciled baseline at the post-Slice-3 state (`backend/app.py` 585 LOC, zero domain API routes, 16 routes in three blueprints), then conservative-floor reconciliation (splits resolve down; the higher value only when concretely and unanimously grounded; unverifiable not credited).
+
+| Dimension | baseline (2026-05-18) | Codex | Gemini | Claude | reconciled |
+|---|--:|--:|--:|--:|--:|
+| Security | 8 | 8 | 8 | 8 | **8** |
+| Error Handling | 8 | 8 | 8 | 8 | **8** |
+| Code Quality | 8 | 8 | 8 | 8 | **8** |
+| Architecture | 7 | 8 | 7 | 7 | **7** |
+| Test Coverage | 8 | 8 | 8 | 8 | **8** |
+| Documentation | 7 | 7 | 7 | 7 | **7** |
+| Debugging/Observability | 8 | 8 | 8 | 8 | **8** |
+| Data Integrity | 9 | 9 | 9 | 9 | **9** |
+| Operational Safety | 9 | 9 | 9 | 9 | **9** |
+| Clever Compliance | 10 | 10 | 10 | 10 | **10** |
+| **Overall** | **8.0** | **8.1** | **8.0** | **8.0** | **8.0** |
+
+**Reconciled overall: 8.0 (unchanged).** Raw 3-model means: Codex 8.1, Gemini 8.0, Claude 8.0. Slice 3 retired a real, named structural-debt item and removed the exact concrete objection that was recorded against Architecture in the 2026-05-18 re-score, but the aggregate does not move, for the grounded reasons below.
+
+### Per-dimension reconciled rationale
+
+- **Architecture 7 (held; 2-1 split resolved down).** Codex scored 8 (the god-module ground is gone; the remaining defects cap below 9 rather than holding at 7). Gemini and Claude independently held 7 on concrete, verified grounds, and the conservative-floor rule resolves the split down. The 2026-05-18 Architecture 7 rested on three concrete grounds: (1) the dual publish path (`published_assessments`/`submissions` vs `published_content`/`student_submissions`) is unconsolidated, dispatched by a `supabase_table` string parameter rather than a unified abstraction; (2) `app.py` was a 1,935-line route god-module; (3) there is no dependency injection. Slice 3 resolved ground (2) cleanly and verifiably (585 LOC, zero domain routes, three cohesive import-cycle-free blueprints registered through the existing aggregator). Grounds (1) and (3) both still hold in-repo: the `supabase_table` dispatch persists across the portal grading and student-portal route paths, and no dependency-injection mechanism was introduced (the existing callback threading through `register_routes` is not DI). One of three concrete grounds resolved is genuine and commendable progress, but a tier bump under the conservative-floor philosophy needs the architectural boundary closed, not the file-size symptom; the decisive reason two independent models held is that the dual-path data model is the boundary defect and it is untouched. This split is the inverse of the 2026-05-18 one (then Codex and Gemini scored 8, Claude held 7) and resolves the same way, now with two of three independently holding rather than one.
+- **Code Quality 8 (held, unanimous).** All three kept 8. The 2026-05-18 below-9 hold had two clauses: the two large non-app files (`assignment_grader.py` ~5,344, `planner_routes.py` ~4,611) and "`app.py` still carries route logic." Slice 3 removed the second clause cleanly, but the first clause is unchanged in-repo (both files still large, and `frontend/src/tabs/PlannerTab.jsx` at ~7,405 is the single largest source file), so the dimension stays mid-8 with no 9.
+- **All other dimensions unchanged, unanimous.** Security 8, Error Handling 8, Test Coverage 8, Documentation 7, Debugging/Observability 8, Data Integrity 9, Operational Safety 9, Clever Compliance 10. Slice 3 was a pure verbatim relocation: auth and error decorators, Sentry and audit logging, the SIGTERM grading-stop handler, the dedup migration, and the Clever code are all carried through or untouched, so no dimension regressed and none gained verified post-baseline uplift. Two pre-existing latent conditions were faithfully preserved rather than introduced and are tracked (issue #423, the `save_results`/`grade_with_parallel_detection` NameError; issue #426, the two dead-shadowed roster routes).
+
+### Biggest remaining lever (unanimous, all three models)
+
+**Dual publish-path consolidation.** With the `app.py` god-module retired, all three models independently name the unconsolidated dual publish path as the single largest unresolved architectural boundary: it is the remaining concrete Architecture-7 ground with the highest blast radius (two table families, both student portals, SSE, the grading dual-dispatch), and it is the prerequisite for cross-path Data Integrity Tier 2. Claude's distinction is worth recording: `PlannerTab.jsx` (~7,405 LOC) is the largest raw file but is concentrated complexity (a Code Quality lever), whereas the dual path is a boundary defect (the Architecture lever); the latter is what gates the Architecture tier. It was deliberately scoped out of Slices 1 through 3 and needs its own brainstorm and design, not a mechanical verbatim slice.
+
+**Honest note.** Slice 3 did exactly what it set out to do and the result is verified, not asserted: the holdout objection recorded against Architecture is concretely gone, `app.py` is now an app-factory-plus-error-handlers core, and every move was proven zero-behavior-change under a pre-move-pinned net. The aggregate stays at 8.0 because the Architecture tier is gated by the dual-path boundary, which Slice 3 correctly did not attempt. This dated section closes the `2026-05-19-app-routes-extraction` plan and Tier 2 Slice 3. The next lever is the dual publish-path consolidation, which requires its own brainstorm.
