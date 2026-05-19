@@ -129,7 +129,7 @@ class SubmissionRepository:
         carry the exact branch body. Base has no path, so NotImplementedError.
         """
         raise NotImplementedError(
-            "normalize_context is path-specific; use a concrete adapter"
+            "_resolve_student_id is path-specific; use a concrete adapter"
         )
 
     def normalize_context(self, row, base_context):

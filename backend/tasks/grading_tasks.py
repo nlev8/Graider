@@ -39,10 +39,25 @@ class PortalGradingTask(Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         submission_id = args[0] if args else kwargs.get('submission_id')
+        # args[2] is the path discriminator. Callers (Task 2.4) pass
+        # SubmissionPathType.<X>.value, whose value IS the legacy table-name
+        # string, so this extraction stays byte-for-byte unchanged and the
+        # kwargs fallback default ('submissions') is unchanged.
         supabase_table = args[2] if len(args) > 2 else kwargs.get('supabase_table', 'submissions')
         if not submission_id:
             return
         try:
+            # PR2 NOTE: this terminal-failure write intentionally stays on
+            # _safe_update_submission rather than
+            # repository_for(...).mark_failed(...). The PR1 characterization
+            # net (TestFailureSeam) and test_grading_tasks pin on_failure by
+            # patching backend.services.portal_grading._safe_update_submission
+            # and asserting its call args (table_name kwarg, args[2] payload).
+            # repo.mark_failed -> repo.update bypasses that module symbol, so
+            # swapping it here would break the byte-identical char-net
+            # contract (a behavior-preserving-refactor violation). The DB
+            # effect is identical either way (same table via the enum value,
+            # same {'status':'failed','error_message':str(exc)[:500]} fields).
             from backend.services.portal_grading import _safe_update_submission
             from backend.supabase_client import get_supabase
             sb = get_supabase()
@@ -102,7 +117,7 @@ def grade_portal_submission(
     self,
     submission_id: str,
     teacher_id: str,
-    supabase_table: str,
+    path_type=None,
     *,
     district_id: str | None = None,
     user_id: str | None = None,
@@ -114,9 +129,13 @@ def grade_portal_submission(
 
     Args:
         submission_id: Supabase row id for the submission (submissions or
-            student_submissions, determined by `supabase_table`).
+            student_submissions, determined by `path_type`).
         teacher_id: Teacher owning the submission (for results storage + api keys).
-        supabase_table: "submissions" for join-code, "student_submissions" for class-based.
+        path_type: SubmissionPathType OR its legacy table-name string
+            ("submissions" for join-code, "student_submissions" for
+            class-based). Celery enqueue sites pass SubmissionPathType.X.value
+            so the wire arg / on_failure args[2] stays the byte-identical
+            legacy string; downstream repository_for() coerces either form.
         district_id: District context for api_keys lookup; passed explicitly so
             the Celery worker doesn't need to reach into flask.g.
         user_id: Acting user id for Sentry scope; hashed before set_user to
@@ -143,7 +162,7 @@ def grade_portal_submission(
     # permanent errors return None and fall through to the existing
     # "no ctx → mark failed" path below.
     try:
-        ctx = fetch_submission_full_context(supabase_table, submission_id, teacher_id)
+        ctx = fetch_submission_full_context(path_type, submission_id, teacher_id)
     except Exception as e:
         from backend.retry import is_retryable_error
         if is_retryable_error(e):
@@ -185,7 +204,7 @@ def grade_portal_submission(
                         'status': 'failed',
                         'error_message': 'Assessment content unavailable at grading time',
                     },
-                    table_name=supabase_table,
+                    table_name=path_type,
                 )
         except Exception:
             pass
@@ -198,7 +217,9 @@ def grade_portal_submission(
         student_info=ctx['student_info'],
         teacher_config=ctx['teacher_config'],
         teacher_id=teacher_id,
-        supabase_table=supabase_table,
+        # grade_portal_submission_sync retains the supabase_table kwarg name
+        # (its repository_for() call coerces the enum OR the legacy string).
+        supabase_table=path_type,
         student_accommodations=ctx.get('student_accommodations'),
         task_id=self.request.id,
         district_id=district_id,

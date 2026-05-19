@@ -25,6 +25,7 @@ from datetime import datetime, timezone, timedelta
 import sentry_sdk
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as _get_supabase
+from backend.services.submission_repository import SubmissionPathType
 # Phase 4.5: this module has MIXED auth paths. Teacher endpoints use
 # get_request_supabase() so their requests land under RLS when the
 # USE_PER_USER_JWT flag is on. Student-session endpoints (authenticated
@@ -827,7 +828,7 @@ def grade_portal_submission():
                     {"student_name": student_name, "student_id": student_id_number, "email": ""},
                     teacher_config,
                     teacher_id,
-                    "student_submissions",
+                    SubmissionPathType.CLASS,
                 ),
                 kwargs={"student_accommodations": published_accommodations},
                 daemon=True,
@@ -1243,7 +1244,7 @@ def submit_student_work(content_id):
                     },
                     teacher_config,
                     teacher_id,
-                    "student_submissions",
+                    SubmissionPathType.CLASS,
                 ),
                 kwargs={"student_accommodations": published_accommodations},
             )

@@ -409,3 +409,18 @@ class TestFailureSeam:
                 einfo=None,
             )
         assert mu.called is False
+
+
+# ---------------------------------------------------------------------------
+# PR2 grep gate: the per-table supabase_table string dispatch must be gone
+# from the grading pipeline body (replaced by SubmissionRepository).
+# ---------------------------------------------------------------------------
+import pathlib
+
+
+def test_no_supabase_table_string_dispatch_remains():
+    pg = pathlib.Path("backend/services/portal_grading.py").read_text()
+    assert "supabase_table ==" not in pg
+    assert "table_name=supabase_table" not in pg
+    assert 'supabase_table="submissions"' not in pg
+    assert 'supabase_table="student_submissions"' not in pg

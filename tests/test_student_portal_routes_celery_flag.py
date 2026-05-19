@@ -49,6 +49,11 @@ def test_spawn_thread_grading_starts_daemon_thread():
     with the full 8-arg contract (incl student_accommodations)."""
     from backend.routes import student_portal_routes
     with patch('threading.Thread') as mock_thread_cls:
+        # PR2: _spawn_thread_grading's 7th param was renamed
+        # supabase_table -> path_type and now takes a SubmissionPathType
+        # (the call sites pass the enum; repository_for coerces it
+        # downstream). repository_for also still accepts the legacy string.
+        from backend.services.submission_repository import SubmissionPathType
         student_portal_routes._spawn_thread_grading(
             submission_id='sub-1',
             assessment={'questions': []},
@@ -56,7 +61,7 @@ def test_spawn_thread_grading_starts_daemon_thread():
             student_info={'student_name': 'X'},
             teacher_config={'model': 'gpt-4o'},
             teacher_id='t-1',
-            supabase_table='submissions',
+            path_type=SubmissionPathType.JOIN_CODE,
             student_accommodations={'iep': True},
         )
     assert mock_thread_cls.called
