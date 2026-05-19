@@ -28,7 +28,6 @@ _root_dir = os.path.dirname(_app_dir)
 sys.path.insert(0, _root_dir)
 load_dotenv(os.path.join(_root_dir, '.env'), override=True)
 
-from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 import sentry_sdk
 
