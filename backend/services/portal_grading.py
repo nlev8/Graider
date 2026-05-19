@@ -339,12 +339,21 @@ def _safe_update_submission(sb, submission_id, update_fields,
 def _fetch_submission_row(sb, supabase_table, submission_id):
     """Fetch the submission row; return dict or None.
 
-    Phase 4.1 PR2 subtask 3a: row-level dedup helper for the Celery path.
+    Phase 4.1 PR2 subtask 3a: originally the row-level fetch helper for the
+    Celery dedup path (the production pipeline now fetches via
+    SubmissionRepository.fetch instead, see NOTE below).
     Returns None on any error so the caller can treat it as "no claim found".
 
     Subtask 3b code-review follow-up: capture exceptions to Sentry so
     broker/schema failures surface instead of silently looking like "no
     row found". Matches the pattern used in _safe_update_submission.
+
+    NOTE (PR2): the production pipeline now fetches via
+    SubmissionRepository.fetch. This helper is retained verbatim because the
+    PR1 characterization net / signature-pin tests reference it directly;
+    deleting it is out of PR2 scope (a tracked post-PR2 cleanup follow-up).
+    Mirrors the retention rationale on the sibling
+    _claim_submission_for_grading helper.
     """
     if not sb or not submission_id:
         return None
