@@ -164,7 +164,14 @@ def test_every_flagged_sis_catch_captures_to_sentry():
 PR_A_EXPECTED_CAPTURES = {
     "backend/accommodations.py": 7,
     "backend/api_keys.py": 2,
-    "backend/app.py": 4,
+    # 2026-05-19 Tier 2 Slice 3 PR2: lowered 4 -> 2. The verbatim FERPA
+    # cluster extraction moved 8 capture sites (the get_audit_logs reader
+    # plus the 6 FERPA route bodies) out of backend/app.py into
+    # backend/routes/ferpa_routes.py. origin/main app.py had 10 captures;
+    # 2 stay, 8 relocated (conservation 10 = 2 + 8). Net Sentry coverage
+    # unchanged; the relocated captures are floor-checked under
+    # PR_B_EXPECTED_CAPTURES["backend/routes/ferpa_routes.py"] below.
+    "backend/app.py": 2,
     "backend/auth.py": 2,
     "backend/routes/analytics_routes.py": 1,
     "backend/routes/assessment_results_routes.py": 3,
@@ -194,10 +201,11 @@ PR_B_EXPECTED_CAPTURES = {
     # PR_A_EXPECTED_CAPTURES["backend/utils/audit.py"]: 2). Net Sentry
     # coverage unchanged.
     "backend/accommodations.py": 7,
-    "backend/app.py": 10,  # 2026-05-19 Tier 2 Slice 3 PR1: 3 more moved to backend/routes/grading_results_routes.py with the verbatim grading-results cluster (15, -2 state PR2, -3 pipeline Phase 3a PR3, -3 grading_results PR1). Net Sentry coverage unchanged; relocated captures floor-checked below.
+    "backend/app.py": 2,  # 2026-05-19 Tier 2 Slice 3 PR2: lowered 10 -> 2. The verbatim FERPA cluster extraction relocated 8 capture sites (get_audit_logs + the 6 FERPA route bodies) to backend/routes/ferpa_routes.py (origin/main app.py 10 = 2 stay + 8 moved). Net Sentry coverage unchanged; relocated captures floor-checked below.
     "backend/grading/state.py": 2,
     "backend/grading/pipeline.py": 3,  # Phase 3a PR3: 3 captures moved from app.py
     "backend/routes/grading_results_routes.py": 3,  # 2026-05-19 Tier 2 Slice 3 PR1: the 3 captures that moved with the verbatim grading-results cluster out of app.py
+    "backend/routes/ferpa_routes.py": 8,  # 2026-05-19 Tier 2 Slice 3 PR2: the 8 captures that moved with the verbatim FERPA cluster (get_audit_logs reader + 6 FERPA route bodies) out of app.py
     "backend/auth.py": 3,
     "backend/routes/analytics_routes.py": 4,
     "backend/routes/automation_routes.py": 4,

@@ -590,20 +590,27 @@ class TestCleverArchiveLogsHashStudentId:
 
 class TestAuditLocalFileFormatContract:
     """PR #214: audit.py local-file format change must remain compatible
-    with the reader at backend/app.py:_get_audit_logs (PR #214 round-2
-    Codex review found the previous format `timestamp | teacher=X | user
-    | action | details` would cause the existing reader to mis-parse
-    `user` as `teacher=X`. Fixed by appending teacher_id LAST instead.)
+    with the reader get_audit_logs (PR #214 round-2 Codex review found the
+    previous format `timestamp | teacher=X | user | action | details` would
+    cause the existing reader to mis-parse `user` as `teacher=X`. Fixed by
+    appending teacher_id LAST instead.)
+
+    2026-05-19 (Tier 2 Slice 3 PR2): get_audit_logs and its AUDIT_LOG_FILE
+    constant were verbatim-moved out of backend.app into
+    backend.routes.ferpa_routes (the reader is now imported from there, and
+    the reader-side AUDIT_LOG_FILE patch targets that module). The
+    writer-side backend.utils.audit.AUDIT_LOG_FILE patch is unchanged. The
+    parse/format contract this test pins is byte-identical pre and post move.
     """
 
     def test_audit_log_line_parses_with_existing_reader(self, tmp_path, monkeypatch):
         # Redirect AUDIT_LOG_FILE to a temp path for both writer and reader
         log_path = str(tmp_path / "audit.log")
         monkeypatch.setattr("backend.utils.audit.AUDIT_LOG_FILE", log_path)
-        monkeypatch.setattr("backend.app.AUDIT_LOG_FILE", log_path)
+        monkeypatch.setattr("backend.routes.ferpa_routes.AUDIT_LOG_FILE", log_path)
 
         from backend.utils.audit import audit_log
-        from backend.app import get_audit_logs
+        from backend.routes.ferpa_routes import get_audit_logs
 
         audit_log(
             action="PERIODIC_SYNC",
