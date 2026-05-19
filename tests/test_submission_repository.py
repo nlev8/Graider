@@ -9,6 +9,8 @@ Fake supabase client (no real network/Supabase):
 """
 import hashlib
 
+import pytest
+
 
 class _Resp:
     def __init__(self, data):
@@ -103,8 +105,6 @@ def test_repository_for_accepts_legacy_string():
 
 
 def test_repository_for_rejects_unknown():
-    import pytest
-
     from backend.services.submission_repository import repository_for
 
     with pytest.raises(ValueError):
@@ -114,7 +114,6 @@ def test_repository_for_rejects_unknown():
 # ---------------------------------------------------------------------------
 # Step 3: update (port of _safe_update_submission)
 # ---------------------------------------------------------------------------
-import pytest  # noqa: E402
 
 
 @pytest.fixture
