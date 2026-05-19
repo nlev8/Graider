@@ -263,3 +263,46 @@ Both are recorded in the PR descriptions and in the plan per the §3 convention.
 **Reconciled dimension effect.** Code Quality and Architecture each receive a modest nudge upward. This is the second delivery against the unanimous biggest remaining lever (concentrated complexity in the large backend files). `assignment_grader.py` was the single largest backend file; the extraction cluster is now a tested, import-cycle-free service module beneath it. No multi-model re-score was run, by design: the change is mechanically test-guarded (verbatim moves, the pre-move-pinned characterization net that stayed byte-identical post-move, and the 9 CI checks), consistent with how Slice 1 and Data Integrity Tier 1 were handled. The overall stays at approximately 7.9 with Code Quality and Architecture trending up.
 
 **One honest note:** CI surfaced that the shim's implicit re-export tripped mypy strict's `no_implicit_reexport` rule for `backend/grading/pipeline.py`, which is in the strict-scope module list. Fixed in the same PR by converting the shim to the redundant-alias explicit re-export form (e.g., `extract_student_work as extract_student_work`), which satisfies mypy with zero behavior change. Same class of project-meta-convention catch as the migration `# destructive:` acknowledgment and the SIS-pin retracks earlier in this effort. The tracked dead-code follow-up (`extract_student_responses_legacy`) is intentionally out of this slice; it will be resolved via a separate Codex plus Gemini plus Claude reconciled decision covering delete-vs-restore, so the fix is both deliberate and reviewable.
+
+---
+
+# 2026-05-18 3-Model Reconciled Re-Score (HEAD `082b49c`)
+
+First full 3-model re-score since 2026-05-16. Everything between is the cumulative effect of Data Integrity Tier 1 (#402), the export-dir configurability fix and its dead-code follow-up (#418, #419, #420), the matplotlib boxplot forward-compat class elimination (#411, #413), the `unit_circle` real-bug fix (#408), and Tier 2 Slices 1 and 2 (#406 through #417). Those were each shipped with a "no multi-model re-score, mechanically test-guarded" note; this is the deferred reconciliation that credits or withholds the accumulated effect. Codex, Gemini, and Claude each re-scored independently against the 2026-05-16 reconciled baseline, then conservative-floor reconciliation (splits resolve down, unverifiable not credited, the higher value only when concretely and unanimously grounded).
+
+| Dimension | baseline (2026-05-16) | Codex | Gemini | Claude | reconciled |
+|---|--:|--:|--:|--:|--:|
+| Security | 8 | 8 | 8 | 8 | **8** |
+| Error Handling | 8 | 8 | 8 | 8 | **8** |
+| Code Quality | 7 | 8 | 8 | 8 | **8** |
+| Architecture | 7 | 8 | 8 | 7 | **7** |
+| Test Coverage | 8 | 8 | 8 | 8 | **8** |
+| Documentation | 7 | 7 | 7 | 7 | **7** |
+| Debugging/Observability | 8 | 8 | 8 | 8 | **8** |
+| Data Integrity | 7 | 9 | 9 | 9 | **9** |
+| Operational Safety | 8 | 9 | 9 | 9 | **9** |
+| Clever Compliance | 10 | 10 | 10 | 10 | **10** |
+| **Overall** | **7.8** | **8.3** | **8.2** | **8.0** | **8.0** |
+
+**Reconciled overall: 8.0** (raw 3-model means: Codex 8.3, Gemini 8.2, Claude 8.0). The reconciled figure is intentionally the conservative floor, consistent with how prior splits were handled and the discipline that caught the earlier false-10. Net movement from baseline: 7.8 to 8.0.
+
+### Per-dimension reconciled rationale
+
+- **Code Quality 7 to 8 (unanimous).** Verified in-repo: `planner_routes.py` 6,050 to 4,611, `assignment_grader.py` 7,444 to 5,344, four new single-responsibility Flask-free service modules (`planner_standards` 243, `planner_export` 1,095, `planner_prompts` 172, `response_extraction` 1,830) under characterization nets. Held below 9: `assignment_grader.py` (5,344) and `planner_routes.py` (4,611) are still large and `app.py` still carries route logic.
+- **Architecture 7 (held; 2-1 split resolved down).** Codex and Gemini scored 8 for the genuine service-layer extraction with no import cycles; Claude held 7 on concrete grounds and the floor rule resolves the split down: the dual publish path (`published_assessments`/`submissions` vs `published_content`/`student_submissions`) is still unconsolidated (dispatched by a `supabase_table` parameter, not a unified abstraction), `app.py` is still 1,935 lines with roughly 40 route functions, and there is no dependency injection. Real progress, not yet a clean architectural boundary.
+- **Data Integrity 7 to 9 (unanimous, now concretely credited).** Migration `0002_submission_dedup_forward_only.py` adds partial UNIQUE indexes on both `submissions` and `student_submissions`, CI asserts both indexes after `alembic upgrade head`, `dedup_key` is set on both publish paths, and no `utcnow()` remains in production. The 2026-05-16 note's qualitative "approximately 9" is now a verified 9. Not 10: forward-only by design (pre-migration historical duplicates remain unconstrained); no orphan-cascade tests.
+- **Operational Safety 8 to 9 (unanimous).** The docx-spam production root cause is fixed (the `backend/paths.py` call-time resolver replaced 19 hardcoded sites; test isolation converged onto one env-var fixture), and the matplotlib 3.11 `ax.boxplot(labels=)` removal class is eliminated codebase-wide. Not 10: Railway auto-deploy on merge is still the entire rollback story (no staged rollout, no post-deploy smoke gate beyond the pre-merge E2E check).
+- **Test Coverage 8 (held).** CI floor is 60%; the claimed 65.00% from a CI run is not stored in-repo and a local `.coverage` read showed a lower total, so no upward credit beyond baseline. The new exhaustive characterization nets add real branch coverage on the extracted code but do not move the absolute number into 9 territory.
+- **Security, Error Handling, Documentation, Debugging/Observability, Clever Compliance: unchanged.** No verified post-baseline uplift in any of these; Clever has no changes and no regression.
+
+### Biggest remaining lever and the next concrete step
+
+The unanimous biggest-lever category is unchanged: Architecture and Code Quality concentrated complexity. The three models split on the specific target, and all three are valid:
+
+1. **`app.py` route god-module (Claude).** 1,935 lines, roughly 40 route functions still embedded (grading-results CRUD), which is the specific concrete reason Architecture stayed at 7. Extracting them verbatim into a Blueprint is the exact proven Slice 1 and 2 pattern (pure move under a characterization net), lowest risk, highest confidence, and directly removes the holdout objection.
+2. **`frontend/src/tabs/PlannerTab.jsx` (Codex).** 7,405 lines, now the single largest source file in the repository. Highest raw concentrated complexity, but frontend extraction needs a Vitest characterization harness and is the higher-care item (the coupling-reduction rule exists precisely because a prior `App.jsx` extraction relocated lines without cutting coupling).
+3. **Dual publish-path consolidation (Gemini).** The biggest architectural lever and the prerequisite for cross-path Data Integrity Tier 2, but the highest blast radius (two tables, both student portals, SSE, grading dual-dispatch). It was deliberately scoped out of Slices 1 and 2 and needs its own brainstorm, not a mechanical slice.
+
+**Next concrete step (Tier 2 Slice 3): extract the grading-results route cluster from `app.py` into a Blueprint** under a characterization net, mirroring Slices 1 and 2. It is the lowest-risk continuous move, directly addresses the Architecture-7 holdout (the `app.py` god-module), and shrinks `app.py` toward an app-factory-plus-error-handlers core. PlannerTab.jsx and the dual publish path are the explicitly sequenced subsequent levers, each requiring its own dedicated design.
+
+**One more honest note:** the prior Slice 1 and 2 closeout notes asserted "overall stays at approximately 7.9." This reconciled re-score lands at 8.0, so those qualitative nudges were slightly conservative rather than wrong. The `App.jsx` figure in the original Critical Findings section (16,531) is stale: it is 7,144 now, halved by an earlier frontend extraction sprint that predates this work, not by these PRs. The Critical Findings section is left as the original-baseline record; this dated section is the current state.
