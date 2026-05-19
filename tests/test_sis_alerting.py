@@ -194,9 +194,10 @@ PR_B_EXPECTED_CAPTURES = {
     # PR_A_EXPECTED_CAPTURES["backend/utils/audit.py"]: 2). Net Sentry
     # coverage unchanged.
     "backend/accommodations.py": 7,
-    "backend/app.py": 12,  # 3 moved to backend/grading/pipeline.py in Phase 3a PR3 (was 15, -2 to state in PR2, -3 here)
+    "backend/app.py": 10,  # 2026-05-19 Tier 2 Slice 3 PR1: 3 more moved to backend/routes/grading_results_routes.py with the verbatim grading-results cluster (15, -2 state PR2, -3 pipeline Phase 3a PR3, -3 grading_results PR1). Net Sentry coverage unchanged; relocated captures floor-checked below.
     "backend/grading/state.py": 2,
     "backend/grading/pipeline.py": 3,  # Phase 3a PR3: 3 captures moved from app.py
+    "backend/routes/grading_results_routes.py": 3,  # 2026-05-19 Tier 2 Slice 3 PR1: the 3 captures that moved with the verbatim grading-results cluster out of app.py
     "backend/auth.py": 3,
     "backend/routes/analytics_routes.py": 4,
     "backend/routes/automation_routes.py": 4,
