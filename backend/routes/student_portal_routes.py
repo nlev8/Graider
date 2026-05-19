@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from backend.supabase_client import get_supabase_or_raise as get_supabase
+from backend.services.submission_repository import SubmissionPathType
 # Phase 4.5: this module has MIXED auth paths. Teacher-authenticated
 # handlers use _get_teacher_supabase() so their requests land under RLS
 # when USE_PER_USER_JWT=1. Anonymous join-code paths
@@ -50,7 +51,7 @@ from backend.observability import critical_path
 
 
 def _spawn_thread_grading(submission_id, assessment, answers, student_info,
-                         teacher_config, teacher_id, supabase_table,
+                         teacher_config, teacher_id, path_type,
                          student_accommodations):
     """Thread-based portal grading spawn.
 
@@ -67,7 +68,7 @@ def _spawn_thread_grading(submission_id, assessment, answers, student_info,
     thread = threading.Thread(
         target=run_portal_grading_thread,
         args=(submission_id, assessment, answers, student_info,
-              teacher_config, teacher_id, supabase_table, student_accommodations),
+              teacher_config, teacher_id, path_type, student_accommodations),
         daemon=True,
     )
     thread.start()
@@ -1554,7 +1555,10 @@ def submit_assessment(code):
                 grade_portal_submission.delay(
                     submission_id,
                     teacher_id,
-                    'submissions',
+                    # KEEP .value here: the Celery message arg must be the
+                    # byte-identical legacy string so PortalGradingTask
+                    # .on_failure's args[2] extraction is unchanged.
+                    SubmissionPathType.JOIN_CODE.value,
                     district_id=district_id,
                     user_id=user_id,
                 )
@@ -1567,7 +1571,8 @@ def submit_assessment(code):
                     sentry_sdk.capture_exception(e)
                 _spawn_thread_grading(submission_id, assessment, answers,
                                       student_info, teacher_config, teacher_id,
-                                      'submissions', student_accommodations)
+                                      SubmissionPathType.JOIN_CODE,
+                                      student_accommodations)
 
             # Mark results as partially graded for frontend
             results["grading_status"] = "partial"
