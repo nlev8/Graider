@@ -62,13 +62,25 @@ def test_wrapper_passes_accommodations_to_sync():
         assert call_kwargs.get('task_id') is None
 
 
-def test_dedup_helpers_exist():
-    """Row-level dedup helpers must be present for the Celery path."""
-    from backend.services.portal_grading import (
-        _fetch_submission_row, _claim_submission_for_grading, _is_stale_claim,
+def test_repo_dedup_methods_exist():
+    """Row-level dedup is now via SubmissionRepository methods (Slice 4 PR2
+    rewired grade_portal_submission_sync onto these). Slice 5 PR2 will
+    delete the legacy _fetch_submission_row + _claim_submission_for_grading
+    helpers; this test pre-positions by asserting the new contract.
+
+    _is_stale_claim stays in portal_grading.py (predicate, not a method on
+    the repo); keep that assertion.
+    """
+    from backend.services.submission_repository import (
+        JoinCodeSubmissionRepository, ClassSubmissionRepository,
     )
-    assert callable(_fetch_submission_row)
-    assert callable(_claim_submission_for_grading)
+    from backend.services.portal_grading import _is_stale_claim
+    # Both repo adapters must have fetch + claim_for_grading
+    assert callable(getattr(JoinCodeSubmissionRepository, "fetch", None))
+    assert callable(getattr(JoinCodeSubmissionRepository, "claim_for_grading", None))
+    assert callable(getattr(ClassSubmissionRepository, "fetch", None))
+    assert callable(getattr(ClassSubmissionRepository, "claim_for_grading", None))
+    # Predicate stays in portal_grading.py
     assert callable(_is_stale_claim)
 
 

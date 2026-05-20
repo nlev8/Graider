@@ -33,10 +33,15 @@ class _Query:
         self._filters[col] = val
         return self
 
+    def ilike(self, col, val):
+        self._filters[("ilike", col)] = val
+        return self
+
     def single(self):
         return self
 
     def execute(self):
+        self._t.last_query = self
         if self._t.raise_on_execute:
             raise self._t.raise_on_execute
         return _Resp(self._t.row)
@@ -47,6 +52,7 @@ class FakeTable:
         self.row = None
         self.updates = []
         self.raise_on_execute = None
+        self.last_query = None
 
 
 class FakeSupabase:
@@ -460,3 +466,126 @@ def test_base_normalize_context_raises_not_implemented():
 
     with _pt.raises(NotImplementedError):
         repo.normalize_context({}, {})
+
+
+# ---------------------------------------------------------------------------
+# Task 1.2: ExistingSubmission dataclass + find_existing_submission
+# ---------------------------------------------------------------------------
+def test_existing_submission_dataclass_shape():
+    from backend.services.submission_repository import ExistingSubmission
+    es = ExistingSubmission(id="abc", results={"score": 90}, student_name="Pat")
+    assert es.id == "abc"
+    assert es.results == {"score": 90}
+    assert es.student_name == "Pat"
+    # Optional fields default to None
+    es2 = ExistingSubmission(id="def")
+    assert es2.results is None
+    assert es2.student_name is None
+
+
+def test_find_existing_submission_method_exists():
+    from backend.services.submission_repository import SubmissionRepository
+    assert hasattr(SubmissionRepository, "find_existing_submission")
+
+
+def test_joincode_find_existing_submission_hit():
+    sb = FakeSupabase()
+    sb.table("submissions")  # materialize
+    sb.tables["submissions"].row = {
+        "id": "sub-1", "student_name": "Pat", "results": {"score": 90}
+    }
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    repo = JoinCodeSubmissionRepository(sb)
+    es = repo.find_existing_submission(lookup_key="ABCD12", student_info={"name": "Pat"})
+    assert es is not None
+    assert es.id == "sub-1"
+    assert es.results == {"score": 90}
+    assert es.student_name == "Pat"
+    # Verify the correct columns and values were filtered on (catches PR2 rewire bugs).
+    last_q = sb.tables["submissions"].last_query
+    assert last_q._filters["join_code"] == "ABCD12"
+    assert last_q._filters[("ilike", "student_name")] == "Pat"
+
+
+def test_joincode_find_existing_submission_miss():
+    sb = FakeSupabase()
+    sb.table("submissions")  # materialize
+    sb.tables["submissions"].row = None  # no row matches
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    repo = JoinCodeSubmissionRepository(sb)
+    es = repo.find_existing_submission(lookup_key="ABCD12", student_info={"name": "Pat"})
+    assert es is None
+
+
+def test_class_find_existing_submission_hit():
+    sb = FakeSupabase()
+    sb.table("student_submissions")  # materialize
+    sb.tables["student_submissions"].row = {"id": "sub-7", "student_name": "Chris"}
+    from backend.services.submission_repository import ClassSubmissionRepository
+    repo = ClassSubmissionRepository(sb)
+    es = repo.find_existing_submission(
+        lookup_key="content-uuid-1",
+        student_info={"student_id": "stu-42"},
+    )
+    assert es is not None
+    assert es.id == "sub-7"
+    assert es.results is None  # class path's pre-check does not select results
+    assert es.student_name == "Chris"
+    # Verify the correct columns and values were filtered on (catches PR2 rewire bugs).
+    last_q = sb.tables["student_submissions"].last_query
+    assert last_q._filters["content_id"] == "content-uuid-1"
+    assert last_q._filters["student_id"] == "stu-42"
+
+
+def test_class_find_existing_submission_miss():
+    sb = FakeSupabase()
+    sb.table("student_submissions")  # materialize
+    sb.tables["student_submissions"].row = None
+    from backend.services.submission_repository import ClassSubmissionRepository
+    repo = ClassSubmissionRepository(sb)
+    es = repo.find_existing_submission(
+        lookup_key="content-uuid-1",
+        student_info={"student_id": "stu-42"},
+    )
+    assert es is None
+
+
+# ---------------------------------------------------------------------------
+# Task 1.2: exception-path tests for find_existing_submission
+# (mirrors test_fetch_none_and_captures_on_execute_exception pattern)
+# ---------------------------------------------------------------------------
+def test_joincode_find_existing_submission_captures_on_execute_exception(monkeypatch):
+    """Mirror fetch() error contract: logs + sentry_sdk.capture_exception, returns None."""
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+
+    sb = FakeSupabase()
+    sb.table("submissions")
+    sb.tables["submissions"].raise_on_execute = RuntimeError("boom")
+    captured = {}
+    monkeypatch.setattr(
+        "backend.services.submission_repository.sentry_sdk.capture_exception",
+        lambda e: captured.setdefault("exc", e),
+    )
+    repo = JoinCodeSubmissionRepository(sb)
+    assert repo.find_existing_submission(lookup_key="ABCD12", student_info={"name": "Pat"}) is None
+    assert isinstance(captured["exc"], RuntimeError)
+
+
+def test_class_find_existing_submission_captures_on_execute_exception(monkeypatch):
+    """Mirror fetch() error contract: logs + sentry_sdk.capture_exception, returns None."""
+    from backend.services.submission_repository import ClassSubmissionRepository
+
+    sb = FakeSupabase()
+    sb.table("student_submissions")
+    sb.tables["student_submissions"].raise_on_execute = RuntimeError("boom")
+    captured = {}
+    monkeypatch.setattr(
+        "backend.services.submission_repository.sentry_sdk.capture_exception",
+        lambda e: captured.setdefault("exc", e),
+    )
+    repo = ClassSubmissionRepository(sb)
+    assert repo.find_existing_submission(
+        lookup_key="content-uuid-1",
+        student_info={"student_id": "stu-42"},
+    ) is None
+    assert isinstance(captured["exc"], RuntimeError)
