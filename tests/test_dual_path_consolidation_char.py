@@ -915,23 +915,22 @@ def test_no_inline_published_or_dedup_queries_in_submit_routes():
         "submit_assessment still contains inline published_assessments fetch; "
         "expected use of content_repo.fetch_by_lookup_key"
     )
-    # Class path: no inline content_id+student_id dedup query
-    # Pattern: any select followed by .eq('content_id', ...).eq('student_id', ...) or vice-versa
-    import re
-    class_dedup_re = re.compile(
-        r"\.eq\(['\"]content_id['\"][^)]*\)\.eq\(['\"]student_id['\"]"
-        r"|\.eq\(['\"]student_id['\"][^)]*\)\.eq\(['\"]content_id['\"]"
-    )
-    assert not class_dedup_re.search(sa_body), (
-        "submit_student_work still contains inline content_id+student_id dedup query; "
+    # Class path: no inline 'select id' dedup query against student_submissions.
+    # The pre-Slice-5 dedup pattern was:
+    #   db.table('student_submissions').select('id').eq('student_id', ...).eq('content_id', ...)
+    # Other student_submissions queries in the body (the upsert, the late-context
+    # fetches) select different columns and don't trip this.
+    assert "db.table('student_submissions').select('id').eq(" not in sa_body and \
+        'db.table("student_submissions").select("id").eq(' not in sa_body, (
+        "submit_student_work still contains the inline 'select id' dedup; "
         "expected use of submission_repo.find_existing_submission"
     )
-    # Class path: no inline published_content fetch (by id specifically — this is the route's content lookup)
-    # Pattern: db.table('published_content').select(...).eq('id', content_id)
-    pc_fetch_re = re.compile(
-        r"db\.table\(['\"]published_content['\"]\)\.select\([^)]*\)\.eq\(['\"]id['\"]"
-    )
-    assert not pc_fetch_re.search(sa_body), (
-        "submit_student_work still contains inline published_content fetch by id; "
-        "expected use of content_repo.fetch_by_lookup_key"
+    # Class path: no inline 'select content, title, teacher_id, settings' fetch
+    # against published_content. This is the route's MAIN content fetch (line 41
+    # in the pre-Slice-5 body). Other published_content queries (the late-context
+    # 'select id, title' fetch) stay because they serve different purposes.
+    assert "db.table('published_content').select('content, title, teacher_id, settings')" not in sa_body and \
+        'db.table("published_content").select("content, title, teacher_id, settings")' not in sa_body, (
+        "submit_student_work still contains the inline 'select content, title, "
+        "teacher_id, settings' fetch; expected use of content_repo.fetch_by_lookup_key"
     )
