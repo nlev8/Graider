@@ -412,6 +412,452 @@ class TestFailureSeam:
 
 
 # ---------------------------------------------------------------------------
+# Seam 5: route-layer observable contract (HTTP entry points)
+#
+# PRE-rewire commit: assertions pin the EXACT status code + JSON body each
+# route returns today for happy-path / dedup-hit / 404 / 400.  PR2 must keep
+# these assertions byte-identical post-rewire; that equivalence is the
+# zero-behavior-change proof for the route layer.
+#
+# Probe-then-pin discipline: every assertion below was verified against the
+# live route code before being written here.  Values were NOT invented.
+# ---------------------------------------------------------------------------
+
+# ---- shared fixtures and helpers for TestRouteContractSeam ----------------
+
+import os as _os
+import logging as _logging
+
+_STUDENT_ID = "11111111-1111-1111-1111-111111111111"
+
+
+def _make_sb_chain(data=None):
+    """Minimal chainable Supabase query-builder mock."""
+    chain = MagicMock()
+    for _attr in [
+        "select", "insert", "upsert", "update", "delete",
+        "eq", "neq", "in_", "lt", "ilike", "order", "limit", "or_",
+    ]:
+        getattr(chain, _attr).return_value = chain
+    chain.execute.return_value = MagicMock(data=data if data is not None else [])
+    return chain
+
+
+@pytest.fixture(scope="module")
+def _route_app():
+    """Production Flask app in test mode with rate-limiter disabled.
+
+    Uses the real app (backend.app) so both blueprints are registered
+    exactly as they are in production — this exercises the full route
+    stack including @handle_route_errors and @critical_path decorators.
+    """
+    _os.environ.setdefault("FLASK_ENV", "development")
+    _os.environ.setdefault("DEV_USER_ID", "test-teacher-001")
+    _logging.disable(_logging.CRITICAL)
+    from backend.app import app as _flask_app
+    _flask_app.config["TESTING"] = True
+    from backend.extensions import limiter as _limiter
+    prior = _limiter.enabled
+    _limiter.enabled = False
+    yield _flask_app
+    _limiter.enabled = prior
+    _logging.disable(_logging.NOTSET)
+
+
+@pytest.fixture(scope="module")
+def _route_client(_route_app):
+    return _route_app.test_client()
+
+
+class TestRouteContractSeam:
+    """Pins both HTTP entry routes' full request-to-response observable contract.
+
+    PRE-rewire commit: assertions pin the EXACT status code + JSON body
+    each route returns today for happy path / dedup hit / 404 / 400.  PR2
+    must keep these assertions byte-identical post-rewire.  That equivalence
+    is the zero-behavior-change proof for the route layer.
+
+    join-code path: POST /api/student/submit/<code>  (anonymous, service-role)
+    class-based path: POST /api/student/class-submit/<content_id>  (X-Student-Token)
+
+    Implementation note — no authed_client fixture exists.  Class-based tests
+    use the direct-invoke pattern from tests/test_student_account_coverage.py
+    (test_request_context + submit_student_work(content_id) call) with
+    @patch('backend.routes.student_account_routes._get_supabase').
+    """
+
+    # ------------------------------------------------------------------
+    # join-code path helpers
+    # ------------------------------------------------------------------
+
+    def _jc_assessment_row(self, code="TESTJC", allow_multiple=False):
+        return [{
+            "id": "assess-jc-001",
+            "join_code": code,
+            "is_active": True,
+            "teacher_id": "teacher-jc-001",
+            "settings": {
+                "show_score_immediately": True,
+                "show_correct_answers": True,
+                "allow_multiple_attempts": allow_multiple,
+            },
+            "assessment": {"sections": []},
+        }]
+
+    def _jc_sb(self, assessment_data, existing_submissions=None, upsert_id="sub-jc-001"):
+        """Build a Supabase mock for the join-code submit route."""
+        mock_sb = MagicMock()
+        existing_submissions = existing_submissions or []
+
+        def _ts(name):
+            if name == "published_assessments":
+                return _make_sb_chain(assessment_data)
+            if name == "submissions":
+                chain = _make_sb_chain(existing_submissions)
+                uc = MagicMock()
+                uc.execute.return_value = MagicMock(data=[{"id": upsert_id}])
+                chain.upsert.return_value = uc
+                return chain
+            return _make_sb_chain([])
+
+        mock_sb.table.side_effect = _ts
+        return mock_sb
+
+    # ------------------------------------------------------------------
+    # class-based path helpers
+    # ------------------------------------------------------------------
+
+    def _class_session_row(self):
+        from datetime import datetime, timezone, timedelta
+        expires = (datetime.now(tz=timezone.utc) + timedelta(hours=4)).isoformat()
+        return [{"student_id": _STUDENT_ID, "class_id": "cls-001", "expires_at": expires}]
+
+    def _class_student_row(self):
+        return [{
+            "first_name": "Jane", "last_name": "Doe",
+            "student_id_number": "S100", "period": "P2",
+            "email": "", "teacher_id": "teacher-class-001",
+        }]
+
+    def _class_content_row(self, content_id="pc-001"):
+        return [{
+            "id": content_id, "class_id": "cls-001", "is_active": True,
+            "target_student_ids": None,
+            "content": {"sections": []},
+            "title": "Quiz A", "teacher_id": "teacher-class-001",
+            "settings": {"show_score_immediately": True},
+            "due_date": None,
+        }]
+
+    def _class_sb(self, content_data=None, existing_subs=None, upsert_id="sub-class-001"):
+        """Build a Supabase mock for the class-based submit route."""
+        mock_sb = MagicMock()
+        cd = content_data if content_data is not None else self._class_content_row()
+        existing_subs = existing_subs or []
+
+        def _ts(name):
+            if name == "student_sessions":
+                return _make_sb_chain(self._class_session_row())
+            if name == "class_students":
+                return _make_sb_chain([{"student_id": _STUDENT_ID}])
+            if name == "students":
+                return _make_sb_chain(self._class_student_row())
+            if name == "student_submissions":
+                chain = _make_sb_chain(existing_subs)
+                uc = MagicMock()
+                uc.execute.return_value = MagicMock(data=[{"id": upsert_id}])
+                chain.upsert.return_value = uc
+                return chain
+            if name == "published_content":
+                return _make_sb_chain(cd)
+            return _make_sb_chain([])
+
+        mock_sb.table.side_effect = _ts
+        return mock_sb
+
+    def _call_class_submit(self, _route_app, content_id, headers, body, mock_sb):
+        """Invoke submit_student_work inside a test_request_context."""
+        from backend.routes.student_account_routes import submit_student_work
+        with patch("backend.routes.student_account_routes._get_supabase", return_value=mock_sb), \
+             patch("backend.services.portal_grading.has_written_questions", return_value=False), \
+             patch("backend.services.grading_service.grade_student_submission",
+                   return_value={"score": 1, "total_points": 1, "percentage": 100.0, "questions": []}):
+            with _route_app.test_request_context(
+                f"/api/student/class-submit/{content_id}",
+                method="POST",
+                headers=headers,
+                json=body,
+            ):
+                rv = submit_student_work(content_id)
+        if isinstance(rv, tuple):
+            return rv[1], rv[0].get_json()
+        return rv.status_code, rv.get_json()
+
+    # ------------------------------------------------------------------
+    # join-code tests
+    # ------------------------------------------------------------------
+
+    def test_joincode_happy_path_creates_submission(self, _route_client):
+        """POST /api/student/submit/<code> — new (name, code) pair.
+
+        Probed 2026-05-20: route returns 200 with success=True, submission_id,
+        student_name, score/total_points/percentage/feedback_summary/detailed_results
+        when assessment is MC-only (no written questions) and show_score_immediately
+        + show_correct_answers are both True.
+        """
+        mock_sb = self._jc_sb(self._jc_assessment_row())
+        grade_rv = {
+            "score": 0, "total_points": 0, "percentage": 0,
+            "questions": [], "feedback_summary": "Probed feedback",
+        }
+        with patch("backend.routes.student_portal_routes.get_supabase", return_value=mock_sb), \
+             patch("backend.services.portal_grading.has_written_questions", return_value=False), \
+             patch("backend.routes.student_portal_routes.grade_student_submission", return_value=grade_rv):
+            resp = _route_client.post(
+                "/api/student/submit/TESTJC",
+                json={"student_name": "Alice", "answers": {}},
+            )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["submission_id"] == "sub-jc-001"
+        assert data["student_name"] == "Alice"
+        # MC-only + show_score_immediately=True + show_correct_answers=True:
+        # score, total_points, percentage, feedback_summary, detailed_results all present
+        assert "score" in data
+        assert "total_points" in data
+        assert "percentage" in data
+        assert "feedback_summary" in data
+        assert "detailed_results" in data
+        # No grading_status key for fully-graded MC path
+        assert "grading_status" not in data
+
+    def test_joincode_dedup_returns_existing_results(self, _route_client):
+        """Second POST with same (code, student_name) hits ilike-name pre-check.
+
+        Probed 2026-05-20: route returns 400 with error=
+        'You have already submitted this assessment.' and previous_results
+        dict containing the stored results.
+
+        The ilike pre-check fires when allow_multiple_attempts is falsy (default).
+        The response body includes `previous_results` — the exact stored results
+        dict from the first submission row.
+        """
+        previous_results = {"score": 5, "total_points": 10, "percentage": 50}
+        existing = [{"id": "sub-existing-001", "results": previous_results}]
+        mock_sb = self._jc_sb(
+            self._jc_assessment_row(allow_multiple=False),
+            existing_submissions=existing,
+        )
+        with patch("backend.routes.student_portal_routes.get_supabase", return_value=mock_sb):
+            resp = _route_client.post(
+                "/api/student/submit/TESTJC",
+                json={"student_name": "Alice", "answers": {}},
+            )
+
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert data["error"] == "You have already submitted this assessment."
+        assert data["previous_results"] == previous_results
+
+    def test_joincode_missing_content_404(self, _route_client):
+        """POST to a nonexistent join_code returns 404.
+
+        Probed 2026-05-20: route returns 404 with
+        error='Assessment not found' when published_assessments query is empty.
+        """
+        mock_sb = self._jc_sb(assessment_data=[])  # not found
+        with patch("backend.routes.student_portal_routes.get_supabase", return_value=mock_sb):
+            resp = _route_client.post(
+                "/api/student/submit/NOTEXIST",
+                json={"student_name": "Alice", "answers": {}},
+            )
+
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert data["error"] == "Assessment not found"
+
+    def test_joincode_inactive_assessment_403(self, _route_client):
+        """POST to an inactive assessment returns 403.
+
+        Probed 2026-05-20: route returns 403 with
+        error='This assessment is no longer accepting submissions.'
+        when is_active=False.  Named _403 (not _400) to pin the actual
+        status code — there is no 400-returning missing-field validation in
+        this route; all input fields use .get() with defaults.
+        """
+        inactive_row = [{
+            "id": "assess-inactive", "join_code": "INACT1", "is_active": False,
+            "settings": {}, "assessment": {}, "teacher_id": "t1",
+        }]
+        mock_sb = self._jc_sb(assessment_data=inactive_row)
+        with patch("backend.routes.student_portal_routes.get_supabase", return_value=mock_sb):
+            resp = _route_client.post(
+                "/api/student/submit/INACT1",
+                json={"student_name": "Alice", "answers": {}},
+            )
+
+        assert resp.status_code == 403
+        data = resp.get_json()
+        assert data["error"] == "This assessment is no longer accepting submissions."
+
+    # ------------------------------------------------------------------
+    # class-based tests
+    # ------------------------------------------------------------------
+
+    def test_class_happy_path_creates_submission(self, _route_app):
+        """POST /api/student/class-submit/<content_id> — first submission.
+
+        Probed 2026-05-20: route returns 200 with success=True, submission_id,
+        is_late, message, score, percentage when MC-only and show_score_immediately=True.
+        """
+        status, data = self._call_class_submit(
+            _route_app,
+            content_id="pc-001",
+            headers={"X-Student-Token": "tok-abc", "Content-Type": "application/json"},
+            body={"answers": {}, "time_taken_seconds": 30},
+            mock_sb=self._class_sb(),
+        )
+
+        assert status == 200
+        assert data["success"] is True
+        assert data["submission_id"] == "sub-class-001"
+        assert data["is_late"] is False
+        assert data["message"] == "Submitted and graded successfully!"
+        # show_score_immediately=True: score + percentage present
+        assert "score" in data
+        assert "percentage" in data
+
+    def test_class_second_submission_succeeds_as_new_attempt(self, _route_app):
+        """Class-based path has NO ilike pre-check; it increments attempt_number.
+
+        Probed 2026-05-20: a second POST for the same (student, content) pair
+        returns 200 with a new submission_id (attempt_number=2).  This differs
+        from the join-code path which blocks duplicates at the pre-check layer.
+        The dedup for class-based is only at the upsert-23505 level (concurrent
+        double-submit), not a soft early-return.
+        """
+        status, data = self._call_class_submit(
+            _route_app,
+            content_id="pc-001",
+            headers={"X-Student-Token": "tok-abc", "Content-Type": "application/json"},
+            body={"answers": {}, "time_taken_seconds": 10},
+            mock_sb=self._class_sb(
+                existing_subs=[{"id": "sub-first"}],
+                upsert_id="sub-second",
+            ),
+        )
+
+        assert status == 200
+        assert data["success"] is True
+        assert data["submission_id"] == "sub-second"
+
+    def test_class_upsert_duplicate_returns_400(self, _route_app):
+        """Concurrent double-submit hits 23505 unique violation → 400.
+
+        Probed 2026-05-20: when the upsert raises an exception containing '23505',
+        route returns 400 with error='You have already submitted this assignment.'
+        Note the wording differs from the join-code path ('assessment' vs 'assignment').
+        """
+        mock_sb = MagicMock()
+
+        def _ts(name):
+            if name == "student_sessions":
+                return _make_sb_chain(self._class_session_row())
+            if name == "class_students":
+                return _make_sb_chain([{"student_id": _STUDENT_ID}])
+            if name == "students":
+                return _make_sb_chain(self._class_student_row())
+            if name == "student_submissions":
+                chain = _make_sb_chain([])
+                uc = MagicMock()
+                uc.execute.side_effect = Exception(
+                    "23505 duplicate key value violates unique constraint"
+                )
+                chain.upsert.return_value = uc
+                return chain
+            if name == "published_content":
+                return _make_sb_chain(self._class_content_row())
+            return _make_sb_chain([])
+
+        mock_sb.table.side_effect = _ts
+
+        from backend.routes.student_account_routes import submit_student_work
+        with patch("backend.routes.student_account_routes._get_supabase", return_value=mock_sb), \
+             patch("backend.services.portal_grading.has_written_questions", return_value=False), \
+             patch("backend.services.grading_service.grade_student_submission",
+                   return_value={"score": 0, "total_points": 1, "percentage": 0, "questions": []}):
+            with _route_app.test_request_context(
+                "/api/student/class-submit/pc-001",
+                method="POST",
+                headers={"X-Student-Token": "tok-abc", "Content-Type": "application/json"},
+                json={"answers": {}, "time_taken_seconds": 10},
+            ):
+                rv = submit_student_work("pc-001")
+
+        status = rv[1] if isinstance(rv, tuple) else rv.status_code
+        data = rv[0].get_json() if isinstance(rv, tuple) else rv.get_json()
+
+        assert status == 400
+        assert data["error"] == "You have already submitted this assignment."
+
+    def test_class_missing_content_404(self, _route_app):
+        """POST to nonexistent content_id: visibility check returns False → 404.
+
+        Probed 2026-05-20: _content_visible_to_student returns False when
+        published_content is empty → route returns 404 with
+        error='Content not found'.
+        """
+        mock_sb = MagicMock()
+
+        def _ts(name):
+            if name == "student_sessions":
+                return _make_sb_chain(self._class_session_row())
+            if name == "class_students":
+                return _make_sb_chain([{"student_id": _STUDENT_ID}])
+            if name == "published_content":
+                return _make_sb_chain([])  # not found → visibility=False
+            return _make_sb_chain([])
+
+        mock_sb.table.side_effect = _ts
+
+        status, data = self._call_class_submit(
+            _route_app,
+            content_id="nonexistent",
+            headers={"X-Student-Token": "tok-abc", "Content-Type": "application/json"},
+            body={"answers": {}},
+            mock_sb=mock_sb,
+        )
+
+        assert status == 404
+        assert data["error"] == "Content not found"
+
+    def test_class_no_auth_returns_401(self, _route_app):
+        """POST without X-Student-Token header returns 401.
+
+        Probed 2026-05-20: missing token → _validate_student_session returns
+        None → route returns 401 with error='Not logged in'.
+        Note: this test does not need a Supabase mock because the auth check
+        fires before any DB call.
+        """
+        from backend.routes.student_account_routes import submit_student_work
+        with _route_app.test_request_context(
+            "/api/student/class-submit/pc-001",
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            json={"answers": {}},
+        ):
+            rv = submit_student_work("pc-001")
+
+        status = rv[1] if isinstance(rv, tuple) else rv.status_code
+        data = rv[0].get_json() if isinstance(rv, tuple) else rv.get_json()
+
+        assert status == 401
+        assert data["error"] == "Not logged in"
+
+
+# ---------------------------------------------------------------------------
 # PR2 grep gate: the per-table supabase_table string dispatch must be gone
 # from the grading pipeline body (replaced by SubmissionRepository).
 # ---------------------------------------------------------------------------
