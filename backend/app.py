@@ -489,11 +489,26 @@ def healthz():
         status["supabase"] = "error"
 
     # Check Redis if configured
+    # socket_timeout + socket_connect_timeout are MANDATORY here: a slow
+    # or unresponsive Redis (e.g. mid-recovery after an upstream outage)
+    # would otherwise let r.ping() block indefinitely, exceeding gunicorn's
+    # worker timeout and killing the worker. The worker SIGKILL surfaces
+    # in Sentry as SystemExit at the URL the worker was processing
+    # (which for orchestrator probes is /healthz). Surfaced by the
+    # 2026-05-19 Railway + GCP incident, where post-recovery Redis
+    # ramp left ping unbounded and /healthz hung -> SystemExit alert.
+    # Total worst-case /healthz latency now: ~3s (Supabase) + ~2s
+    # (Redis connect) + ~2s (Redis ping) = ~7s, well under gunicorn's
+    # default 30s worker timeout.
     try:
         redis_url = os.getenv('REDIS_URL')
         if redis_url:
             import redis
-            r = redis.from_url(redis_url)
+            r = redis.from_url(
+                redis_url,
+                socket_timeout=2.0,
+                socket_connect_timeout=2.0,
+            )
             r.ping()
             status["redis"] = "ok"
         else:
