@@ -21,11 +21,32 @@ without a Flask request context).
 import enum
 import hashlib
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Optional
 
 import sentry_sdk
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExistingSubmission:
+    """Return type of SubmissionRepository.find_existing_submission.
+
+    Each adapter populates the fields its query selects. Caller handles
+    None vs hit and uses whatever fields are available. JoinCode populates
+    id + results + student_name (the 'submissions' table's id, results,
+    student_name columns). Class populates id + student_name (the
+    'student_submissions' table's id, student_name columns; results is
+    not selected by the class-based dedup pre-check today).
+
+    id is Optional because row.get("id") returns Optional[str]; callers
+    must handle None before dereferencing.
+    """
+    id: Optional[str] = None
+    results: Optional[dict] = None
+    student_name: Optional[str] = None
 
 
 class SubmissionPathType(enum.Enum):
@@ -123,6 +144,14 @@ class SubmissionRepository:
             sentry_sdk.capture_exception(e)
             return None
 
+    def find_existing_submission(self, lookup_key, student_info):
+        """Route-layer dedup pre-check. Returns ExistingSubmission or None.
+
+        Per-adapter implementation preserves each path's exact query mechanism
+        (fuzzy ilike for join-code, exact match for class-based).
+        """
+        raise NotImplementedError("find_existing_submission is path-specific")
+
     def _resolve_student_id(self, data):
         """Path-specific student_id resolution. Relocated VERBATIM from the
         portal_grading.fetch_submission_full_context :526 branch; subclasses
@@ -190,6 +219,31 @@ class JoinCodeSubmissionRepository(SubmissionRepository):
         student_id = ''
         return student_id
 
+    def find_existing_submission(self, lookup_key, student_info):
+        if not self._sb or not lookup_key:
+            return None
+        try:
+            result = self._sb.table(self.table_name).select(
+                "id, results, student_name"
+            ).eq("join_code", lookup_key).ilike(
+                "student_name", student_info.get("name", "")
+            ).execute()
+        except Exception as e:
+            logger.error("find_existing_submission failed for %s", lookup_key)
+            sentry_sdk.capture_exception(e)
+            return None
+        rows = result.data if result else None
+        if not rows:
+            return None
+        # If multiple matches, take the first (the existing route does
+        # the same: it reads the first row of the result).
+        row = rows[0] if isinstance(rows, list) else rows
+        return ExistingSubmission(
+            id=row.get("id"),
+            results=row.get("results"),
+            student_name=row.get("student_name"),
+        )
+
 
 class ClassSubmissionRepository(SubmissionRepository):
     """Authenticated class-based path -> Supabase 'student_submissions' table."""
@@ -201,6 +255,35 @@ class ClassSubmissionRepository(SubmissionRepository):
         # (portal_grading.py:529 on main).
         student_id = data.get('student_id') or ''
         return student_id
+
+    def find_existing_submission(self, lookup_key, student_info):
+        if not self._sb or not lookup_key or not student_info.get("student_id"):
+            return None
+        try:
+            # Mirror student_account_routes.py:1137 exactly. The dedup
+            # query selects only id today (class path does not return
+            # existing results inline); preserve that. Select student_name
+            # additionally for the ExistingSubmission dataclass.
+            result = self._sb.table(self.table_name).select(
+                "id, student_name"
+            ).eq(
+                "content_id", lookup_key
+            ).eq(
+                "student_id", student_info["student_id"]
+            ).execute()
+        except Exception as e:
+            logger.error("find_existing_submission failed for %s", lookup_key)
+            sentry_sdk.capture_exception(e)
+            return None
+        rows = result.data if result else None
+        if not rows:
+            return None
+        row = rows[0] if isinstance(rows, list) else rows
+        return ExistingSubmission(
+            id=row.get("id"),
+            results=None,
+            student_name=row.get("student_name"),
+        )
 
 
 def repository_for(path_type, sb):
