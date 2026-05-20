@@ -33,24 +33,82 @@ if not redis_url:
 # explicit @limiter.limit(...) decorators override this for endpoints that
 # need tighter (auth, writes) or looser (dashboards, polling) limits.
 #
-# 2026-05-20 hotfix #3: in_memory_fallback_enabled=True. When the Redis
-# storage backend is unreachable at REQUEST TIME (e.g. the 2026-05-19
-# Railway/GCP incident left Redis degraded for hours after Railway's edge
-# recovered), the limiter previously raised in before_request and every
-# non-@limiter.exempt route returned a Flask 500. With this flag the
-# limiter automatically falls back to in-memory storage per request when
-# the configured backend errors. Per-route limits become per-worker
-# in-memory during the fallback window — bypassable but the app serves
-# users correctly, and the fallback is automatic + per-request (no
-# restart needed when Redis recovers).
+# 2026-05-20 hotfix #5: STARTUP REDIS PROBE + storage_options bounds.
 #
-# Note this fallback only fires for transient-Redis-unreachable errors at
-# REQUEST TIME. The hard requirement above (REDIS_URL must be SET in
-# production) still raises at module import — a config-missing error is a
-# different class from a transient outage and stays fail-fast.
+# Hotfix #3 added in_memory_fallback_enabled=True, but in_memory_fallback
+# only kicks in when the storage backend RAISES an exception. The
+# 2026-05-19 Railway/GCP incident exposed the case where Redis is
+# unreachable in a way that makes redis-py's internal connection-retry
+# loop HANG (no exception ever raised) until gunicorn's worker timeout
+# fires SIGABRT → SystemExit(1). The fallback never fired because the
+# call never returned. Sentry traces showed the worker stuck deep in
+# limits/storage/redis.py:incr → flask-limiter's own internal redis
+# client (separate from the redis.from_url calls in app.py).
+#
+# Fix has two layers:
+#
+# 1. STARTUP PROBE: at module import, probe Redis with a bounded connect
+#    (~2s, no retries). If reachable, use the configured Redis URL as the
+#    storage. If unreachable, fall back to memory:// for the entire
+#    process lifetime — the limiter never even tries to talk to broken
+#    Redis at request time, so workers can't get stuck in its retry loop.
+#    Sessions are per-worker in this mode (matches the existing
+#    flask-session filesystem fallback in app.py from hotfix #3).
+#
+# 2. storage_options BOUNDS: passed to the Limiter so that IF Redis was
+#    reachable at startup but becomes unreachable later (network blip),
+#    the limiter's redis client fails fast (~2s, no retries) instead of
+#    hanging. in_memory_fallback_enabled then correctly catches the
+#    raised exception and degrades per-request.
+#
+# The hard config requirement at the top of this file (REDIS_URL must be
+# SET in production) still raises at import — a config-missing error is
+# a different class from a transient outage and stays fail-fast.
+
+_storage_uri = redis_url or "memory://"
+_storage_options: dict = {}
+
+if redis_url:
+    try:
+        import redis as _redis_lib
+        from redis.backoff import NoBackoff as _NoBackoff
+        from redis.retry import Retry as _Retry
+
+        _probe = _redis_lib.from_url(
+            redis_url,
+            socket_timeout=2.0,
+            socket_connect_timeout=2.0,
+            retry=_Retry(_NoBackoff(), retries=0),
+        )
+        _probe.ping()
+        # Redis reachable at startup — use it, with bounded options so a
+        # later transient unreachable fails fast and lets the fallback fire.
+        _storage_options = {
+            "socket_timeout": 2.0,
+            "socket_connect_timeout": 2.0,
+            "retry": _Retry(_NoBackoff(), retries=0),
+        }
+        logging.getLogger(__name__).info(
+            "Redis reachable at startup; flask-limiter using Redis storage."
+        )
+    except Exception as _redis_err:
+        # Redis unreachable at startup — fall back to memory:// so the
+        # limiter never tries to talk to broken Redis at request time.
+        # Rate limits become per-worker in-memory for this process lifetime;
+        # bypassable but the app serves users correctly. Restart pods to
+        # pick Redis back up once it recovers.
+        logging.getLogger(__name__).warning(
+            "Redis unreachable at startup (%s); flask-limiter falling back "
+            "to memory:// for this process lifetime. Restart workers once "
+            "Redis recovers to pick the shared backend back up.",
+            _redis_err,
+        )
+        _storage_uri = "memory://"
+
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["100 per minute"],
-    storage_uri=redis_url or "memory://",
+    storage_uri=_storage_uri,
+    storage_options=_storage_options,
     in_memory_fallback_enabled=True,
 )
