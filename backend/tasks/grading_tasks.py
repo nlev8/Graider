@@ -39,41 +39,26 @@ class PortalGradingTask(Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         submission_id = args[0] if args else kwargs.get('submission_id')
-        # args[2] is the path discriminator. Callers (Task 2.4) pass
-        # SubmissionPathType.<X>.value, whose value IS the legacy table-name
-        # string, so this extraction stays byte-for-byte unchanged and the
-        # kwargs fallback default ('submissions') is unchanged.
+        # args[2] is the path discriminator. Callers pass
+        # SubmissionPathType.<X>.value; its value IS the legacy table-name
+        # string, so kwargs fallback default ('submissions') stays unchanged.
         supabase_table = args[2] if len(args) > 2 else kwargs.get('supabase_table', 'submissions')
         if not submission_id:
             return
         try:
-            # PR2 NOTE: this terminal-failure write intentionally stays on
-            # _safe_update_submission rather than
-            # repository_for(...).mark_failed(...). The PR1 characterization
-            # net (TestFailureSeam) and test_grading_tasks pin on_failure by
-            # patching backend.services.portal_grading._safe_update_submission
-            # and asserting its call args (table_name kwarg, args[2] payload).
-            # repo.mark_failed -> repo.update bypasses that module symbol, so
-            # swapping it here would break the byte-identical char-net
-            # contract (a behavior-preserving-refactor violation). The DB
-            # effect is identical either way (same table via the enum value,
-            # same {'status':'failed','error_message':str(exc)[:500]} fields).
-            from backend.services.portal_grading import _safe_update_submission
+            # Slice 5 PR2 Task 2.4: terminal-failure write now goes through the
+            # repository abstraction (repo.mark_failed) instead of the legacy
+            # _safe_update_submission helper. The DB effect is byte-identical
+            # (status='failed', error_message=str(exc)[:500], correct table by
+            # path discriminator). TestFailureSeam patches the repo method's
+            # update in lockstep with this change.
+            from backend.services.submission_repository import repository_for
             from backend.supabase_client import get_supabase
             sb = get_supabase()
             if sb:
-                _safe_update_submission(
-                    sb,
-                    submission_id,
-                    {
-                        'status': 'failed',
-                        'error_message': str(exc)[:500],
-                    },
-                    table_name=supabase_table,
-                )
+                repository_for(supabase_table, sb).mark_failed(submission_id, exc)
         except Exception:
-            # Sentry already has the original exception; don't mask it by
-            # re-raising from the failure hook.
+            # Sentry already has the original exception; don't mask it.
             pass
 
 
@@ -193,18 +178,13 @@ def grade_portal_submission(
         )
         # Mark row as failed so ops can re-enqueue once the root cause is fixed
         try:
-            from backend.services.portal_grading import _safe_update_submission
+            from backend.services.submission_repository import repository_for
             from backend.supabase_client import get_supabase
             sb = get_supabase()
             if sb:
-                _safe_update_submission(
-                    sb,
+                repository_for(path_type, sb).mark_failed(
                     submission_id,
-                    {
-                        'status': 'failed',
-                        'error_message': 'Assessment content unavailable at grading time',
-                    },
-                    table_name=path_type,
+                    'Assessment content unavailable at grading time',
                 )
         except Exception:
             pass
@@ -217,9 +197,10 @@ def grade_portal_submission(
         student_info=ctx['student_info'],
         teacher_config=ctx['teacher_config'],
         teacher_id=teacher_id,
-        # grade_portal_submission_sync retains the supabase_table kwarg name
-        # (its repository_for() call coerces the enum OR the legacy string).
-        supabase_table=path_type,
+        # Slice 5 PR2 Task 2.4: grade_portal_submission_sync's param renamed
+        # supabase_table -> path_type; the Celery task's own param keeps the
+        # name path_type (set in Tasks 2.1-2.3); forward unchanged.
+        path_type=path_type,
         student_accommodations=ctx.get('student_accommodations'),
         task_id=self.request.id,
         district_id=district_id,

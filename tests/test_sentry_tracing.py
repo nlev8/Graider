@@ -572,39 +572,42 @@ class TestCallSiteIdHashing:
         )
 
     def test_safe_update_submission_runtime_no_raw_id(self, capsys):
-        """Round-5 Codex CRITICAL fold: _safe_update_submission with sb=None
-        previously formatted raw submission_id into both logger.error and
-        capture_message. Now the format string receives only the hash."""
+        """SubmissionRepository.update with sb=None must not leak raw
+        submission_id into Sentry — only the sha256[:8] hash.
+
+        Slice 5 PR2 Task 2.4: migrated from portal_grading._safe_update_submission
+        (deleted) to SubmissionRepository.update (verbatim port). Patch target
+        moved to backend.services.submission_repository.sentry_sdk.capture_message.
+        """
         from unittest.mock import patch
+        import re
 
         # Import via the project path to match how the module is normally used.
         import sys
         if "backend" in sys.path:
             sys.path.remove("backend")  # ensure consistent import
-        from backend.services import portal_grading
+        from backend.services.submission_repository import JoinCodeSubmissionRepository
 
+        repo = JoinCodeSubmissionRepository(None)
         captured = {}
 
         def fake_capture(msg, level=None):
             captured["msg"] = msg
             captured["level"] = level
 
-        with patch("backend.services.portal_grading.sentry_sdk.capture_message",
+        with patch("backend.services.submission_repository.sentry_sdk.capture_message",
                    side_effect=fake_capture):
-            portal_grading._safe_update_submission(
-                sb=None,
+            repo.update(
                 submission_id="test-raw-id-abc123-XYZ",
                 update_fields={"status": "failed"},
             )
 
-        # Raw submission_id must not appear in either the captured Sentry
-        # message or, by extension, the logger.error formatted output.
+        # Raw submission_id must not appear in the captured Sentry message.
         assert "msg" in captured, "capture_message should have been called"
         assert "test-raw-id-abc123-XYZ" not in captured["msg"], (
             f"Raw submission_id leaked into Sentry: {captured['msg']!r}"
         )
         # The hash should be present (8 hex chars) so debugging is still possible.
-        import re
         assert re.search(r"\b[0-9a-f]{8}\b", captured["msg"]), (
             f"Expected an 8-hex-char hash in the message; got: {captured['msg']!r}"
         )

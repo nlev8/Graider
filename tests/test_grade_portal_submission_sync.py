@@ -32,8 +32,9 @@ def test_run_portal_grading_thread_keeps_original_signature():
     from backend.services.portal_grading import run_portal_grading_thread
     sig = inspect.signature(run_portal_grading_thread)
     assert 'student_accommodations' in sig.parameters
-    # Default is 'student_submissions' for supabase_table (existing behavior)
-    assert sig.parameters['supabase_table'].default == 'student_submissions'
+    # Slice 5 PR2 Task 2.4: renamed supabase_table -> path_type; default
+    # value unchanged ('student_submissions').
+    assert sig.parameters['path_type'].default == 'student_submissions'
     # Should NOT require task_id / district_id / user_id (those are pulled from flask.g in the wrapper)
     for name in ('task_id', 'district_id', 'user_id'):
         assert name not in sig.parameters, (
@@ -52,7 +53,7 @@ def test_wrapper_passes_accommodations_to_sync():
             student_info={'name': 'Test'},
             teacher_config={},
             teacher_id='test-teacher',
-            supabase_table='submissions',
+            path_type='submissions',
             student_accommodations={'iep': True, 'extended_time': 1.5},
         )
         mock_sync.assert_called_once()
