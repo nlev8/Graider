@@ -483,3 +483,69 @@ The question "is Railway the correct backend provider for Graider" was raised du
 ## Status
 
 Recorded, not resolved. Tier 1 implementation is a future brainstorm and slice, gated on Railway's recovery (their non-enterprise build queue was throttled during ramp). The Operational Safety dimension is unchanged in this section. Whether tonight plus the Tier 1 work moves it (down 9 to 8 because the named gap was verified live; up 9 to 10 only after Tier 1 ships and the gap is closed) is a judgment call deferred to the next 3-model reconciled re-score once Tier 1 lands. The Slack template that pre-empted reflexive revert and the diagnosis sequence in this section are the two durable artifacts from tonight; both will fold into the Tier 1 runbook when it is written.
+
+---
+
+# 2026-05-20 Tier 2 Slice 5 closeout — dual publish-path consolidation completion
+
+This section records the mechanical facts of the Slice 5 closeout. Per established convention, dimension scores are not asserted here; a 3-model reconciled re-score (Task 3 of the plan) will follow in its own dated section after PR2 merges.
+
+## What shipped
+
+**PR1 (#443) — additive only.** `PublishedContentRepository` module (`backend/services/published_content_repository.py`): `PublishedContentRepository` ABC, `JoinCodePublishedRepository` (table `published_assessments`, lookup column `join_code`), `ClassPublishedRepository` (table `published_content`, lookup column `id`), and `published_content_repository_for(path_type, sb)` factory. `ExistingSubmission` dataclass + `SubmissionRepository.find_existing_submission` extension on the ABC with per-adapter implementations (fuzzy `ilike` for join-code; exact match for class-based). Route-layer char-net extension: `TestRouteContractSeam` (9 tests) pinned both submit routes' full request-to-response observable contract pre-rewire. Test migration: `TestClaimSeam` and `TestUpdateSeam` patch targets moved from module symbols to repo methods. No production code was wired to the new module; behavior change was impossible by construction.
+
+**PR2 (#444) — rewire + #431 fold-in.** Route rewire: both HTTP entry routes (`student_portal_routes.submit_assessment`, `student_account_routes.submit_student_work`) now go through the parallel repos for their published-content fetch and dedup pre-check. Grep gate green: `test_no_inline_published_or_dedup_queries_in_submit_routes` (4 assertions) confirms the inline `db.table('published_assessments')`, `db.table('published_content').select(...).eq('id', ...)`, and the inline `ilike`-name dedup + `content_id`+`student_id` attempt-counter queries are gone from both route bodies. The `count_existing_for` method was added to `SubmissionRepository` and both adapters, with 9 per-adapter unit tests. #431 fold-in: `on_failure` in `backend/tasks/grading_tasks.py` now calls `repository_for(supabase_table, sb).mark_failed(submission_id, exc)` (DB effect byte-identical: `status='failed'`, `error_message=str(exc)[:500]`, correct table selected by path discriminator). Three helpers retired from `backend/services/portal_grading.py`: `_fetch_submission_row` (zero production callers post-rewire), `_claim_submission_for_grading` (zero production callers post-rewire), and `_safe_update_submission` (zero callers remained after the `on_failure` switch). `supabase_table` parameter renamed to `path_type` on `grade_portal_submission_sync` and `run_portal_grading_thread`; the Celery `args[2]` cross-wire slot keeps the `supabase_table` name because the enum's `.value` (the legacy string) crosses the wire and the `on_failure` extraction reads `args[2]`.
+
+## Route + read + dedup boundary status
+
+The inline `db.table(...)` queries that were open-coded in both submit route bodies are gone. Both routes now resolve published-content rows through `published_content_repository_for(...)` and dedup through `submission_repo.find_existing_submission(...)`. The boundary is load-bearing in production: the grep gate and the byte-identical `TestRouteContractSeam` together prove zero behavior change at the route layer. Architecture ground 1 is now fully closed at both the write/grading layer (Slice 4) and the route/read/dedup layer (Slice 5).
+
+## Zero schema change, zero data migration, zero behavior change
+
+Proven by three independent gates:
+
+- `TestRouteContractSeam` (9 tests): both routes' full request-to-response observable contract pinned pre-rewire; assertions byte-identical post-rewire. Any behavior change would have broken a pinned assertion.
+- `test_no_inline_published_or_dedup_queries_in_submit_routes` (4 assertions): grep gate confirms the old inline patterns are absent from both route files.
+- Per-adapter unit tests for the new abstractions (`count_existing_for`, `find_existing_submission`, `fetch_by_lookup_key`): each adapter's query logic is tested in isolation against `FakeSupabase`.
+
+No Alembic migration, no table alteration, no data backfill. The two physical table pairs (`published_assessments`/`published_content` and `submissions`/`student_submissions`) are unchanged.
+
+## #431 fold-in shipped
+
+All three transitional residuals from Slice 4's char-net contract are retired:
+
+1. `on_failure` unified onto `repo.mark_failed` (the DB write is byte-identical; `TestFailureSeam` patches `SubmissionRepository.update` or `.mark_failed` in lockstep with the production change).
+2. `_safe_update_submission`, `_fetch_submission_row`, `_claim_submission_for_grading` all deleted (zero callers verified by grep before deletion).
+3. `supabase_table` renamed to `path_type` on `grade_portal_submission_sync` + `run_portal_grading_thread`; the Celery wire boundary keeps the legacy string name via `args[2]`.
+
+## Out of scope (unchanged)
+
+No dependency injection was introduced (Architecture ground 3 remains open). No HTTP endpoint consolidation (the two submit routes remain separate endpoints with their distinct auth models). No frontend change. No physical table consolidation (the four physical tables remain; consolidating FERPA student-submission data across paths was explicitly deferred in the Slice 4 design and remains deferred). These are documented future levers, not regressions.
+
+## Net diff
+
+```
+ 12 files changed, 385 insertions(+), 334 deletions(-)
+```
+
+Branch commits (5 commits beyond main at closeout time):
+
+```
+8aac8b6 refactor(portal): close #431 transitional residuals — on_failure unified, 2 dead helpers retired, supabase_table renamed (Slice 5 PR2)
+c5eaecd refactor(routes): student_account_routes.submit_student_work uses parallel repos + count_existing_for (Slice 5 PR2)
+281eeea test(routes): tighten class-path grep gate to catch multi-line inline patterns (Slice 5 PR2)
+e4cf38d refactor(routes): student_portal_routes.submit_assessment uses parallel repos (Slice 5 PR2)
+64433f8 test(routes): RED grep gate for inline dedup + published-content fetch removal (Slice 5 PR2)
+```
+
+## Sentry conservation
+
+Net -1 capture globally. The three retired helpers (`_safe_update_submission`, `_fetch_submission_row`, `_claim_submission_for_grading`) had `sentry_sdk.capture_exception` calls that were redundant with the repo methods' captures (which have existed since Slice 4 PR1). This is a cleanup, not a coverage loss. `PR_B_EXPECTED_CAPTURES` floor in `tests/test_sis_alerting.py` is unaffected (the renamed-out files were not gated).
+
+## Tests delta
+
+PR1 baseline: 5146 passed. After PR1+PR2: 5145 passed + 14 skipped + 1 known flake (`test_anthropic_chat_uses_breaker` passes in isolation; same sibling pattern as the plan-mentioned `test_gemini_chat_uses_breaker`). The net -1 from baseline accounts for: +1 grep gate test + 9 new `count_existing_for` tests − 11 deleted test instances (6 `TestClaimSeam` parametrized + 5 `TestUpdateSeam`) = −1.
+
+## Next step
+
+3-model reconciled re-score (Task 3 of the plan): Codex, Gemini, and Claude re-score independently against the post-Slice-5 state. The decisive judgment: with Architecture ground 1 now fully closed (both write/grading layer from Slice 4 and route/read/dedup layer from Slice 5) and #431 retired, but ground 3 (no DI) still open and physical table consolidation still deferred, does Architecture move from 7 to 8? Conservative-floor reconcile applies. The re-score appends its own dated section.

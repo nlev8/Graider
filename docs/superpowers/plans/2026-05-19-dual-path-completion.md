@@ -4,6 +4,8 @@
 
 **Goal:** Close the second half of Architecture ground 1 by abstracting the published-content reads + route-layer dedup behind a parallel `PublishedContentRepository` and a `SubmissionRepository.find_existing_submission` extension, rewiring both HTTP entry routes onto them, and retiring the three #431 transitional residuals from Slice 4.
 
+**STATUS: CLOSED 2026-05-20** — shipped via PR1 (#443: PublishedContentRepository module + ABC extension + char-net extension + test migration) and PR2 (route rewire + #431 fold-in). Second half of Architecture ground 1 closed. Zero schema change, zero behavior change.
+
 **Architecture:** Mirror the proven PR1/PR2 split that worked for Slice 4. PR1 is purely additive (new module, ABC extension, route-layer char-net extension, char-net assertion migration with helpers still in place) so behavior change is impossible by construction. PR2 rewires the two route bodies onto the new repos and folds in #431 (delete dead helpers, switch on_failure to repo.mark_failed, rename `supabase_table` to `path_type`). A pre-pinned characterization net stays byte-identical across the rewire.
 
 **Tech Stack:** Python 3.14, Flask, Supabase client, Celery + threading, pytest with `unittest.mock`. venv `/Users/alexc/Downloads/Graider/venv/` (`source venv/bin/activate`). Two sequenced PRs plus a post-slice 3-model reconciled re-score.
