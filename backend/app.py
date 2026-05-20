@@ -516,17 +516,36 @@ def healthz():
     except Exception:
         status["redis"] = "error"
 
-    # Fail-closed contract: HTTP 503 when any required dependency is not
-    # healthy, so Railway / load balancers can route around a degraded
-    # pod. "not configured" is treated as healthy (dev/test where the
-    # dep isn't wired). "ok" is healthy; everything else (including
-    # "error" and "degraded (status N)") is unhealthy.
+    # Tiered fail-closed contract.
+    #
+    # HARD deps (Supabase): a 503 here is correct — without Supabase the app
+    # cannot fetch or persist any data, so Railway / load balancers should
+    # route around the pod.
+    #
+    # SOFT deps (Redis): a degraded Redis only loses shared rate-limit state
+    # (flask-limiter falls back to per-worker limits, which are bypassable
+    # but the app still serves teachers and students correctly). Reporting
+    # 503 in that case causes Railway's healthchecker to kill the pod, which
+    # then crash-loops until Railway gives up. Surfaced by the 2026-05-19
+    # Railway + GCP incident: post-recovery Redis was reachable from the
+    # service-card level but unreachable from the backend (Railway dashboard
+    # showed "Database Connection: unable to connect via SSH" + "Your
+    # application is not running or in an unexpected state"), so /healthz
+    # 503'd on the bounded Redis check and the pod was killed. Treat Redis
+    # as best-effort here so the pod survives a Redis outage; the response
+    # body still reports "redis": "error" so monitors and humans see the
+    # degradation.
+    #
+    # "not configured" is treated as healthy (dev/test where the dep isn't
+    # wired). "ok" is healthy. For SOFT deps everything else is logged but
+    # does not flip the response to 503.
     healthy_states = {"ok", "not configured"}
-    is_healthy = all(
+    hard_deps = ("supabase",)
+    hard_healthy = all(
         status.get(dep, "missing") in healthy_states
-        for dep in ("supabase", "redis")
+        for dep in hard_deps
     )
-    return jsonify(status), 200 if is_healthy else 503
+    return jsonify(status), 200 if hard_healthy else 503
 
 
 # ══════════════════════════════════════════════════════════════
