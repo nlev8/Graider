@@ -1420,13 +1420,17 @@ def submit_assessment(code):
         db = get_supabase()
         code = code.upper()
 
-        # Get assessment
-        assessment_result = db.table('published_assessments').select('*').eq('join_code', code).execute()
+        from backend.services.published_content_repository import published_content_repository_for
+        from backend.services.submission_repository import (
+            SubmissionPathType, repository_for,
+        )
+        content_repo = published_content_repository_for(SubmissionPathType.JOIN_CODE, db)
+        submission_repo = repository_for(SubmissionPathType.JOIN_CODE, db)
 
-        if not assessment_result.data:
+        # Get assessment via the parallel repo abstraction (Slice 5 PR2 rewire).
+        assessment_data = content_repo.fetch_by_lookup_key(code)
+        if not assessment_data:
             return jsonify({"error": "Assessment not found"}), 404
-
-        assessment_data = assessment_result.data[0]
 
         # Check if active
         if not assessment_data.get('is_active', True):
@@ -1449,13 +1453,16 @@ def submit_assessment(code):
             if available_until and now > available_until:
                 return jsonify({"error": "This assessment is no longer accepting submissions."}), 403
 
-        # Check for duplicate submission
+        # Check for duplicate submission via the parallel repo abstraction
+        # (Slice 5 PR2 rewire). The repo encapsulates the exact ilike-name
+        # semantic the inline query used, returning an ExistingSubmission
+        # dataclass or None.
         if not settings.get('allow_multiple_attempts', False):
-            existing = db.table('submissions').select('id, results').eq('join_code', code).ilike('student_name', student_name).execute()
-            if existing.data:
+            existing = submission_repo.find_existing_submission(code, {"name": student_name})
+            if existing is not None:
                 return jsonify({
                     "error": "You have already submitted this assessment.",
-                    "previous_results": existing.data[0].get('results')
+                    "previous_results": existing.results,
                 }), 400
 
         # Determine grading strategy
