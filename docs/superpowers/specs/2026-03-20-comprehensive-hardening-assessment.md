@@ -409,3 +409,77 @@ The deferred judgment step the Slice 4 closeout said would follow. Codex, Gemini
 **Finishing the dual-path consolidation, plus a separate dependency-injection lever.** Both completed models independently named the same two remaining tier-gating items, in roughly the same order: (a) finish the dual-path consolidation outside the write layer (collapse the two HTTP entry routes plus the `published_assessments`/`published_content` read split plus the route-layer dedup pre-check onto the repository abstraction, then retire the #431 transitional residue), and (b) introduce dependency injection (the third Architecture-7 ground, fully untouched). The physical two-table consolidation is the deferred end-state lever the dual-path design explicitly chose not to bet live FERPA student-submission data on; it stays sequenced behind the code-boundary completion above. `frontend/src/tabs/PlannerTab.jsx` (about 7,405 LOC) remains the largest raw file and is the Code Quality concentrated-complexity lever, distinct from these Architecture-tier levers.
 
 **Honest note.** The dual-path consolidation did exactly what its spec scoped: it closed the named code-boundary objection at the write and grading layer with zero behavior change, proven by the byte-identical pre-pinned characterization net plus per-adapter unit tests, and it correctly did not attempt the higher-blast-radius read, route, table, or dependency-injection levers. The aggregate stays 8.0 because the Architecture tier is gated by the remaining half of the boundary plus the no-DI ground, which this slice did not attempt. Codex did not converge within the dispatch window; the result is reported faithfully (failed-to-run, not failed-low), and the reconciliation rests on the two completed, unanimous, concretely-grounded assessments plus controller first-hand verification. This dated section closes the `2026-05-19-dual-publish-path-consolidation` plan and the Tier 2 Slice 4 lever. The next concrete step is the dual-path code-boundary completion (routes plus read split plus #431 cleanup), which the lever recap above sketches and which would be its own brainstorm.
+
+---
+
+# 2026-05-19 Production incident: Railway edge outage (GCP-side) and OpSafety hardening roadmap
+
+This section records a production outage that began on 2026-05-19 evening UTC and the resulting OpSafety hardening roadmap. It is a recorded follow-up artifact, not a re-score. Whether the incident or the hardening that follows moves the Operational Safety dimension is a judgment call deferred to the next 3-model reconciled re-score, once the Tier 1 work below ships. Consistent with how every prior closeout section in this doc has been handled (Slices 1 through 4 and the Data Integrity Tier 1 closeout), the section asserts only the verifiable mechanical facts and asserts no dimension nudge.
+
+## What happened
+
+Slack alerted that `app.graider.live/healthz` was unreachable on 2026-05-19 around 22:00 UTC. The user reproduced the failure in a browser (Chrome `NET::ERR_CERT_COMMON_NAME_INVALID`). Diagnosis sequence (read-only, controller-driven, no production change):
+
+1. `curl https://app.graider.live/healthz` returned the libcurl error "SSL peer cert or SSH remote key was not OK", which confirmed a TLS-layer failure rather than an HTTP-layer failure. This pre-empted any reflexive code rollback (a code regression would produce an HTTP 5xx, not a TLS handshake failure).
+2. `openssl s_client -connect app.graider.live:443 -servername app.graider.live -showcerts` returned `Verify return code: 0 (ok)` (the cert chain itself was valid), but the leaf served had `subject=CN=*.up.railway.app` with a SAN list of only `DNS:*.up.railway.app`. Validity `notBefore=Apr 5 2026, notAfter=Jul 4 2026`. The cert was not expired and not malformed; it was the wrong cert for our hostname. Standard hostname validation correctly rejects it because `app.graider.live` is not in the SAN.
+3. `dig +short app.graider.live A` showed `app.graider.live -> CNAME ar90ys35.up.railway.app -> 66.33.22.209` (a Railway edge POP). DNS was correct.
+4. The user attempted to reach the Railway dashboard via Railway's purple "Go to Railway" button on the edge 404 page and could not. Direct navigation to `railway.app/dashboard` in an incognito window also returned the Railway edge 404 placeholder ("Not Found / The train has not arrived at the station"), with a fresh Request ID. The dashboard control plane itself was impaired.
+5. The user reached `status.railway.app`, which showed a Major Outage on the Edge Network as of 22:29 UTC ("widespread service disruption, errors including 'no healthy upstream', 'unconditional drop overload', login failures, and inability to access the dashboard"). The root cause was refined at 22:43 UTC ("access to our upstream cloud provider has been restored, working on a fix"), then again at 23:37 UTC ("Google Cloud has blocked our account, making some Railway services unavailable. We have escalated this directly with Google."). The incident was still ongoing past 01:34 UTC on 2026-05-20, with Railway-metal workloads gradually recovering but GCP-hosted networking still impaired. No ETA was given.
+
+**Net root cause.** Google Cloud blocked Railway's GCP account. This broke Railway's GCP-hosted control plane and edge custom-domain routing. Railway's edge could not authoritatively serve our custom-domain cert (it fell back to the default `*.up.railway.app` wildcard) nor route requests for `app.graider.live` (the edge returned the "train has not arrived" 404 placeholder). The Flask app behind the edge was almost certainly healthy throughout; only Railway's edge layer was degraded.
+
+## What was NOT the cause
+
+The recent merge sequence (#430 additive `SubmissionRepository`, #432 the dual-path rewire, #433 the post-dual-path re-score) was independently ruled out before `status.railway.app` was found. The TLS handshake failure mode plus the served cert subject established that the connection never reached Flask. Reverting code would not have helped and was explicitly recommended against in the Slack template the controller drafted for the alerting channel. That pre-empted the reflexive-revert action that a fresh prod-down alert plus a string of recent merge notifications might otherwise have triggered on a less-disciplined response.
+
+## Our response
+
+(a) Diagnosed upstream before touching code or production state. (b) Did not re-add the custom domain in the Railway dashboard mid-outage (risk: stuck "pending" cert state, duplicate registrations, or failed Let's Encrypt provisioning while the edge plane is degraded). (c) Did not open a Railway customer support ticket (Railway had already identified the cause, escalated to Google Cloud, and was actively working with GCP support; a customer ticket would add backlog without changing the outcome). (d) Drafted a copy-paste Slack message for the alerting channel explaining the upstream cause and instructing the team not to roll back recent PRs. (e) Held position. The recovery is upstream-bound.
+
+## OpSafety datapoint
+
+This is the predicted-class incident the existing 2026-05-18 OpSafety dimension already named. The line in the 2026-05-18 3-Model Reconciled Re-Score (HEAD `082b49c`), per-dimension rationale: *"Operational Safety 8 to 9 (unanimous). [...] Not 10: Railway auto-deploy on merge is still the entire rollback story (no staged rollout, no post-deploy smoke gate beyond the pre-merge E2E check)."* Tonight extends that observation: there is also no customer-side fallback when Railway's edge plane is degraded by an upstream-of-upstream incident, and there is no off-Railway status page for users (teachers, school admins) to land on during a multi-hour Railway outage. The dimension was correctly held below 10; tonight verifies the named gap and adds an adjacent one (customer-facing communication during upstream incidents).
+
+## Hardening roadmap (three tiers)
+
+This roadmap is the recorded plan only. Implementation requires its own brainstorm (and design approval) before code lands, following the established `superpowers:brainstorming` plus writing-plans plus subagent-driven-development flow. Three-model consultation will be applied at the genuine design forks (provider picks; v1 scope versus deferred items).
+
+### Tier 1: cheap, high-value, do in the next week
+
+- **Off-Railway status page.** A `status.graider.live` (or equivalent) hosted on infrastructure independent of Railway (free Statuspage by Atlassian, Instatus, Cachet, or a static page on Vercel or GitHub Pages). When `app.graider.live` is down, the status page is what users land on instead of a cert warning or Railway's edge 404. The single biggest trust win for multi-hour outages.
+- **External uptime monitor.** UptimeRobot, BetterStack, or Healthchecks.io free tier, probing `/healthz` from outside our infrastructure at a 1 to 5 minute cadence with a 5-minute flap dampener, posting to the status page automatically. Independent of the existing Slack alert path.
+- **A "Railway down" runbook.** Checked into `docs/`. Captures the diagnosis sequence walked above (openssl plus dig plus `status.railway.app`), the decision tree (re-add the domain or wait, file a Railway ticket or wait), the pre-drafted Slack and email comms templates, and the escalation thresholds (when 2-hour silence from Railway justifies a customer ticket). Saves the next on-call two hours of redoing the diagnosis.
+- **Customer comms template.** A pre-drafted message (Slack and email) for school admins and teachers when the system is unreachable. School-facing trust during a multi-hour outage depends on us telling them what is happening, not on them noticing and reporting it.
+
+### Tier 2: defensive layering, 1-2 weeks of work
+
+- **Marketing-site banner ability.** `graider.live` is on Vercel (independent of Railway). Add a banner mechanism so when `app.graider.live` is down the marketing site shows an "experiencing issues, see status.graider.live" notice. Low engineering cost given Vercel is already in place.
+- **Data-safety boundary documentation.** Supabase is on a separate stack from Railway (managed Postgres, separate vendor). When Railway is down, the data layer is reachable independently. Write down explicitly: what is durable across a Railway outage (Supabase rows, audit log) versus what is at risk (in-flight grading threads, results not yet persisted). This is reassurance for FERPA and school-admin conversations and is mostly documentation, not new infrastructure.
+- **Optional graceful-degrade mode.** A static export of recent results behind a Vercel or Cloudflare front. Teachers can at least see yesterday's grading when the app is hard-down. Probably overkill at current scale; recorded as an option, not a commitment.
+
+### Tier 3: architectural, only if a pattern emerges
+
+- **Multi-PaaS active-active.** Railway plus Fly.io (or equivalent), with DNS-failover at the domain level. Real engineering cost: dual-config management, secret sync, CI pipeline doubling, database connection routing. Eliminates single-vendor risk but at high ongoing complexity cost.
+- **Direct cloud migration.** AWS, GCP, or Cloudflare Workers, eliminating the Railway-as-middleman layer. Trades it for owning Infrastructure-as-Code, deploy pipelines, observability, secrets management, networking, certs. Massive operational burden for a single-developer team. Probably wrong for this app's current stage.
+
+**Trigger conditions for Tier 3, recorded explicitly so the next on-call is not pressured to migrate reactively after a single bad night.**
+
+- Railway has 3 or more multi-hour outages in 6 months.
+- A paying-customer contract demands an SLA Railway cannot provide.
+- Scale outgrows Railway's pricing model.
+- A specific feature (tight network-layer control, bring-your-own-cloud for school districts) becomes blocking.
+
+**What would NOT justify Tier 3.** One bad night, even a long one. Provider migration as "reliability theater" without measuring whether the alternative is structurally safer for the same incident class. Every PaaS competitor (Fly.io, Render, Heroku) has lived analogous multi-hour outages. Direct cloud carries its own incident class (AWS US-East-1, Cloudflare config-push incidents, GCP networking events). Single-provider risk is the structural item; provider choice rotates which incidents we are exposed to, it does not eliminate the class.
+
+## Provider re-evaluation (recorded honestly)
+
+The question "is Railway the correct backend provider for Graider" was raised during the incident. The recorded answer: probably yes, at this stage, with Tier 1 hardening. Reasoning:
+
+- **Where Railway fits Graider well today.** Flask plus auto-deploy on PR-merge is the loop the project actually runs. The 9 required CI checks plus Railway's auto-deploy plus the Supabase separation is a clean, single-developer-friendly setup. The cost is appropriate for the scale (school teachers and students; bounded multi-tenant, not viral consumer). Normal-operations developer experience is strong compared to what a single developer would have to build on raw cloud.
+- **Where tonight exposed a real weakness.** The dimension doc had already named the rollback-story-is-just-Railway gap. Tonight extends that to: no customer-side communication channel during a multi-hour Railway outage. The fix is Tier 1, not provider migration.
+- **Competitor positioning, honest.** Fly.io: similar abstraction, similar risk class, has had its own multi-hour networking outages. Render: similar profile. Heroku: more mature but Salesforce-owned, pricing pressure. Vercel: not designed for long-running Flask plus background grading threads plus Celery workers. AWS, GCP, Cloudflare Workers direct: best reliability ceiling but total-cost-of-operation dominated by the team's time.
+- **Reactive migration is not warranted by one incident.** The alternative providers carry the same incident class; the gain is not real safety, it is the appearance of action.
+
+## Status
+
+Recorded, not resolved. Tier 1 implementation is a future brainstorm and slice, gated on Railway's recovery (their non-enterprise build queue was throttled during ramp). The Operational Safety dimension is unchanged in this section. Whether tonight plus the Tier 1 work moves it (down 9 to 8 because the named gap was verified live; up 9 to 10 only after Tier 1 ships and the gap is closed) is a judgment call deferred to the next 3-model reconciled re-score once Tier 1 lands. The Slack template that pre-empted reflexive revert and the diagnosis sequence in this section are the two durable artifacts from tonight; both will fold into the Tier 1 runbook when it is written.
