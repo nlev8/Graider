@@ -120,11 +120,19 @@ class TestHealthzLimiterExempt:
             "when the limiter's Redis backend is down"
         )
 
-    def test_route_returns_503_not_500_when_limiter_storage_raises(self):
+    def test_route_returns_route_owned_response_not_500_when_limiter_storage_raises(self):
         """Runtime simulation: even if Flask-Limiter's storage raises (Redis
-        down), /healthz must still produce its own JSON 503, not a generic
-        Flask 500. The @limiter.exempt decorator gates this — without it
-        the limiter's before_request would crash before the route runs."""
+        down), /healthz must still produce its own JSON response, not a
+        generic Flask 500. The @limiter.exempt decorator gates this — without
+        it the limiter's before_request would crash before the route runs.
+
+        Under the soft-dep contract (2026-05-20 hotfix #2), Redis is a soft
+        dep: with Supabase = "not configured" (healthy) and Redis = "error",
+        the route returns 200 with the error in the body. The 200-vs-503
+        distinction is not the point of THIS test — the point is that the
+        route's own JSON handler runs at all (not a Flask 500 from the
+        limiter pre-empting it). The fail-closed-on-Supabase contract is
+        covered by TestHealthzFailClosed::test_supabase_exception_returns_503."""
         backend_app = _import_app()
 
         # Force the limiter's storage layer to raise on every call. If the
@@ -155,16 +163,19 @@ class TestHealthzLimiterExempt:
             mock_redis.return_value.ping.side_effect = Exception("redis down")
             resp = backend_app.app.test_client().get("/healthz")
 
-        # Critical contract: route-owned 503 with structured JSON body,
+        # Critical contract: route-owned response with structured JSON body,
         # NOT a generic Flask 500 from the limiter's failed before_request.
-        assert resp.status_code == 503, (
-            f"Expected route-owned 503, got {resp.status_code} "
+        # Under the soft-dep contract, Supabase=not_configured + Redis=error
+        # returns 200 (Supabase is the hard dep; Redis is soft).
+        assert resp.status_code == 200, (
+            f"Expected route-owned 200 (soft-dep contract: Supabase healthy, "
+            f"Redis error in body), got {resp.status_code} "
             f"(body: {resp.data!r}) — limiter exemption may be broken"
         )
         body = resp.get_json()
         assert body is not None, "Response body must be valid JSON, not Flask 500 page"
         assert body["app"] == "ok"
-        assert body["redis"] == "error"
+        assert body["redis"] == "error", "Redis error must still be reported in body"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -173,7 +184,10 @@ class TestHealthzLimiterExempt:
 
 
 class TestHealthzFailClosed:
-    """Any dependency error → 503."""
+    """Tiered fail-closed contract (2026-05-20 hotfix #2): Supabase is the
+    HARD dep (error → 503); Redis is a SOFT dep (error → 200 with the error
+    in the response body, so Railway healthchecker does not kill the pod
+    during a Redis-only outage)."""
 
     def test_supabase_exception_returns_503(self, monkeypatch):
         """httpx raises (network error, DNS failure, etc.) → 503."""
@@ -203,8 +217,10 @@ class TestHealthzFailClosed:
         body = resp.get_json()
         assert body["supabase"].startswith("degraded")
 
-    def test_redis_exception_returns_503(self, monkeypatch):
-        """Redis ping raises → 503."""
+    def test_redis_exception_returns_200_with_error_in_body(self, monkeypatch):
+        """Redis ping raises → soft-dep: route returns 200 with the redis
+        error reported in the body. Supabase here is "not configured"
+        (env vars unset), which under the route's contract is healthy."""
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
         monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
@@ -214,12 +230,20 @@ class TestHealthzFailClosed:
             mock_redis.return_value.ping.side_effect = Exception("redis down")
             resp = _client().get("/healthz")
 
-        assert resp.status_code == 503
+        assert resp.status_code == 200, (
+            "Redis is a soft dep; with Supabase healthy/unconfigured, "
+            "Redis errors must NOT flip the response to 503 "
+            f"(got {resp.status_code}, body {resp.data!r})"
+        )
         body = resp.get_json()
-        assert body["redis"] == "error"
+        assert body["redis"] == "error", "Redis error must still be surfaced in body"
 
-    def test_supabase_ok_redis_error_returns_503(self, monkeypatch):
-        """Mixed health — one bad dep is enough to fail closed."""
+    def test_supabase_ok_redis_error_returns_200_soft_dep(self, monkeypatch):
+        """Mixed health — Supabase OK + Redis error → 200 with Redis error in
+        body. The soft-dep contract (hotfix #2) is exactly what makes the
+        pod survive a Redis-only outage; the previous "any bad dep → 503"
+        rule caused Railway healthchecker to kill the pod during the
+        2026-05-19 GCP-side incident's Redis-degraded aftermath."""
         monkeypatch.setenv("SUPABASE_URL", "https://supabase.example")
         monkeypatch.setenv("SUPABASE_SERVICE_KEY", "test-key")
         monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
@@ -230,10 +254,13 @@ class TestHealthzFailClosed:
             mock_redis.return_value.ping.side_effect = Exception("down")
             resp = _client().get("/healthz")
 
-        assert resp.status_code == 503
+        assert resp.status_code == 200, (
+            "Soft-dep contract: Supabase OK + Redis error must return 200, "
+            f"not 503 (got {resp.status_code}, body {resp.data!r})"
+        )
         body = resp.get_json()
         assert body["supabase"] == "ok"
-        assert body["redis"] == "error"
+        assert body["redis"] == "error", "Redis error must still be surfaced in body"
 
 
 # ──────────────────────────────────────────────────────────────────
