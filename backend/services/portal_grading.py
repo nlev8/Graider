@@ -311,89 +311,6 @@ def _upsert_result_by_submission_id(existing_results, new_record):
     return filtered
 
 
-def _safe_update_submission(sb, submission_id, update_fields,
-                            table_name="student_submissions"):
-    """Update a Supabase submission row; capture to Sentry on failure.
-    Skips silently when submission_id is falsy (the anonymous join-code
-    path doesn't have a Supabase row). If submission_id IS set but sb
-    is None, that's a real config/connectivity problem — page it."""
-    if not submission_id:
-        return  # Intentional skip: join-code path has no submission row
-    if not sb:
-        # FERPA: hash submission_id — see Codex audit MAJOR #14 round-5.
-        # Same leak class as round-4's 4 cited sites (capture_message + logger
-        # both receive the bare ID), reachable when Supabase config is broken.
-        sub_hash = hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]
-        msg = ("Cannot update submission %s: Supabase client unavailable"
-               % sub_hash)
-        logger.error(msg)
-        sentry_sdk.capture_message(msg, level="error")
-        return
-    try:
-        sb.table(table_name).update(update_fields).eq("id", submission_id).execute()
-    except Exception as e:
-        logger.error("Failed to update Supabase submission: %s", e)
-        sentry_sdk.capture_exception(e)
-
-
-def _fetch_submission_row(sb, supabase_table, submission_id):
-    """Fetch the submission row; return dict or None.
-
-    Phase 4.1 PR2 subtask 3a: originally the row-level fetch helper for the
-    Celery dedup path (the production pipeline now fetches via
-    SubmissionRepository.fetch instead, see NOTE below).
-    Returns None on any error so the caller can treat it as "no claim found".
-
-    Subtask 3b code-review follow-up: capture exceptions to Sentry so
-    broker/schema failures surface instead of silently looking like "no
-    row found". Matches the pattern used in _safe_update_submission.
-
-    NOTE (PR2): the production pipeline now fetches via
-    SubmissionRepository.fetch. This helper is retained verbatim because the
-    PR1 characterization net / signature-pin tests reference it directly;
-    deleting it is out of PR2 scope (a tracked post-PR2 cleanup follow-up).
-    Mirrors the retention rationale on the sibling
-    _claim_submission_for_grading helper.
-    """
-    if not sb or not submission_id:
-        return None
-    try:
-        result = sb.table(supabase_table).select('*').eq('id', submission_id).single().execute()
-        return result.data
-    except Exception as e:
-        # FERPA: hash submission_id — see Codex audit MAJOR #14 round-4.
-        logger.error(
-            "Failed to fetch submission row %s: %s",
-            hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
-            e,
-        )
-        sentry_sdk.capture_exception(e)
-        return None
-
-
-def _claim_submission_for_grading(sb, table_name, submission_id, task_id):
-    """Row-level claim. Sets status='grading_in_progress' + grading_task_id + grading_started_at.
-
-    Phase 4.1 PR2 subtask 3a: row-level dedup helper for the Celery path.
-    Uses _safe_update_submission so Sentry capture + logging are consistent.
-
-    NOTE (PR2): the production pipeline now claims via
-    SubmissionRepository.claim_for_grading. This helper is retained verbatim
-    because the PR1 characterization net (TestClaimSeam) pins its exact
-    3-field write directly; deleting it is out of PR2 scope. The second
-    positional arg was renamed (internal only, all callers pass positionally)
-    so the PR2 dispatch-removal grep gate no longer matches a passthrough
-    inside this retained helper.
-    """
-    if not sb or not submission_id:
-        return
-    _safe_update_submission(sb, submission_id, {
-        'status': 'grading_in_progress',
-        'grading_task_id': task_id,
-        'grading_started_at': datetime.now(timezone.utc).isoformat(),
-    }, table_name=table_name)
-
-
 def _is_stale_claim(started_at_iso, minutes=15):
     """True if started_at is older than `minutes` ago (reclaim allowed).
 
@@ -550,14 +467,10 @@ def grade_portal_submission_sync(
     student_info,
     teacher_config,
     teacher_id,
-    # PR2: default kept as the legacy table-name STRING (SubmissionPathType
-    # .CLASS.value == "student_submissions") so inspect.signature().default
-    # stays byte-identical for the existing signature-pin tests, while the
-    # source no longer contains the forbidden supabase_table="..." literal
-    # the dispatch-removal grep gate scans for. repository_for() coerces the
-    # string OR the enum, so every existing supabase_table= keyword caller is
-    # unaffected.
-    supabase_table=SubmissionPathType.CLASS.value,
+    # Slice 5 PR2 Task 2.4: renamed supabase_table -> path_type. Default kept
+    # as the legacy table-name STRING (SubmissionPathType.CLASS.value ==
+    # "student_submissions") so repository_for() coerces it correctly.
+    path_type=SubmissionPathType.CLASS.value,
     student_accommodations=None,
     *,
     task_id=None,
@@ -579,7 +492,8 @@ def grade_portal_submission_sync(
         teacher_config: Dict with global_ai_notes, grade_level, subject, grading_style,
                        rubric, ai_model, period
         teacher_id: Teacher's user ID for results storage
-        supabase_table: "submissions" for join-code, "student_submissions" for class-based
+        path_type: "submissions" for join-code, "student_submissions" for class-based
+            (or the SubmissionPathType enum; repository_for() coerces either form).
         student_accommodations: Embedded accommodations dict from published content
         task_id: Celery task id; when set enables row-level dedup claim. None for
             the legacy thread path (skips dedup).
@@ -597,7 +511,7 @@ def grade_portal_submission_sync(
     # _is_stale_claim dedup DECISION below stays VERBATIM in this pipeline
     # caller (carry-forward #2): it is pipeline-scoped, has its own direct
     # test caller, and is intentionally NOT moved into the repository.
-    repo = repository_for(supabase_table, sb)
+    repo = repository_for(path_type, sb)
 
     # Row-level dedup (Celery path only — task_id=None skips this entirely)
     if task_id and submission_id:
@@ -1001,11 +915,10 @@ def grade_portal_submission_sync(
 @critical_path
 def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                               teacher_config, teacher_id,
-                              # PR2: see grade_portal_submission_sync — default
-                              # stays the byte-identical legacy string via
-                              # SubmissionPathType.CLASS.value so the signature
-                              # pin test and the grep gate both hold.
-                              supabase_table=SubmissionPathType.CLASS.value,
+                              # Slice 5 PR2 Task 2.4: renamed supabase_table ->
+                              # path_type. Default keeps the legacy string value
+                              # so repository_for() coerces it correctly.
+                              path_type=SubmissionPathType.CLASS.value,
                               student_accommodations=None):
     """Phase 4.1 PR2 subtask 3a: thin wrapper that preserves the original signature.
 
@@ -1032,7 +945,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                 from backend.supabase_client import get_supabase
                 sb = get_supabase()
                 if sb and submission_id:
-                    repository_for(supabase_table, sb).update(
+                    repository_for(path_type, sb).update(
                         submission_id, {"status": "grading_deferred"}
                     )
             except Exception as e:
@@ -1059,7 +972,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
             student_info=student_info,
             teacher_config=teacher_config,
             teacher_id=teacher_id,
-            supabase_table=supabase_table,
+            path_type=path_type,
             student_accommodations=student_accommodations,
             task_id=None,  # legacy thread path skips row-level dedup
             district_id=district_id,

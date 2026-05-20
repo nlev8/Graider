@@ -59,38 +59,42 @@ def test_save_result_failure_captures_to_sentry():
 
 
 def test_supabase_submission_update_failure_captures_to_sentry():
-    """portal_grading.py line 523 region: sb.table(...).update(...)
-    .execute() throws -> must capture_exception."""
-    from backend.services import portal_grading
+    """SubmissionRepository.update: sb.table(...).update(...).execute() throws
+    -> must capture_exception to Sentry.
+
+    Slice 5 PR2 Task 2.4: migrated from portal_grading._safe_update_submission
+    (deleted) to SubmissionRepository.update (the verbatim port). Patch target
+    moved to backend.services.submission_repository.sentry_sdk.
+    """
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
     mock_sb = MagicMock()
     (mock_sb.table.return_value
         .update.return_value
         .eq.return_value
         .execute.side_effect) = RuntimeError("supabase boom")
-    with patch("backend.services.portal_grading.sentry_sdk") as mock_sentry:
-        portal_grading._safe_update_submission(
-            mock_sb, "sub-id", {"status": "graded"},
-        )
+    repo = JoinCodeSubmissionRepository(mock_sb)
+    with patch("backend.services.submission_repository.sentry_sdk") as mock_sentry:
+        repo.update("sub-id", {"status": "graded"})
         mock_sentry.capture_exception.assert_called_once()
 
 
 def test_supabase_unavailable_with_submission_id_pages():
     """If submission_id is set but Supabase client is None, that's a real
     config/connectivity failure — must page, not silently skip."""
-    from backend.services import portal_grading
-    with patch("backend.services.portal_grading.sentry_sdk") as mock_sentry:
-        portal_grading._safe_update_submission(
-            None, "sub-id", {"status": "graded"},
-        )
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    repo = JoinCodeSubmissionRepository(None)
+    with patch("backend.services.submission_repository.sentry_sdk") as mock_sentry:
+        repo.update("sub-id", {"status": "graded"})
         mock_sentry.capture_message.assert_called_once()
 
 
 def test_supabase_skip_without_submission_id_is_silent():
     """The anonymous join-code path has no submission row; skip without
     paging when submission_id is falsy even if sb is None."""
-    from backend.services import portal_grading
-    with patch("backend.services.portal_grading.sentry_sdk") as mock_sentry:
-        portal_grading._safe_update_submission(None, "", {"status": "graded"})
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    repo = JoinCodeSubmissionRepository(None)
+    with patch("backend.services.submission_repository.sentry_sdk") as mock_sentry:
+        repo.update("", {"status": "graded"})
         mock_sentry.capture_message.assert_not_called()
         mock_sentry.capture_exception.assert_not_called()
 

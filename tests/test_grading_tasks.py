@@ -74,13 +74,19 @@ def test_task_sets_sentry_user_with_hashed_uid(eager_celery):
 
 
 def test_on_failure_marks_submission_failed(eager_celery):
-    """on_failure calls _safe_update_submission directly (update_submission doesn't exist)."""
+    """on_failure calls repository_for(...).mark_failed(submission_id, exc).
+
+    Slice 5 PR2 Task 2.4: migrated from patching _safe_update_submission to
+    patching repository_for. DB effect is byte-identical: correct table via
+    path discriminator, status='failed', str(exc)[:500] error_message.
+    """
     from backend.tasks.grading_tasks import PortalGradingTask
     task = PortalGradingTask()
     task.name = 'grading.portal_submission'
 
-    with patch('backend.services.portal_grading._safe_update_submission') as mock_update:
+    with patch('backend.services.submission_repository.repository_for') as mock_rf:
         with patch('backend.supabase_client.get_supabase', return_value=MagicMock()):
+            mock_repo = mock_rf.return_value
             task.on_failure(
                 exc=RuntimeError('boom'),
                 task_id='some-task-id',
@@ -88,13 +94,14 @@ def test_on_failure_marks_submission_failed(eager_celery):
                 kwargs={},
                 einfo=None,
             )
-    assert mock_update.called
-    ca = mock_update.call_args
-    # _safe_update_submission(sb, submission_id, update_fields_dict, table_name=...)
-    update_fields = ca.args[2]
-    assert update_fields['status'] == 'failed'
-    assert update_fields['error_message'] == 'boom'
-    assert ca.kwargs['table_name'] == 'submissions'
+    # repository_for called with the path discriminator from args[2]
+    assert mock_rf.call_args.args[0] == 'submissions'
+    # mark_failed called with submission_id and the original exception
+    mock_repo.mark_failed.assert_called_once()
+    mf_args = mock_repo.mark_failed.call_args.args
+    assert mf_args[0] == 'sub-1'
+    assert isinstance(mf_args[1], RuntimeError)
+    assert str(mf_args[1]) == 'boom'
 
 
 def test_on_failure_no_submission_id_is_noop(eager_celery):
@@ -102,9 +109,9 @@ def test_on_failure_no_submission_id_is_noop(eager_celery):
     from backend.tasks.grading_tasks import PortalGradingTask
     task = PortalGradingTask()
     task.name = 'grading.portal_submission'
-    with patch('backend.services.portal_grading._safe_update_submission') as mock_update:
+    with patch('backend.services.submission_repository.repository_for') as mock_rf:
         task.on_failure(exc=RuntimeError('x'), task_id='t', args=[], kwargs={}, einfo=None)
-    mock_update.assert_not_called()
+    mock_rf.assert_not_called()
 
 
 def test_fetch_submission_full_context_reads_accommodations_from_published_settings():
@@ -309,19 +316,19 @@ def test_task_aborts_when_assessment_is_none(eager_celery):
     from backend.tasks.grading_tasks import grade_portal_submission
     with patch('backend.services.portal_grading.fetch_submission_full_context', return_value=partial_ctx):
         with patch('backend.services.portal_grading.grade_portal_submission_sync') as mock_sync:
-            with patch('backend.services.portal_grading._safe_update_submission') as mock_update:
+            with patch('backend.services.submission_repository.repository_for') as mock_rf:
                 with patch('backend.supabase_client.get_supabase', return_value=MagicMock()):
+                    mock_repo = mock_rf.return_value
                     result = grade_portal_submission.apply(
                         args=['sub-1', 'teacher-1', 'submissions'],
                     )
     assert result.successful()  # task returns cleanly
     mock_sync.assert_not_called()  # sync function never invoked
-    # Row was marked failed with explanatory error_message
-    assert mock_update.called
-    call_args = mock_update.call_args
-    update_fields = call_args.args[2]
-    assert update_fields['status'] == 'failed'
-    assert 'Assessment content unavailable' in update_fields['error_message']
+    # Row was marked failed with explanatory error_message via repo.mark_failed
+    mock_repo.mark_failed.assert_called_once()
+    mf_args = mock_repo.mark_failed.call_args.args
+    assert mf_args[0] == 'sub-1'
+    assert 'Assessment content unavailable' in str(mf_args[1])
 
 
 # ══════════════════════════════════════════════════════════════
@@ -409,7 +416,7 @@ def _run_sync_with_dedup(sb, task_id, submission_id='sub-1'):
                                 student_info={'student_name': 'Ana', 'student_id': ''},
                                 teacher_config={},
                                 teacher_id='t-1',
-                                supabase_table='submissions',
+                                path_type='submissions',
                                 task_id=task_id,
                             )
 

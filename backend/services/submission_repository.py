@@ -152,6 +152,16 @@ class SubmissionRepository:
         """
         raise NotImplementedError("find_existing_submission is path-specific")
 
+    def count_existing_for(self, lookup_key, student_info) -> int:
+        """Return the count of submissions matching (lookup_key, student_info).
+
+        Used by the class-based submit route to derive attempt_number
+        (count + 1). The join-code path uses this for the equivalent
+        per-name count if it ever needs an attempt counter. Returns 0
+        if no submissions match or the query fails.
+        """
+        raise NotImplementedError("count_existing_for is path-specific")
+
     def _resolve_student_id(self, data):
         """Path-specific student_id resolution. Relocated VERBATIM from the
         portal_grading.fetch_submission_full_context :526 branch; subclasses
@@ -244,6 +254,24 @@ class JoinCodeSubmissionRepository(SubmissionRepository):
             student_name=row.get("student_name"),
         )
 
+    def count_existing_for(self, lookup_key, student_info) -> int:
+        if not self._sb or not lookup_key:
+            return 0
+        try:
+            result = self._sb.table(self.table_name).select(
+                "id"
+            ).eq("join_code", lookup_key).ilike(
+                "student_name", student_info.get("name", "")
+            ).execute()
+        except Exception as e:
+            logger.error("count_existing_for failed for table %s: %s", self.table_name, e)
+            sentry_sdk.capture_exception(e)
+            return 0
+        rows = result.data if result else None
+        if not rows:
+            return 0
+        return len(rows) if isinstance(rows, list) else 1
+
 
 class ClassSubmissionRepository(SubmissionRepository):
     """Authenticated class-based path -> Supabase 'student_submissions' table."""
@@ -284,6 +312,29 @@ class ClassSubmissionRepository(SubmissionRepository):
             results=None,
             student_name=row.get("student_name"),
         )
+
+    def count_existing_for(self, lookup_key, student_info) -> int:
+        if not self._sb or not lookup_key or not student_info.get("student_id"):
+            return 0
+        try:
+            # Mirror student_account_routes.submit_student_work body's
+            # original attempt-counter query semantics. Selects only "id"
+            # to minimize payload.
+            result = self._sb.table(self.table_name).select(
+                "id"
+            ).eq(
+                "student_id", student_info["student_id"]
+            ).eq(
+                "content_id", lookup_key
+            ).execute()
+        except Exception as e:
+            logger.error("count_existing_for failed for table %s: %s", self.table_name, e)
+            sentry_sdk.capture_exception(e)
+            return 0
+        rows = result.data if result else None
+        if not rows:
+            return 0
+        return len(rows) if isinstance(rows, list) else 1
 
 
 def repository_for(path_type, sb):

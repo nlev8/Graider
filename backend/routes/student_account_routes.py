@@ -1134,24 +1134,26 @@ def submit_student_work(content_id):
         s = student.data[0]
         student_name = f"{s['first_name']} {s['last_name']}"
 
-        existing = db.table('student_submissions').select('id').eq(
-            'student_id', student_id
-        ).eq('content_id', content_id).execute()
+        from backend.services.submission_repository import repository_for
+        from backend.services.published_content_repository import published_content_repository_for
+        submission_repo = repository_for(SubmissionPathType.CLASS, db)
+        content_repo = published_content_repository_for(SubmissionPathType.CLASS, db)
 
-        attempt = len(existing.data) + 1
+        attempt = submission_repo.count_existing_for(
+            content_id, {"student_id": student_id}
+        ) + 1
 
         # Load published content to get assessment data for grading
-        pc = db.table('published_content').select('content, title, teacher_id, settings').eq(
-            'id', content_id).execute()
-        if not pc.data:
+        pc_row = content_repo.fetch_by_lookup_key(content_id)
+        if not pc_row:
             return jsonify({"error": "Published content not found"}), 404
 
-        assessment_content = pc.data[0].get('content', {})
-        content_title = pc.data[0].get('title', 'Assignment')
-        teacher_id = pc.data[0].get('teacher_id', s.get('teacher_id', ''))
+        assessment_content = pc_row.get('content', {})
+        content_title = pc_row.get('title', 'Assignment')
+        teacher_id = pc_row.get('teacher_id', s.get('teacher_id', ''))
 
         # Check for late submission (assignments with due dates)
-        due_date = pc.data[0].get('due_date')
+        due_date = pc_row.get('due_date')
         is_late = False
         if due_date:
             now_ts = datetime.now(tz=timezone.utc).isoformat()
@@ -1229,7 +1231,7 @@ def submit_student_work(content_id):
             teacher_config["period"] = s.get("period", "")
 
             # Get accommodations from published content settings (already fetched with settings column)
-            published_accommodations = pc.data[0].get('settings', {}).get('student_accommodations', {}) if pc.data else {}
+            published_accommodations = pc_row.get('settings', {}).get('student_accommodations', {})
 
             _spawn_grading_thread_safe(
                 target=run_portal_grading_thread,
@@ -1285,7 +1287,7 @@ def submit_student_work(content_id):
                 _logger.debug("Confirmation queue insert skipped: %s", conf_err)
 
         # Return instant results to student (MC scores immediately)
-        publish_settings = pc.data[0].get('settings', {}) if pc.data else {}
+        publish_settings = pc_row.get('settings', {})
         response = {
             "success": True,
             "submission_id": submission_id,

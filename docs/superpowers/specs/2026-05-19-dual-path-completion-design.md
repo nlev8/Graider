@@ -8,6 +8,8 @@
 
 Eliminate the remaining path-specific code in the two HTTP entry routes and the `published_*` read split by introducing a parallel `PublishedContentRepository` abstraction and extending `SubmissionRepository` with a route-layer dedup pre-check method; retire the three #431 transitional residuals. Behavior-preserving: no schema change, no data migration, no HTTP endpoint consolidation, characterization net byte-identical pre and post.
 
+**STATUS: CLOSED 2026-05-20** — shipped via PR1 (#443: PublishedContentRepository module + ABC extension + char-net extension + test migration) and PR2 (route rewire + #431 fold-in). Second half of Architecture ground 1 closed. Zero schema change, zero behavior change.
+
 ## 2. Problem
 
 Three connected residuals after Slice 4:

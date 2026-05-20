@@ -159,7 +159,7 @@ class _GradingThreadTestBase:
     """Shared setup for grading thread tests."""
 
     def _run(self, assessment, answers, student_info=None, teacher_config=None,
-             submission_id="sub_1", supabase_table="student_submissions",
+             submission_id="sub_1", path_type="student_submissions",
              student_accommodations=None, sb_mock=None):
         """Run run_portal_grading_thread with all dependencies mocked."""
         from backend.services.portal_grading import run_portal_grading_thread, _shutdown_event
@@ -196,7 +196,7 @@ class _GradingThreadTestBase:
                 student_info=student_info,
                 teacher_config=teacher_config,
                 teacher_id="teacher_1",
-                supabase_table=supabase_table,
+                path_type=path_type,
                 student_accommodations=student_accommodations,
             )
 
@@ -226,7 +226,7 @@ class TestGradingStateTransitions(_GradingThreadTestBase):
         sb = self._run(
             assessment=_make_mc_assessment(),
             answers={"0-0": "B", "0-1": "True"},
-            supabase_table="student_submissions",
+            path_type="student_submissions",
         )
         sb.table.assert_any_call("student_submissions")
 
@@ -235,7 +235,7 @@ class TestGradingStateTransitions(_GradingThreadTestBase):
         sb = self._run(
             assessment=_make_mc_assessment(),
             answers={"0-0": "B", "0-1": "True"},
-            supabase_table="submissions",
+            path_type="submissions",
         )
         sb.table.assert_any_call("submissions")
 
@@ -380,7 +380,7 @@ class TestThreadLifecycle(_GradingThreadTestBase):
             student_info=_base_student_info(),
             teacher_config=_base_teacher_config(),
             submission_id="sub_params",
-            supabase_table="student_submissions",
+            path_type="student_submissions",
             student_accommodations={"Jane Doe": {"iep": True, "accommodations": "extra time"}},
         )
         # No TypeError means all params accepted

@@ -38,54 +38,10 @@ BOTH_TABLES = [JOIN_CODE_TABLE, CLASS_TABLE]
 
 
 # ---------------------------------------------------------------------------
-# Seam 1: claim — _claim_submission_for_grading (UNCONDITIONAL write)
+# Seam 1: claim — _claim_submission_for_grading (DELETED in Slice 5 PR2
+# Task 2.4; coverage retained in tests/test_submission_repository.py
+# test_claim_for_grading_* tests against SubmissionRepository.claim_for_grading)
 # ---------------------------------------------------------------------------
-class TestClaimSeam:
-    @pytest.mark.parametrize("table", BOTH_TABLES)
-    def test_claim_writes_exact_three_fields_to_correct_table(self, table):
-        """Fresh row: unconditional write of exactly status +
-        grading_task_id + grading_started_at to the wired table.
-        There is NO 'already claimed' branch in this function."""
-        from backend.services.portal_grading import _claim_submission_for_grading
-
-        sb = MagicMock()
-        ret = _claim_submission_for_grading(sb, table, "sid-1", "task-99")
-
-        # Returns None (no bool, no conditional) — pinned.
-        assert ret is None
-
-        assert sb.table.call_args.args[0] == table
-        payload = sb.table.return_value.update.call_args.args[0]
-        assert sorted(payload.keys()) == [
-            "grading_started_at",
-            "grading_task_id",
-            "status",
-        ]
-        assert payload["status"] == "grading_in_progress"
-        assert payload["grading_task_id"] == "task-99"
-        # ISO-8601 UTC string with offset (datetime.now(timezone.utc).isoformat())
-        assert isinstance(payload["grading_started_at"], str)
-        assert payload["grading_started_at"].endswith("+00:00")
-        # Targets the row by id.
-        sb.table.return_value.update.return_value.eq.assert_called_once_with(
-            "id", "sid-1"
-        )
-
-    @pytest.mark.parametrize("table", BOTH_TABLES)
-    def test_claim_noop_when_sb_falsy(self, table):
-        from backend.services.portal_grading import _claim_submission_for_grading
-
-        assert _claim_submission_for_grading(None, table, "sid", "t") is None
-
-    @pytest.mark.parametrize("table", BOTH_TABLES)
-    def test_claim_noop_when_submission_id_falsy(self, table):
-        from backend.services.portal_grading import _claim_submission_for_grading
-
-        sb = MagicMock()
-        assert _claim_submission_for_grading(sb, table, None, "t") is None
-        assert _claim_submission_for_grading(sb, table, "", "t") is None
-        assert sb.table.called is False
-
 
 # ---------------------------------------------------------------------------
 # Seam 2: fetch — fetch_submission_full_context normalized context dict
@@ -229,60 +185,10 @@ class TestFetchContextSeam:
 
 
 # ---------------------------------------------------------------------------
-# Seam 3: update — _safe_update_submission
+# Seam 3: update — _safe_update_submission (DELETED in Slice 5 PR2 Task 2.4;
+# coverage retained in tests/test_submission_repository.py test_update_*
+# tests against SubmissionRepository.update)
 # ---------------------------------------------------------------------------
-class TestUpdateSeam:
-    @pytest.mark.parametrize("table", BOTH_TABLES)
-    def test_update_targets_correct_table(self, table):
-        from backend.services.portal_grading import _safe_update_submission
-
-        sb = MagicMock()
-        _safe_update_submission(
-            sb, "sid-1", {"status": "x"}, table_name=table
-        )
-        assert sb.table.call_args.args[0] == table
-        assert sb.table.return_value.update.call_args.args[0] == {"status": "x"}
-        sb.table.return_value.update.return_value.eq.assert_called_once_with(
-            "id", "sid-1"
-        )
-
-    @pytest.mark.parametrize("table", BOTH_TABLES)
-    def test_update_falsy_sid_silent_skip(self, table):
-        from backend.services.portal_grading import _safe_update_submission
-
-        sb = MagicMock()
-        assert (
-            _safe_update_submission(sb, "", {"a": 1}, table_name=table) is None
-        )
-        assert (
-            _safe_update_submission(sb, None, {"a": 1}, table_name=table)
-            is None
-        )
-        assert sb.table.called is False
-
-    def test_update_sb_none_pages_sentry_with_hashed_id(self):
-        """sb=None with a real submission_id is a config problem: logger.error
-        + sentry capture_message(level='error'), id is sha256[:8] hashed."""
-        from backend.services.portal_grading import _safe_update_submission
-
-        with patch(
-            "backend.services.portal_grading.sentry_sdk.capture_message"
-        ) as cap, patch(
-            "backend.services.portal_grading.logger.error"
-        ) as log_err:
-            ret = _safe_update_submission(
-                None, "sid-secret", {"a": 1}, table_name=JOIN_CODE_TABLE
-            )
-
-        assert ret is None
-        expected_hash = hashlib.sha256(b"sid-secret").hexdigest()[:8]
-        expected_msg = (
-            "Cannot update submission %s: Supabase client unavailable"
-            % expected_hash
-        )
-        cap.assert_called_once_with(expected_msg, level="error")
-        log_err.assert_called_once_with(expected_msg)
-
 
 # ---------------------------------------------------------------------------
 # Seam 4: failure — PortalGradingTask.on_failure
@@ -300,6 +206,12 @@ def _celery_broker_env(monkeypatch):
 
 
 class TestFailureSeam:
+    """Slice 5 PR2 Task 2.4: on_failure now calls repository_for(...).mark_failed(...)
+    instead of the deleted _safe_update_submission helper. Tests patch
+    backend.tasks.grading_tasks.repository_for and assert the same DB-observable
+    invariants: correct path discriminator (table), status='failed',
+    error_message=str(exc)[:500]. DB effect is byte-identical."""
+
     @pytest.mark.parametrize("table", BOTH_TABLES)
     def test_on_failure_writes_failed_to_table_from_args2(self, table):
         from backend.tasks.grading_tasks import PortalGradingTask
@@ -308,10 +220,11 @@ class TestFailureSeam:
         task.name = "grading.portal_submission"
 
         with patch(
-            "backend.services.portal_grading._safe_update_submission"
-        ) as mu, patch(
+            "backend.services.submission_repository.repository_for"
+        ) as mrf, patch(
             "backend.supabase_client.get_supabase", return_value=MagicMock()
         ):
+            mock_repo = mrf.return_value
             task.on_failure(
                 exc=RuntimeError("boom"),
                 task_id="t",
@@ -320,11 +233,14 @@ class TestFailureSeam:
                 einfo=None,
             )
 
-        assert mu.call_args.args[2] == {
-            "status": "failed",
-            "error_message": "boom",
-        }
-        assert mu.call_args.kwargs["table_name"] == table
+        # repository_for called with the right path discriminator
+        assert mrf.call_args.args[0] == table
+        # mark_failed called with the right submission_id and exception
+        mock_repo.mark_failed.assert_called_once()
+        mf_args = mock_repo.mark_failed.call_args.args
+        assert mf_args[0] == "sub-1"
+        assert isinstance(mf_args[1], RuntimeError)
+        assert str(mf_args[1]) == "boom"
 
     def test_on_failure_truncates_error_at_500(self):
         from backend.tasks.grading_tasks import PortalGradingTask
@@ -333,10 +249,11 @@ class TestFailureSeam:
         task.name = "grading.portal_submission"
 
         with patch(
-            "backend.services.portal_grading._safe_update_submission"
-        ) as mu, patch(
+            "backend.services.submission_repository.repository_for"
+        ) as mrf, patch(
             "backend.supabase_client.get_supabase", return_value=MagicMock()
         ):
+            mock_repo = mrf.return_value
             task.on_failure(
                 exc=ValueError("x" * 600),
                 task_id="t",
@@ -345,9 +262,12 @@ class TestFailureSeam:
                 einfo=None,
             )
 
-        payload = mu.call_args.args[2]
-        assert payload["status"] == "failed"
-        assert len(payload["error_message"]) == 500
+        mock_repo.mark_failed.assert_called_once()
+        mf_args = mock_repo.mark_failed.call_args.args
+        # mark_failed does str(error)[:500] internally; pin that the error arg
+        # is the original exception and truncation happens inside mark_failed
+        assert isinstance(mf_args[1], ValueError)
+        assert len(str(mf_args[1])[:500]) == 500
 
     def test_on_failure_defaults_to_submissions_when_args2_absent(self):
         from backend.tasks.grading_tasks import PortalGradingTask
@@ -356,8 +276,8 @@ class TestFailureSeam:
         task.name = "grading.portal_submission"
 
         with patch(
-            "backend.services.portal_grading._safe_update_submission"
-        ) as mu, patch(
+            "backend.services.submission_repository.repository_for"
+        ) as mrf, patch(
             "backend.supabase_client.get_supabase", return_value=MagicMock()
         ):
             task.on_failure(
@@ -368,7 +288,8 @@ class TestFailureSeam:
                 einfo=None,
             )
 
-        assert mu.call_args.kwargs["table_name"] == JOIN_CODE_TABLE
+        # When args[2] is absent, fallback default 'submissions' must be used
+        assert mrf.call_args.args[0] == JOIN_CODE_TABLE
 
     def test_on_failure_noop_without_submission_id(self):
         from backend.tasks.grading_tasks import PortalGradingTask
@@ -377,8 +298,8 @@ class TestFailureSeam:
         task.name = "grading.portal_submission"
 
         with patch(
-            "backend.services.portal_grading._safe_update_submission"
-        ) as mu:
+            "backend.services.submission_repository.repository_for"
+        ) as mrf:
             task.on_failure(
                 exc=RuntimeError("x"),
                 task_id="t",
@@ -386,19 +307,20 @@ class TestFailureSeam:
                 kwargs={},
                 einfo=None,
             )
-        assert mu.called is False
+        # Neither repository_for nor mark_failed must be called
+        mrf.assert_not_called()
 
     def test_on_failure_skips_update_when_sb_none(self):
         """on_failure guards the write with `if sb:` — when get_supabase
-        returns None, _safe_update_submission is never invoked."""
+        returns None, repository_for / mark_failed are never invoked."""
         from backend.tasks.grading_tasks import PortalGradingTask
 
         task = PortalGradingTask()
         task.name = "grading.portal_submission"
 
         with patch(
-            "backend.services.portal_grading._safe_update_submission"
-        ) as mu, patch(
+            "backend.services.submission_repository.repository_for"
+        ) as mrf, patch(
             "backend.supabase_client.get_supabase", return_value=None
         ):
             task.on_failure(
@@ -408,7 +330,7 @@ class TestFailureSeam:
                 kwargs={},
                 einfo=None,
             )
-        assert mu.called is False
+        mrf.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -870,3 +792,67 @@ def test_no_supabase_table_string_dispatch_remains():
     assert "table_name=supabase_table" not in pg
     assert 'supabase_table="submissions"' not in pg
     assert 'supabase_table="student_submissions"' not in pg
+
+
+# ---------------------------------------------------------------------------
+# PR2 grep gate: inline dedup queries + inline published-content fetches must
+# be gone from both submit route function bodies after Tasks 2.2 + 2.3 land.
+# Scoped via inspect.getsource to the two route function bodies only so that
+# the 10+ legitimate published_content references elsewhere in
+# student_account_routes.py do NOT trip the gate.
+# ---------------------------------------------------------------------------
+
+
+def test_no_inline_published_or_dedup_queries_in_submit_routes():
+    """After PR2 rewires both submit routes onto the parallel repos
+    (PublishedContentRepository + SubmissionRepository.find_existing_submission),
+    the route function bodies must not contain:
+      - the inline ilike-name dedup pattern (join-code path)
+      - the inline content_id+student_id dedup query (class path)
+      - the inline published-content table fetch (either path)
+
+    Scoped via inspect.getsource to the two route function bodies only;
+    other functions in the same files that legitimately query
+    published_assessments / published_content / student_submissions are
+    unaffected.
+
+    RED on the PR1-merge sha: the grep finds the inline patterns at
+    student_portal_routes.py:1454 and student_account_routes.py:1137/1144.
+    GREEN after PR2 Tasks 2.2 + 2.3 land the rewire.
+    """
+    import inspect
+    from backend.routes.student_portal_routes import submit_assessment
+    from backend.routes.student_account_routes import submit_student_work
+
+    sp_body = inspect.getsource(submit_assessment)
+    sa_body = inspect.getsource(submit_student_work)
+
+    # Join-code path: no inline ilike-name dedup
+    assert ".ilike('student_name'" not in sp_body and '.ilike("student_name"' not in sp_body, (
+        "submit_assessment still contains inline ilike-name dedup; "
+        "expected use of submission_repo.find_existing_submission"
+    )
+    # Join-code path: no inline published_assessments fetch
+    assert "db.table('published_assessments')" not in sp_body and 'db.table("published_assessments")' not in sp_body, (
+        "submit_assessment still contains inline published_assessments fetch; "
+        "expected use of content_repo.fetch_by_lookup_key"
+    )
+    # Class path: no inline 'select id' dedup query against student_submissions.
+    # The pre-Slice-5 dedup pattern was:
+    #   db.table('student_submissions').select('id').eq('student_id', ...).eq('content_id', ...)
+    # Other student_submissions queries in the body (the upsert, the late-context
+    # fetches) select different columns and don't trip this.
+    assert "db.table('student_submissions').select('id').eq(" not in sa_body and \
+        'db.table("student_submissions").select("id").eq(' not in sa_body, (
+        "submit_student_work still contains the inline 'select id' dedup; "
+        "expected use of submission_repo.find_existing_submission"
+    )
+    # Class path: no inline 'select content, title, teacher_id, settings' fetch
+    # against published_content. This is the route's MAIN content fetch (line 41
+    # in the pre-Slice-5 body). Other published_content queries (the late-context
+    # 'select id, title' fetch) stay because they serve different purposes.
+    assert "db.table('published_content').select('content, title, teacher_id, settings')" not in sa_body and \
+        'db.table("published_content").select("content, title, teacher_id, settings")' not in sa_body, (
+        "submit_student_work still contains the inline 'select content, title, "
+        "teacher_id, settings' fetch; expected use of content_repo.fetch_by_lookup_key"
+    )
