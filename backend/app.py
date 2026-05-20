@@ -144,14 +144,48 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
 from datetime import timedelta
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)  # Session inactivity timeout
 if os.getenv('REDIS_URL'):
-    # Production: server-side sessions via Redis (survives multi-worker)
+    # Production: server-side sessions via Redis (survives multi-worker).
+    #
+    # 2026-05-20 hotfix #3: probe Redis at startup and fall back to
+    # filesystem sessions if unreachable, so the worker can serve requests
+    # instead of crashing the session interface on every request. The
+    # filesystem fallback is per-worker (sessions do not survive cross-
+    # worker until Redis recovers and the worker restarts) but the app
+    # stays functional during a Redis outage. Surfaced by the 2026-05-19
+    # Railway/GCP incident: Redis was unreachable for hours after
+    # Railway's edge recovered, and the prior unconditional 'redis'
+    # session backend made every non-/healthz request 500 because the
+    # session interface hit Redis before the route handler ran.
     from flask_session import Session
     import redis
-    app.config['SESSION_TYPE'] = 'redis'
-    app.config['SESSION_PERMANENT'] = True  # Use PERMANENT_SESSION_LIFETIME for expiry
-    app.config['SESSION_KEY_PREFIX'] = 'graider:'
-    app.config['SESSION_REDIS'] = redis.from_url(os.getenv('REDIS_URL'))
-    Session(app)
+    _session_redis = redis.from_url(
+        os.getenv('REDIS_URL'),
+        socket_timeout=2.0,
+        socket_connect_timeout=2.0,
+    )
+    try:
+        _session_redis.ping()
+        # Redis reachable at startup — use it for shared sessions.
+        app.config['SESSION_TYPE'] = 'redis'
+        app.config['SESSION_PERMANENT'] = True  # Use PERMANENT_SESSION_LIFETIME for expiry
+        app.config['SESSION_KEY_PREFIX'] = 'graider:'
+        app.config['SESSION_REDIS'] = _session_redis
+        Session(app)
+    except Exception as _redis_err:
+        # Redis unreachable at startup — fall back to filesystem sessions
+        # for this worker. Sessions become per-worker until Redis recovers
+        # and the worker restarts; acceptable degraded mode (better than
+        # 500'ing every request).
+        import logging
+        logging.getLogger(__name__).warning(
+            "Redis unreachable at startup (%s); using filesystem sessions "
+            "for this worker until Redis recovers + worker restarts.",
+            _redis_err,
+        )
+        app.config['SESSION_TYPE'] = 'filesystem'
+        app.config['SESSION_PERMANENT'] = True
+        app.config['SESSION_KEY_PREFIX'] = 'graider:'
+        Session(app)
 
 # ══════════════════════════════════════════════════════════════
 # AUTHENTICATION
