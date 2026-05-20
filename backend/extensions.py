@@ -32,8 +32,25 @@ if not redis_url:
 # Phase 4.6: global default tightened from 200/min → 100/min. Per-route
 # explicit @limiter.limit(...) decorators override this for endpoints that
 # need tighter (auth, writes) or looser (dashboards, polling) limits.
+#
+# 2026-05-20 hotfix #3: in_memory_fallback_enabled=True. When the Redis
+# storage backend is unreachable at REQUEST TIME (e.g. the 2026-05-19
+# Railway/GCP incident left Redis degraded for hours after Railway's edge
+# recovered), the limiter previously raised in before_request and every
+# non-@limiter.exempt route returned a Flask 500. With this flag the
+# limiter automatically falls back to in-memory storage per request when
+# the configured backend errors. Per-route limits become per-worker
+# in-memory during the fallback window — bypassable but the app serves
+# users correctly, and the fallback is automatic + per-request (no
+# restart needed when Redis recovers).
+#
+# Note this fallback only fires for transient-Redis-unreachable errors at
+# REQUEST TIME. The hard requirement above (REDIS_URL must be SET in
+# production) still raises at module import — a config-missing error is a
+# different class from a transient outage and stays fail-fast.
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["100 per minute"],
     storage_uri=redis_url or "memory://",
+    in_memory_fallback_enabled=True,
 )
