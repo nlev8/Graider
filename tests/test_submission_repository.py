@@ -589,3 +589,99 @@ def test_class_find_existing_submission_captures_on_execute_exception(monkeypatc
         student_info={"student_id": "stu-42"},
     ) is None
     assert isinstance(captured["exc"], RuntimeError)
+
+
+# ---------------------------------------------------------------------------
+# Task 2.3: count_existing_for — base + both adapters
+# ---------------------------------------------------------------------------
+def test_existence_of_count_existing_for_method():
+    from backend.services.submission_repository import SubmissionRepository
+    assert hasattr(SubmissionRepository, "count_existing_for")
+
+
+def test_base_count_existing_for_raises_not_implemented():
+    from backend.services.submission_repository import SubmissionRepository
+    base = SubmissionRepository(FakeSupabase())
+    with pytest.raises(NotImplementedError, match="count_existing_for"):
+        base.count_existing_for("k", {})
+
+
+def test_joincode_count_existing_for_zero():
+    sb = FakeSupabase()
+    sb.table("submissions")
+    sb.tables["submissions"].row = None
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    repo = JoinCodeSubmissionRepository(sb)
+    assert repo.count_existing_for("ABCD12", {"name": "Pat"}) == 0
+
+
+def test_joincode_count_existing_for_single():
+    sb = FakeSupabase()
+    sb.table("submissions")
+    sb.tables["submissions"].row = [{"id": "s1"}]  # list with one item
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    repo = JoinCodeSubmissionRepository(sb)
+    assert repo.count_existing_for("ABCD12", {"name": "Pat"}) == 1
+
+
+def test_joincode_count_existing_for_multiple():
+    sb = FakeSupabase()
+    sb.table("submissions")
+    sb.tables["submissions"].row = [{"id": "s1"}, {"id": "s2"}, {"id": "s3"}]
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    repo = JoinCodeSubmissionRepository(sb)
+    assert repo.count_existing_for("ABCD12", {"name": "Pat"}) == 3
+
+
+def test_class_count_existing_for_zero():
+    sb = FakeSupabase()
+    sb.table("student_submissions")
+    sb.tables["student_submissions"].row = None
+    from backend.services.submission_repository import ClassSubmissionRepository
+    repo = ClassSubmissionRepository(sb)
+    n = repo.count_existing_for(
+        lookup_key="content-uuid-1",
+        student_info={"student_id": "stu-42"},
+    )
+    assert n == 0
+
+
+def test_class_count_existing_for_multiple():
+    sb = FakeSupabase()
+    sb.table("student_submissions")
+    sb.tables["student_submissions"].row = [{"id": "s1"}, {"id": "s2"}]
+    from backend.services.submission_repository import ClassSubmissionRepository
+    repo = ClassSubmissionRepository(sb)
+    n = repo.count_existing_for(
+        lookup_key="content-uuid-1",
+        student_info={"student_id": "stu-42"},
+    )
+    assert n == 2
+
+
+def test_class_count_existing_for_missing_student_id_returns_zero():
+    sb = FakeSupabase()
+    sb.table("student_submissions")
+    sb.tables["student_submissions"].row = [{"id": "s1"}]
+    from backend.services.submission_repository import ClassSubmissionRepository
+    repo = ClassSubmissionRepository(sb)
+    assert repo.count_existing_for("content-uuid-1", {}) == 0
+
+
+def test_class_count_existing_for_captures_on_execute_exception(monkeypatch):
+    captured = {}
+
+    def fake_capture(exc):
+        captured["exc"] = exc
+
+    monkeypatch.setattr(
+        "backend.services.submission_repository.sentry_sdk.capture_exception",
+        fake_capture,
+    )
+    sb = FakeSupabase()
+    sb.table("student_submissions")
+    sb.tables["student_submissions"].raise_on_execute = RuntimeError("boom")
+    from backend.services.submission_repository import ClassSubmissionRepository
+    repo = ClassSubmissionRepository(sb)
+    assert repo.count_existing_for("content-1", {"student_id": "s"}) == 0
+    assert isinstance(captured.get("exc"), RuntimeError)
