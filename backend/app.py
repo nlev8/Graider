@@ -158,10 +158,20 @@ if os.getenv('REDIS_URL'):
     # session interface hit Redis before the route handler ran.
     from flask_session import Session
     import redis
+    from redis.backoff import NoBackoff
+    from redis.retry import Retry
+    # HOTFIX #4 (2026-05-20): also pass retry=Retry(NoBackoff(), 0) so a
+    # single Redis-unreachable connect attempt fails fast (~2s bounded by
+    # socket_connect_timeout) instead of triggering redis-py's default
+    # internal retry loop (which retries connection errors multiple times
+    # with backoff and totalled well past gunicorn's 30s worker timeout,
+    # causing the SIGABRT -> handle_abort -> SystemExit(1) chain that
+    # Sentry kept reporting even after hotfixes #438 and #439 landed).
     _session_redis = redis.from_url(
         os.getenv('REDIS_URL'),
         socket_timeout=2.0,
         socket_connect_timeout=2.0,
+        retry=Retry(NoBackoff(), retries=0),
     )
     try:
         _session_redis.ping()
@@ -538,10 +548,20 @@ def healthz():
         redis_url = os.getenv('REDIS_URL')
         if redis_url:
             import redis
+            from redis.backoff import NoBackoff
+            from redis.retry import Retry
+            # HOTFIX #4 (2026-05-20): retry=Retry(NoBackoff(), 0) disables
+            # redis-py's internal connection-retry loop so this dep check
+            # is bounded to a single ~2s connect attempt instead of
+            # multiple retries × 2s + backoff that totalled past gunicorn's
+            # 30s worker timeout, triggering SIGABRT -> handle_abort ->
+            # SystemExit(1) (the Sentry alert that kept firing even after
+            # hotfix #438 bounded the individual socket ops).
             r = redis.from_url(
                 redis_url,
                 socket_timeout=2.0,
                 socket_connect_timeout=2.0,
+                retry=Retry(NoBackoff(), retries=0),
             )
             r.ping()
             status["redis"] = "ok"
