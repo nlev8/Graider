@@ -1,0 +1,154 @@
+/* ============================================
+   GRAIDER LANDING — STATUS BANNER
+   ============================================
+
+   Pulls the BetterStack public status JSON from status.graider.live and
+   renders a banner at the top of the page when any of:
+   - top-level status != "operational"
+   - any monitor status != "operational"
+   - any incident status in {"investigating", "identified", "monitoring"}
+
+   Fails-open on any fetch error, parse error, or unexpected shape:
+   a "status unknown" banner is worse than no banner during a normal
+   page-load with an API hiccup.
+
+   See docs/superpowers/specs/2026-05-21-opsafety-tier1-design.md.
+   ============================================ */
+
+const STATUS_URL = 'https://status.graider.live/api/v1/status.json';
+const FETCH_TIMEOUT_MS = 3000;
+const ACTIVE_INCIDENT_STATES = ['investigating', 'identified', 'monitoring'];
+
+/**
+ * Decide whether to show the banner.
+ *
+ * Fails-open: returns false on any unexpected input shape so the banner
+ * does not render when the API is having a hiccup.
+ *
+ * @param {object} statusJSON - Parsed BetterStack /api/v1/status.json response.
+ * @returns {boolean} true to show banner, false otherwise.
+ */
+function shouldShowBanner(statusJSON) {
+  if (!statusJSON || typeof statusJSON !== 'object' || Array.isArray(statusJSON)) {
+    return false;
+  }
+
+  // Check top-level aggregate status. Banner ON if anything other than
+  // explicit "operational".
+  if (statusJSON.status && statusJSON.status !== 'operational') {
+    return true;
+  }
+
+  // Check individual monitors. Banner ON if any monitor reports non-operational.
+  const monitors = Array.isArray(statusJSON.monitors) ? statusJSON.monitors : [];
+  for (const m of monitors) {
+    if (m && m.status && m.status !== 'operational') {
+      return true;
+    }
+  }
+
+  // Check active incidents. Banner ON if any incident is in an active
+  // (non-resolved) state.
+  const incidents = Array.isArray(statusJSON.incidents) ? statusJSON.incidents : [];
+  for (const inc of incidents) {
+    if (inc && inc.status && ACTIVE_INCIDENT_STATES.includes(inc.status)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// CommonJS export for node:test. The browser-mounting path in Task 2.2
+// uses a separate IIFE that does not depend on CommonJS.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { shouldShowBanner, STATUS_URL, FETCH_TIMEOUT_MS, ACTIVE_INCIDENT_STATES };
+}
+
+// ============================================
+// BROWSER MOUNTING (IIFE — no-op in Node)
+// ============================================
+//
+// On DOMContentLoaded, fetch the status JSON, decide whether to render,
+// and inject the banner into #status-banner. Failing-open is critical:
+// any error path silently renders nothing.
+
+(function () {
+  // Skip in non-browser environments (e.g., node:test runner).
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  function buildBannerHTML() {
+    return [
+      '<div class="status-banner-content">',
+      '  <span class="status-banner-icon" aria-hidden="true">⚠️</span>',
+      '  <span class="status-banner-text">',
+      '    We\'re experiencing service issues. Check ',
+      '    <a href="https://status.graider.live" target="_blank" rel="noopener noreferrer">status.graider.live</a>',
+      '    for live updates.',
+      '  </span>',
+      '  <button class="status-banner-dismiss" aria-label="Dismiss banner" type="button">×</button>',
+      '</div>',
+    ].join('');
+  }
+
+  function mountBanner(container) {
+    container.innerHTML = buildBannerHTML();
+    container.classList.add('visible');
+    container.removeAttribute('hidden');
+    const dismissBtn = container.querySelector('.status-banner-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', function () {
+        container.classList.remove('visible');
+        container.setAttribute('hidden', '');
+        try {
+          sessionStorage.setItem('graider:status-banner-dismissed', '1');
+        } catch (_) {
+          // sessionStorage can throw in private-browsing or quota-exceeded
+          // contexts. Failing-open: dismissal is per-tab even without storage.
+        }
+      });
+    }
+  }
+
+  async function fetchStatusWithTimeout() {
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+    try {
+      const resp = await fetch(STATUS_URL, { signal: controller.signal, cache: 'no-store' });
+      if (!resp.ok) {
+        return null;
+      }
+      return await resp.json();
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function init() {
+    const container = document.getElementById('status-banner');
+    if (!container) {
+      return;
+    }
+    try {
+      if (sessionStorage.getItem('graider:status-banner-dismissed') === '1') {
+        return;
+      }
+    } catch (_) {
+      // No sessionStorage available — proceed without dismissal memory.
+    }
+    const statusJSON = await fetchStatusWithTimeout();
+    if (statusJSON && shouldShowBanner(statusJSON)) {
+      mountBanner(container);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
