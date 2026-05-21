@@ -229,43 +229,46 @@ is the stable contract regardless of where it's emitted from.
 
 ---
 
-## Probe-coverage audit (2026-05-21, Tier 1 OpSafety)
+## Probe-coverage audit — DEFERRED to next quarterly drill (recorded 2026-05-21)
+
+**Status: deferred** to the next quarterly alert drill (first Monday of Jul 2026). Scope below documents what to verify; findings are recorded then.
 
 Verifies that BetterStack's `/healthz` probe correctly detects the 2026-05-19 incident class (TLS handshake failure at Railway's edge), not just HTTP 5xx. The existing alert routing Rule 1 above says *"`/healthz` returns non-200 for 2 consecutive probes OR response body missing `"supabase":"ok"`"*. A TLS handshake failure returns no HTTP status at all — neither 200 nor non-200. Whether BetterStack classifies that as "down" depends on monitor configuration.
 
-### Audit findings (2026-05-21)
+The audit was deliberately deferred to keep Tier 1 OpSafety PR2 unblocked on the runbook, comms templates, and customer-facing banner that the 2026-05-19 incident exposed as the higher-priority gap. The probe DID fire correctly on 2026-05-19 (the Slack alert landed within minutes), so the audit is not blocking; it's a "verify the why" follow-up.
 
-**Probe URL:** `<TO_FILL: confirm the BetterStack monitor URL — must be https://app.graider.live/healthz (custom domain), NOT https://<railway-internal>.up.railway.app/healthz. The internal URL would have served correctly during the 2026-05-19 incident even though customer traffic was broken.>`
+### Audit checklist (to be filled in during the Jul 2026 drill)
 
-**Expected status code:** `<TO_FILL: e.g., "200 OK" — BetterStack's expected-status field.>`
+Verify the following directly in the BetterStack dashboard → Monitors → the `/healthz` monitor:
 
-**Expected response body keyword:** `<TO_FILL: e.g., "ok" or empty — BetterStack's response-body-keyword field. The existing alert routing Rule 1 says the probe also checks for `"supabase":"ok"` in the body; document whether that's via the response-body-keyword field or via a separate mechanism.>`
+- **Probe URL** is `https://app.graider.live/healthz` (the custom domain). If the URL is a Railway-internal `*.up.railway.app/healthz`, change it to the custom domain — the internal URL would have served correctly during the 2026-05-19 incident even though customer traffic was broken.
+- **Expected status code** is `200`.
+- **Expected response body keyword** documented (e.g., `"ok"` or `"supabase":"ok"`). The existing alert routing Rule 1 says the probe also checks for `"supabase":"ok"` in the body; verify whether that's via the response-body-keyword field or via a separate mechanism.
+- **Probe timeout** is ≥ 4 s (Supabase round-trips can hit ~4 s under nominal load per the Slow Request warnings in container logs).
+- **Follow-redirects** is `false` (a redirect on `/healthz` would itself be a misconfiguration worth alerting on).
+- **TLS-failure classification**: BetterStack's default is to fail the check on any TLS error. Confirm there is no "ignore SSL errors" toggle enabled.
 
-**Timeout:** `<TO_FILL: e.g., 10s — BetterStack's probe-timeout setting. Should be ≥ the worst-case Supabase round-trip latency (currently ~4s during nominal load per the Slow Request warnings in container logs).>`
-
-**Follow-redirects:** `<TO_FILL: true / false — BetterStack's follow-redirects setting. Should be false; a redirect on /healthz is itself a misconfiguration worth alerting on.>`
-
-**TLS-failure classification:** `<TO_FILL: confirm BetterStack treats TLS handshake failures as "down". Per BetterStack docs, the default behavior is to fail the check on any TLS error; document the actual config and any non-default override.>`
-
-### Config fixes made (if any)
-
-`<TO_FILL: list any changes made in the BetterStack dashboard, e.g., "Changed probe URL from https://...up.railway.app/healthz to https://app.graider.live/healthz on 2026-05-2X" or "No changes; existing config verified correct">`
+Record findings + any config fixes made in this section after the drill completes.
 
 ### Verification scope
 
-What this audit covered:
+What this audit will cover:
 - BetterStack monitor configuration for the `/healthz` probe.
 - The probe URL is the customer-facing custom domain, not a Railway-internal URL.
 - TLS-handshake failure is correctly classified as "down."
 
-What this audit deliberately did NOT cover:
+What this audit deliberately will NOT cover:
 - Probe behavior under load (false positives during traffic spikes). Out of scope for Tier 1.
 - Multi-region probe geographic coverage. BetterStack free tier is multi-region by default; not verified per region.
 - Probe behavior during BetterStack-side incidents. Out of scope; same risk class as any monitoring vendor.
 
-### Next quarterly drill
+### Drill day procedure
 
-Verify that during the next `FORCE_HEALTHZ_FAIL=1` drill (first Monday of Jul 2026), the `graider.live` banner appears within ~6 minutes of the BetterStack incident being created.
+During the next `FORCE_HEALTHZ_FAIL=1` drill (first Monday of Jul 2026):
+
+1. Run the BetterStack monitor config audit above. Record each field.
+2. Verify that within ~6 minutes of `FORCE_HEALTHZ_FAIL=1` being set, the `graider.live` banner appears (pulling from the BetterStack incident-now-active status).
+3. Replace this section's "DEFERRED" status header with the actual audit findings + drill verification result.
 
 ---
 
