@@ -226,6 +226,8 @@
     </style>
 </head>
 <body>
+    <!-- Off-Railway status banner — auto-rendered by status-banner.js when BetterStack reports non-operational. Hidden by default; fails-open. -->
+    <div id="status-banner" hidden></div>
     <!-- Navigation -->
     <nav class="navbar" id="navbar">
         <div class="nav-container">
@@ -1272,6 +1274,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="status-banner.js"></script>
     <script src="script.js"></script>
 
     <!-- PostHog Custom Event Tracking -->

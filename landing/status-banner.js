@@ -64,3 +64,91 @@ function shouldShowBanner(statusJSON) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { shouldShowBanner, STATUS_URL, FETCH_TIMEOUT_MS, ACTIVE_INCIDENT_STATES };
 }
+
+// ============================================
+// BROWSER MOUNTING (IIFE — no-op in Node)
+// ============================================
+//
+// On DOMContentLoaded, fetch the status JSON, decide whether to render,
+// and inject the banner into #status-banner. Failing-open is critical:
+// any error path silently renders nothing.
+
+(function () {
+  // Skip in non-browser environments (e.g., node:test runner).
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  function buildBannerHTML() {
+    return [
+      '<div class="status-banner-content">',
+      '  <span class="status-banner-icon" aria-hidden="true">⚠️</span>',
+      '  <span class="status-banner-text">',
+      '    We\'re experiencing service issues. Check ',
+      '    <a href="https://status.graider.live" target="_blank" rel="noopener noreferrer">status.graider.live</a>',
+      '    for live updates.',
+      '  </span>',
+      '  <button class="status-banner-dismiss" aria-label="Dismiss banner" type="button">×</button>',
+      '</div>',
+    ].join('');
+  }
+
+  function mountBanner(container) {
+    container.innerHTML = buildBannerHTML();
+    container.classList.add('visible');
+    container.removeAttribute('hidden');
+    const dismissBtn = container.querySelector('.status-banner-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', function () {
+        container.classList.remove('visible');
+        container.setAttribute('hidden', '');
+        try {
+          sessionStorage.setItem('graider:status-banner-dismissed', '1');
+        } catch (_) {
+          // sessionStorage can throw in private-browsing or quota-exceeded
+          // contexts. Failing-open: dismissal is per-tab even without storage.
+        }
+      });
+    }
+  }
+
+  async function fetchStatusWithTimeout() {
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+    try {
+      const resp = await fetch(STATUS_URL, { signal: controller.signal, cache: 'no-store' });
+      if (!resp.ok) {
+        return null;
+      }
+      return await resp.json();
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function init() {
+    const container = document.getElementById('status-banner');
+    if (!container) {
+      return;
+    }
+    try {
+      if (sessionStorage.getItem('graider:status-banner-dismissed') === '1') {
+        return;
+      }
+    } catch (_) {
+      // No sessionStorage available — proceed without dismissal memory.
+    }
+    const statusJSON = await fetchStatusWithTimeout();
+    if (statusJSON && shouldShowBanner(statusJSON)) {
+      mountBanner(container);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
