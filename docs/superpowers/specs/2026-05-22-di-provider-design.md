@@ -127,16 +127,31 @@ def repository_for(path_type, sb=None):
 
 Every existing caller that passes `sb` explicitly keeps working byte-identically. Only the `sb is None` branch is new.
 
-### 6.3 Call-site migration (the small, surgical set)
+### 6.3 Call-site migration (refined after planning-time code audit)
 
-Only sites that acquire `sb` *solely* to build a repo collapse to the provider:
+A planning-time audit of the actual call sites found the migration is narrower than first assumed. Three findings shaped the refined set:
 
-| File | Sites | Change |
-|---|---|---|
-| `backend/services/portal_grading.py` | `fetch_submission_full_context`, `grade_portal_submission_sync`, `run_portal_grading_thread` | Where `sb` is acquired only to build a repo, use `get_submission_repository(path_type)`. Where `sb` is also used for direct `db.table(...)` queries, keep `get_supabase()` and only route the repo construction through the provider. |
-| `backend/tasks/grading_tasks.py` | `on_failure`, no-assessment failure branch | `repository_for(path_type, sb)` → `get_submission_repository(path_type)` (drop the now-unneeded `sb` acquisition where it was only for the repo) |
-| `backend/routes/student_portal_routes.py` | `submit_assessment` | the Slice 5 repo-construction lines → provider |
-| `backend/routes/student_account_routes.py` | `submit_student_work` | the Slice 5 repo-construction lines → provider |
+1. **The char net pins call-count at the `if sb:` guards.** `TestFailureSeam::test_on_failure_skips_update_when_sb_none` and `::test_on_failure_noop_without_submission_id` patch `repository_for` and assert `assert_not_called()` when `get_supabase()` returns `None`. Migrating `on_failure` to `get_submission_repository(path_type)` (which calls `repository_for` internally via the provider) means `repository_for` IS called even when the client is `None` — the repo then no-ops its write via its own internal guard, so the observable DB effect is identical, but the call-count assertion breaks. These ~3 tests assert an implementation detail (whether the factory was called), not behavior (whether a DB write happened). **Decision (user-approved): migrate these sites AND update those ~3 tests to assert the observable effect (no DB write when client is None) instead of the call count.** This is arguably less brittle. `TestRouteContractSeam` (the HTTP contract net) stays 100% byte-identical; only the internal `TestFailureSeam` call-count assertions change.
+
+2. **`submit_student_work` uses `get_supabase_or_raise()`** (aliased as `_get_supabase`, raises if unconfigured) while the provider resolves via `get_supabase()` (returns `None`). Migrating it would change raise→None semantics — not behavior-preserving. **Decision: do NOT migrate `submit_student_work` in this slice; it stays passing its explicit `_get_supabase()` client. Follow-up.**
+
+3. **Several sites use `sb` for both repo construction AND direct `db.table(...)` queries** (e.g. `fetch_submission_full_context:376-383`, `submit_assessment` which acquires `db` for the upsert). Migrating the repo line alone double-acquires the client and creates a test-interception asymmetry (the override would catch the repo but not the direct query). **Decision: do NOT migrate dual-use sites; they keep passing the already-acquired explicit client. Follow-up.**
+
+**The refined migration set (sites that acquire `sb` SOLELY to build a repo, use `get_supabase()`, and where updating the call-count assertion is acceptable):**
+
+| File | Site | Change | Char-net impact |
+|---|---|---|---|
+| `backend/tasks/grading_tasks.py` | `on_failure` (~line 57) | `sb = get_supabase(); if sb: repository_for(supabase_table, sb).mark_failed(...)` → `get_submission_repository(supabase_table).mark_failed(...)` | `test_on_failure_skips_update_when_sb_none` + `test_on_failure_noop_without_submission_id` update from call-count to DB-effect assertion |
+| `backend/tasks/grading_tasks.py` | no-assessment failure branch (~line 183) | same pattern → `get_submission_repository(path_type).mark_failed(...)` | covered by the same TestFailureSeam-style test if one pins it; otherwise no char-net change |
+| `backend/services/portal_grading.py` | `run_portal_grading_thread` inline update (~line 946) | `sb = get_supabase(); if sb and submission_id: repository_for(path_type, sb).update(...)` → guard on `submission_id`, route repo via `get_submission_repository(path_type)` | update any test that pins the call-count on this branch from call-count to DB-effect |
+
+**Explicitly NOT migrated in this slice (follow-up):**
+- `portal_grading.py:fetch_submission_full_context` (376-383) — dual-use: `sb` also does `sb.table(repo.table_name)...` directly.
+- `portal_grading.py:grade_portal_submission_sync` (506-514) — `sb` acquired then used for `repo.fetch()` etc; verify at implementation whether `sb` is touched directly after the repo build; migrate only if it is repo-only AND no char-net call-count test pins it.
+- `routes/student_portal_routes.py:submit_assessment` — `db` acquired for the upsert; dual-use.
+- `routes/student_account_routes.py:submit_student_work` — `_get_supabase()` = `get_supabase_or_raise()` (raise-vs-None semantics).
+
+The point of the slice stands: the provider + `override_supabase` infrastructure ships and is genuinely used in production at the grading/task failure seams, and the ergonomics-proof test rewrite demonstrates the testability win. The dual-use and raise-semantics sites are honestly deferred rather than force-migrated.
 
 **Nuance:** several of those sites use `sb` for both repo construction AND direct queries. In those, keep the `get_supabase()` call (the direct query needs it) and route only the repo construction through the provider. Direct-query conversion is a later slice. This keeps the diff small and honest.
 
@@ -148,9 +163,11 @@ Only sites that acquire `sb` *solely* to build a repo collapse to the provider:
 - No call-site changes yet. Behavior change impossible by construction.
 
 **PR2 (the rewire):**
-- Migrate the seam call sites to the provider.
-- Rewrite one or two existing seam tests to use `override_supabase` instead of multi-patch — the proof-of-ergonomics.
-- The Slice 5 char net (`TestRouteContractSeam`, 9 tests) stays byte-identical green.
+- Migrate the refined set of repo-only seam call sites (section 6.3): `grading_tasks.py` `on_failure` + no-assessment branch, `portal_grading.py` `run_portal_grading_thread` inline update.
+- Update the ~3 `TestFailureSeam` tests that pin call-count-when-client-None to instead assert the observable effect (no DB write when client is None).
+- Rewrite one existing seam test to use `override_supabase` instead of multi-patch — the proof-of-ergonomics.
+- The Slice 5 `TestRouteContractSeam` (9 tests, the HTTP contract net) stays byte-identical green.
+- Dual-use sites and `submit_student_work` (raise-vs-None semantics) are NOT migrated — deferred to follow-up (section 6.3).
 
 ## 8. Testing
 
@@ -168,6 +185,7 @@ Only sites that acquire `sb` *solely* to build a repo collapse to the provider:
 | nested/threaded override isolation — one context's fake does not leak to another | the contextvars safety property |
 
 **PR2:**
+- The ~3 `TestFailureSeam` call-count assertions (`test_on_failure_skips_update_when_sb_none`, `test_on_failure_noop_without_submission_id`, and any branch test that pins `repository_for` call-count) updated to assert the observable effect: no DB write occurs when the client is None (instead of asserting `repository_for` was not called). Behavior-preserving; the assertion shifts from an implementation detail to the observable contract.
 - At least one existing seam test rewritten from multi-`patch(...get_supabase...)` to `override_supabase(fake)` — proves the ergonomics win is real.
 - The Slice 5 `TestRouteContractSeam` (9 tests) stays byte-identical green — the rewire is behavior-preserving.
 - Full regression: 0 failed (tolerating the known `test_anthropic_chat_uses_breaker` / `test_gemini_chat_uses_breaker` network flakes that pass in isolation).
