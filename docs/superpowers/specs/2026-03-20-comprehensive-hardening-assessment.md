@@ -668,3 +668,36 @@ Full regression after PR2: 5155 passed, 14 skipped, 1 known network flake (`test
 ## Next step
 
 Post-slice 3-model reconciled re-score weighing whether Architecture moves 8 → 9. Honest framing required: this is lightweight provider-based DI live at ONE seam (the grading/task failure path), genuinely used in production, with the testability win demonstrated (override_supabase replaces multi-module patching) — but it is NOT a framework across the codebase, and the dual-use/raise-semantics seams + the ~80 other call sites still acquire deps directly. A conservative-floor reconcile will weigh whether seam-level DI + the clean provider infrastructure clears the bar, or whether the broader conversion follow-up is a prerequisite. The honest expectation is that this likely holds Architecture at 8 (the objection is addressed at the seam but not retired codebase-wide) — the re-score makes that judgment explicit.
+
+---
+
+# 2026-05-22 PlannerTab calendar extraction closeout (PR #456)
+
+The first slice of Wave 3 — the resumption of the Code-Quality concentrated-complexity lever (`frontend/src/tabs/PlannerTab.jsx`, the largest raw file). Distinct from the Architecture-tier DI/dual-path work: this is frontend cluster-extraction continuing the cadence of the 2026-05-04 Planner extraction plan (Waves 1–2 pulled the Planner JSX + ~91 state pairs out of App.jsx and INTO PlannerTab.jsx, which is precisely why PlannerTab itself is now the lever at 7,405 LOC). Brainstormed via superpowers:brainstorming (cluster pick + extraction shape, both user-chosen), planned via superpowers:writing-plans, executed subagent-driven with two-stage review per task. Spec `docs/superpowers/specs/2026-05-22-plannertab-calendar-extraction-design.md`, plan `docs/superpowers/plans/2026-05-22-plannertab-calendar-extraction.md`.
+
+## What shipped
+
+- `frontend/src/components/PlannerCalendar.jsx` (new, 735 LOC) — owns the calendar cluster end-to-end: 15 state vars, the fetch effect, 11 helpers, the ~600-line JSX. Interface: `{ active, addToast, savedLessons, supportDocs, setSupportDocs }`. The cleanest isolated `plannerMode` block (no coupling to lesson/assessment generation; reuses the already-extracted HolidayModal/ImportEventsModal).
+- `frontend/src/tabs/PlannerTab.jsx` — renders `<PlannerCalendar active={activeTab === "planner"} … />` inside its existing `{plannerMode === "calendar" && (…)}` gate; the inline calendar state/effect/helpers/JSX removed, plus the now-dead HolidayModal/ImportEventsModal imports and 4 pre-existing dead imports. **7,405 → 6,680 LOC (−725).**
+- `frontend/src/__tests__/PlannerCalendar.test.jsx` (new, +3 tests) — pins the one behavioral reformulation, the `active`-prop fetch contract, in isolation. Full frontend suite 181 → 184.
+
+## Behavior preservation
+
+Verbatim move. The only non-verbatim change: the fetch effect re-expressed from `if (activeTab === "planner" && plannerMode === "calendar")` to `useEffect(() => { if (active) loadCalendar(); }, [active])` — the conditional render handles the plannerMode half, the `active` prop the activeTab half (provably equivalent fetch timing). Proven by a whitespace-normalized JSX parity diff (596 lines, byte-for-byte identical) + the existing PlannerTab calendar tests (fetch effect + Calendar mode button) staying green through PlannerTab → PlannerCalendar + the Playwright health-check E2E.
+
+## Course-corrections recorded honestly
+
+- **Audit miss caught at implementation time.** The design audit's external-surface scan omitted `supportDocs`/`setSupportDocs`. They are App-level shared state (`App.jsx:1481`, also consumed by the Settings/Tools tab); the calendar import flow reads the doc list and lazy-loads it. The implementer flagged it and initially localized them — which would have broken the shared-doc-list contract. Corrected to forward them as props; spec §3/§5/§9 + the plan updated to the 5-prop interface. Lesson: an external-identifier scan must enumerate every referenced prop, not a hand-picked subset.
+- **Subagent timeout on the large removal.** The Task-3 implementer subagent hit a stream-idle timeout having applied nothing durable (clean slate). The controller completed the 721-line removal directly via an assertion-guarded anchor-based script (aborts rather than corrupts if any anchor is missing/ambiguous), then ran the same two-stage spec + code-quality review on the result. The byte-identical JSX parity diff is the definitive correctness proof for a verbatim move of this size.
+
+## Out of scope (follow-up slices)
+
+The other four `plannerMode` blocks remain inline in PlannerTab.jsx: tools/reading-level (~806 LOC, the next cleanest isolated cluster), dashboard (~573), and the cross-coupled lesson (~2,193) + assessment (~1,625). Each its own brainstorm → spec → plan → slice.
+
+## Verification
+
+Vite build clean; full frontend suite 184 passed; JSX parity OK (596 lines, whitespace-normalized byte-identical); existing PlannerTab calendar tests green; all 9 CI checks green. Merged PR #456 (squash `b696acf`), Railway auto-deployed.
+
+## Scorecard note
+
+Code-Quality lever, not Architecture-tier. A single isolated-cluster extraction is unlikely to move a dimension score on its own; the cumulative effect across the PlannerTab Wave-3 slices (calendar + tools + dashboard + lesson + assessment) is what would. No 3-model re-score run for this slice (deliberate — predictable hold; the judgment is recorded here rather than burning a dispatch), consistent with the DI closeout's reasoning. A re-score becomes worthwhile once several PlannerTab slices have landed and the file is materially smaller.
