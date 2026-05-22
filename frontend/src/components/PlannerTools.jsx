@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import Icon from "./Icon";
 import * as api from "../services/api";
 
-export default function PlannerTools({ config, lessonPlan, generatedAssignment, globalAINotes, uploadedDocs, addToast }) {
+export default function PlannerTools({ config, lessonPlan, generatedAssignment, globalAINotes, uploadedDocs, addToast, shareWithClass }) {
   // Study guide
   const [studyGuide, setStudyGuide] = useState(null);
   const [studyGuideGenerating, setStudyGuideGenerating] = useState(false);

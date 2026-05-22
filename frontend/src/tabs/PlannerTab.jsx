@@ -5657,6 +5657,7 @@ export default function PlannerTab(props) {
                       globalAINotes={globalAINotes}
                       uploadedDocs={uploadedDocs}
                       addToast={addToast}
+                      shareWithClass={shareWithClass}
                     />
                   )}
 

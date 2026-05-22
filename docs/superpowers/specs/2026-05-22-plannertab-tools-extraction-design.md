@@ -37,7 +37,7 @@ The post-calendar handoff/recommendation labeled "tools" as "reading-level, ~806
 
 New file: `frontend/src/components/PlannerTools.jsx`. Owns all 24 tool-local state vars internally; imports `Icon` + `api` directly; uses global `fetch` for the 8 raw calls (verbatim).
 
-### Interface (6 read-only shared props)
+### Interface (7 forwarded props)
 
 ```jsx
 <PlannerTools
@@ -47,10 +47,13 @@ New file: `frontend/src/components/PlannerTools.jsx`. Owns all 24 tool-local sta
   globalAINotes={globalAINotes}
   uploadedDocs={uploadedDocs}
   addToast={addToast}
+  shareWithClass={shareWithClass}
 />
 ```
 
-No `active` prop (no mount effect, unlike calendar). All 24 state vars and all inline handlers are component-internal.
+No `active` prop (no mount effect, unlike calendar). All 24 state vars and the tool-specific inline handlers are component-internal.
+
+**Correction (code-quality review):** the initial audit listed 6 props but missed `shareWithClass` — a PlannerTab-body closure (the share-with-classes handler, coupled to PlannerTab's `teacherClasses` + share-modal state used by other blocks) called by the 3 "Share with Class" buttons in the study-guide/flashcards/slides sub-tools. It must be **forwarded as a prop** (it stays in PlannerTab; moving it would drag the whole share-modal infra). The audit's prop/import/state scan did not cover PlannerTab-body *functions*; a follow-up free-variable scan confirmed `shareWithClass` is the only such case. A regression test (generate study guide → click "Share with Class" → assert the prop fires) guards it.
 
 ### File-level shape
 
@@ -59,7 +62,7 @@ import React, { useState } from "react";
 import Icon from "./Icon";
 import * as api from "../services/api";
 
-export default function PlannerTools({ config, lessonPlan, generatedAssignment, globalAINotes, uploadedDocs, addToast }) {
+export default function PlannerTools({ config, lessonPlan, generatedAssignment, globalAINotes, uploadedDocs, addToast, shareWithClass }) {
   // 24 tool-local state vars (verbatim from PlannerTab: study/flashcard/slide 597-615, rl 835-847)
   return (
     // the ~803-line tools JSX block, verbatim from PlannerTab inner 5685-6487

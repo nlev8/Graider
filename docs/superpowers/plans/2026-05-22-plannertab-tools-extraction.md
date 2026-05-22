@@ -4,7 +4,7 @@
 
 **Goal:** Extract the Tools tab (reading-level + study guide + flashcards + slides) out of `frontend/src/tabs/PlannerTab.jsx` into a new `frontend/src/components/PlannerTools.jsx`, behavior-preserving, **zero logic change** (no effect to re-express).
 
-**Architecture:** Single component. Owns 24 tool-local state vars; 6 read-only shared props (`config`, `lessonPlan`, `generatedAssignment`, `globalAINotes`, `uploadedDocs`, `addToast`); imports `Icon` + `api`; 8 raw fetches verbatim.
+**Architecture:** Single component. Owns 24 tool-local state vars; 7 forwarded props (`config`, `lessonPlan`, `generatedAssignment`, `globalAINotes`, `uploadedDocs`, `addToast`, `shareWithClass` — the last added after a code-quality review caught it as a missed PlannerTab-body closure); imports `Icon` + `api`; 8 raw fetches verbatim.
 
 **Tech Stack:** React 18 + Vite + Vitest. Frontend slice — proof = Vite build + frontend test floor + Playwright E2E + new `PlannerTools.test.jsx` + normalized-JSX parity.
 
@@ -111,6 +111,7 @@ describe('PlannerTools', () => {
                       globalAINotes={globalAINotes}
                       uploadedDocs={uploadedDocs}
                       addToast={addToast}
+                      shareWithClass={shareWithClass}
                     />
                   )}
 ```
