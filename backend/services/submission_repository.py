@@ -29,6 +29,8 @@ import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
+_UNSET = object()  # Sentinel for sb default in repository_for
+
 
 @dataclass
 class ExistingSubmission:
@@ -337,9 +339,13 @@ class ClassSubmissionRepository(SubmissionRepository):
         return len(rows) if isinstance(rows, list) else 1
 
 
-def repository_for(path_type, sb):
+def repository_for(path_type, sb=_UNSET):
     """Return the adapter for a SubmissionPathType (or its legacy table-name
-    string). Raises ValueError for anything else."""
+    string). When sb is omitted, resolve it from backend.providers (the DI
+    seam). Raises ValueError for anything else."""
+    if sb is _UNSET:
+        from backend.providers import get_supabase_provider
+        sb = get_supabase_provider()
     if isinstance(path_type, str):
         path_type = SubmissionPathType(path_type)
     if path_type is SubmissionPathType.JOIN_CODE:

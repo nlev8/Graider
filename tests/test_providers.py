@@ -97,3 +97,51 @@ def test_override_isolated_across_threads():
             t.join()
 
     assert seen["child"] is real  # child did NOT see parent's override
+
+
+def test_repository_for_no_sb_resolves_via_provider():
+    from backend.services.submission_repository import (
+        SubmissionPathType, repository_for, JoinCodeSubmissionRepository,
+    )
+    from backend.providers import override_supabase
+    fake = FakeSupabase()
+    with override_supabase(fake):
+        repo = repository_for(SubmissionPathType.JOIN_CODE)  # no sb arg
+    assert isinstance(repo, JoinCodeSubmissionRepository)
+    assert repo._sb is fake
+
+
+def test_repository_for_explicit_sb_is_unchanged():
+    from backend.services.submission_repository import (
+        SubmissionPathType, repository_for, JoinCodeSubmissionRepository,
+    )
+    explicit = FakeSupabase()
+    repo = repository_for(SubmissionPathType.JOIN_CODE, explicit)
+    assert isinstance(repo, JoinCodeSubmissionRepository)
+    assert repo._sb is explicit
+
+
+def test_repository_for_explicit_none_passes_through():
+    """The factory uses a sentinel default (_UNSET), not None — so an
+    explicit None is passed through to the adapter (degraded-mode contract,
+    relied on by test_submission_repository's sb-None tests) rather than
+    triggering provider resolution."""
+    from backend.services.submission_repository import (
+        SubmissionPathType, repository_for, JoinCodeSubmissionRepository,
+    )
+    repo = repository_for(SubmissionPathType.JOIN_CODE, None)
+    assert isinstance(repo, JoinCodeSubmissionRepository)
+    assert repo._sb is None
+
+
+def test_published_content_repository_for_no_sb_resolves_via_provider():
+    from backend.services.submission_repository import SubmissionPathType
+    from backend.services.published_content_repository import (
+        published_content_repository_for, ClassPublishedRepository,
+    )
+    from backend.providers import override_supabase
+    fake = FakeSupabase()
+    with override_supabase(fake):
+        repo = published_content_repository_for(SubmissionPathType.CLASS)
+    assert isinstance(repo, ClassPublishedRepository)
+    assert repo._sb is fake
