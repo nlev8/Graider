@@ -21,7 +21,7 @@ from typing import Optional
 
 import sentry_sdk
 
-from backend.services.submission_repository import SubmissionPathType
+from backend.services.submission_repository import SubmissionPathType, _UNSET
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +73,13 @@ class ClassPublishedRepository(PublishedContentRepository):
     lookup_column = "id"
 
 
-def published_content_repository_for(path_type, sb) -> PublishedContentRepository:
-    """Reconstruct the adapter from the path discriminator. Accepts the
+def published_content_repository_for(path_type, sb=_UNSET) -> PublishedContentRepository:
+    """Reconstruct the adapter from the path discriminator. When sb is omitted,
+    resolve it from backend.providers (the DI seam). Accepts the
     SubmissionPathType enum or the legacy table-name string (transitional)."""
+    if sb is _UNSET:
+        from backend.providers import get_supabase_provider
+        sb = get_supabase_provider()
     if isinstance(path_type, str):
         path_type = SubmissionPathType(path_type)
     if path_type is SubmissionPathType.JOIN_CODE:
