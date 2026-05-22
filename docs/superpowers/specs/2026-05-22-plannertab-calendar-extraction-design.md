@@ -139,13 +139,12 @@ Each mutation helper retains its existing `try/catch` with `if (addToast) addToa
 No backend characterization net (frontend slice). Proof is the Frontend Build + E2E CI gates plus targeted component tests.
 
 - **Existing net stays green (unmodified):** `PlannerTab.test.jsx:194–212` + `:215–223`. These exercise the calendar fetch wiring and the mode button *through* PlannerTab, so a correct extraction keeps them passing.
-- **New `frontend/src/__tests__/PlannerCalendar.test.jsx`** (matching the location of `HolidayModal.test.jsx` / `AttemptDrawer.test.jsx`):
+- **New `frontend/src/__tests__/PlannerCalendar.test.jsx`** (matching the location of `HolidayModal.test.jsx` / `AttemptDrawer.test.jsx`). These directly pin the one behavioral reformulation — the `active`-prop fetch contract — in isolation:
   - smoke: renders without crashing with minimal props (`active=false`).
   - `active=true` → fetches `/api/calendar` on mount.
   - `active=false` → does not fetch.
-  - schedule action → `PUT /api/calendar/schedule`.
-  - add-holiday action → `POST /api/calendar/holiday`.
   - (mock `../services/api` + `global.fetch` per the existing PlannerTab test harness.)
+- The verbatim remainder (schedule/holiday/import mutations, date math, JSX) is covered by the existing PlannerTab calendar integration test + the normalized-JSX parity review + Vite build + Playwright E2E smoke — the established mechanism for verbatim moves in this repo. Schedule/holiday interaction tests are intentionally not added here: holiday-add routes through the already-tested `HolidayModal`, and scheduling requires drag/date-selection DOM that would make for fragile assertions with little marginal coverage over the parity review.
 - **Frontend test count floor** must not drop (Frontend Build CI enforces a count ≥ floor); this slice only adds tests.
 - **Slice proof gates:** Vite build clean + frontend test count ≥ floor + Playwright `health-check.spec.js` E2E smoke (the 9 CI checks).
 - **Parity review:** normalized-JSX parity of the moved 600-line block against the pre-PR PlannerTab calendar block (the established Codex-style review step), to confirm byte-for-byte equivalence modulo the prop wiring.
@@ -172,7 +171,7 @@ No backend characterization net (frontend slice). Proof is the Frontend Build + 
 
 - `PlannerTab.jsx`: **7,405 → ~6,675 LOC** (~730 removed).
 - New `PlannerCalendar.jsx`: **~700 LOC**.
-- Frontend test count: **+~6** (new `PlannerCalendar.test.jsx`).
+- Frontend test count: **+3** (new `PlannerCalendar.test.jsx`: smoke + `active=true` fetch + `active=false` no-fetch).
 - No backend LOC change; no `App.jsx` change.
 
 ## 14. References
