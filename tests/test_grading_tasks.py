@@ -305,7 +305,18 @@ def test_task_aborts_when_assessment_is_none(eager_celery):
     grading_failed via its outer except — but that's a noisier failure path
     than short-circuiting with a clear signal. Task now logs + Sentry-captures
     + writes status='failed' + error_message + returns early.
+
+    Ergonomics proof (DI PR2 Task 2.2): the failure-write path used to need
+    TWO patches just to intercept the repo write — patch(repository_for) to
+    swap the adapter for a MagicMock AND patch(get_supabase) to keep the
+    factory from blowing up. The DI provider collapses both into a SINGLE
+    override_supabase(fake): the fake IS the client the provider resolves,
+    and we assert the OBSERVABLE write the fake recorded (status='failed' +
+    error_message) instead of asserting a mock method was called. Patch count
+    on this test dropped 4 -> 2.
     """
+    from backend.providers import override_supabase
+    from tests.test_submission_repository import FakeSupabase
     partial_ctx = {
         'assessment': None,  # published_assessments fetch failed upstream
         'answers': {'q1': 'a'},
@@ -314,21 +325,23 @@ def test_task_aborts_when_assessment_is_none(eager_celery):
         'student_accommodations': None,
     }
     from backend.tasks.grading_tasks import grade_portal_submission
+    fake = FakeSupabase()
+    fake.table('submissions')  # materialize so a no-write mutation reads as len==0
     with patch('backend.services.portal_grading.fetch_submission_full_context', return_value=partial_ctx):
         with patch('backend.services.portal_grading.grade_portal_submission_sync') as mock_sync:
-            with patch('backend.services.submission_repository.repository_for') as mock_rf:
-                with patch('backend.supabase_client.get_supabase', return_value=MagicMock()):
-                    mock_repo = mock_rf.return_value
-                    result = grade_portal_submission.apply(
-                        args=['sub-1', 'teacher-1', 'submissions'],
-                    )
+            with override_supabase(fake):
+                result = grade_portal_submission.apply(
+                    args=['sub-1', 'teacher-1', 'submissions'],
+                )
     assert result.successful()  # task returns cleanly
     mock_sync.assert_not_called()  # sync function never invoked
-    # Row was marked failed with explanatory error_message via repo.mark_failed
-    mock_repo.mark_failed.assert_called_once()
-    mf_args = mock_repo.mark_failed.call_args.args
-    assert mf_args[0] == 'sub-1'
-    assert 'Assessment content unavailable' in str(mf_args[1])
+    # Observable effect: the row was marked failed via repo.mark_failed, which
+    # writes status='failed' + error_message to the 'submissions' table. The
+    # single override_supabase(fake) routed the provider to our recording fake.
+    updates = fake.tables['submissions'].updates
+    assert len(updates) == 1
+    assert updates[0]['status'] == 'failed'
+    assert 'Assessment content unavailable' in updates[0]['error_message']
 
 
 # ══════════════════════════════════════════════════════════════
