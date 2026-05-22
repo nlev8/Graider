@@ -638,3 +638,33 @@ Whether Tier 1 closure moves the Operational Safety dimension (currently reconci
 ## Next concrete step
 
 Either: (a) post-slice 3-model reconciled re-score weighing whether Operational Safety moves 9 → 10 given Tier 1 closure (the audit-deferred caveat would factor into the conservative-floor reconciliation), or (b) the third Architecture-7 ground (no dependency injection) brainstorm, which the 2026-05-21 Post-Slice-5 re-score named as the dominant remaining Architecture lever. The repository layer added by Slices 4 + 5 has clean seams (factories, the `SubmissionPathType` enum, byte-identical Celery wire) that make a small DI library a structurally low-risk next slice.
+
+---
+
+# 2026-05-22 DI provider closeout (PR #452 + PR #453)
+
+The third Architecture-7 ground (no dependency injection) addressed at the repository/supabase seam. Brainstormed via superpowers:brainstorming with 3-model consultation on the mechanism (Claude + Codex reconciled on a hand-rolled provider; Gemini leaned toward a DI library but failed to engage the Flask+Celery dual-context constraint — weak signal, treated as failed-to-run-not-failed-low). Executed subagent-driven with two-stage review.
+
+## What shipped
+
+- `backend/providers.py` (PR1 #452) — get_supabase_provider() (contextvars override or supabase_client.get_supabase()), get_submission_repository(path_type), get_published_content_repository(path_type), override_supabase(fake) contextmanager (contextvars-backed, resets in finally including on exception). Plain module functions → context-independent (works in Flask AND Celery). 11 unit tests including a mutation-probe-verified contextvars per-thread isolation test.
+- `repository_for(path_type, sb=_UNSET)` + `published_content_repository_for(path_type, sb=_UNSET)` (PR1 #452) — default-resolve from the provider when the arg is OMITTED; a module-level sentinel `_UNSET` (not None) distinguishes "omitted" from "explicit None" so the existing degraded-mode tests that call `repository_for(..., None)` keep working. Backward-compatible.
+- Grading/task failure seams (PR2 #453) — `grading_tasks.py` on_failure + the no-assessment failure branch, and `portal_grading.py` run_portal_grading_thread's deferred-update, all route through get_submission_repository(path_type). The gate dropped from `if sb [and submission_id]:` to `if submission_id:` (or removed); the repo's internal `if not self._sb` guard preserves the observable no-write-when-None behavior.
+- Char-net update (PR2 #453) — a TestFailureSeam test that asserted `repository_for` was NOT called when the client is None was pinning an implementation detail, and a mutation probe proved the original "no exception" assertion was masked by on_failure's `try/except pass`. Split into two falsifiable contracts: `test_on_failure_writes_via_provider_when_client_present` (TestFailureSeam, recording-client assertion) + the existing repo-layer `test_update_sb_none_pages_sentry_with_hashed_id` (no-write-when-None, no try/except masking). Both mutation-probe-verified. TestRouteContractSeam stayed byte-identical.
+- Ergonomics proof (PR2 #453) — `test_task_aborts_when_assessment_is_none` rewritten from 4 patches → 2: a single `override_supabase(fake)` replaces the `repository_for` + `get_supabase` patch pair, with a stronger observable assertion. The single-switch testability win the provider was built for.
+
+## Planning-time scope refinement (recorded honestly)
+
+A code audit during planning found the call-site migration is narrower than the spec first assumed. Three findings: (1) the char net pins call-count at the if-sb guards (migrating makes `repository_for` fire even with a None client, which no-ops via the repo's own guard — observable DB effect identical, but the call-count assertion needed updating to the observable contract); (2) `submit_student_work` uses `get_supabase_or_raise` (raise-if-unconfigured) while the provider uses `get_supabase` (returns None) — raise-vs-None semantics differ; (3) several sites use `sb` for both repo construction AND direct `db.table` queries, so migrating the repo line alone double-acquires + creates a test-interception asymmetry. Decision (user-approved): migrate the clean repo-only `get_supabase`-based seams + update the ~2 call-count assertions to falsifiable observable-effect assertions; defer the dual-use + raise-semantics sites.
+
+## Out of scope (follow-up slices)
+
+The ~80 other get_supabase() call sites, the 6 duplicate _get_supabase() definitions, AI/LLM clients (`api_keys.py`, `llm_adapter/`), config loading, and the dual-use + raise-semantics seams above.
+
+## Verification
+
+Full regression after PR2: 5155 passed, 14 skipped, 1 known network flake (`test_openai_chat_uses_breaker` — third sibling of the anthropic/gemini breaker flakes; passes in isolation in ~19s, verified). Both DI-contract mutation probes green. Ruff clean on modified files. TestRouteContractSeam byte-identical across the rewire.
+
+## Next step
+
+Post-slice 3-model reconciled re-score weighing whether Architecture moves 8 → 9. Honest framing required: this is lightweight provider-based DI live at ONE seam (the grading/task failure path), genuinely used in production, with the testability win demonstrated (override_supabase replaces multi-module patching) — but it is NOT a framework across the codebase, and the dual-use/raise-semantics seams + the ~80 other call sites still acquire deps directly. A conservative-floor reconcile will weigh whether seam-level DI + the clean provider infrastructure clears the bar, or whether the broader conversion follow-up is a prerequisite. The honest expectation is that this likely holds Architecture at 8 (the objection is addressed at the seam but not retired codebase-wide) — the re-score makes that judgment explicit.

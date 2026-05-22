@@ -3,7 +3,7 @@
 **Date:** 2026-05-22
 **Brainstorm:** Claude (controller) + Codex + Gemini consulted on the mechanism fork; user gave the final picks (motivation, mechanism, scope).
 **Predecessor:** `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` "2026-05-21 Post-Slice-5 3-Model Reconciled Re-Score" — named "no dependency injection" as the dominant remaining Architecture lever holding the dimension at 8 (short of 9).
-**Status:** OPEN
+**Status:** CLOSED 2026-05-22 — shipped via PR1 (#452: provider + factory `sb=_UNSET` evolution) and PR2 (#453: grading/task failure-seam migration + char-net call-count→falsifiable-observable-effect update + ergonomics-proof test). Dual-use + `submit_student_work` raise-vs-None sites deferred to follow-up (section 6.3).
 
 ---
 

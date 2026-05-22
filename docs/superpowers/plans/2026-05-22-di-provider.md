@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**STATUS: CLOSED 2026-05-22** — shipped via PR1 (#452: provider + factory `sb=_UNSET` evolution) and PR2 (#453: grading/task failure-seam migration + char-net call-count→falsifiable-observable-effect update + ergonomics-proof test). DI provider live at the repository/supabase seam; the `grading_tasks.py` failure seams + `portal_grading.py` deferred-update route through it; tests swap the DB via `override_supabase(fake)`. The 3rd Architecture-7 ground (no DI) is addressed at the seam; the broader conversion (dual-use sites, `submit_student_work` raise-vs-None semantics, the ~80 other `get_supabase()` sites, AI clients, config) is sequenced follow-up.
+
 **Goal:** Introduce a lightweight hand-rolled dependency provider (`backend/providers.py`) at the repository/supabase seam so tests swap the database for a fake at a single `override_supabase(fake)` switch instead of monkeypatching `get_supabase()` per-module, and route the genuinely-clean grading/task failure seams through it in production.
 
 **Architecture:** A new `backend/providers.py` wraps `supabase_client.get_supabase()` and the repo factories, with a `contextvars`-backed test-override hook. The two repo factories evolve to `sb=None` default-resolving from the provider (backward-compatible). PR1 is additive (provider + tests + factory evolution, behavior change impossible). PR2 migrates the refined set of repo-only seam call sites and updates ~3 char-net call-count assertions to observable-effect assertions.
