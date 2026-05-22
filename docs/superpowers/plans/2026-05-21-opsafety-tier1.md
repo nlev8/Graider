@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**STATUS: CLOSED 2026-05-21** — shipped via PR1 (#447: railway-down runbook + customer comms templates) and PR2 (#448: status-banner.js + UI + deferred probe-coverage audit). Tier 1 OpSafety roadmap gap from the 2026-05-19 PR #434 dated section closed: customers reach a working status page via the `graider.live` banner, the on-call has a checked-in Railway-down runbook plus pre-drafted comms templates, and the BetterStack `/healthz` probe-coverage audit is documented with the audit itself deferred to the Jul 2026 quarterly drill (per user decision; the probe DID fire correctly on 2026-05-19, so the audit is a "verify the why" follow-up, not a blocker).
+
 **Goal:** Ship Tier 1 OpSafety hardening — a customer-facing banner on `graider.live` that auto-renders when `status.graider.live` shows non-operational, a "Railway down" runbook capturing the 2026-05-19 diagnosis sequence, pre-drafted customer comms templates, and a probe-coverage audit verifying BetterStack detects the 2026-05-19 incident class.
 
 **Architecture:** Two sequenced PRs mirroring the Slice 4/5 PR1+PR2 split. PR1 is docs-only (zero deploy risk). PR2 adds the banner code to the existing vanilla JS landing project and appends a probe-audit section to `docs/observability.md`. The banner pulls `status.graider.live/api/v1/status.json` on each landing page-load and fails-open on fetch error.

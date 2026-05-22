@@ -3,7 +3,7 @@
 **Date:** 2026-05-21
 **Brainstorm:** Claude (controller) + Codex/Gemini consulted on the provider picks per the original 2026-05-19 OpSafety roadmap mandate; user gave the final picks
 **Predecessor:** `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` "2026-05-19 Production incident: Railway edge outage (GCP-side) and OpSafety hardening roadmap" (PR #434)
-**Status:** OPEN
+**Status:** CLOSED 2026-05-21 — shipped via PR1 (#447: railway-down runbook + customer comms templates) and PR2 (#448: status-banner.js + deferred probe-coverage audit). Probe audit deferred to the Jul 2026 quarterly drill per user decision.
 
 ---
 
