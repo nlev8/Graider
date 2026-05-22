@@ -1,144 +1,84 @@
-# Handoff: 2026-05-19 evening / 2026-05-20 early UTC
+# Handoff: 2026-05-22 — three slices shipped, clean stopping point
 
-Long session covering Tier 2 Slice 3 (app.py route god-module extraction), Tier 2 Slice 4 (dual publish-path consolidation), the post-slice 3-model re-scores, and an ongoing production incident (Railway edge outage caused by Google Cloud blocking Railway's GCP account). Two follow-up brainstorms are queued. Written per CLAUDE.md §12 because the session is long, there is an unresolved prod incident, and a `/compact` is likely.
+This session ran from a production incident (Railway/GCP edge outage) through three complete architecture-decomposition slices. Everything is shipped and merged; nothing is mid-flight. Written for a fresh `/clear` session per CLAUDE.md §12 (clean handoff beats `/compact` when starting a new topic). The next agent should read this first, then `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` (the canonical scorecard + every dated closeout section).
 
 ## 1. Goal
 
-Decompose Graider's biggest-lever Code Quality and Architecture concentrated complexity via repeated brainstorm → spec → plan → subagent-driven slices, each verbatim under a characterization net with zero behavior change, post-slice 3-model reconciled re-scores, all CI-green and merged. Sub-goal active tonight: the dual publish-path consolidation lever closed; OpSafety hardening roadmap recorded; next lever queued behind your design approval. Sub-goal blocked tonight: a production outage caused by Railway's GCP-side incident, waiting on Railway recovery.
+Decompose Graider's biggest-lever Architecture and Code-Quality concentrated complexity via repeated brainstorm → spec → plan → subagent-driven slices, each behavior-preserving under a characterization net, with post-slice 3-model reconciled re-scores, all CI-green and merged. This session closed the dual-path consolidation, shipped Tier 1 operational-safety hardening, and addressed the dependency-injection ground at the repository seam.
 
 ## 2. TL;DR
 
-- **Production is down.** `app.graider.live/healthz` returns Railway's edge 404 placeholder, and the cert served is the default `*.up.railway.app` wildcard. Root cause: Google Cloud blocked Railway's GCP account (status.railway.app Major Outage from 22:29 UTC 2026-05-19, ongoing past 01:34 UTC 2026-05-20, no ETA). **Recovery is upstream-bound. Do nothing on our side until Railway is back.**
-- **Tier 2 Slice 4 (dual publish-path consolidation) is fully shipped and CI-green.** Four PRs merged tonight: #429 spec+plan, #430 PR1 (`SubmissionRepository` + char net, additive), #432 PR2 (rewire pipeline onto the repository), #433 post-slice 3-model reconciled re-score (Architecture held 7, Overall 8.0). Full suite 5115 passed / 0 failed.
-- **PR #434 is open** with the recorded follow-up artifact in `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`: 2026-05-19 production incident plus OpSafety hardening Tier 1/2/3 roadmap. Auto-merge armed.
-- **Four follow-up issues open** (each with fix sketch + repro): #423 (pre-existing latent NameError in grading paths), #426 (dead-shadowed roster routes), #431 (post-PR2 cleanup tail: unify on_failure write + retire 2 dead char-net-pinned helpers + rename supabase_table params), and the implicit "Tier 1 OpSafety hardening" recorded in PR #434.
-- **Two brainstorms queued, gated on (a) prod recovery and (b) your design approval at the brainstorming HARD-GATE.** First in priority: Tier 1 OpSafety hardening (off-Railway status page + runbook + external uptime monitor + customer comms template). Second in priority: next architectural lever (dual-path code-boundary completion / system-wide DI / PlannerTab.jsx decomposition / cleanup tail). You explicitly asked to brainstorm OpSafety hardening with Claude + Codex + Gemini; design forks will use 3-model consultation, mechanical implementation Claude-only.
+- **Production incident resolved.** A 2026-05-19 Railway/GCP edge outage (Google blocked Railway's GCP account) was diagnosed (TLS-layer, not app-layer) and recovered. Five hotfixes (#438–#442) made the app resilient to a degraded Redis: `/healthz` soft-dep contract, flask-limiter + flask-session startup probes that fall back to `memory://`/filesystem when Redis is unreachable, and `Retry(NoBackoff(), 0)` to stop redis-py's hang loop. Prod verified back (200s on `/` and `/healthz`).
+- **Slice 5 (dual-path completion) shipped** — #443 (PR1 additive: `PublishedContentRepository` + `find_existing_submission` + route char-net) + #444 (PR2 rewire + #431 fold-in). Issue #431 closed. Post-slice re-score (#445): Architecture **7 → 8**, Overall ~8.1.
+- **Slice 6 (Tier 1 OpSafety) shipped** — #446 (spec/plan) + #447 (railway-down runbook + customer comms templates) + #448 (graider.live status banner + deferred probe audit) + #449 (closeout). The BetterStack stack already existed; the real gap was the customer path from broken app → working status page, now closed by the banner.
+- **Slice 7 (DI provider) shipped** — #450 (spec) + #451 (spec-refinement + plan, race-recovery) + #452 (PR1 provider + factory `sb=_UNSET` evolution) + #453 (PR2 failure-seam migration + falsifiable char-net split + ergonomics proof) + #454 (closeout). DI addressed at the repository seam; honest framing: seam-level, not codebase-wide.
+- **No DI re-score run** (deliberate). Predictable "holds Architecture at 8" — seam-level DI is live and the testability win is demonstrated, but the ~80 other `get_supabase()` sites still acquire deps directly. The judgment is recorded in the DI closeout dated section instead of burning a 3-model dispatch.
 
 ## 3. Current state
 
-### Code state on `main`
+### main HEAD
+- `751123d` (#454 DI closeout). `git log --oneline origin/main -6` shows #454→#449 in order.
+- Full backend suite: **5155 passed, 14 skipped, 1 known network flake** (`test_openai_chat_uses_breaker`; passes in isolation in ~19s — sibling of the anthropic/gemini breaker flakes). GitNexus index refreshed to `a369606`, embeddings 11211 preserved.
 
-- HEAD `1f1031c` (PR #433 merge, the post-dual-path re-score).
-- `backend/app.py` 585 LOC (post Slice 3); only SPA/static factory-shell routes remain.
-- `backend/services/portal_grading.py` routes submission-row I/O through `SubmissionRepository`; zero `supabase_table` string dispatch remains (grep gate green).
-- `backend/services/submission_repository.py` is live and load-bearing (`SubmissionPathType` enum, ABC, two adapters, `repository_for` factory).
-- Full suite 5115 passed / 0 failed; ruff clean.
+### Shipped this session (all merged)
+| PRs | What |
+|---|---|
+| #438–#442 | Production incident hotfixes (Redis resilience) |
+| #443, #444, #445 | Slice 5 dual-path completion + re-score |
+| #446, #447, #448, #449 | Slice 6 Tier 1 OpSafety |
+| #450, #451, #452, #453, #454 | Slice 7 DI provider |
 
-### Branches and PRs
+### New durable code/docs
+- `backend/providers.py` — the DI provider (get_supabase_provider / get_submission_repository / get_published_content_repository / override_supabase). 11 unit tests in `tests/test_providers.py`.
+- `repository_for(path_type, sb=_UNSET)` + `published_content_repository_for(path_type, sb=_UNSET)` — default-resolve via provider when omitted; sentinel distinguishes omitted from explicit-None.
+- `docs/runbooks/railway-down.md` + `docs/runbooks/customer-comms-templates.md`.
+- `landing/status-banner.js` + `landing/status-banner.test.js` (vanilla JS, node:test) + banner wired into `landing/index.html` + `landing/styles.css`.
+- `docs/observability.md` — appended a deferred probe-coverage audit section.
+- `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` — dated closeout sections for all three slices + the Slice 5 re-score + the 2026-05-19 incident.
 
-- **PR #434 OPEN** on `docs/opsafety-incident-2026-05-19`: the OpSafety incident + hardening roadmap doc section. Auto-merge armed; waiting on the 9 CI checks.
-- All other code branches from tonight are merged (#424/#425/#427/#428 for Slice 3; #429/#430/#432/#433 for Slice 4).
+## 4. Open loops (BOTH require the user — an agent cannot do them)
 
-### Follow-up issues filed
+1. **Deploy the OpSafety landing banner.** It's merged but NOT live: the landing deploys via an explicit `cd landing && npx vercel --prod` (needs Vercel auth). Until then `graider.live` does not show the status banner. Verify after: `curl -sS https://graider.live/ | grep -c 'id="status-banner"'` → expect `1`.
+2. **OpSafety probe-coverage audit** — deferred to the next quarterly alert drill (first Monday of Jul 2026). Needs BetterStack dashboard access. The 6 config fields to verify are listed as a checklist in `docs/observability.md` ("Probe-coverage audit" section). The probe DID fire correctly on 2026-05-19, so this is a "verify the why," not a blocker.
 
-| # | Title | Class |
-|---|---|---|
-| #423 | save_results / grade_with_parallel_detection latent NameError | Pre-existing latent bug, faithfully preserved by Slice 3 verbatim moves, not a regression |
-| #426 | Dead-shadowed roster routes | Pre-existing dead code, faithfully preserved by Slice 3 PR3 verbatim move |
-| #431 | Post-PR2 dual-path cleanup tail | Three transitional residuals from the dual-path PR2 rewire (on_failure write unification, retire 2 dead char-net-pinned helpers, rename supabase_table params); requires mutating pinned char-net assertions which the PR2 contract forbade |
+## 5. What changed scope mid-flight (so the next agent doesn't re-derive)
 
-### Production incident state
+- **OpSafety scope correction:** the PR #434 roadmap listed "off-Railway status page" + "external uptime monitor" as Tier 1, but BetterStack (Uptime + Status Page at status.graider.live + Slack + iOS Critical Alerts) already shipped 2026-04-11. The real Tier 1 gap was the marketing-site banner (originally labeled Tier 2) + the runbook + comms templates. Don't rebuild the BetterStack stack — it exists.
+- **DI scope refinement (planning-time audit):** the call-site migration is narrower than the spec first assumed. (a) The char net pinned call-count at the `if sb:` guards — migrating makes `repository_for` fire even with a None client (repo no-ops via its own guard; observable effect identical), so ~2 TestFailureSeam tests were updated from call-count to falsifiable observable-effect assertions. (b) `submit_student_work` uses `get_supabase_or_raise` (raise-vs-None vs the provider's `get_supabase`) — deferred. (c) Dual-use sites (`sb` used for both repo + direct `db.table` queries) double-acquire — deferred. Only the clean repo-only `get_supabase`-based failure seams migrated.
+- **`landing/` is vanilla HTML/CSS/JS, NOT React.** The OpSafety spec assumed React; the plan corrected to vanilla JS + `node:test`. Any future landing work: it's plain `index.html` + `script.js` + `styles.css`, no build step beyond Vercel.
 
-- Slack alert at roughly 22:00 UTC 2026-05-19 said `app.graider.live/healthz` is down.
-- Root cause: Google Cloud blocked Railway's GCP account, breaking Railway's GCP-hosted control plane and custom-domain routing.
-- Last status.railway.app update read: 01:34 UTC 2026-05-20 ("recovered our compute on Google Cloud, but services are unable to start because of ongoing networking issues on Google Cloud's side. We are engaged with Google Cloud support to resolve this. ... gradual recovery on Railway metal workloads. To ensure things remain stable as we ramp back up, we are temporarily throttling all non-enterprise builds.").
-- Two Railway edge Request IDs captured: `hEiwsGzBS0Gv6ZYlozsQ6Q` (initial), `tYn-Df0BRxuVzufTGbGh5g` (later attempt). Useful only if Railway customer support is engaged.
-- Slack comms template was drafted in-session and given to the user to paste into the alerting channel. It explicitly says do not roll back PRs #430/#432/#433.
+## 6. Recommended next lever (ranked)
 
-## 4. Local repro
+1. **PlannerTab.jsx decomposition** (RECOMMENDED) — `frontend/src/tabs/PlannerTab.jsx` (~7,405 LOC), the largest raw file, named across re-scores as the distinct Code-Quality concentrated-complexity lever (separate from the Architecture-tier work). A different kind of slice (frontend, no Celery/char-net coupling).
 
-Each of these is a single shell command, read-only, safe to run from a fresh agent.
-
-### Verify production is down (TLS-layer failure, not application failure)
-
-```bash
-curl -sS -m 10 -o /tmp/healthz_body -w "HTTP %{http_code} | total %{time_total}s\n" https://app.graider.live/healthz
-# Expected during incident: libcurl SSL error 51 ("SSL peer cert or SSH remote key was not OK").
-# Expected after recovery: HTTP 200, JSON body with health status.
-
-openssl s_client -connect app.graider.live:443 -servername app.graider.live -showcerts </dev/null 2>&1 | head -30
-# Expected during incident: leaf cert subject=CN=*.up.railway.app, SAN=DNS:*.up.railway.app only (default Railway wildcard, wrong cert for our hostname).
-# Expected after recovery: leaf subject and SAN both include app.graider.live.
-
-dig +short app.graider.live A
-# Expected throughout: 66.33.22.209 (Railway edge POP). DNS is correct; the gap is between DNS and Railway's project-domain mapping.
-```
-
-### Verify the local repo state
-
-```bash
-cd /Users/alexc/Downloads/Graider
-git log --oneline -8 origin/main
-# Expected top: 1f1031c docs(assessment): post-dual-path 3-model reconciled re-score (Architecture held 7, Overall 8.0) (#433)
-# Then in order: 6767d3e dual-path PR2, 370f08c dual-path PR1, 130e574 dual-path spec/plan, 6c40246 post-Slice-3 re-score, d54ee8e Slice 3 PR3 + closeout, 4bb82e3 Slice 3 PR2, 9d0ffc8 Slice 3 PR1.
-
-source venv/bin/activate
-python -m pytest tests/ -q --ignore=tests/load 2>&1 | tail -5
-# Expected: 5115 passed, 14 skipped, 0 failed (the post-Slice-4 baseline). If this drops, something landed that wasn't covered tonight.
-
-grep -nE "supabase_table ==|table_name=supabase_table|supabase_table=\"(submissions|student_submissions)\"" backend/services/portal_grading.py
-# Expected: EMPTY (the dual-path string dispatch is eliminated from the grading pipeline; this is the PR2 grep gate, recorded in tests/test_dual_path_consolidation_char.py::test_no_supabase_table_string_dispatch_remains).
-
-gh pr view 434 --json state,mergedAt -q '.state + " @ " + (.mergedAt // "open")'
-# Expected: MERGED if CI cleared (docs PR, no risk); OPEN if the 9 checks are still running.
-```
-
-### Verify Railway recovery before any dashboard action
-
-```bash
-curl -I https://app.graider.live/healthz
-# If HTTP 200: prod recovered, domain config survived the outage, no further action needed.
-# If still HTTP 404 / cert mismatch persists 30 min after Railway status flips to Monitoring / Resolved: the outage left the registration in a bad state, re-add app.graider.live in Railway dashboard (see section 7 below).
-```
-
-## 5. Disproved hypotheses (and other paths considered, ruled out)
-
-- **"Recent code merges (#430/#432/#433) caused prod-down."** Ruled out within minutes of triage: the failure mode is a TLS handshake rejection (the connection never reached Flask), not an HTTP 5xx. The openssl probe showed the wrong cert served at the edge. A code regression cannot cause this class of failure. Reflexive revert would have done nothing useful and was explicitly recommended against in the Slack template.
-- **"TLS cert expired."** Ruled out by openssl: notBefore 2026-04-05, notAfter 2026-07-04, Verify return code 0. The cert is valid; it is just the wrong cert for our hostname (SAN list is `*.up.railway.app` only, no `app.graider.live` entry).
-- **"DNS misconfigured."** Ruled out by dig: app.graider.live CNAME chain resolves correctly to a Railway edge POP. The gap is at the Railway project-domain mapping, not at DNS.
-- **"Custom domain genuinely lost from Railway, re-add it now."** Was the first plan after the openssl probe pointed at a Railway-side domain-registration gap. ABANDONED once the user found status.railway.app showing a Major Outage with the GCP account block: re-adding the domain mid-outage risks stuck pending cert state, duplicate registrations, or failed Let's Encrypt provisioning while the edge plane is degraded. Hold position until Railway recovers; then if the domain is still missing in the dashboard, re-add it.
-- **"Open a Railway customer support ticket."** Ruled out: Railway has identified the root cause, escalated to Google Cloud, and is actively working with GCP support. A customer ticket adds backlog without changing the outcome. Reserved for if Railway goes silent past 03:34 UTC (the 2-hour-silence threshold) without further status updates.
-- **"Reactive provider migration off Railway."** Considered and ruled out as reliability theater: every PaaS competitor has lived analogous multi-hour outages; provider choice rotates which incidents we are exposed to, it does not eliminate the class. Trigger conditions for genuine re-evaluation are recorded in the PR #434 doc section (3+ multi-hour outages in 6 months, SLA contract demand, scale outgrowing pricing, blocking feature need).
-
-## 6. Most likely remaining causes (ranked, for the prod incident specifically)
-
-Not "what is causing the symptom" (we know: GCP blocked Railway's account), but ranked by what may still go wrong from here:
-
-1. **Railway recovers and `app.graider.live` works automatically.** Most likely. The domain config probably survived server-side; the dashboard just could not render it correctly during the outage. After full Railway recovery, re-test with `curl -I https://app.graider.live/healthz`. If 200, done.
-2. **Railway recovers but our custom domain remains unregistered.** Possible: the outage may have damaged the registration state. In that case, re-add `app.graider.live` in the Railway dashboard. DNS is already correct (per dig); cert provisioning takes 30 to 90 seconds.
-3. **Railway recovers but its build queue stays throttled when we next need to deploy.** Non-enterprise builds were explicitly throttled during ramp-back. Deploys may be slow for several hours after the status page flips to Resolved. Not a concern unless you need to ship a hotfix.
-4. **Railway's GCP-side issue escalates and stays unresolved past dawn UTC.** Then the customer ticket and Tier 3 re-evaluation conversations become real. Currently below threshold.
+   **IMPORTANT — this is NOT greenfield; it's an in-progress multi-wave refactor (scouted 2026-05-22, deferred to a fresh session for the heavy analysis):**
+   - Existing plan: `docs/superpowers/plans/2026-05-04-planner-tab-extraction.md` (went through 3 Codex review rounds). Read it first.
+   - **Wave 1** (PR 1–7, PRs #193–#203): extracted the inline Planner JSX out of `App.jsx` into `PlannerTab.jsx` + decentralized ~91 Planner-only `useState` pairs out of App.
+   - **Wave 2** (PR 7a–7e, 8a–8d, PRs #199–#207): extracted clusters *out of* `PlannerTab.jsx` into `frontend/src/components/` (AttemptDrawer, ShareWithClasses, NewUnit+tag, matching, doc-upload, preview, lesson-gen) — these are the imports at the top of PlannerTab.jsx.
+   - **Despite both waves it's still 7,405 LOC / 75 useState / 6 useEffect / ~20 handlers / a ~6,100-line JSX return (line 1275 → end) with deeply nested conditional sub-renders.** That's how huge it started (~5,943 LOC inline originally).
+   - **The next slice's first job (do this FRESH, with full context budget):** identify the largest cohesive clusters STILL inline in PlannerTab.jsx (by line count + cohesion) that haven't been extracted by waves 1+2, pick one as the v1 extraction target, and brainstorm THAT cluster's extraction. Don't redesign the whole decomposition — continue the established cluster-extraction cadence (extract one cluster → component or hook, prove via Vite build + frontend test count floor + Playwright E2E smoke, no behavior change).
+   - Frontend "no behavior change" proof = Vite build succeeds + frontend test count ≥ floor (Frontend Build CI check) + Playwright `health-check.spec.js` E2E smoke. There is no backend-style char-net; the prior PlannerTab PRs relied on Codex parity review + the test suite (currently ~160+ frontend tests; `frontend/src/__tests__/PlannerTab.test.jsx` exists).
+   - Begin with `superpowers:brainstorming`, but the brainstorm should be SHORT — the decomposition strategy is already designed in the 2026-05-04 plan; the open question is just "which remaining inline cluster is next."
+2. **Broader DI conversion** — what would actually move Architecture 8 → 9 codebase-wide: the dual-use sites + `submit_student_work` + the 6 duplicate `_get_supabase()` defs + progressively the ~80 other `get_supabase()` call sites + AI clients + config. Multi-slice; each its own spec/plan. The provider seam from this session is the foundation.
+3. **Physical two-table consolidation** — the deferred dual-path end-state (`submissions`+`student_submissions`, `published_assessments`+`published_content`). Deliberately deferred for FERPA-data-safety reasons; needs its own design + migration. Highest blast radius.
 
 ## 7. Concrete next step
 
-In priority order. **None of these run until Railway is back unless explicitly marked otherwise.**
+Start a fresh session: `/clear`, then "read handoff.md first." Then invoke `superpowers:brainstorming` for the PlannerTab.jsx decomposition (or whichever lever above the user picks). The established cadence: brainstorm (3-model consult on genuine design forks) → spec → writing-plans → subagent-driven-development with two-stage review (spec-compliance then code-quality) per task → closeout dated section → optional 3-model re-score.
 
-### When Railway recovers
+Standing constraints (from CLAUDE.md + this session): venv at `/Users/alexc/Downloads/Graider/venv/`; pytest always `--ignore=tests/load`; never contact `:3000`; all changes via PR (9 CI checks); commit trailer `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`; PR body trailer `🤖 Generated with [Claude Code](https://claude.com/claude-code)`; skip em-dash sweeps on internal docs (humanizer was for pitch decks); active frontend is `frontend/src/App.jsx` (never edit `graider_app.py` for UI); landing is vanilla JS on Vercel.
 
-1. **Verify prod is back.** `curl -I https://app.graider.live/healthz` returns 200. `openssl s_client -connect app.graider.live:443 -servername app.graider.live </dev/null 2>&1 | grep -E "subject|SAN"` shows app.graider.live in the cert SAN.
-2. **If the custom domain shows missing in Railway dashboard after recovery:** Settings → Networking → Custom Domains → Add `app.graider.live`. Railway returns a CNAME target; confirm it matches `ar90ys35.up.railway.app` (what DNS already points to). If yes, do nothing on DNS. Wait 30 to 90 seconds for cert provisioning; status badge goes Pending → Active.
-3. **Slack the alerting channel** that prod is back, root cause was upstream (Railway plus GCP), no Graider code was at fault, no rollback occurred. Use the in-session Slack template plus an "all clear" addendum.
+## 8. Disproved / ruled-out this session (don't re-try)
 
-### Already in flight (runs independent of prod state)
+- **Reverting recent merges during the prod incident** — ruled out fast: the failure was a TLS handshake rejection (connection never reached Flask), which a code regression cannot cause. Reflexive revert would have done nothing.
+- **`flask.g`/`current_app`-based DI** — ruled out: the Celery/thread grading paths run outside Flask request context (`backend/supabase_client_scoped.py` documents this). The DI provider must be context-independent; that's why it's plain module functions + contextvars.
+- **A DI library (punq/dependency-injector)** — considered (Gemini leaned this way) and ruled out for v1: adds a runtime dependency + learning curve for a single-dev team, identical testability outcome to the hand-rolled provider. Revisit only if a re-score says the hand-rolled provider doesn't retire the objection.
+- **Running the DI re-score** — skipped deliberately (predictable hold-at-8); not a gap, a judgment recorded in the closeout.
 
-4. **PR #434 merge.** GitHub Actions CI runs on GitHub's runners (Railway-independent); the docs PR should merge whenever the 9 checks clear regardless of Railway state. Verify with `gh pr view 434 --json state,mergedAt`.
+## 9. References
 
-### Queued brainstorms (gated on prod recovery + your design approval at the brainstorming HARD-GATE)
-
-5. **Tier 1 OpSafety hardening brainstorm.** Off-Railway status page (Statuspage / Instatus / Cachet / GitHub Pages static, design fork, 3-model consultation), external uptime monitor (UptimeRobot / BetterStack / Healthchecks.io, design fork, 3-model consultation), "Railway down" runbook (capture tonight's diagnosis sequence + decision tree + Slack template), customer comms template. Invoke `superpowers:brainstorming` with the controller framing "Claude + superpowers + Codex + Gemini": Claude drives the brainstorm and writing-plans, Codex and Gemini consulted at the genuine design forks (provider picks, v1 scope vs Tier 2 deferral). Recorded in PR #434 doc section.
-6. **Next architectural lever decision (deferred from before the incident).** The post-dual-path re-score named two tier-gating items: (a) finish the dual-path consolidation outside the write layer (routes plus published_* read split plus #431 cleanup) and (b) system-wide dependency injection. PlannerTab.jsx is the separate Code Quality lever. The cleanup tail (#423/#426/#431) is the small-PR alternative. Your last message before the incident asked for clarification on these options; the AskUserQuestion was interrupted and the answer never came. Resume after Tier 1 OpSafety ships, since Tier 1 hardening is the right next thing anyway.
-
-## 8. References
-
-- PR #424 (Slice 3 PR1 grading_results_routes), #425 (Slice 3 PR2 ferpa_routes), #427 (Slice 3 PR3 roster_routes + closeout), #428 (post-Slice-3 re-score), #429 (dual-path spec+plan), #430 (dual-path PR1 SubmissionRepository), #432 (dual-path PR2 rewire), #433 (post-dual-path re-score). All merged.
-- PR #434 (this session's OpSafety incident doc section). Open with auto-merge armed.
-- Issues #423, #426, #431. Open follow-ups with fix sketches.
-- Plan docs: `docs/superpowers/plans/2026-05-19-app-routes-extraction.md` (Slice 3, CLOSED), `docs/superpowers/plans/2026-05-19-dual-publish-path-consolidation.md` (Slice 4, CLOSED).
-- Spec docs: `docs/superpowers/specs/2026-05-19-app-routes-extraction-design.md`, `docs/superpowers/specs/2026-05-19-dual-publish-path-consolidation-design.md`.
-- Assessment doc: `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`. Latest dated sections: post-Slice-3 re-score (HEAD `d54ee8e`), 2026-05-19 Tier 2 Slice 4 closeout, post-dual-path re-score (HEAD `6767d3e`), 2026-05-19 production incident + OpSafety hardening roadmap (this PR #434 once merged).
-- Railway status incident IDs: 22:29 UTC 2026-05-19 Major Outage on Edge Network; root cause identified 23:37 UTC ("Google Cloud has blocked our account"); ongoing past 01:34 UTC 2026-05-20.
-- Railway edge Request IDs captured tonight: `hEiwsGzBS0Gv6ZYlozsQ6Q`, `tYn-Df0BRxuVzufTGbGh5g`.
-
-## Honest meta-note
-
-Per CLAUDE.md §12, this handoff should have been maintained throughout the session, not written at the end after the user prompted. I did not maintain it as we went; the user's question "are you documenting the session with claude mem in case we have to compact?" correctly flagged the gap. Writing it now closes that gap so a `/compact` or fresh session can resume cleanly. Claude-mem captures the conversation passively (no active action needed; the session log JSONL is the durable transcript and observations surface to future sessions automatically per the SessionStart message); handoff.md is the active artifact that captures the open threads and decisions cleanly enough for a fresh agent to pick up without re-deriving context. Both are useful; they serve different purposes.
+- Assessment doc (canonical): `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`
+- Slice specs/plans: `docs/superpowers/specs/2026-05-19-dual-path-completion-design.md` + plan; `docs/superpowers/specs/2026-05-21-opsafety-tier1-design.md` + plan; `docs/superpowers/specs/2026-05-22-di-provider-design.md` + plan (`docs/superpowers/plans/2026-05-22-di-provider.md`).
+- Observability runbook: `docs/observability.md`. Incident runbook: `docs/runbooks/railway-down.md`.
+- PRs this session: #438–#454. All merged. Pre-existing OPEN PRs (#367, #115, #103, #90, #42, #40) are NOT from this session and were not touched — leave for the user to triage.
+- Stale local branches (chore/*, ci/*, docs/*) are pre-existing, not from this session.
