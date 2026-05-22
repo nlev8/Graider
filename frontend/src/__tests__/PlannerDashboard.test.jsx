@@ -8,8 +8,7 @@ vi.mock('../services/api', () => ({}));
 const makeProps = (overrides = {}) => ({
   // data
   allTeacherTags: [],
-  assignment: null,
-  contentSubmissionsGroups: {},
+  contentSubmissionsGroups: [],
   inProgressDrafts: [],
   loadingPublished: false,
   loadingResults: false,

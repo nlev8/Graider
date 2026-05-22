@@ -5070,7 +5070,6 @@ export default function PlannerTab(props) {
                     <PlannerDashboard
                       addToast={addToast}
                       allTeacherTags={allTeacherTags}
-                      assignment={assignment}
                       contentSubmissionsGroups={contentSubmissionsGroups}
                       deletePublishedAssessment={deletePublishedAssessment}
                       deleteSavedAssessment={deleteSavedAssessment}
