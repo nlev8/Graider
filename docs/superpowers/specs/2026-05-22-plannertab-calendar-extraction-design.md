@@ -35,7 +35,8 @@ Calendar is chosen for v1: highest cohesion + isolation = lowest risk to re-warm
 - The calendar block is **conditionally rendered** inside PlannerTab via `{plannerMode === "calendar" && (…)}` (line 5809), so the calendar subtree itself mounts/unmounts on `plannerMode` change.
 - **All 15 calendar state vars (1142–1156) are calendar-block-only** — no references anywhere else in `PlannerTab.jsx` (the one apparent hit at line 104 is a comment).
 - **All 11 calendar helpers are calendar-cluster-only** — every call site is within the calendar block (5809–6408) or an internal helper-to-helper call (e.g. `loadCalendar` invoked by `scheduleLesson`/`addHoliday`/etc.).
-- **Calendar JSX external dependency surface is minimal:** `addToast` (5 refs), `savedLessons` (3 refs — reads `savedLessons.units`), `api.*` (3 refs — `listSupportDocuments`, `parseDocumentForCalendar`, `importCalendarEvents`). The apparent `status` ref was a false positive (`data.status` from a response, not the app-shell `status` prop). **No `lessonPlan`/`generatedAssignment`/`generatedAssessment` leakage.**
+- **Calendar JSX external dependency surface:** `addToast` (5 refs), `savedLessons` (3 refs — reads `savedLessons.units`), `supportDocs`/`setSupportDocs` (reads `supportDocs.length`, lazy-loads via `setSupportDocs`, passes `supportDocs` to `ImportEventsModal`), `api.*` (3 refs — `listSupportDocuments`, `parseDocumentForCalendar`, `importCalendarEvents`). The apparent `status` ref was a false positive (`data.status` from a response, not the app-shell `status` prop). **No `lessonPlan`/`generatedAssignment`/`generatedAssessment` leakage.**
+  - **Correction (implementation-time audit, 2026-05-22):** the initial design audit omitted `supportDocs`/`setSupportDocs`. They are App-level **shared** state (`App.jsx:1481`, also passed to the Settings/Tools tab at `App.jsx:6479`); the calendar import flow reads the shared doc list and lazy-loads it. They must be **passed through as props** (not made component-local), or the shared-doc-list contract with the other tab breaks. **The component interface is five props, not three.**
 - Components used in the calendar JSX: `Icon`, `HolidayModal`, `ImportEventsModal` — all already extracted and importable.
 - **Existing behavior net:** `frontend/src/__tests__/PlannerTab.test.jsx:194–212` asserts the `/api/calendar` fetch fires when `plannerMode==='calendar'` and does **not** fire in lesson mode; lines 215–223 assert the Calendar mode button calls `setPlannerMode('calendar')`. These run *through* PlannerTab, so they validate the post-extraction wiring without modification.
 
@@ -63,10 +64,12 @@ New file: `frontend/src/components/PlannerCalendar.jsx` (Approach A, matching th
   active={activeTab === "planner"}   // gates the fetch effect (see §6)
   addToast={addToast}                // CRUD error toasts (unchanged)
   savedLessons={savedLessons}        // read-only; powers the quick-add unit dropdown
+  supportDocs={supportDocs}          // shared doc list (also used by Settings/Tools tab)
+  setSupportDocs={setSupportDocs}    // shared setter; calendar import lazy-loads the list
 />
 ```
 
-No other props. All 15 state vars and 11 helpers are component-internal.
+Five props total. All 15 state vars and 11 helpers are component-internal; `supportDocs`/`setSupportDocs` are forwarded shared state (see §3 correction).
 
 ### File-level shape
 
@@ -77,7 +80,7 @@ import HolidayModal from "./HolidayModal";
 import ImportEventsModal from "./ImportEventsModal";
 import * as api from "../services/api";
 
-export default function PlannerCalendar({ active, addToast, savedLessons }) {
+export default function PlannerCalendar({ active, addToast, savedLessons, supportDocs, setSupportDocs }) {
   // 15 calendar state vars (verbatim from PlannerTab 1142–1156)
   // fetch effect (re-expressed; see §6)
   // 11 helpers (verbatim from PlannerTab 1173–1273)
@@ -129,10 +132,13 @@ Each mutation helper retains its existing `try/catch` with `if (addToast) addToa
       active={activeTab === "planner"}
       addToast={addToast}
       savedLessons={savedLessons}
+      supportDocs={supportDocs}
+      setSupportDocs={setSupportDocs}
     />
   )}
   ```
-- No `App.jsx` change required — PlannerTab already receives `activeTab`, `addToast`, and `savedLessons` as props.
+- **Keep** `supportDocs`/`setSupportDocs` in PlannerTab's prop destructuring — they are forwarded to PlannerCalendar (and remain App-level shared state). Do **not** remove them from PlannerTab or App.jsx.
+- No `App.jsx` change required — PlannerTab already receives `activeTab`, `addToast`, `savedLessons`, `supportDocs`, and `setSupportDocs` as props.
 
 ## 10. Testing & proof
 

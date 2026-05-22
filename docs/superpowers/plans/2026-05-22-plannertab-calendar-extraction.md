@@ -4,7 +4,7 @@
 
 **Goal:** Extract the calendar cluster (~730 LOC) out of `frontend/src/tabs/PlannerTab.jsx` into a single new `frontend/src/components/PlannerCalendar.jsx`, behavior-preserving, zero logic change.
 
-**Architecture:** Approach A (single component), matching the Wave 2 cadence. The new component owns all 15 calendar state vars, the fetch effect, and all 11 calendar helpers internally; it imports `Icon`/`HolidayModal`/`ImportEventsModal`/`api` directly. Interface is three props: `{ active, addToast, savedLessons }`. The only non-verbatim change is the fetch effect, re-expressed from a `[activeTab, plannerMode]` guard to `useEffect(() => { if (active) loadCalendar(); }, [active])`, with PlannerTab passing `active={activeTab === "planner"}` and its existing conditional render handling the `plannerMode === "calendar"` half.
+**Architecture:** Approach A (single component), matching the Wave 2 cadence. The new component owns all 15 calendar state vars, the fetch effect, and all 11 calendar helpers internally; it imports `Icon`/`HolidayModal`/`ImportEventsModal`/`api` directly. Interface is five props: `{ active, addToast, savedLessons, supportDocs, setSupportDocs }` (`supportDocs`/`setSupportDocs` are App-level shared state forwarded through — see the spec §3 correction; the initial audit missed them). The only non-verbatim change is the fetch effect, re-expressed from a `[activeTab, plannerMode]` guard to `useEffect(() => { if (active) loadCalendar(); }, [active])`, with PlannerTab passing `active={activeTab === "planner"}` and its existing conditional render handling the `plannerMode === "calendar"` half.
 
 **Tech Stack:** React 18 + Vite + Vitest + React Testing Library. Frontend slice — no backend characterization net. Proof = Vite build + frontend test count floor + Playwright `health-check.spec.js` E2E smoke + new `PlannerCalendar.test.jsx` + normalized-JSX parity review.
 
@@ -167,7 +167,7 @@ import HolidayModal from "./HolidayModal";
 import ImportEventsModal from "./ImportEventsModal";
 import * as api from "../services/api";
 
-export default function PlannerCalendar({ active, addToast, savedLessons }) {
+export default function PlannerCalendar({ active, addToast, savedLessons, supportDocs, setSupportDocs }) {
   // === REGION 1: 15 calendar state vars ===
   // Copy verbatim from PlannerTab.jsx state block (spec lines 1142–1156):
   //   const [calendarData, setCalendarData] = useState({ scheduled_lessons: [], holidays: [], school_days: {} });
@@ -214,7 +214,7 @@ Run: `cd frontend && npx vitest run src/__tests__/PlannerCalendar.test.jsx`
 Expected: 3 passed.
 
 Run: `cd frontend && npm run build`
-Expected: build succeeds. If it fails with `X is not defined`, the JSX references an identifier not in `{ active, addToast, savedLessons }` or the imports — re-check against the Task-1 isolation audit (it should not happen; the audit proved the surface is exactly these). Do not invent props; trace the identifier back to the source.
+Expected: build succeeds. If it fails with `X is not defined`, the JSX references an identifier not in `{ active, addToast, savedLessons, supportDocs, setSupportDocs }` or the imports. (Implementation-time audit found the original 3-prop surface missed `supportDocs`/`setSupportDocs` — App-level shared state that must be forwarded as props, not made local; see spec §3 correction.) Do not invent props; trace any further identifier back to the source, and if it is shared App state, forward it as a prop rather than localizing it.
 
 - [ ] **Step 5: Commit**
 
@@ -259,6 +259,8 @@ Replace the entire calendar JSX block — from `{/* Calendar Mode */}` through i
                       active={activeTab === "planner"}
                       addToast={addToast}
                       savedLessons={savedLessons}
+                      supportDocs={supportDocs}
+                      setSupportDocs={setSupportDocs}
                     />
                   )}
 ```
@@ -270,6 +272,8 @@ Delete from `PlannerTab.jsx`:
 - the calendar fetch effect (spec 1159–1163) — **but keep** the dashboard `fetchTeacherClasses` effect immediately below it (1166–1170),
 - the 11 calendar helpers (spec 1173–1273),
 - the calendar slice comment (spec 102–107).
+
+**Do NOT remove** `supportDocs`/`setSupportDocs` from PlannerTab's prop destructuring (≈ line 53) — they are App-level shared state forwarded to `<PlannerCalendar>` above, and removing them would break the shared-doc-list contract with the Settings/Tools tab. No `App.jsx` change.
 
 - [ ] **Step 4: Build and verify no dangling references**
 
