@@ -595,3 +595,46 @@ Gemini's read-only investigation did not converge to a Slice-5 verdict within th
 - **Codex's compatibility observation worth recording.** Codex flagged that the `on_failure` body's kwargs fallback default still says `supabase_table='submissions'` (e.g. `kwargs.get('supabase_table', 'submissions')`) while the rename was `supabase_table` → `path_type` on the two pure functions. This is the cross-the-wire constraint the implementer documented (Celery's `args[2]` positional slot keeps the legacy name because `SubmissionPathType.<X>.value` equals the legacy table-name string and crosses the wire byte-identical). Current call sites pass positional `args[2]` per the wire contract, so it's not a current production break, but if a future caller passes `path_type=` as a keyword and omits the positional, failure marking would default to `submissions`. Latent compatibility debt; non-blocking for the tier bump but worth a follow-up issue if anyone ever tightens the Celery wire interface.
 
 This dated section closes the Slice 5 lever. The next concrete step is the third Architecture-7 ground (no dependency injection), which the lever recap above sketches and which would be its own brainstorm + design + plan + slice. Tier 1 OpSafety hardening (the off-Railway status page, external uptime monitor, "Railway down" runbook, customer comms template; recorded in the 2026-05-19 production incident dated section) is the explicitly sequenced item that should come before the next big architectural lever, per the user's request that operational safety lessons from the outage be shipped before resuming pure architectural decomposition.
+
+---
+
+# 2026-05-21 Tier 1 OpSafety hardening closeout (PR #447 + PR #448)
+
+The Tier 1 implementation the 2026-05-19 production incident dated section named as the first thing to ship before resuming pure architectural decomposition. Brainstormed via `superpowers:brainstorming` (spec `docs/superpowers/specs/2026-05-21-opsafety-tier1-design.md`), planned via `superpowers:writing-plans` (plan `docs/superpowers/plans/2026-05-21-opsafety-tier1.md`), executed subagent-driven with two-stage review per task.
+
+## Scope correction recorded
+
+The original 2026-05-19 PR #434 OpSafety roadmap listed "off-Railway status page" and "external uptime monitor" as Tier 1 items, but the BetterStack stack (Uptime + Status Page at `status.graider.live` + Slack alerts + iOS Critical Alerts) already shipped on 2026-04-11 per `docs/superpowers/specs/2026-04-11-observability-sentry-betterstack-design.md` and `docs/observability.md`. The actual remaining gap was narrower: customers had no path from broken `app.graider.live` to the working `status.graider.live`, and the 2026-05-19 diagnosis sequence + comms templates were not captured anywhere durable. The "marketing-site banner" item that the PR #434 roadmap labeled Tier 2 was promoted to Tier 1 in this slice's spec because the incident verified it as the missing piece of customer trust.
+
+## What shipped
+
+- **`docs/runbooks/railway-down.md`** (PR1 #447) — 5-section on-call reference: confirm it's Railway (curl/openssl/dig/status.railway.app), decision tree mapping symptom to cause and action, escalation thresholds (30 min / 2 hr / multi-hour), what NOT to do (no reflex rollback on TLS handshake fail, no domain re-add mid-outage, no Railway ticket within 2 hr, no reactive provider migration), post-incident verification.
+- **`docs/runbooks/customer-comms-templates.md`** (PR1 #447) — 3 templates: Slack `#alerts` (internal-team, immediate on incident confirmation), customer email (school admins, multi-hour outages with active impact only; FERPA-aware reassurance that Supabase-stored student work is safe), in-app banner reference (handled by PR2).
+- **`landing/status-banner.js`** + **`landing/status-banner.test.js`** (PR2 #448) — vanilla JS module (the spec assumed React but `landing/` is plain HTML/CSS/JS; the plan corrected to vanilla JS with `node:test`). Pure-logic `shouldShowBanner(statusJSON)` + browser-only IIFE fetching `https://status.graider.live/api/v1/status.json` on `DOMContentLoaded` with a 3 s timeout, rendering a sticky dismissible banner when BetterStack reports non-operational. Fails-open on any error. 16 `node:test` unit tests (4 BetterStack status states + monitor-degraded + incident-active edge cases + 8 fails-open shapes), all green.
+- **`landing/index.html` + `landing/styles.css`** (PR2 #448) — banner container after `<body>` + sticky yellow/orange CSS + dismiss button + mobile-responsive media query.
+- **`docs/observability.md` — "Probe-coverage audit" section** (PR2 #448) — documents the 6 BetterStack monitor config fields to verify (probe URL is custom domain not Railway-internal, expected status, response-body keyword, timeout, follow-redirects, TLS-failure classification). **The audit itself is deferred to the next quarterly drill (first Monday of Jul 2026)** per user decision, because the probe DID fire correctly on 2026-05-19 (Slack alert landed within minutes), making the audit a "verify the why" follow-up rather than a blocking prerequisite.
+- **`.gitignore`** (PR2 #448) — one-line `!landing/*.test.js` carve-out of the existing blanket `*.test.js` ignore rule, matching the existing `!frontend/e2e/*.spec.js` negation pattern.
+
+## Deferred within this slice
+
+- **Probe-coverage audit findings** — deferred to the Jul 2026 quarterly drill. The drill checklist is documented in `docs/observability.md`.
+
+## Out of scope (recorded explicitly)
+
+- Tier 2 items (data-safety boundary documentation, graceful-degrade mode). Stay deferred.
+- Tier 3 items (multi-PaaS active-active, direct cloud migration). Stay deferred per the trigger conditions in the 2026-05-19 dated section.
+- Frontend error tracking — known gap in `docs/observability.md` follow-ups. Separate brainstorm.
+- SSL / domain expiry monitoring. BetterStack paid feature, deferred per existing observability doc.
+- Provider re-evaluation. The 2026-05-19 incident dated section concluded Railway is the right provider at this stage; not re-litigated.
+
+## Mechanical asserts
+
+Two implementation PRs shipped (#447 docs-only, #448 infrastructure) plus the spec+plan PR (#446). 9 CI checks green on all. `cd landing && node --test status-banner.test.js` returns 16 passed, 0 failed. The customer-facing banner deploys with `cd landing && npx vercel --prod` (explicit CLI step, not auto-deployed on merge); the deployed `index.html` serves the `#status-banner` div (verifiable with `curl -sS https://graider.live/ | grep -c 'id="status-banner"'`).
+
+## Operational Safety dimension note
+
+Whether Tier 1 closure moves the Operational Safety dimension (currently reconciled 9) is a judgment call deferred to a 3-model reconciled re-score, consistent with how every prior slice closeout has been handled. The 2026-05-19 incident verified the customer-communication gap live; this slice closes it (the banner gives customers a path to the status page during a Railway-edge outage). The probe-coverage audit being deferred is the one open thread; a re-score would weigh whether the dimension moves 9 → 10 now or holds at 9 until the audit confirms the probe catches the TLS-handshake failure class.
+
+## Next concrete step
+
+Either: (a) post-slice 3-model reconciled re-score weighing whether Operational Safety moves 9 → 10 given Tier 1 closure (the audit-deferred caveat would factor into the conservative-floor reconciliation), or (b) the third Architecture-7 ground (no dependency injection) brainstorm, which the 2026-05-21 Post-Slice-5 re-score named as the dominant remaining Architecture lever. The repository layer added by Slices 4 + 5 has clean seams (factories, the `SubmissionPathType` enum, byte-identical Celery wire) that make a small DI library a structurally low-risk next slice.
