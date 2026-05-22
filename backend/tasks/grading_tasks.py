@@ -46,17 +46,13 @@ class PortalGradingTask(Task):
         if not submission_id:
             return
         try:
-            # Slice 5 PR2 Task 2.4: terminal-failure write now goes through the
-            # repository abstraction (repo.mark_failed) instead of the legacy
-            # _safe_update_submission helper. The DB effect is byte-identical
-            # (status='failed', error_message=str(exc)[:500], correct table by
-            # path discriminator). TestFailureSeam patches the repo method's
-            # update in lockstep with this change.
-            from backend.services.submission_repository import repository_for
-            from backend.supabase_client import get_supabase
-            sb = get_supabase()
-            if sb:
-                repository_for(supabase_table, sb).mark_failed(submission_id, exc)
+            # PR2 Task 2.1: route through the DI provider so tests can swap the
+            # client at one switch (override_supabase) instead of patching
+            # get_supabase per-module. The repo's internal `if not self._sb`
+            # guard preserves the no-write-when-None behavior; the observable
+            # DB effect is byte-identical.
+            from backend.providers import get_submission_repository
+            get_submission_repository(supabase_table).mark_failed(submission_id, exc)
         except Exception:
             # Sentry already has the original exception; don't mask it.
             pass
@@ -176,16 +172,15 @@ def grade_portal_submission(
             f"grade_portal_submission: no assessment for submission {sub_hash}",
             level='error',
         )
-        # Mark row as failed so ops can re-enqueue once the root cause is fixed
+        # Mark row as failed so ops can re-enqueue once the root cause is fixed.
+        # PR2 Task 2.1: route through the DI provider; repo's internal guard
+        # handles None client (no-op write), observable effect unchanged.
         try:
-            from backend.services.submission_repository import repository_for
-            from backend.supabase_client import get_supabase
-            sb = get_supabase()
-            if sb:
-                repository_for(path_type, sb).mark_failed(
-                    submission_id,
-                    'Assessment content unavailable at grading time',
-                )
+            from backend.providers import get_submission_repository
+            get_submission_repository(path_type).mark_failed(
+                submission_id,
+                'Assessment content unavailable at grading time',
+            )
         except Exception:
             pass
         return

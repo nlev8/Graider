@@ -942,10 +942,13 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
             sub_hash = hashlib.sha256(str(submission_id).encode()).hexdigest()[:8]
             logger.info("Shutdown in progress — skipping grading for submission %s", sub_hash)
             try:
-                from backend.supabase_client import get_supabase
-                sb = get_supabase()
-                if sb and submission_id:
-                    repository_for(path_type, sb).update(
+                if submission_id:
+                    # PR2 Task 2.2: route through the DI provider; the repo's
+                    # internal `if not self._sb` guard handles the None-client
+                    # case (no write when client is None — observable effect
+                    # identical to the old `if sb and submission_id` gate).
+                    from backend.providers import get_submission_repository
+                    get_submission_repository(path_type).update(
                         submission_id, {"status": "grading_deferred"}
                     )
             except Exception as e:

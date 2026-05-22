@@ -298,8 +298,8 @@ class TestFailureSeam:
         task.name = "grading.portal_submission"
 
         with patch(
-            "backend.services.submission_repository.repository_for"
-        ) as mrf:
+            "backend.providers.get_submission_repository"
+        ) as mgsr:
             task.on_failure(
                 exc=RuntimeError("x"),
                 task_id="t",
@@ -307,22 +307,45 @@ class TestFailureSeam:
                 kwargs={},
                 einfo=None,
             )
-        # Neither repository_for nor mark_failed must be called
-        mrf.assert_not_called()
+        # The `if not submission_id: return` guard fires before any repo call
+        mgsr.assert_not_called()
 
-    def test_on_failure_skips_update_when_sb_none(self):
-        """on_failure guards the write with `if sb:` — when get_supabase
-        returns None, repository_for / mark_failed are never invoked."""
+    def test_on_failure_writes_via_provider_when_client_present(self):
+        """Falsifiable contract: on_failure routes through the DI provider and
+        issues a DB write when a real client is present.
+
+        WHY this replaces the old 'no_write_when_client_none' test
+        ============================================================
+        The previous test only asserted "no exception escaped." That assertion
+        is trivially unfalsifiable: on_failure wraps its body in
+        `try/except Exception: pass`, so ANY failure (including a guard
+        removal that causes `None.table(...)`) would be swallowed and the test
+        would still green. A mutation-probe confirmed this: disabling the repo's
+        `if not self._sb` guard raised AttributeError on `None.table(...)`,
+        which was swallowed, and the test still passed.
+
+        The repo-level None-guard is already pinned — falsifiably — in
+        tests/test_submission_repository.py::test_update_sb_none_pages_sentry_with_hashed_id
+        (no try/except there; a direct call to repo.update() with sb=None must
+        return None AND page Sentry). That test fails immediately if the guard
+        is removed. No duplication is needed here.
+
+        THIS test pins a different and complementary contract: when a real
+        client IS present, on_failure MUST issue the write. Falsifiability
+        proof: comment out `get_submission_repository(...).mark_failed(...)` in
+        on_failure → recording_client.table.assert_called() fails. The
+        `try/except Exception: pass` cannot mask a missing call."""
         from backend.tasks.grading_tasks import PortalGradingTask
+        from backend.providers import override_supabase
+
+        # Build a recording client whose .table(...).update(...).eq(...).execute()
+        # chain is fully wired via MagicMock auto-spec chaining.
+        recording_client = MagicMock()
 
         task = PortalGradingTask()
         task.name = "grading.portal_submission"
 
-        with patch(
-            "backend.services.submission_repository.repository_for"
-        ) as mrf, patch(
-            "backend.supabase_client.get_supabase", return_value=None
-        ):
+        with override_supabase(recording_client):
             task.on_failure(
                 exc=RuntimeError("q"),
                 task_id="t",
@@ -330,7 +353,12 @@ class TestFailureSeam:
                 kwargs={},
                 einfo=None,
             )
-        mrf.assert_not_called()
+
+        # on_failure must have routed through the provider and issued a write.
+        # If mark_failed is ever removed from on_failure, this assertion fails.
+        recording_client.table.assert_called()
+        # Confirm the right table was targeted (path discriminator contract).
+        assert recording_client.table.call_args.args[0] == JOIN_CODE_TABLE
 
 
 # ---------------------------------------------------------------------------
