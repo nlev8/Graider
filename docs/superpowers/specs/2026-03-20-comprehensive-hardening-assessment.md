@@ -729,3 +729,36 @@ Per slice: Vite build clean, byte-for-byte normalized-JSX parity (calendar 596, 
 ## Next step
 
 3-model reconciled re-score (Claude + Codex + Gemini, conservative floor) weighing whether Wave 3's PlannerTab de-concentration moves **Code Quality 7 → 8**. Honest framing: the prior re-score capped Code Quality at 7 because "LOC was relocated, not eliminated" (PlannerTab 7,405, SettingsTab 6,534, assignment_grader 7,444). Wave 3 genuinely *de-concentrates* PlannerTab (−28%, three focused tested components) — directly attacking the named "concentrated complexity" lever — but the LOC still largely relocated into sibling components, and **SettingsTab (6,534) + assignment_grader (7,444) are untouched** and PlannerTab still carries the lesson (~2,193) + assessment (~1,625) blocks. The re-score makes the continue-vs-pivot call: keep extracting PlannerTab (lesson/assessment), pivot to the other god-files, or consolidate.
+
+---
+
+# 2026-05-22 Post-Wave-3 PlannerTab decomposition re-score (PRs #456 + #458 + #459)
+
+3-model reconciled re-score weighing whether the Wave 3 PlannerTab decomposition (calendar + tools + dashboard slices) moves the **Code Quality** dimension from its prior 7/10. Method: three independent models each verified the live code with their own shell commands — Claude (controller, first-hand), Codex (`codex exec`), Gemini (`gemini -p`). Conservative-floor reconciliation: on a split the lower score wins unless a model presents strong disconfirming file:line evidence.
+
+| Model | Code Quality | Recommendation |
+|---|---|---|
+| Claude | 7 (hold, "strong direction to 8") | continue lesson/assessment, but the dimension needs broader de-concentration — App.jsx (7,144) is now the largest frontend file |
+| Codex | 7.5 | continue PlannerTab lesson/assessment, then pivot to SettingsTab.jsx |
+| Gemini | 8 | continue PlannerTab (lesson/assessment) toward a <3k-LOC target, then SettingsTab.jsx |
+| **Reconciled** | **7 (held — a near-8 on the cusp)** | continue PlannerTab lesson/assessment, then pivot to SettingsTab.jsx |
+
+## Verdict: Code Quality holds at 7 (conservative floor). Overall unchanged at 7.8.
+
+All three models verified the same facts firsthand — there is **no factual split, only a judgment split** (7 vs 7.5 vs 8) — so the conservative floor takes Claude's 7. Claude's basis (the concentration is multi-file and only one file was partially decomposed) was not disconfirmed by the higher scores.
+
+**What all three confirmed (real, verified progress):**
+- `frontend/src/tabs/PlannerTab.jsx` 7,405 → 5,322 LOC (−28%), de-concentrating the repo's former single-largest source file.
+- Three focused, cohesive, single-responsibility components extracted with their own tests: `PlannerCalendar.jsx` (735), `PlannerTools.jsx` (840), `PlannerDashboard.jsx` (577); 8 new component tests — the first unit-testable surfaces for these features.
+- `assignment_grader.py` is now 5,344 LOC, down from the 7,444 baseline that partly drove the original "Code Quality 7" cap (Gemini's disconfirming evidence against part of the cap basis).
+
+**Why the floor still holds at 7 (Claude's basis, not disconfirmed):**
+- The concentration is **multi-file**; Wave 3 improved one file partially. `App.jsx` is now the **largest** frontend file at 7,144 LOC (untouched by Wave 3); `SettingsTab.jsx` remains a 6,534 LOC monolith (all three models); `PlannerTab.jsx` still carries large inline `lesson` (~2,193 LOC) and `assessment` (~1,800 LOC) blocks.
+- The LOC was largely **relocated** into sibling components, not eliminated — the original cap's framing partly persists.
+- This is now a "high 7 on the cusp": all three agree the trajectory is right. The floor lifts to 8 once PlannerTab is fully decomposed (lesson/assessment) **and** at least one more god-file (SettingsTab) is started.
+
+## Recommendation (consensus): continue, then pivot
+
+All three models recommend **continuing PlannerTab lesson/assessment** next (the warm cadence finishes the file toward a <3k-LOC target), **then pivoting to `SettingsTab.jsx`**. Caveat (Claude): lesson/assessment are the cross-coupled blocks (shared `lessonPlan`/`generatedAssignment`/`generatedAssessment`, question-editing, publish/share modals) — they genuinely decentralize state rather than just move JSX, so they warrant their own brainstorm and are higher-risk than the calendar/tools/dashboard slices. The Code-Quality dimension will not tick to 8 on PlannerTab alone; broader de-concentration (SettingsTab, and revisiting App.jsx) is required.
+
+**Honest note on the 3-model run:** Gemini's first invocation failed (untrusted-workspace, exit 55) and was re-run with `GEMINI_CLI_TRUST_WORKSPACE=true --skip-trust`; both Codex and Gemini then completed cleanly. No model failed-to-run in the final tally; the split is a genuine judgment difference, resolved conservatively.
