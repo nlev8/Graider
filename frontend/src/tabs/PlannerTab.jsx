@@ -8,15 +8,11 @@ import NewUnitModal from "../components/NewUnitModal";
 import ShareWithClassesModal from "../components/ShareWithClassesModal";
 import AttemptDrawer from "../components/AttemptDrawer";
 import PlatformExportMenu from "../components/PlatformExportMenu";
-import DataTablePreview from "../components/DataTablePreview";
 import { AssignmentPlayer } from "../components";
 import QuestionEditToolbar from "../components/QuestionEditToolbar";
 import QuestionEditOverlay from "../components/QuestionEditOverlay";
 import MatchingCards from "../components/MatchingCards";
-import MindMapView from "../components/MindMapView";
-import FlashcardView from "../components/FlashcardView";
 import * as api from "../services/api";
-import { getAuthHeaders } from "../services/api";
 import { checkRequirementsMismatch } from "../utils/standardsMismatch";
 
 /*
