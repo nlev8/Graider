@@ -701,3 +701,31 @@ Vite build clean; full frontend suite 184 passed; JSX parity OK (596 lines, whit
 ## Scorecard note
 
 Code-Quality lever, not Architecture-tier. A single isolated-cluster extraction is unlikely to move a dimension score on its own; the cumulative effect across the PlannerTab Wave-3 slices (calendar + tools + dashboard + lesson + assessment) is what would. No 3-model re-score run for this slice (deliberate — predictable hold; the judgment is recorded here rather than burning a dispatch), consistent with the DI closeout's reasoning. A re-score becomes worthwhile once several PlannerTab slices have landed and the file is materially smaller.
+
+---
+
+# 2026-05-22 PlannerTab tools + dashboard extraction closeout (PR #458 + PR #459)
+
+Wave 3 slices 2 and 3, continuing the Code-Quality concentrated-complexity lever (`frontend/src/tabs/PlannerTab.jsx`). Both behavior-preserving verbatim moves under the calendar-slice cadence (brainstorm/spec → programmatic assembly+rewire scripts because the file is large and a subagent edit timed out on the calendar removal → two-stage subagent review → byte-for-byte JSX parity). Specs: `docs/superpowers/specs/2026-05-22-plannertab-tools-extraction-design.md`, `…-dashboard-extraction-design.md`.
+
+## What shipped
+
+- **Tools tab → `components/PlannerTools.jsx`** (PR #458, 841 LOC). The full 4-tool tab (reading-level + study guide + flashcards + slides), 24 tool-local state vars moved in, 7 forwarded props. Zero logic change (no effect to re-express). PlannerTab 6,680 → 5,853 LOC (−827).
+- **Student Portal Dashboard → `components/PlannerDashboard.jsx`** (PR #459, ~575 LOC). Purely presentational — the block owned no local state (already prop-driven from App), so 34 forwarded props (data + handlers + setters + the `renderTagRow` render-prop + `setAttemptDrawerStudent`); no state removed from PlannerTab. PlannerTab 5,853 → 5,322 LOC (−531).
+- **Cumulative Wave 3 (calendar + tools + dashboard): PlannerTab 7,405 → 5,322 LOC (−28%).** Three focused, independently-tested, single-responsibility components extracted (PlannerCalendar 735, PlannerTools 841, PlannerDashboard 575). Frontend suite 181 → 189.
+
+## Audit-method course-corrections (recorded honestly)
+
+Each slice surfaced one external dependency the initial "exhaustive" audit missed — the method converged across the three:
+- **calendar:** `supportDocs`/`setSupportDocs` (a shared prop) — caught by the implementer.
+- **tools:** `shareWithClass` (a `function X` parent-body closure) — caught by the code-quality review.
+- **dashboard:** `renderTagRow` (a `var X = function` parent-body closure) — caught by the controller's own free-variable scan *before* review.
+The durable fix: the pre-extraction audit now enumerates **all** free identifiers (props, imports, *and* parent-body `function`/`const`/`var` closures via a call-pattern free-variable scan), and prop sets are derived programmatically so the component signature and the call site cannot drift (verified equal). For prop-driven blocks this matters because a missed handler/render prop is a **runtime** error, not a build error.
+
+## Verification
+
+Per slice: Vite build clean, byte-for-byte normalized-JSX parity (calendar 596, tools 803, dashboard 569 lines — all zero-diff), full frontend suite green (189 after dashboard), both spec-compliance and code-quality reviews passed, all 9 CI checks green, merged. No `App.jsx` or backend change in any slice.
+
+## Next step
+
+3-model reconciled re-score (Claude + Codex + Gemini, conservative floor) weighing whether Wave 3's PlannerTab de-concentration moves **Code Quality 7 → 8**. Honest framing: the prior re-score capped Code Quality at 7 because "LOC was relocated, not eliminated" (PlannerTab 7,405, SettingsTab 6,534, assignment_grader 7,444). Wave 3 genuinely *de-concentrates* PlannerTab (−28%, three focused tested components) — directly attacking the named "concentrated complexity" lever — but the LOC still largely relocated into sibling components, and **SettingsTab (6,534) + assignment_grader (7,444) are untouched** and PlannerTab still carries the lesson (~2,193) + assessment (~1,625) blocks. The re-score makes the continue-vs-pivot call: keep extracting PlannerTab (lesson/assessment), pivot to the other god-files, or consolidate.
