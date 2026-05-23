@@ -1139,7 +1139,6 @@ export default function PlannerTab(props) {
                       assessmentConfig={assessmentConfig}
                       assessmentLoading={assessmentLoading}
                       assessmentStandardsScrollRef={assessmentStandardsScrollRef}
-                      assignment={assignment}
                       deleteSelectedQuestions={deleteSelectedQuestions}
                       distributeDOK={distributeDOK}
                       distributePoints={distributePoints}
@@ -1197,7 +1196,7 @@ export default function PlannerTab(props) {
                     />
                   )}
 
-                                    {/* Student Portal Dashboard */}
+                  {/* Student Portal Dashboard */}
                   {plannerMode === "dashboard" && (
                     <PlannerDashboard
                       addToast={addToast}

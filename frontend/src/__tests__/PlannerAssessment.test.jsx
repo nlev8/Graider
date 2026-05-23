@@ -22,7 +22,7 @@ const base = () => ({
   selectedStandards: [],
   standards: [],
   savedAssignments: [],
-  savedLessons: [],
+  savedLessons: { units: {} },
   periods: [],
   uploadedDocs: [],
   assessmentLoading: false,
