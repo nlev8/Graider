@@ -31,7 +31,6 @@ import CurveModal from "./components/CurveModal";
 import HolidayModal from "./components/HolidayModal";
 import PlatformExportMenu from "./components/PlatformExportMenu";
 import ActivityLog from "./components/ActivityLog";
-import AIReasoningPanel from "./components/AIReasoningPanel";
 import { AssignmentPlayer } from "./components";
 import QuestionEditToolbar from "./components/QuestionEditToolbar";
 import QuestionEditOverlay from "./components/QuestionEditOverlay";
@@ -4040,6 +4039,7 @@ ${signature}`;
           addSelectedAsMarker={addSelectedAsMarker}
           addToast={addToast}
           applyAllHighlights={applyAllHighlights}
+          assignment={assignment}
           docEditorModal={docEditorModal}
           docHtmlRef={docHtmlRef}
           getEndMarker={getEndMarker}
