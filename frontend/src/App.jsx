@@ -556,8 +556,6 @@ function App() {
   const [uploadingParentContacts, setUploadingParentContacts] = useState(false);
   const [parentContactMapping, setParentContactMapping] = useState({ show: false, preview: null, mapping: null });
   // Batch export state
-  const [batchExportLoading, setBatchExportLoading] = useState(false);
-  const [outlookExportLoading, setOutlookExportLoading] = useState(false);
 
   // VPortal credentials state
   const [vportalEmail, setVportalEmail] = useState("");
@@ -571,7 +569,6 @@ function App() {
   const [pendingConfirmations, setPendingConfirmations] = useState(0);
   const [pendingConfirmationStudents, setPendingConfirmationStudents] = useState([]);
   const [confirmationStudentFilter, setConfirmationStudentFilter] = useState("");
-  const [ccParents, setCcParents] = useState(false);
   const pendingConfirmationIds = useRef([]);
   const pendingConfirmationFilenames = useRef([]);
   const [focusCommentsStatus, setFocusCommentsStatus] = useState({ status: "idle", entered: 0, total: 0, failed: 0, message: "" });
@@ -894,13 +891,7 @@ function App() {
 
   const [portalSubmissions, setPortalSubmissions] = useState([]);
   const [assessmentResults, setAssessmentResults] = useState([]);
-  const [resultsFilter, setResultsFilter] = useState("all"); // "all", "handwritten", "typed", "missing"
   const [resultsPeriodFilter, setResultsPeriodFilter] = useState(""); // Filter results by class period
-  const [resultsAssignmentFilter, setResultsAssignmentFilter] = useState(""); // Filter results by assignment
-  const [resultsSort, setResultsSort] = useState({
-    field: "time",
-    direction: "desc",
-  }); // field: time, name, assignment, score, grade
   // Grade-specific state (skipVerified, excludeGradedStudents, excludeApprovedStudents,
   // showActivityLog) moved into tabs/GradeTab.jsx in PR 2 of the Grade tab extraction sprint.
   const [globalAINotes, setGlobalAINotes] = useState("");
@@ -1051,7 +1042,6 @@ function App() {
   const [sentEmails, setSentEmails] = useState({}); // { index: true } - tracks which emails have been sent
   const [autoApproveEmails, setAutoApproveEmails] = useState(false);
   const [editedEmails, setEditedEmails] = useState({}); // { index: { subject, body } }
-  const [resultsSearch, setResultsSearch] = useState("");
   const [curveModal, setCurveModal] = useState({ show: false, curveType: "add", curveValue: 5 }); // Curve modal state
 
   // Planner state
@@ -6121,11 +6111,7 @@ ${signature}`;
                   rubric={rubric}
                   globalAINotes={globalAINotes}
                   theme={theme}
-                  resultsFilter={resultsFilter}
                   resultsPeriodFilter={resultsPeriodFilter}
-                  resultsAssignmentFilter={resultsAssignmentFilter}
-                  resultsSort={resultsSort}
-                  resultsSearch={resultsSearch}
                   editedResults={editedResults}
                   emailApprovals={emailApprovals}
                   sentEmails={sentEmails}
@@ -6141,8 +6127,6 @@ ${signature}`;
                   assessmentResults={assessmentResults}
                   setAssessmentResults={setAssessmentResults}
                   vportalConfigured={vportalConfigured}
-                  batchExportLoading={batchExportLoading}
-                  outlookExportLoading={outlookExportLoading}
                   outlookSendStatus={outlookSendStatus}
                   focusCommsStatus={focusCommsStatus}
                   focusCommentsStatus={focusCommentsStatus}
@@ -6152,12 +6136,7 @@ ${signature}`;
                   pendingConfirmations={pendingConfirmations}
                   pendingConfirmationStudents={pendingConfirmationStudents}
                   confirmationStudentFilter={confirmationStudentFilter}
-                  ccParents={ccParents}
-                  setResultsFilter={setResultsFilter}
                   setResultsPeriodFilter={setResultsPeriodFilter}
-                  setResultsAssignmentFilter={setResultsAssignmentFilter}
-                  setResultsSort={setResultsSort}
-                  setResultsSearch={setResultsSearch}
                   setStatus={setStatus}
                   setConfig={setConfig}
                   setEditedResults={setEditedResults}
@@ -6167,8 +6146,6 @@ ${signature}`;
                   setEmailStatus={setEmailStatus}
                   setAutoApproveEmails={setAutoApproveEmails}
                   setGradesApproved={setGradesApproved}
-                  setBatchExportLoading={setBatchExportLoading}
-                  setOutlookExportLoading={setOutlookExportLoading}
                   setOutlookSendStatus={setOutlookSendStatus}
                   setOutlookSendPolling={setOutlookSendPolling}
                   setFocusCommsStatus={setFocusCommsStatus}
@@ -6179,7 +6156,6 @@ ${signature}`;
                   setFocusExportModal={setFocusExportModal}
                   setColWidths={setColWidths}
                   setConfirmationStudentFilter={setConfirmationStudentFilter}
-                  setCcParents={setCcParents}
                   addToast={addToast}
                   openReview={openReview}
                   sendSingleEmail={sendSingleEmail}

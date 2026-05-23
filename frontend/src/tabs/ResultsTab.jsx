@@ -10,17 +10,17 @@ import {
 /*
  * Props required by ResultsTab:
  *
+ * NOTE: resultsFilter / resultsAssignmentFilter / resultsSort / resultsSearch /
+ *       batchExportLoading / outlookExportLoading / ccParents (and their setters) are now
+ *       ResultsTab-owned local state (useState in the body), pushed down from App (App.jsx decomp slice 2).
+ *
  * --- State values ---
  * status                 - { results, is_running, log, complete }
  * config                 - full config object (assignments_folder, output_folder, roster_file, etc.)
  * rubric                 - rubric object
  * globalAINotes          - string
  * theme                  - "dark" | "light"
- * resultsFilter          - string
  * resultsPeriodFilter    - string
- * resultsAssignmentFilter - string
- * resultsSort            - { field, direction }
- * resultsSearch          - string
  * editedResults          - array
  * emailApprovals         - object { index: 'approved' | 'rejected' | 'pending' }
  * sentEmails             - object { index: true }
@@ -35,8 +35,6 @@ import {
  * portalSubmissions      - array
  * assessmentResults      - array of assessment result objects from /api/assessment-results
  * vportalConfigured      - boolean
- * batchExportLoading     - boolean
- * outlookExportLoading   - boolean
  * outlookSendStatus      - { status, sent, total, failed, message }
  * focusCommsStatus       - { status, sent, total, failed, skipped, message }
  * focusCommentsStatus    - { status, entered, total, failed, message }
@@ -46,16 +44,11 @@ import {
  * pendingConfirmations   - number
  * pendingConfirmationStudents - array
  * confirmationStudentFilter   - string
- * ccParents              - boolean
  * focusExportModal       - boolean (value not used but setter is)
  * reviewModal            - { show, index }  (value not used but setter is)
  *
  * --- Setter functions ---
- * setResultsFilter
  * setResultsPeriodFilter
- * setResultsAssignmentFilter
- * setResultsSort
- * setResultsSearch
  * setStatus
  * setConfig
  * setEditedResults
@@ -65,8 +58,6 @@ import {
  * setEmailStatus
  * setAutoApproveEmails
  * setGradesApproved
- * setBatchExportLoading
- * setOutlookExportLoading
  * setOutlookSendStatus
  * setOutlookSendPolling
  * setFocusCommsStatus
@@ -77,7 +68,6 @@ import {
  * setFocusExportModal
  * setColWidths
  * setConfirmationStudentFilter
- * setCcParents
  *
  * --- Callbacks / functions ---
  * addToast               - function(message, type, duration?)
@@ -308,11 +298,7 @@ export default React.memo(function ResultsTab({
   rubric,
   globalAINotes,
   theme,
-  resultsFilter,
   resultsPeriodFilter,
-  resultsAssignmentFilter,
-  resultsSort,
-  resultsSearch,
   editedResults,
   emailApprovals,
   sentEmails,
@@ -328,8 +314,6 @@ export default React.memo(function ResultsTab({
   assessmentResults,
   setAssessmentResults,
   vportalConfigured,
-  batchExportLoading,
-  outlookExportLoading,
   outlookSendStatus,
   focusCommsStatus,
   focusCommentsStatus,
@@ -339,13 +323,8 @@ export default React.memo(function ResultsTab({
   pendingConfirmations,
   pendingConfirmationStudents,
   confirmationStudentFilter,
-  ccParents,
   // Setters
-  setResultsFilter,
   setResultsPeriodFilter,
-  setResultsAssignmentFilter,
-  setResultsSort,
-  setResultsSearch,
   setStatus,
   setConfig,
   setEditedResults,
@@ -355,8 +334,6 @@ export default React.memo(function ResultsTab({
   setEmailStatus,
   setAutoApproveEmails,
   setGradesApproved,
-  setBatchExportLoading,
-  setOutlookExportLoading,
   setOutlookSendStatus,
   setOutlookSendPolling,
   setFocusCommsStatus,
@@ -367,7 +344,6 @@ export default React.memo(function ResultsTab({
   setFocusExportModal,
   setColWidths,
   setConfirmationStudentFilter,
-  setCcParents,
   // Callbacks
   addToast,
   openReview,
@@ -381,6 +357,13 @@ export default React.memo(function ResultsTab({
   pendingConfirmationIds,
   pendingConfirmationFilenames,
 }) {
+  const [batchExportLoading, setBatchExportLoading] = useState(false);
+  const [outlookExportLoading, setOutlookExportLoading] = useState(false);
+  const [ccParents, setCcParents] = useState(false);
+  const [resultsFilter, setResultsFilter] = useState("all");
+  const [resultsAssignmentFilter, setResultsAssignmentFilter] = useState("");
+  const [resultsSort, setResultsSort] = useState({ field: "time", direction: "desc" });
+  const [resultsSearch, setResultsSearch] = useState("");
   var _assessmentSectionOpen = useState(true);
   var assessmentSectionOpen = _assessmentSectionOpen[0];
   var setAssessmentSectionOpen = _assessmentSectionOpen[1];
