@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import Icon from "../components/Icon";
-import StandardCard from "../components/StandardCard";
 import PublishedAssessmentModal from "../components/PublishedAssessmentModal";
 import PublishContentModal from "../components/PublishContentModal";
 import PlannerCalendar from "../components/PlannerCalendar";
@@ -11,7 +10,6 @@ import NewUnitModal from "../components/NewUnitModal";
 import ShareWithClassesModal from "../components/ShareWithClassesModal";
 import AttemptDrawer from "../components/AttemptDrawer";
 import PlatformExportMenu from "../components/PlatformExportMenu";
-import { AssignmentPlayer } from "../components";
 import QuestionEditToolbar from "../components/QuestionEditToolbar";
 import QuestionEditOverlay from "../components/QuestionEditOverlay";
 import MatchingCards from "../components/MatchingCards";

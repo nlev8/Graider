@@ -1,7 +1,7 @@
 import React from "react";
 import Icon from "./Icon";
 import StandardCard from "./StandardCard";
-import { AssignmentPlayer } from "../components";
+import AssignmentPlayer from "./AssignmentPlayer";
 import QuestionEditToolbar from "./QuestionEditToolbar";
 import * as api from "../services/api";
 
