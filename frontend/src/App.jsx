@@ -538,12 +538,6 @@ function App() {
     anthropicIsOwn: false,
     geminiIsOwn: false,
   });
-  const [showApiKeys, setShowApiKeys] = useState({
-    openai: false,
-    anthropic: false,
-    gemini: false,
-  });
-  const [savingApiKeys, setSavingApiKeys] = useState(false);
 
   // Focus Export state
   const [focusExportModal, setFocusExportModal] = useState(false);
@@ -551,17 +545,10 @@ function App() {
   const [focusIncludeLetterGrade, setFocusIncludeLetterGrade] = useState(false);
   // Approval gate — teacher must approve grades before export
   const [gradesApproved, setGradesApproved] = useState(false);
-  // Parent contacts state
-  const [parentContacts, setParentContacts] = useState(null);
-  const [uploadingParentContacts, setUploadingParentContacts] = useState(false);
-  const [parentContactMapping, setParentContactMapping] = useState({ show: false, preview: null, mapping: null });
-  // Batch export state
 
   // VPortal credentials state
   const [vportalEmail, setVportalEmail] = useState("");
-  const [vportalPassword, setVportalPassword] = useState("");
   const [vportalConfigured, setVportalConfigured] = useState(false);
-  const [vportalSaving, setVportalSaving] = useState(false);
   const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
   const [outlookSendPolling, setOutlookSendPolling] = useState(false);
   const [focusCommsStatus, setFocusCommsStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, skipped: 0, message: "" });
@@ -804,9 +791,6 @@ function App() {
     },
   ];
 
-  // State for custom tools
-  const [customTools, setCustomTools] = useState([]);
-  const [newCustomTool, setNewCustomTool] = useState("");
 
   const [status, setStatus] = useState({
     is_running: false,
@@ -826,8 +810,6 @@ function App() {
   // moved selectedPeriod, periodStudents, gradeFilterAssignment, individualUpload,
   // gradeAssignment, and the related handlers into tabs/GradeTab.jsx. PR 4 also moved
   // gradeFilterStudent into GradeTab as pure local UI state.
-  const [exportStudentSearch, setExportStudentSearch] = useState({ active: false, query: "", results: [], allStudents: [] });
-  const [importStudentData, setImportStudentData] = useState({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" });
 
   const [activeTab, _setActiveTab] = useState("grade");
   const setActiveTab = useCallback((tab) => {
@@ -840,10 +822,8 @@ function App() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy, billing
-  const [syncingCloud, setSyncingCloud] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
-  const [costSummary, setCostSummary] = useState(null);
   // Resizable column widths for Results table (in px, initialized on first render)
   const [colWidths, setColWidths] = useState(null);
   const tableRef = useRef(null);
@@ -1467,58 +1447,15 @@ function App() {
   const [periods, setPeriods] = useState([]);
   const [supportDocs, setSupportDocs] = useState([]);
   const [uploadingRoster, setUploadingRoster] = useState(false);
-  const [uploadingPeriod, setUploadingPeriod] = useState(false);
-  const [uploadingDoc, setUploadingDoc] = useState(false);
-  const [newPeriodName, setNewPeriodName] = useState("");
-  const [newDocType, setNewDocType] = useState("curriculum");
-  const [newDocDescription, setNewDocDescription] = useState("");
 
-  // Focus roster import + inline editor state
-  const [focusImporting, setFocusImporting] = useState(false);
-  const [focusImportProgress, setFocusImportProgress] = useState("");
-  const [expandedPeriod, setExpandedPeriod] = useState(null);
-  const [expandedStudents, setExpandedStudents] = useState([]);
-  const [loadingExpandedStudents, setLoadingExpandedStudents] = useState(false);
-  const [editingStudentId, setEditingStudentId] = useState(null);
-  const [editStudentData, setEditStudentData] = useState({});
-  const [addingStudent, setAddingStudent] = useState(false);
-  const [newStudent, setNewStudent] = useState({ name: '', student_id: '', grade: '', parent_emails: '', parent_phones: '' });
 
-  const [rosterMappingModal, setRosterMappingModal] = useState({
-    show: false,
-    roster: null,
-  });
 
-  // Add Student from Screenshot modal
-  const [addStudentModal, setAddStudentModal] = useState({
-    show: false,
-    loading: false,
-    image: null,
-    student: null,
-    error: null,
-  });
 
   // Accommodation state (IEP/504 support - FERPA compliant)
   const [accommodationPresets, setAccommodationPresets] = useState([]);
   const [studentAccommodations, setStudentAccommodations] = useState({});
-  const [accommodationModal, setAccommodationModal] = useState({
-    show: false,
-    studentId: null,
-  });
-  const [selectedAccommodationPresets, setSelectedAccommodationPresets] =
-    useState([]);
-  const [accommodationCustomNotes, setAccommodationCustomNotes] = useState("");
 
-  // Accommodation modal: student selection state
-  const [accommPeriodFilter, setAccommPeriodFilter] = useState("");
-  const [accommStudentsList, setAccommStudentsList] = useState([]);
-  const [accommSelectedStudents, setAccommSelectedStudents] = useState({});
-  const [accommEllLanguage, setAccommEllLanguage] = useState("");
 
-  // Student writing profiles/history state
-  const [studentHistoryList, setStudentHistoryList] = useState([]);
-  const [studentHistoryLoading, setStudentHistoryLoading] = useState(false);
-  const [selectedStudentHistory, setSelectedStudentHistory] = useState(null);
 
   // Rubric state
   const [rubric, setRubric] = useState({
@@ -6185,12 +6122,6 @@ ${signature}`;
                   setGlobalAINotes={setGlobalAINotes}
                   apiKeys={apiKeys}
                   setApiKeys={setApiKeys}
-                  showApiKeys={showApiKeys}
-                  setShowApiKeys={setShowApiKeys}
-                  savingApiKeys={savingApiKeys}
-                  setSavingApiKeys={setSavingApiKeys}
-                  costSummary={costSummary}
-                  setCostSummary={setCostSummary}
                   subscription={subscription}
                   setSubscription={setSubscription}
                   subscriptionLoading={subscriptionLoading}
@@ -6199,90 +6130,18 @@ ${signature}`;
                   setPeriods={setPeriods}
                   rosters={rosters}
                   setRosters={setRosters}
-                  expandedPeriod={expandedPeriod}
-                  setExpandedPeriod={setExpandedPeriod}
-                  expandedStudents={expandedStudents}
-                  setExpandedStudents={setExpandedStudents}
-                  loadingExpandedStudents={loadingExpandedStudents}
-                  setLoadingExpandedStudents={setLoadingExpandedStudents}
-                  newPeriodName={newPeriodName}
-                  setNewPeriodName={setNewPeriodName}
-                  uploadingPeriod={uploadingPeriod}
-                  setUploadingPeriod={setUploadingPeriod}
-                  newStudent={newStudent}
-                  setNewStudent={setNewStudent}
-                  addingStudent={addingStudent}
-                  setAddingStudent={setAddingStudent}
-                  editingStudentId={editingStudentId}
-                  setEditingStudentId={setEditingStudentId}
-                  editStudentData={editStudentData}
-                  setEditStudentData={setEditStudentData}
                   studentAccommodations={studentAccommodations}
                   setStudentAccommodations={setStudentAccommodations}
-                  selectedAccommodationPresets={selectedAccommodationPresets}
-                  setSelectedAccommodationPresets={setSelectedAccommodationPresets}
-                  accommodationCustomNotes={accommodationCustomNotes}
-                  setAccommodationCustomNotes={setAccommodationCustomNotes}
-                  accommodationModal={accommodationModal}
-                  setAccommodationModal={setAccommodationModal}
-                  accommEllLanguage={accommEllLanguage}
-                  setAccommEllLanguage={setAccommEllLanguage}
-                  accommSelectedStudents={accommSelectedStudents}
-                  setAccommSelectedStudents={setAccommSelectedStudents}
-                  accommPeriodFilter={accommPeriodFilter}
-                  setAccommPeriodFilter={setAccommPeriodFilter}
-                  accommStudentsList={accommStudentsList}
-                  setAccommStudentsList={setAccommStudentsList}
-                  studentHistoryList={studentHistoryList}
-                  setStudentHistoryList={setStudentHistoryList}
-                  studentHistoryLoading={studentHistoryLoading}
-                  setStudentHistoryLoading={setStudentHistoryLoading}
-                  selectedStudentHistory={selectedStudentHistory}
-                  setSelectedStudentHistory={setSelectedStudentHistory}
                   vportalEmail={vportalEmail}
                   setVportalEmail={setVportalEmail}
-                  vportalPassword={vportalPassword}
-                  setVportalPassword={setVportalPassword}
-                  vportalSaving={vportalSaving}
-                  setVportalSaving={setVportalSaving}
                   vportalConfigured={vportalConfigured}
                   setVportalConfigured={setVportalConfigured}
-                  syncingCloud={syncingCloud}
-                  setSyncingCloud={setSyncingCloud}
-                  parentContacts={parentContacts}
-                  setParentContacts={setParentContacts}
-                  parentContactMapping={parentContactMapping}
-                  setParentContactMapping={setParentContactMapping}
-                  uploadingParentContacts={uploadingParentContacts}
-                  setUploadingParentContacts={setUploadingParentContacts}
-                  customTools={customTools}
-                  setCustomTools={setCustomTools}
-                  newCustomTool={newCustomTool}
-                  setNewCustomTool={setNewCustomTool}
                   supportDocs={supportDocs}
                   setSupportDocs={setSupportDocs}
-                  uploadingDoc={uploadingDoc}
-                  setUploadingDoc={setUploadingDoc}
-                  newDocType={newDocType}
-                  setNewDocType={setNewDocType}
-                  newDocDescription={newDocDescription}
-                  setNewDocDescription={setNewDocDescription}
                   assessmentTemplates={assessmentTemplates}
                   setAssessmentTemplates={setAssessmentTemplates}
                   uploadingTemplate={uploadingTemplate}
                   setUploadingTemplate={setUploadingTemplate}
-                  addStudentModal={addStudentModal}
-                  setAddStudentModal={setAddStudentModal}
-                  rosterMappingModal={rosterMappingModal}
-                  setRosterMappingModal={setRosterMappingModal}
-                  focusImporting={focusImporting}
-                  setFocusImporting={setFocusImporting}
-                  focusImportProgress={focusImportProgress}
-                  setFocusImportProgress={setFocusImportProgress}
-                  importStudentData={importStudentData}
-                  setImportStudentData={setImportStudentData}
-                  exportStudentSearch={exportStudentSearch}
-                  setExportStudentSearch={setExportStudentSearch}
                   showOnboardingWizard={showOnboardingWizard}
                   setShowOnboardingWizard={setShowOnboardingWizard}
                   sortedPeriods={sortedPeriods}
