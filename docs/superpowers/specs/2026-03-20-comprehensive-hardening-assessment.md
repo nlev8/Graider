@@ -762,3 +762,41 @@ All three models verified the same facts firsthand — there is **no factual spl
 All three models recommend **continuing PlannerTab lesson/assessment** next (the warm cadence finishes the file toward a <3k-LOC target), **then pivoting to `SettingsTab.jsx`**. Caveat (Claude): lesson/assessment are the cross-coupled blocks (shared `lessonPlan`/`generatedAssignment`/`generatedAssessment`, question-editing, publish/share modals) — they genuinely decentralize state rather than just move JSX, so they warrant their own brainstorm and are higher-risk than the calendar/tools/dashboard slices. The Code-Quality dimension will not tick to 8 on PlannerTab alone; broader de-concentration (SettingsTab, and revisiting App.jsx) is required.
 
 **Honest note on the 3-model run:** Gemini's first invocation failed (untrusted-workspace, exit 55) and was re-run with `GEMINI_CLI_TRUST_WORKSPACE=true --skip-trust`; both Codex and Gemini then completed cleanly. No model failed-to-run in the final tally; the split is a genuine judgment difference, resolved conservatively.
+
+---
+
+# 2026-05-23 PlannerTab lesson + assessment extraction closeout (PR #463 + #465 + #467)
+
+Wave 3 slices 4–6, the final and hardest part of the PlannerTab decomposition — the cross-coupled `lesson` and `assessment` mode blocks. Brainstormed via `superpowers:brainstorming`, planned via `superpowers:writing-plans` (3-PR plan), executed subagent-driven with two-stage review. Specs/plan: `docs/superpowers/specs/2026-05-22-plannertab-lesson-assessment-extraction-design.md` (+ plan). This closes the PlannerTab Code-Quality lever.
+
+## What shipped
+
+- **PR1 #463 — `useQuestionEditing` hook** (208 LOC). The shared question-editing cluster (4 state vars + 6 handlers) decentralized into `frontend/src/hooks/useQuestionEditing.js`; PlannerTab calls it **once** and forwards the bundle (single instance preserves cross-mode persistence). 5 audited inputs `{getActiveAssignment, setActiveAssignment, addToast, config, unitConfig}`; renderHook unit tests. The genuine state-decentralization win of this slice.
+- **PR2 #465 — `PlannerLesson.jsx`** (2,200 LOC) — the ~2,189-line lesson JSX, 69 forwarded props.
+- **PR3 #467 — `PlannerAssessment.jsx`** (1,633 LOC) — the ~1,621-line assessment JSX, 59 forwarded props.
+- **PlannerTab.jsx: 3,019 (post-PR1) → 1,453 LOC.** **Cumulative Wave 3 (calendar + tools + dashboard + lesson + assessment + hook): 7,405 → 1,453 LOC (−80%).** PlannerTab is now a thin orchestrator that owns shared App-state forwarding, the mode-nav, the trailing modals, the hook call, and renders the five mode components.
+
+## Design pivot recorded (3-model consensus)
+
+The original spec's "move the lesson/assessment local state + handlers INTO the components" design was **invalidated at PR2 implementation time**: the lesson state is woven through code that *stays* in PlannerTab — a subject-change `useEffect` writes `assignmentQuestionCounts`, and the globally-rendered Save Lesson modal uses `showSaveLesson`. Moving that state into the conditionally-rendered component breaks those staying consumers and resets state on mode-switch. This was a genuine design fork, decided by **3-model consultation (Claude + Codex + Gemini, unanimous on Option A)**: **pure-JSX presentational extraction** — move only the JSX, forward everything as props, keep all state/handlers/effects/modals in PlannerTab (the PlannerDashboard pattern at scale). Behavior-preserving; large flat prop surface accepted (prop-grouping deferred to preserve verbatim parity). Recorded in the spec's "Design correction" section.
+
+## Audit-method lessons (honest)
+
+The lesson slice exposed three scan pitfalls — each caught by the deterministic **free-variable scan** before any bug shipped, not by hand-reading:
+- The hook interface was corrected twice (9→10→5 inputs) — comment pollution, then a region-scan overshoot into the adjacent doc-upload cluster.
+- The prop-window for the destructure parse was cut off at the wrong line (94 vs the real 98), hiding ~40 real props as false "free variables".
+- A `handleDocUpload` span computation overshot to EOF, polluting the footprint with assessment/dashboard props.
+The durable takeaway: derive prop sets programmatically, and gate every component on a free-variable scan to **zero** undefined identifiers + signature==call-site equality. The deterministic gates (free-var scan, byte-for-byte JSX parity, full-suite, two-stage review) held despite the hand-scan slips.
+
+## Verification
+
+Per PR: Vite build clean, byte-for-byte normalized-JSX parity (lesson 2,189; assessment 1,621 — zero-diff), free-var scan zero, signature==call-site, full frontend suite **195 passed**, all 9 CI checks green, both spec-compliance and code-quality reviews passed. No `App.jsx` or backend change in any of the three PRs.
+
+## Follow-ups filed
+
+- **#464** — pre-existing `config.globalAINotes` regen bug surfaced (not introduced) by the hook extraction; deferred because the fix changes the regenerate request payload (behavior change).
+- **#466** — dead setter-props in PlannerTab's destructure after the extractions; cross-cutting (App + PlannerTab), deferred to a dedicated cleanup PR.
+
+## Next step
+
+The PlannerTab Code-Quality lever is closed (−80%). Per the post-Wave-3 re-score, PlannerTab alone does not move Code Quality 7 → 8 — the remaining concentrated-complexity levers are **`SettingsTab.jsx` (6,534 LOC)** and **`App.jsx` (7,144 LOC)**. A re-score is worth running now that PlannerTab is a 1.5k orchestrator, but the conservative expectation is it holds at 7 until SettingsTab/App.jsx are also de-concentrated. The dead-setter-props cleanup (#466) is a small in-PlannerTab follow-up.
