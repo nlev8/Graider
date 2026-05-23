@@ -800,3 +800,30 @@ Per PR: Vite build clean, byte-for-byte normalized-JSX parity (lesson 2,189; ass
 ## Next step
 
 The PlannerTab Code-Quality lever is closed (−80%). Per the post-Wave-3 re-score, PlannerTab alone does not move Code Quality 7 → 8 — the remaining concentrated-complexity levers are **`SettingsTab.jsx` (6,534 LOC)** and **`App.jsx` (7,144 LOC)**. A re-score is worth running now that PlannerTab is a 1.5k orchestrator, but the conservative expectation is it holds at 7 until SettingsTab/App.jsx are also de-concentrated. The dead-setter-props cleanup (#466) is a small in-PlannerTab follow-up.
+
+---
+
+# 2026-05-23 Post-full-PlannerTab-decomposition re-score (Code Quality 7 → 8)
+
+3-model reconciled re-score after the COMPLETE PlannerTab decomposition (Wave 3 slices 1–6: calendar/tools/dashboard/lesson/assessment + the `useQuestionEditing` hook all shipped and merged). Supersedes the 2026-05-22 re-score, which was taken mid-decomposition (PlannerTab 5,322 LOC, lesson/assessment still inline) and held at 7. Method: Claude (controller, first-hand), Codex (`codex exec`), Gemini (`gemini -p`); conservative-floor reconciliation.
+
+| Model | Code Quality | Recommendation |
+|---|---|---|
+| Claude | 7 (dissent) | SettingsTab; floor holds on multi-file concentration |
+| Codex | 8 | SettingsTab — largest remaining tab-level god-file |
+| Gemini | 8 | SettingsTab — decompose into focused sub-tabs |
+| **Reconciled** | **8** | SettingsTab.jsx next |
+
+## Verdict: Code Quality 7 → 8. Overall 7.8 → 7.9.
+
+The prior re-score's stated cap reason — "PlannerTab still carries inline lesson/assessment blocks" — is now closed with verified file:line evidence: `PlannerTab.jsx` 7,405 → 1,453 LOC (−80%), a thin orchestrator that renders five focused, independently-tested components (PlannerCalendar 735, PlannerTools 840, PlannerDashboard 577, PlannerLesson 2,200, PlannerAssessment 1,633) + `useQuestionEditing` (208). The single largest and most-cited frontend god-file is fully de-concentrated. Two models independently scored 8 on this basis; per the conservative floor's "strong disconfirming evidence" exception (the cap's specific cited reason is verifiably closed), the dimension moves to 8 — the mirror of how the floor resolves DOWN when the lower score's basis stands (e.g. the 2026-05-11 Architecture 7).
+
+**Claude's dissent (recorded):** Claude held 7 — the concentration is multi-file and the LOC was largely relocated into sibling components (PlannerLesson/PlannerAssessment are themselves 1.6–2.2k LOC) rather than eliminated, with App.jsx (7,144), SettingsTab.jsx (6,534), and assignment_grader.py (5,344) untouched. This is exactly why the reconcile stops at 8, not 9.
+
+## Path to 9 (remaining concentrated-complexity levers)
+
+Unanimous next lever: **SettingsTab.jsx (6,534 LOC)** — the largest remaining tab-level frontend god-file, cleanly decomposable into 7 focused section components (general / grading / ai / classroom / privacy / billing / resources — the same `settingsTab === "X"` pattern as PlannerTab's mode blocks). After that: App.jsx (7,144 — the app shell, already cut 57% in prior work), assignment_grader.py (5,344), and the backend route god-files (planner_routes.py 4,611, student_portal_routes.py 3,686). Reaching 9 needs broad de-concentration across these, not any single file.
+
+## Honest note
+
+Both Codex and Gemini completed cleanly (Gemini via `GEMINI_CLI_TRUST_WORKSPACE=true --skip-trust`). The 7-vs-8 split is a genuine judgment difference — does completely closing the single largest god-file warrant the point while others remain — resolved UP to 8 because the prior cap's specific reason is verifiably closed and two independent models concur with file:line evidence.
