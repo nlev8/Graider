@@ -9,7 +9,7 @@ const base = () => ({
   config: { ai_model: 'gpt-4o', assistant_model: 'gpt-4o', assistant_voice: 'alloy', ensemble_enabled: false, ensemble_models: [], extraction_mode: 'structured' },
   apiKeys: {},
   globalAINotes: '',
-  showApiKeys: false,
+  showApiKeys: { openai: false, anthropic: false, gemini: false },
   savingApiKeys: false,
   MODEL_COST_PER_ASSIGNMENT: {},
 });
