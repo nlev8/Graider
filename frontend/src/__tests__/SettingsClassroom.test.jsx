@@ -13,7 +13,7 @@ const base = () => ({
   ltiContexts: [],
   ltiPlatforms: [],
   ltiSyncScores: [],
-  cleverSelectedSections: [],
+  cleverSelectedSections: {},
   // structured objects
   cleverAccommSuggestions: {},
   cleverSyncResult: null,
