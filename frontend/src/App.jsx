@@ -55,7 +55,7 @@ import DataTablePreview from "./components/DataTablePreview";
 import OnboardingWizard from "./components/OnboardingWizard";
 import TutorialOverlay, { TUTORIAL_STEPS } from "./components/TutorialOverlay";
 import HelpTab from "./components/HelpTab";
-import { AuthLoadingScreen, ApprovalPendingScreen, NotApprovedScreen } from "./components/AuthScreens";
+import { AuthLoadingScreen, ApprovalCheckingScreen, NotApprovedScreen } from "./components/AuthScreens";
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
 import { checkRequirementsMismatch } from "./utils/standardsMismatch";
 import BuilderTab from "./tabs/BuilderTab";
@@ -3943,7 +3943,7 @@ ${signature}`;
 
   if (userApproved === null) {
     // Still checking approval — show spinner instead of briefly flashing the app
-    return <ApprovalPendingScreen />;
+    return <ApprovalCheckingScreen />;
   }
 
   if (userApproved === false) {

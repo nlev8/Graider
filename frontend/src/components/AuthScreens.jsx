@@ -1,5 +1,11 @@
 import React from "react";
 
+/*
+ * Auth-gate early-return screens rendered by App's auth gate (App.jsx).
+ * Pure render, no app state: AuthLoadingScreen (auth check in flight),
+ * ApprovalCheckingScreen (userApproved === null, status check in flight),
+ * NotApprovedScreen (userApproved === false, account pending admin approval).
+ */
 export function AuthLoadingScreen() {
   return (
       <div style={{
@@ -14,7 +20,7 @@ export function AuthLoadingScreen() {
   );
 }
 
-export function ApprovalPendingScreen() {
+export function ApprovalCheckingScreen() {
   return (
       <div style={{
         minHeight: '100vh',
