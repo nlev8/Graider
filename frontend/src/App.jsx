@@ -66,6 +66,7 @@ import EmailPreviewModal from "./components/EmailPreviewModal";
 import DocumentEditorModal from "./components/DocumentEditorModal";
 import ReviewModal from "./components/ReviewModal";
 import Sidebar from "./components/Sidebar";
+import { useSubscription } from "./hooks/useSubscription";
 const AnalyticsTab = React.lazy(() => import("./tabs/AnalyticsTab"));
 var AdminTab = React.lazy(function() { return import("./tabs/AdminTab"); });
 
@@ -826,8 +827,7 @@ function App() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [settingsTab, setSettingsTab] = useState("general"); // general, grading, classroom, integration, privacy, billing
-  const [subscription, setSubscription] = useState(null);
-  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const { subscription, setSubscription, subscriptionLoading, setSubscriptionLoading } = useSubscription(settingsTab);
   // Resizable column widths for Results table (in px, initialized on first render)
   const [colWidths, setColWidths] = useState(null);
   const tableRef = useRef(null);
@@ -1640,15 +1640,6 @@ function App() {
     }
   }, [settingsLoaded]);
 
-  // Load subscription status when Billing tab is selected
-  useEffect(() => {
-    if (settingsTab !== "billing") return;
-    setSubscriptionLoading(true);
-    api.getSubscriptionStatus()
-      .then((res) => { if (!res.error) setSubscription(res); })
-      .catch(() => {})
-      .finally(() => setSubscriptionLoading(false));
-  }, [settingsTab]);
 
   // Handle Stripe redirect URL params (?billing=success or ?billing=cancel)
   useEffect(() => {
