@@ -10,6 +10,14 @@ import SettingsPrivacy from "../components/SettingsPrivacy";
 import SettingsResources from "../components/SettingsResources";
 import SettingsClassroom from "../components/SettingsClassroom";
 
+/*
+ * SettingsTab — the Settings dashboard tab. Owns the settings-domain UI state
+ * (37 vars pushed down from the App.jsx shell in the App.jsx-decomposition slice 3:
+ * accommodation/student-management/roster-import/api-key/vPortal/doc state) declared as
+ * useState in the body below, and forwards them to its presentational children
+ * (SettingsGeneral/Grading/AI/Classroom/Privacy/Billing/Resources). Remaining props are
+ * cross-tab/shared state still owned by App (e.g. config, rubric, periods, roster/SIS).
+ */
 export default React.memo(function SettingsTab({
   settingsTab,
   setSettingsTab,
@@ -21,12 +29,6 @@ export default React.memo(function SettingsTab({
   setGlobalAINotes,
   apiKeys,
   setApiKeys,
-  showApiKeys,
-  setShowApiKeys,
-  savingApiKeys,
-  setSavingApiKeys,
-  costSummary,
-  setCostSummary,
   subscription,
   setSubscription,
   subscriptionLoading,
@@ -35,90 +37,18 @@ export default React.memo(function SettingsTab({
   setPeriods,
   rosters,
   setRosters,
-  expandedPeriod,
-  setExpandedPeriod,
-  expandedStudents,
-  setExpandedStudents,
-  loadingExpandedStudents,
-  setLoadingExpandedStudents,
-  newPeriodName,
-  setNewPeriodName,
-  uploadingPeriod,
-  setUploadingPeriod,
-  newStudent,
-  setNewStudent,
-  addingStudent,
-  setAddingStudent,
-  editingStudentId,
-  setEditingStudentId,
-  editStudentData,
-  setEditStudentData,
   studentAccommodations,
   setStudentAccommodations,
-  selectedAccommodationPresets,
-  setSelectedAccommodationPresets,
-  accommodationCustomNotes,
-  setAccommodationCustomNotes,
-  accommodationModal,
-  setAccommodationModal,
-  accommEllLanguage,
-  setAccommEllLanguage,
-  accommSelectedStudents,
-  setAccommSelectedStudents,
-  accommPeriodFilter,
-  setAccommPeriodFilter,
-  accommStudentsList,
-  setAccommStudentsList,
-  studentHistoryList,
-  setStudentHistoryList,
-  studentHistoryLoading,
-  setStudentHistoryLoading,
-  selectedStudentHistory,
-  setSelectedStudentHistory,
   vportalEmail,
   setVportalEmail,
-  vportalPassword,
-  setVportalPassword,
-  vportalSaving,
-  setVportalSaving,
   vportalConfigured,
   setVportalConfigured,
-  syncingCloud,
-  setSyncingCloud,
-  parentContacts,
-  setParentContacts,
-  parentContactMapping,
-  setParentContactMapping,
-  uploadingParentContacts,
-  setUploadingParentContacts,
-  customTools,
-  setCustomTools,
-  newCustomTool,
-  setNewCustomTool,
   supportDocs,
   setSupportDocs,
-  uploadingDoc,
-  setUploadingDoc,
-  newDocType,
-  setNewDocType,
-  newDocDescription,
-  setNewDocDescription,
   assessmentTemplates,
   setAssessmentTemplates,
   uploadingTemplate,
   setUploadingTemplate,
-  addStudentModal,
-  setAddStudentModal,
-  rosterMappingModal,
-  setRosterMappingModal,
-  focusImporting,
-  setFocusImporting,
-  focusImportProgress,
-  setFocusImportProgress,
-  importStudentData,
-  setImportStudentData,
-  exportStudentSearch,
-  setExportStudentSearch,
   showOnboardingWizard,
   setShowOnboardingWizard,
   // PR 4 of the Grade tab extraction sprint deleted the dead pass-through of
@@ -130,6 +60,60 @@ export default React.memo(function SettingsTab({
   MODEL_COST_PER_ASSIGNMENT,
   addToast,
 }) {
+  const [accommEllLanguage, setAccommEllLanguage] = useState("");
+  const [accommPeriodFilter, setAccommPeriodFilter] = useState("");
+  const [accommSelectedStudents, setAccommSelectedStudents] = useState({});
+  const [accommStudentsList, setAccommStudentsList] = useState([]);
+  const [accommodationCustomNotes, setAccommodationCustomNotes] = useState("");
+  const [accommodationModal, setAccommodationModal] = useState({
+    show: false,
+    studentId: null,
+  });
+  const [addStudentModal, setAddStudentModal] = useState({
+    show: false,
+    loading: false,
+    image: null,
+    student: null,
+    error: null,
+  });
+  const [addingStudent, setAddingStudent] = useState(false);
+  const [costSummary, setCostSummary] = useState(null);
+  const [editStudentData, setEditStudentData] = useState({});
+  const [editingStudentId, setEditingStudentId] = useState(null);
+  const [expandedPeriod, setExpandedPeriod] = useState(null);
+  const [expandedStudents, setExpandedStudents] = useState([]);
+  const [exportStudentSearch, setExportStudentSearch] = useState({ active: false, query: "", results: [], allStudents: [] });
+  const [focusImportProgress, setFocusImportProgress] = useState("");
+  const [focusImporting, setFocusImporting] = useState(false);
+  const [importStudentData, setImportStudentData] = useState({ active: false, preview: null, file: null, importing: false, selectedPeriod: "" });
+  const [loadingExpandedStudents, setLoadingExpandedStudents] = useState(false);
+  const [newDocDescription, setNewDocDescription] = useState("");
+  const [newDocType, setNewDocType] = useState("curriculum");
+  const [newPeriodName, setNewPeriodName] = useState("");
+  const [newStudent, setNewStudent] = useState({ name: '', student_id: '', grade: '', parent_emails: '', parent_phones: '' });
+  const [parentContactMapping, setParentContactMapping] = useState({ show: false, preview: null, mapping: null });
+  const [parentContacts, setParentContacts] = useState(null);
+  const [rosterMappingModal, setRosterMappingModal] = useState({
+    show: false,
+    roster: null,
+  });
+  const [savingApiKeys, setSavingApiKeys] = useState(false);
+  const [selectedAccommodationPresets, setSelectedAccommodationPresets] =
+    useState([]);
+  const [selectedStudentHistory, setSelectedStudentHistory] = useState(null);
+  const [showApiKeys, setShowApiKeys] = useState({
+    openai: false,
+    anthropic: false,
+    gemini: false,
+  });
+  const [studentHistoryList, setStudentHistoryList] = useState([]);
+  const [studentHistoryLoading, setStudentHistoryLoading] = useState(false);
+  const [syncingCloud, setSyncingCloud] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadingParentContacts, setUploadingParentContacts] = useState(false);
+  const [uploadingPeriod, setUploadingPeriod] = useState(false);
+  const [vportalPassword, setVportalPassword] = useState("");
+  const [vportalSaving, setVportalSaving] = useState(false);
   const periodInputRef = useRef(null);
   const parentContactsInputRef = useRef(null);
   const supportDocInputRef = useRef(null);
