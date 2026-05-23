@@ -6,9 +6,8 @@ import SettingsResources from '../components/SettingsResources';
 vi.mock('../services/api', () => new Proxy({}, { get: () => vi.fn().mockResolvedValue({}) }));
 
 const base = () => ({
-  rubric: { categories: [], gradingStyle: 'standard' },
   supportDocs: [],
-  newDocType: '',
+  newDocType: 'curriculum',
   newDocDescription: '',
   uploadingDoc: false,
   supportDocInputRef: { current: null },
