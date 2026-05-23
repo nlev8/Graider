@@ -827,3 +827,41 @@ Unanimous next lever: **SettingsTab.jsx (6,534 LOC)** — the largest remaining 
 ## Honest note
 
 Both Codex and Gemini completed cleanly (Gemini via `GEMINI_CLI_TRUST_WORKSPACE=true --skip-trust`). The 7-vs-8 split is a genuine judgment difference — does completely closing the single largest god-file warrant the point while others remain — resolved UP to 8 because the prior cap's specific reason is verifiably closed and two independent models concur with file:line evidence.
+
+---
+
+# 2026-05-23 SettingsTab decomposition closeout (Wave 4, PRs #471–#475)
+
+Wave 4 — the `frontend/src/tabs/SettingsTab.jsx` Code-Quality concentrated-complexity lever, the **unanimous next target** named by the 2026-05-23 post-full-PlannerTab re-score (`#469`) above. Brainstormed via `superpowers:brainstorming` (per-section pure-forward shape, 3-model-validated no-hook), planned via `superpowers:writing-plans` (5-PR plan), executed subagent-driven with two-stage review per PR. Spec/plan: `docs/superpowers/specs/2026-05-23-settingstab-decomposition-design.md` (+ matching plan), shipped as docs PR #470.
+
+## What shipped
+
+Seven focused, independently-tested **presentational** components extracted from the `settingsTab === "X"` section blocks, **pure-forward**: move ONLY the section JSX, forward every referenced value/handler/ref as a prop (programmatic derivation so signature == call site), keep ALL state/effects/modals declared in SettingsTab.
+
+- **PR1 #471** — `SettingsGeneral` (19 props), `SettingsGrading` (4), `SettingsBilling` (9). 6,534 → 5,717 LOC (−817).
+- **PR2 #472** — `SettingsAI` (12 props): grading/assistant model select, ensemble config, OpenAI/Anthropic/Gemini API keys, global AI notes. 5,717 → 4,957 (−760).
+- **PR3 #473** — `SettingsPrivacy` (15 props): student-data export/import, student history + detail modal, retention/trusted-writers; forwards `importFileRef`. 4,957 → 3,948 (−1,009).
+- **PR4 #474** — `SettingsResources` (10 props): support-doc upload list + new-doc form; forwards `supportDocInputRef`. 3,948 → 3,773 (−175).
+- **PR5 #475** — `SettingsClassroom` (99 props, ~2,298 lines, the largest section): periods/roster, Clever + OneRoster + LTI SIS integrations, accommodations, parent contacts; forwards 4 parent-body closures (`activeProvider`, `isCleverUser`, `periodInputRef`, `parentContactsInputRef`). 3,773 → 1,576 (−2,196).
+- **Cumulative: `SettingsTab.jsx` 6,534 → 1,576 LOC (−76%).** Now a thin orchestrator: tab-nav + the 7 section conditionals + retained state/effects + the cross-section modals. Component LOC: General 376, Grading 256, Billing 248, AI 784, Privacy 1,036, Resources 197, Classroom 2,307. Frontend suite 195 → 202 (one smoke test per component).
+
+## Extraction shape (pure-forward, behavior-preserving)
+
+Option A pure-forward — the proven `PlannerLesson`/`PlannerDashboard`/`PlannerAssessment` pattern. SettingsTab was the cleanest variant of it (no section-local state needing move-in for the small sections, no trailing modals tied to a single section, so no shared hook was required — confirmed in the brainstorm by 3-model validation). Parent-body refs and derived consts referenced by a section (`importFileRef`, `supportDocInputRef`, `activeProvider`, `isCleverUser`, `periodInputRef`, `parentContactsInputRef`) are **forwarded as props by identity**; their declarations stay in SettingsTab so any staying consumers and the cross-section modals are unaffected.
+
+## Why this was safe (deterministic gates, every slice)
+
+- **Byte-for-byte whitespace-normalized JSX parity** for every section (the spec reviewers independently confirmed several were byte-for-byte identical, stronger than normalized).
+- **Free-variable scan to zero** undefined identifiers + an explicit **parent-body-closure cross-check** (every referenced closure verified forwarded, none left free).
+- **Neighbor-context dead-prop gate** — added mid-series after the PR4 review caught a string-literal false-forward; it removed props the regex deriver matched only in prose/strings/comments: `periods` (PR2 prose), `rubric` (PR4 `value="rubric"`), and `config`/`periods`/`rosters` (PR5 — the section renders `sortedPeriods`). The assembler was also hardened to auto-forward parent-body closures and to recognize `function(...)` callback params.
+- Per-component Proxy-`makeProps` **smoke test**; Vite **build**; **full frontend suite** (202); all **9 CI checks**; Playwright **E2E**.
+- **Two-stage subagent review per PR** (spec-compliance, then code-quality); all 5 PRs approved with no Critical/Important issues. Each PR re-audited its section boundaries (line numbers drift as prior slices merge) and branched off freshly-merged `main`.
+
+## Follow-ups (recorded, out of scope)
+
+- **`SettingsClassroom` further sub-division** — at 2,307 LOC / 99 props it is now the strongest remaining single-component candidate; it cleanly contains five independent sub-panels (Clever / OneRoster / LTI / periods+roster / accommodations) that share almost no props. Splitting them would shrink each child's prop list and roughly halve the largest file, but it would break this series' byte-for-byte parity guarantee, so it is sequenced as its own later slice.
+- **Pre-existing latent no-op** at `SettingsPrivacy.jsx` (`(status.results || [])` where `status` resolves to the browser global `window.status`, so the trusted-writers name-lookup is always a silent no-op) — surfaced in the PR3 spec review, **byte-identical to base**, deferred (fixing it would have broken PR3 parity).
+
+## Dimension effect
+
+Per established convention, **no dimension score is asserted in this closeout**; a 3-model reconciled re-score is the deferred judgment step and appends as its own dated section. The `#469` re-score put **Code Quality at 8** with SettingsTab as the named lever; this **closes that lever**. The honest question the re-score will weigh: does de-concentrating the largest remaining tab-level frontend god-file (6,534 → 1,576, −76%, into 7 tested components) move Code Quality **8 → 9**, or hold at 8 given that `App.jsx` (7,144), `assignment_grader.py` (5,344), and the backend route god-files (`planner_routes.py` 4,611, `student_portal_routes.py` 3,686) remain concentrated — reaching 9 needs broad de-concentration across these, not any single file.
