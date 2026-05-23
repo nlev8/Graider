@@ -11,7 +11,7 @@ const base = () => ({
   studentHistoryList: [],
   studentHistoryLoading: false,
   selectedStudentHistory: null,
-  exportStudentSearch: '',
+  exportStudentSearch: { active: false, query: '', results: [], allStudents: [] },
   importStudentData: { active: false, preview: null, file: null, importing: false, selectedPeriod: '' },
   importFileRef: { current: null },
 });
