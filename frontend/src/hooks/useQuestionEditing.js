@@ -2,9 +2,7 @@ import { useState } from "react";
 import * as api from "../services/api";
 
 export function useQuestionEditing({
-  getActiveAssignment, setActiveAssignment,
-  addToast, config, unitConfig, globalAINotes,
-  standards, selectedStandards, uploadedDocs, setUploadedDocs,
+  getActiveAssignment, setActiveAssignment, addToast, config, unitConfig,
 }) {
   const [editMode, setEditMode] = useState(false);
   const [selectedQuestions, setSelectedQuestions] = useState(new Set());

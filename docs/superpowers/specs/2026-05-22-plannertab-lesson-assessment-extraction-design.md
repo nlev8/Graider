@@ -40,8 +40,7 @@ import * as api from "../services/api";
 
 export function useQuestionEditing({
   getActiveAssignment, setActiveAssignment,
-  addToast, config, unitConfig, globalAINotes,
-  standards, selectedStandards, uploadedDocs, setUploadedDocs,
+  addToast, config, unitConfig,
 }) {
   const [editMode, setEditMode] = useState(false);
   const [selectedQuestions, setSelectedQuestions] = useState(new Set());
@@ -67,7 +66,7 @@ export function useQuestionEditing({
     editingQuestion, setEditingQuestion, regeneratingQuestions, setRegeneratingQuestions,
     toggleQuestionSelect, selectAllQuestions, saveEditedQuestion,
     deleteSelectedQuestions, regenerateSelectedQuestions, regenerateOneQuestion,
-  } = useQuestionEditing({ getActiveAssignment, setActiveAssignment, addToast, config, unitConfig, globalAINotes, standards, selectedStandards, uploadedDocs, setUploadedDocs });
+  } = useQuestionEditing({ getActiveAssignment, setActiveAssignment, addToast, config, unitConfig });
   ```
   The lesson + assessment blocks are **untouched** (same bare identifiers, now sourced from the hook). `sectionsDropdownOpen` and `publishAssessmentHandler` stay in PlannerTab (not part of this hook).
 - **Test:** `frontend/src/hooks/__tests__/useQuestionEditing.test.js` (or alongside existing test convention) — unit tests via `@testing-library/react`'s `renderHook`: `toggleQuestionSelect` toggles a key; `selectAllQuestions` selects across sections of a stub active assignment; `saveEditedQuestion` calls `setActiveAssignment` with the edit applied; `regenerateOneQuestion`/`regenerateSelectedQuestions` call `api.regenerateQuestions` (mocked) and write back via `setActiveAssignment`. This is the new independently-testable surface.
@@ -110,7 +109,7 @@ export function useQuestionEditing({
 | Risk | Mitigation |
 |---|---|
 | QE state resets on mode-switch (behavior change) | Single hook instance in PlannerTab, bundle forwarded to both (§3). |
-| A handler captures a PlannerTab value not passed as a hook input | Audited: the 6 handlers' deps are exactly the 10 inputs + `api`; no other closures. Re-verify in PR1. |
+| A handler captures a PlannerTab value not passed as a hook input | Audited: the 6 handlers' deps are exactly the 5 inputs + `api`; no other closures. Re-verify in PR1. |
 | Missed prop/closure when extracting the components (runtime error) | Per-PR exhaustive free-identifier scan (props/imports/parent-body closures) + programmatic prop derivation + free-var scan of the new component + two-stage review. |
 | Large mechanical edit times out a subagent | Controller-run assertion-guarded assembly/anchor scripts (the proven calendar/tools/dashboard method); subagents do review only. |
 | Not a verbatim JSX move | Whitespace-normalized parity diff per component PR. |

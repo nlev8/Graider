@@ -620,7 +620,6 @@ export default function PlannerTab(props) {
     deleteSelectedQuestions, regenerateSelectedQuestions, regenerateOneQuestion,
   } = useQuestionEditing({
     getActiveAssignment, setActiveAssignment, addToast, config, unitConfig,
-    globalAINotes, standards, selectedStandards, uploadedDocs, setUploadedDocs,
   });
   const [sectionsDropdownOpen, setSectionsDropdownOpen] = useState(false);
 

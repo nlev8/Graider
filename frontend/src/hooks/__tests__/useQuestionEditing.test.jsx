@@ -2,23 +2,22 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { useQuestionEditing } from '../useQuestionEditing';
 
+// The handlers consume `data.replacements` (the backend's shape), not `data.questions`.
 vi.mock('../../services/api', () => ({
-  regenerateQuestions: vi.fn().mockResolvedValue({ questions: [{ question: 'regenerated' }] }),
+  regenerateQuestions: vi.fn().mockResolvedValue({
+    replacements: [{ section_index: 0, question_index: 0, question: { question: 'regenerated', points: 1 } }],
+    usage: { cost_display: null },
+  }),
 }));
 
 const makeInputs = (over = {}) => ({
   getActiveAssignment: vi.fn(() => ({
-    sections: [{ name: 'S1', questions: [{ question: 'q1' }, { question: 'q2' }] }],
+    sections: [{ name: 'S1', points: 2, questions: [{ question: 'q1', points: 1 }, { question: 'q2', points: 1 }] }],
   })),
   setActiveAssignment: vi.fn(),
   addToast: vi.fn(),
   config: { ai_model: 'gpt-4o', subject: 'Math', grade_level: '8' },
   unitConfig: {},
-  globalAINotes: '',
-  standards: [],
-  selectedStandards: [],
-  uploadedDocs: [],
-  setUploadedDocs: vi.fn(),
   ...over,
 });
 
@@ -40,14 +39,16 @@ describe('useQuestionEditing', () => {
   it('saveEditedQuestion writes the active assignment back via setActiveAssignment', () => {
     const setActiveAssignment = vi.fn();
     const { result } = renderHook(() => useQuestionEditing(makeInputs({ setActiveAssignment })));
-    act(() => result.current.saveEditedQuestion(0, 0, { question: 'edited' }));
+    act(() => result.current.saveEditedQuestion(0, 0, { question: 'edited', points: 1 }));
     expect(setActiveAssignment).toHaveBeenCalled();
   });
 
-  it('regenerateOneQuestion calls api.regenerateQuestions', async () => {
+  it('regenerateOneQuestion calls api.regenerateQuestions and writes the result back', async () => {
     const api = await import('../../services/api');
-    const { result } = renderHook(() => useQuestionEditing(makeInputs()));
+    const setActiveAssignment = vi.fn();
+    const { result } = renderHook(() => useQuestionEditing(makeInputs({ setActiveAssignment })));
     await act(async () => { await result.current.regenerateOneQuestion(0, 0); });
     expect(api.regenerateQuestions).toHaveBeenCalled();
+    expect(setActiveAssignment).toHaveBeenCalled();
   });
 });

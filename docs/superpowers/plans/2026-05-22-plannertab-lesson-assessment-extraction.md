@@ -40,7 +40,7 @@ Handler signatures (verified): `toggleQuestionSelect(qKey)`, `selectAllQuestions
 ### Task 1: Pre-flight audit (controller, read-only)
 
 - [ ] **Step 1:** Confirm branch (impl PR1 branch off `main`).
-- [ ] **Step 2:** Re-confirm the 6 handler bodies' external dependencies are exactly `{getActiveAssignment, setActiveAssignment, addToast, config, unitConfig, globalAINotes, standards, selectedStandards, uploadedDocs, setUploadedDocs}` + `api.regenerateQuestions` + the 4 own state setters, and that they call no other PlannerTab closures (they may call each other — fine, both in the hook):
+- [ ] **Step 2:** Re-confirm the 6 handler bodies' external dependencies are exactly `{getActiveAssignment, setActiveAssignment, addToast, config, unitConfig}` + `api.regenerateQuestions` + the 4 own state setters, and that they call no other PlannerTab closures (they may call each other — fine, both in the hook):
 ```bash
 cd /Users/alexc/Downloads/Graider/frontend/src/tabs
 python3 - <<'PY'
@@ -59,7 +59,7 @@ print("props used:", sorted(p for p in props if p in ids))
 print("api.*:", sorted(set(re.findall(r'\bapi\.(\w+)',body))))
 PY
 ```
-Expected: props used ⊆ the 10 inputs (plus possibly others — if any NEW prop appears, add it to the hook inputs); `api.*` = `['regenerateQuestions']`. No commit.
+Expected: props used ⊆ the 5 inputs (plus possibly others — if any NEW prop appears, add it to the hook inputs); `api.*` = `['regenerateQuestions']`. No commit.
 
 ### Task 2: Write the failing hook test
 
@@ -134,8 +134,7 @@ import * as api from "../services/api";
 
 export function useQuestionEditing({
   getActiveAssignment, setActiveAssignment,
-  addToast, config, unitConfig, globalAINotes,
-  standards, selectedStandards, uploadedDocs, setUploadedDocs,
+  addToast, config, unitConfig,
 }) {
   const [editMode, setEditMode] = useState(false);
   const [selectedQuestions, setSelectedQuestions] = useState(new Set());
@@ -166,16 +165,16 @@ Copy the 6 handler bodies verbatim from the current PlannerTab (the Task-1 regio
     deleteSelectedQuestions, regenerateSelectedQuestions, regenerateOneQuestion,
   } = useQuestionEditing({
     getActiveAssignment, setActiveAssignment, addToast, config, unitConfig,
-    globalAINotes, standards, selectedStandards, uploadedDocs, setUploadedDocs,
+    
   });
 ```
 The lesson + assessment blocks are **untouched** (same bare names).
 
 - [ ] **Step 3:** Run the hook test → PASS: `cd frontend && npx vitest run src/hooks/__tests__/useQuestionEditing.test.js` → 4 passed.
-- [ ] **Step 4:** Build + full suite: `cd frontend && npm run build` (clean) + `npx vitest run` (all pass, count = floor + 4). If build/`X is not defined`: a handler referenced a value not in the 10 inputs — add it to the hook inputs + the call (do not guess; trace it).
+- [ ] **Step 4:** Build + full suite: `cd frontend && npm run build` (clean) + `npx vitest run` (all pass, count = floor + 4). If build/`X is not defined`: a handler referenced a value not in the 5 inputs — add it to the hook inputs + the call (do not guess; trace it).
 - [ ] **Step 5:** Confirm removal: `grep -nE "const \[(editMode|selectedQuestions|editingQuestion|regeneratingQuestions)|const (toggleQuestionSelect|saveEditedQuestion|regenerateOneQuestion)" frontend/src/tabs/PlannerTab.jsx` → EMPTY. `grep -c "useQuestionEditing" frontend/src/tabs/PlannerTab.jsx` → 2 (import + call).
 - [ ] **Step 6:** Commit (hook + test + PlannerTab); discard `backend/static` (`git restore backend/static && git clean -fd backend/static`).
-- [ ] **Step 7:** Two-stage review (spec-compliance: verbatim handler move + single call + 10 inputs + blocks untouched; then code-quality). Fix findings.
+- [ ] **Step 7:** Two-stage review (spec-compliance: verbatim handler move + single call + 5 inputs + blocks untouched; then code-quality). Fix findings.
 - [ ] **Step 8:** Push, open PR1, watch the 9 CI checks, merge when green.
 
 ---
