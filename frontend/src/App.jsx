@@ -67,6 +67,7 @@ import DocumentEditorModal from "./components/DocumentEditorModal";
 import ReviewModal from "./components/ReviewModal";
 import Sidebar from "./components/Sidebar";
 import { useSubscription } from "./hooks/useSubscription";
+import { useFocusPolling } from "./hooks/useFocusPolling";
 const AnalyticsTab = React.lazy(() => import("./tabs/AnalyticsTab"));
 var AdminTab = React.lazy(function() { return import("./tabs/AdminTab"); });
 
@@ -556,15 +557,11 @@ function App() {
   const [vportalConfigured, setVportalConfigured] = useState(false);
   const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
   const [outlookSendPolling, setOutlookSendPolling] = useState(false);
-  const [focusCommsStatus, setFocusCommsStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, skipped: 0, message: "" });
-  const [focusCommsPolling, setFocusCommsPolling] = useState(false);
   const [pendingConfirmations, setPendingConfirmations] = useState(0);
   const [pendingConfirmationStudents, setPendingConfirmationStudents] = useState([]);
   const [confirmationStudentFilter, setConfirmationStudentFilter] = useState("");
   const pendingConfirmationIds = useRef([]);
   const pendingConfirmationFilenames = useRef([]);
-  const [focusCommentsStatus, setFocusCommentsStatus] = useState({ status: "idle", entered: 0, total: 0, failed: 0, message: "" });
-  const [focusCommentsPolling, setFocusCommentsPolling] = useState(false);
 
   // Available EdTech tools that can be selected
   const EDTECH_TOOLS = [
@@ -936,6 +933,11 @@ function App() {
     }
     return id; // Return ID so caller can remove it later
   };
+
+  const {
+    focusCommsStatus, setFocusCommsStatus, focusCommsPolling, setFocusCommsPolling,
+    focusCommentsStatus, setFocusCommentsStatus, focusCommentsPolling, setFocusCommentsPolling,
+  } = useFocusPolling(addToast);
 
   const removeToast = (id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -2018,45 +2020,7 @@ function App() {
     return function() { clearInterval(interval); };
   }, [outlookSendPolling]);
 
-  // Focus comms polling
-  useEffect(() => {
-    if (!focusCommsPolling) return;
-    var interval = setInterval(async function() {
-      try {
-        var data = await api.getFocusCommsStatus();
-        setFocusCommsStatus(data);
-        if (data.status === "done" || data.status === "error" || data.status === "idle") {
-          setFocusCommsPolling(false);
-          if (data.status === "done") {
-            addToast("Focus: Sent " + data.sent + " of " + data.total + " messages" + (data.failed > 0 ? " (" + data.failed + " failed)" : ""), data.failed > 0 ? "warning" : "success");
-          }
-        }
-      } catch (err) {
-        // ignore polling errors
-      }
-    }, 2000);
-    return function() { clearInterval(interval); };
-  }, [focusCommsPolling]);
 
-  // Focus comments upload polling
-  useEffect(() => {
-    if (!focusCommentsPolling) return;
-    var interval = setInterval(async function() {
-      try {
-        var data = await api.getFocusCommentsStatus();
-        setFocusCommentsStatus(data);
-        if (data.status === "done" || data.status === "error" || data.status === "idle") {
-          setFocusCommentsPolling(false);
-          if (data.status === "done") {
-            addToast("Focus: Entered " + data.entered + " comments" + (data.failed > 0 ? " (" + data.failed + " failed)" : "") + (data.skipped > 0 ? " (" + data.skipped + " skipped)" : ""), data.failed > 0 ? "warning" : "success");
-          }
-        }
-      } catch (err) {
-        // ignore polling errors
-      }
-    }, 2000);
-    return function() { clearInterval(interval); };
-  }, [focusCommentsPolling]);
 
   // Auto-scroll log + auto-expand-on-error effects moved into tabs/GradeTab.jsx
   // (with logRef and showActivityLog state) in PR 2 of the Grade tab extraction sprint.
