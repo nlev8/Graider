@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import Icon from "../components/Icon";
 import * as api from "../services/api";
 
@@ -11,7 +11,7 @@ import * as api from "../services/api";
  *   - assignment, setAssignment
  *   - savedAssignments, setSavedAssignments (setSavedAssignments not directly used but kept for consistency)
  *   - savedAssignmentData, setSavedAssignmentData
- *   - savedAssignmentsExpanded, setSavedAssignmentsExpanded
+ *   (savedAssignmentsExpanded is now BuilderTab-owned local state, pushed down from App.jsx)
  *   - loadedAssignmentName, setLoadedAssignmentName
  *   - isLoadingAssignment, setIsLoadingAssignment
  *   - importedDoc, setImportedDoc
@@ -55,8 +55,6 @@ export default React.memo(function BuilderTab({
   savedAssignments,
   savedAssignmentData,
   setSavedAssignmentData,
-  savedAssignmentsExpanded,
-  setSavedAssignmentsExpanded,
   loadedAssignmentName,
   setLoadedAssignmentName,
   isLoadingAssignment,
@@ -95,6 +93,7 @@ export default React.memo(function BuilderTab({
   textToRichHtml,
   markerLibrary,
 }) {
+  const [savedAssignmentsExpanded, setSavedAssignmentsExpanded] = useState(false);
   return (
                 <div data-tutorial="builder-card" className="fade-in">
                   {/* Saved Assignments - Collapsible */}
