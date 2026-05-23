@@ -126,3 +126,17 @@ export function useQuestionEditing({
 - Prior Wave 3 slices: calendar (#456), tools (#458), dashboard (#459); closeouts #457/#460; post-Wave-3 re-score #461 (Code Quality held 7, recommended continue lesson/assessment then SettingsTab).
 - Canonical scorecard: `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`.
 - Prior phase plan: `docs/superpowers/plans/2026-05-04-planner-tab-extraction.md` (flagged question-editing as cross-cutting over lessonPlan/generatedAssignment/generatedAssessment).
+
+---
+
+## Design correction (2026-05-22, during PR2): Option A pure-forward — 3-model consensus
+
+PR2's implementation-time audit invalidated this spec's original "move 12 lesson-local state vars + 5 handlers INTO PlannerLesson" design. The lesson state is **not** cleanly local — it is woven through code that **stays** in PlannerTab: a subject-change `useEffect` writes `assignmentQuestionCounts`, and the globally-rendered "Save Lesson" modal (bottom of PlannerTab) uses `showSaveLesson`. Moving that state into the conditionally-rendered component breaks those staying consumers (ReferenceError) and resets state on mode-switch.
+
+This was a genuine design fork, so it was decided by **3-model consultation (Claude + Codex + Gemini), all unanimous on Option A**:
+
+- **PR2 (PlannerLesson) and PR3 (PlannerAssessment) are PURE-JSX presentational extractions.** Move only the mode's JSX into the component; **forward everything** it references as props (PlannerLesson: 69 props). Keep ALL state, handlers, effects, and trailing modals in PlannerTab. This is the already-shipped PlannerDashboard pattern at larger scale.
+- **Behavior-preserving:** nothing removed from PlannerTab but the JSX, so staying effects/modals keep working and state persists across mode switches (no reset). The `useQuestionEditing` hook (PR1) remains the single shared instance, forwarded.
+- **Trade-off accepted:** large flat prop surface (no state decentralization). Prop-grouping into a bundle object (Codex + Gemini's suggested mitigation) is **deferred** — it would rewrite the JSX and break the verbatim-parity guarantee. The post-Wave-3 re-score already concluded PlannerTab alone won't move Code Quality 7→8 (SettingsTab/App.jsx are the levers), so the lost decentralization costs little.
+
+PR2 result: lesson JSX (2,189 lines, byte-for-byte parity) extracted; PlannerTab 5,137 → 3,019 LOC; free-var scan zero; full suite green.
