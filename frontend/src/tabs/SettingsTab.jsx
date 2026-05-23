@@ -2694,7 +2694,6 @@ export default React.memo(function SettingsTab({
                 addToast={addToast}
                 newDocDescription={newDocDescription}
                 newDocType={newDocType}
-                rubric={rubric}
                 setNewDocDescription={setNewDocDescription}
                 setNewDocType={setNewDocType}
                 setSupportDocs={setSupportDocs}

@@ -2,7 +2,7 @@ import React from "react";
 import Icon from "./Icon";
 import * as api from "../services/api";
 
-export default function SettingsResources({ addToast, newDocDescription, newDocType, rubric, setNewDocDescription, setNewDocType, setSupportDocs, setUploadingDoc, supportDocInputRef, supportDocs, uploadingDoc }) {
+export default function SettingsResources({ addToast, newDocDescription, newDocType, setNewDocDescription, setNewDocType, setSupportDocs, setUploadingDoc, supportDocInputRef, supportDocs, uploadingDoc }) {
   return (
               <div data-tutorial="resources-upload">
                 <p
