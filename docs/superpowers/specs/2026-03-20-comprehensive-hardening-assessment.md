@@ -865,3 +865,39 @@ Option A pure-forward — the proven `PlannerLesson`/`PlannerDashboard`/`Planner
 ## Dimension effect
 
 Per established convention, **no dimension score is asserted in this closeout**; a 3-model reconciled re-score is the deferred judgment step and appends as its own dated section. The `#469` re-score put **Code Quality at 8** with SettingsTab as the named lever; this **closes that lever**. The honest question the re-score will weigh: does de-concentrating the largest remaining tab-level frontend god-file (6,534 → 1,576, −76%, into 7 tested components) move Code Quality **8 → 9**, or hold at 8 given that `App.jsx` (7,144), `assignment_grader.py` (5,344), and the backend route god-files (`planner_routes.py` 4,611, `student_portal_routes.py` 3,686) remain concentrated — reaching 9 needs broad de-concentration across these, not any single file.
+
+---
+
+# 2026-05-23 Post-SettingsTab-decomposition 3-Model Reconciled Re-Score
+
+The deferred judgment step the SettingsTab closeout (above) said would follow. Codex, Gemini, and Claude each re-scored independently against the 2026-05-23 post-full-PlannerTab baseline (Code Quality 8) at the post-SettingsTab state (`SettingsTab.jsx` 1,576 LOC, a thin orchestrator rendering all 7 extracted `Settings*` components). Method: Claude (controller, first-hand), Codex (`codex exec`), Gemini (`gemini -p`, `GEMINI_CLI_TRUST_WORKSPACE=true --skip-trust`). Conservative-floor reconciliation: on a split the lower score wins unless a model presents strong disconfirming file:line evidence.
+
+| Model | Code Quality | Recommendation |
+|-------|--------------|----------------|
+| Claude | 8 (floor) | App.jsx — broad multi-file 9-bar unmet (App.jsx + grader untouched) |
+| Codex | 8.5 | App.jsx — largest frontend file, clearest remaining UI concentration |
+| Gemini | 8.5 | App.jsx — decompose the modal state machine / global handlers |
+| **Reconciled** | **8 (held — a high-8 on the cusp of 8.5)** | App.jsx next |
+
+## Verdict: Code Quality holds at 8 (conservative floor). Overall unchanged at 7.9.
+
+All three models verified the live code with their own shell commands and **unanimously agree it is not a 9**. The split is only 8 vs 8.5, resolved DOWN to 8 by the same conservative-floor discipline applied in the 2026-05-22 re-score (Codex 7.5 / Gemini 8 / Claude 7 → reconciled 7): the higher value is credited only when concretely and unanimously grounded, and here it is neither unanimous nor does it cross a tier.
+
+**Verified progress (all three, file:line):**
+- `frontend/src/tabs/SettingsTab.jsx` 6,534 → 1,576 LOC (−76%); imports all 7 `Settings*` components at lines 5–11; all 7 section render branches delegated (`general` 300/301, `grading` 325/326, `ai` 335/336, `classroom` 355/356, `privacy` 460/461, `billing` 481/482, `resources` 496/497).
+- **Both** of the two largest frontend tab god-files are now de-concentrated: `PlannerTab.jsx` 1,453, `SettingsTab.jsx` 1,576. The two named frontend Code-Quality levers are closed.
+- Seven focused, independently-tested components (General 376, Grading 256, Billing 248, AI 784, Privacy 1,036, Resources 197, Classroom 2,307), each with a smoke test.
+
+**Why it holds at 8, not 9 (unanimous grounds):**
+- The `#469` re-score set the explicit 9-bar as "broad de-concentration across these [App.jsx 7,144, SettingsTab, assignment_grader.py 5,344], **not any single file**." SettingsTab is now done, but it is one of the three named items — `App.jsx` (7,144, now the single largest frontend file, ~191 hooks) and `assignment_grader.py` (5,344) are wholly untouched, plus the backend route god-files (`planner_routes.py` 4,611, `student_portal_routes.py` 3,686).
+- Complexity was partly **relocated, not eliminated**: `SettingsClassroom.jsx` is itself 2,307 LOC with a 99-prop signature (`SettingsClassroom.jsx:6`) — a "sub-god-file" (Gemini), recorded in the closeout as the strongest remaining sub-division candidate.
+
+**The 8.5 case (Codex + Gemini, recorded):** both credited the closure of the *second* major frontend god-file as a genuine half-step beyond the state when 8 was assigned (when SettingsTab was still a 6,534 monolith). This is real, verified progress; under the conservative floor it lands the dimension as a high-8 trending toward the next tier, not a held-flat 8 — the mirror of how the 2026-05-22 re-score recorded a "near-8 on the cusp" while holding at 7.
+
+## Path to 9 (remaining concentrated-complexity levers)
+
+**Unanimous next lever: `frontend/src/App.jsx` (7,144 LOC)** — now the single largest source file in the repository and the clearest remaining UI concentration point (a large modal state machine + global handlers; ~191 `useState`/`useEffect`). After that: `assignment_grader.py` (5,344) and the backend route god-files (`planner_routes.py` 4,611, `student_portal_routes.py` 3,686). Reaching 9 still needs broad de-concentration across these, consistent with every prior re-score — App.jsx is the highest-value single next step toward it.
+
+## Honest note
+
+Both Codex and Gemini completed cleanly and independently landed on 8.5 with concrete file:line evidence and the same App.jsx recommendation; Claude (controller) held the 8 floor on the explicit multi-file 9-bar. No model scored 9. The reconciled 8 is therefore a held dimension with a verified upward trajectory, not a stall: two of the three named frontend/concentration items the original cap cited (PlannerTab, then SettingsTab) are now closed, and the third (App.jsx) plus the backend grader/route files are the named path to 9.
