@@ -3857,41 +3857,7 @@ def save_to_master_csv(grades: list, output_folder: str):
     print(f"📊 Updated master grades file: {master_file}")
 
 
-def export_detailed_report(grades: list, output_folder: str, assignment_name: str) -> str:
-    """
-    Create detailed CSV with all grading information for your records.
-    """
-    safe_name = re.sub(r'[^\w\s-]', '', assignment_name).replace(' ', '_')
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filepath = Path(output_folder) / f"Detailed_Report_{safe_name}_{timestamp}.csv"
-    
-    with open(filepath, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            'Student ID', 'Student Name', 'Email', 'Assignment', 'Score', 'Letter Grade',
-            'Content (40)', 'Completeness (25)', 'Writing (20)', 'Effort (15)',
-            'Feedback', 'Filename'
-        ])
-        
-        for grade in grades:
-            breakdown = grade.get('breakdown', {})
-            writer.writerow([
-                grade.get('student_id', ''),
-                grade.get('student_name', ''),
-                grade.get('email', ''),
-                grade.get('assignment', ''),
-                grade.get('score', ''),
-                grade.get('letter_grade', ''),
-                breakdown.get('content_accuracy', ''),
-                breakdown.get('completeness', ''),
-                breakdown.get('writing_quality', ''),
-                breakdown.get('effort_engagement', breakdown.get('critical_thinking', '')),
-                grade.get('feedback', ''),
-                grade.get('filename', '')
-            ])
-    
-    print(f"📋 Detailed report saved: {filepath}")
-    return str(filepath)
+from backend.services.grader_export import export_detailed_report as export_detailed_report  # noqa: F401 explicit re-export (grading/pipeline.py imports this — mypy no_implicit_reexport)
 
 
 # =============================================================================
