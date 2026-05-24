@@ -1309,45 +1309,7 @@ def extract_from_graider_text(document_text, exclude_markers=None):
     }
 
 
-def read_image_file(filepath: str) -> dict:
-    """
-    Read an image file and return it as base64 for GPT-4o vision.
-    
-    Returns dict with:
-    - type: "image"
-    - data: base64 encoded image
-    - media_type: image MIME type
-    """
-    import base64
-    
-    filepath = Path(filepath)
-    extension = filepath.suffix.lower()
-    
-    # Map extensions to MIME types
-    mime_types = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp'
-    }
-    
-    if extension not in mime_types:
-        print(f"  ⚠️  Unsupported image type: {extension}")
-        return None
-    
-    try:
-        with open(filepath, 'rb') as f:
-            image_data = base64.b64encode(f.read()).decode('utf-8')
-        
-        return {
-            "type": "image",
-            "data": image_data,
-            "media_type": mime_types[extension]
-        }
-    except Exception as e:
-        print(f"  ⚠️  Error reading image: {e}")
-        return None
+from backend.services.submission_parsing import read_image_file as read_image_file  # noqa: F401 explicit re-export (grader-internal caller; consistency)
 
 
 def read_assignment_file(filepath: str) -> dict:

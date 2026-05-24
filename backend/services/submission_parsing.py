@@ -1,9 +1,13 @@
 """Submission parsing for the grading pipeline: extract student info from a
-filename (and, later, read submission file contents). Pure logic (pathlib +
-strings — no LLM / network / Flask) extracted from assignment_grader.py.
-Wave 7 Slice 6 (grading-engine decomposition).
+filename + read submission file contents. Flask-free (pathlib / base64 / file I/O —
+no LLM / network) extracted from assignment_grader.py. Wave 7 (grading-engine
+decomposition). Diagnostic output uses the module logger (the grader's debug prints
+became _logger calls on extraction — return values are unchanged).
 """
+import logging
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 
 def parse_filename(filename: str) -> dict:
@@ -69,3 +73,44 @@ def parse_filename(filename: str) -> dict:
             "assignment_part": "",
             "lookup_key": name.lower().replace("'", "").replace("\u2019", "")
         }
+
+
+def read_image_file(filepath: str) -> dict:
+    """
+    Read an image file and return it as base64 for GPT-4o vision.
+
+    Returns dict with:
+    - type: "image"
+    - data: base64 encoded image
+    - media_type: image MIME type
+    """
+    import base64
+
+    filepath = Path(filepath)
+    extension = filepath.suffix.lower()
+
+    # Map extensions to MIME types
+    mime_types = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp'
+    }
+
+    if extension not in mime_types:
+        _logger.warning("Unsupported image type: %s", extension)
+        return None
+
+    try:
+        with open(filepath, 'rb') as f:
+            image_data = base64.b64encode(f.read()).decode('utf-8')
+
+        return {
+            "type": "image",
+            "data": image_data,
+            "media_type": mime_types[extension]
+        }
+    except Exception as e:
+        _logger.warning("Error reading image: %s", e)
+        return None

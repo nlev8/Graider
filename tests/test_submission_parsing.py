@@ -10,7 +10,10 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from assignment_grader import parse_filename
+import base64
+import tempfile
+
+from assignment_grader import parse_filename, read_image_file
 
 
 def test_standard_underscore_format():
@@ -40,3 +43,39 @@ def test_unparseable_single_word_fallback():
     assert parse_filename("singleword.txt") == {
         "first_name": "singleword", "last_name": "", "assignment_part": "",
         "lookup_key": "singleword"}
+
+
+# ── read_image_file (return-value golden; the print→logger conversion preserves these) ──
+
+
+def test_read_image_returns_base64_dict():
+    raw = b"\x89PNG\r\n\x1a\nFAKE-PNG-BYTES"
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as t:
+        t.write(raw)
+        path = t.name
+    try:
+        assert read_image_file(path) == {
+            "type": "image",
+            "data": base64.b64encode(raw).decode("utf-8"),
+            "media_type": "image/png"}
+    finally:
+        os.unlink(path)
+
+
+def test_read_image_maps_jpg_to_jpeg_mime():
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as t:
+        t.write(b"\xff\xd8\xff")
+        path = t.name
+    try:
+        out = read_image_file(path)
+        assert out["media_type"] == "image/jpeg"
+    finally:
+        os.unlink(path)
+
+
+def test_read_image_unsupported_ext_returns_none():
+    assert read_image_file("photo.bmp") is None  # .bmp not in mime_types
+
+
+def test_read_image_nonexistent_returns_none():
+    assert read_image_file("/nonexistent/dir/x.png") is None  # open() fails -> None
