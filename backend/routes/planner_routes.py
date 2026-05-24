@@ -95,7 +95,7 @@ from backend.services.planner_study_aids import generate_slides_payload
 from backend.services.planner_content_tools import adjust_reading_level_content
 from backend.services.planner_standards import rewrite_for_alignment_content
 from backend.services.planner_standards import align_document_to_standards_content
-from backend.services.planner_standards import TextExtractionError, extract_text_from_upload
+from backend.services.planner_standards import IMAGE_EXTENSIONS, TextExtractionError, extract_text_from_upload
 from backend.services.planner_assessments import grade_assessment_answers_logic
 
 # ── Tier 2 PR3: prompt construction extracted to ───────────────────────────
@@ -3397,7 +3397,7 @@ def extract_text_from_file():
     # the missing-key 400 here; non-image types never touch the key, preserving
     # the original no-extra-key-lookup behavior.
     api_key = None
-    if filename.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')):
+    if filename.endswith(IMAGE_EXTENSIONS):
         from backend.api_keys import get_api_key as _gak
         teacher_id = getattr(g, 'user_id', 'local-dev')
         api_key = _gak('openai', teacher_id)

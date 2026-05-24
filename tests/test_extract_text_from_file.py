@@ -150,6 +150,16 @@ def test_service_unhandled_type_raises_text_extraction_error():
     assert str(exc.value) == "Unsupported file type. Use .docx, .pdf, .txt, .png, .jpg, or .jpeg"
 
 
+def test_image_extensions_single_source_of_truth():
+    # Route and service must reference the SAME tuple object so the two image
+    # branches can never diverge (a divergence would let an image reach the
+    # service with api_key=None and fail in the 500 catch-all, not the 400).
+    import backend.routes.planner_routes as pr
+    from backend.services.planner_standards import IMAGE_EXTENSIONS
+    assert pr.IMAGE_EXTENSIONS is IMAGE_EXTENSIONS
+    assert IMAGE_EXTENSIONS == ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')
+
+
 def test_service_image_uses_vision_with_key():
     from backend.services.planner_standards import extract_text_from_upload
     fake_adapter = MagicMock()
