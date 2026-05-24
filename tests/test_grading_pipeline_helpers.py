@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from backend.services.grading_pipeline import (
     _COMPLETENESS_CAPS,
+    _apply_single_pass_post_processing,
     _completeness_cap_table,
     _letter_grade,
 )
@@ -42,3 +43,36 @@ def test_completeness_cap_unknown_style_falls_back_to_standard():
     assert _completeness_cap_table("") == _COMPLETENESS_CAPS["standard"]
     assert _completeness_cap_table("weird") == _COMPLETENESS_CAPS["standard"]
     assert _completeness_cap_table(None) == _COMPLETENESS_CAPS["standard"]
+
+
+# ── _apply_single_pass_post_processing (Wave 8 slice 3) ───────────────────────
+# The grade_assignment golden uses a fully-answered, no-rubric-weights fixture, so its
+# post-processing block is a no-op there. These directly exercise the caps + weights paths.
+
+def test_post_processing_completeness_cap_lowers_score():
+    result = {"score": 95, "letter_grade": "A", "breakdown": {}, "unanswered_questions": []}
+    extraction = {"blank_questions": ["Q1", "Q2"], "missing_sections": []}
+    _apply_single_pass_post_processing(result, None, "standard", extraction)
+    # 2 blanks → standard cap table {2: 79}; 95 > 79 → capped to 79 (C)
+    assert result["score"] == 79
+    assert result["letter_grade"] == "C"
+    assert set(result["unanswered_questions"]) == {"Q1", "Q2"}
+
+
+def test_post_processing_rubric_weights_recompute_score():
+    result = {"score": 80, "letter_grade": "B",
+              "breakdown": {"content_accuracy": 40, "completeness": 25,
+                            "writing_quality": 20, "effort_engagement": 15}}
+    _apply_single_pass_post_processing(result, [40, 25, 20, 15], "standard", None)
+    # all categories at full → weighted score 100 (A)
+    assert result["score"] == 100
+    assert result["letter_grade"] == "A"
+
+
+def test_post_processing_noop_when_no_weights_and_no_blanks():
+    result = {"score": 85, "letter_grade": "B", "breakdown": {}, "unanswered_questions": ["x"]}
+    _apply_single_pass_post_processing(result, None, "standard",
+                                       {"blank_questions": [], "missing_sections": []})
+    assert result["score"] == 85
+    assert result["letter_grade"] == "B"
+    assert result["unanswered_questions"] == ["x"]

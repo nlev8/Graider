@@ -154,6 +154,66 @@ Focus on the content they provided, not on sections that may not apply to this a
 """
 
 
+def _apply_single_pass_post_processing(result, rubric_weights, grading_style, extraction_result):
+    """Apply custom rubric weights then deterministic completeness caps to a single-pass
+    grade_assignment result dict (mutates result in place). Extracted from grade_assignment
+    (Wave 8 — phase split); covered by the golden net + test_grading_factors."""
+    # === APPLY CUSTOM RUBRIC WEIGHTS (single-pass) ===
+    # rubric_weights is a list of 4 weights [content, completeness, writing, effort]
+    if rubric_weights and len(rubric_weights) == 4:
+        breakdown = result.get("breakdown", {})
+        cat_pcts = [
+            breakdown.get("content_accuracy", 0) / 40,
+            breakdown.get("completeness", 0) / 25,
+            breakdown.get("writing_quality", 0) / 20,
+            breakdown.get("effort_engagement", 0) / 15,
+        ]
+        total_weight = sum(rubric_weights) or 100
+        weighted_score = sum(
+            pct * (w / total_weight)
+            for pct, w in zip(cat_pcts, rubric_weights)
+        )
+        result["score"] = int(round(weighted_score * 100))
+        result["score"] = max(0, min(100, result["score"]))
+        s = result["score"]
+        result["letter_grade"] = _letter_grade(s)
+        _logger.info(f"  📊 Rubric-weighted score: {result['score']} ({result['letter_grade']}) [weights: {rubric_weights}]")
+
+    # === DETERMINISTIC COMPLETENESS CAPS (single-pass) ===
+    # The AI prompt asks it to penalize blank sections, but it doesn't reliably do so.
+    # Apply the same deterministic caps as grade_multipass() based on actual extraction data.
+    if extraction_result:
+        extraction_blanks = extraction_result.get("blank_questions", [])
+        extraction_missing = extraction_result.get("missing_sections", [])
+        blank_count = len(extraction_blanks) + len(extraction_missing)
+
+        # Override AI's unanswered_questions with deterministic extraction data.
+        # The AI often misses blank/missing sections even when told about them.
+        if blank_count > 0:
+            deterministic_unanswered = extraction_blanks + extraction_missing
+            ai_unanswered = result.get("unanswered_questions", [])
+            # Merge: keep AI's list but ensure extraction-detected items are included
+            merged = list(ai_unanswered)
+            for item in deterministic_unanswered:
+                if not any(item.lower() in existing.lower() or existing.lower() in item.lower() for existing in merged):
+                    merged.append(item)
+            if merged != ai_unanswered:
+                _logger.info(f"  🔧 Overriding unanswered_questions: AI had {len(ai_unanswered)}, extraction found {len(deterministic_unanswered)}, merged to {len(merged)}")
+            result["unanswered_questions"] = merged
+
+        if blank_count > 0:
+            caps = _completeness_cap_table(grading_style)
+            cap = caps.get(blank_count, 0) if blank_count < len(caps) else 0
+            old_score = result["score"]
+            if old_score > cap:
+                result["score"] = cap
+                s = result["score"]
+                result["letter_grade"] = _letter_grade(s)
+                blank_names = extraction_blanks + extraction_missing
+                _logger.info(f"  📉 Completeness cap: {blank_count} blank/missing → capped {old_score} to {cap} ({result['letter_grade']})")
+                _logger.info(f"      Blank sections: {blank_names}")
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -1151,60 +1211,7 @@ Provide your response in the following JSON format ONLY (no other text):
             else:
                 _logger.info(f"  ⚠️  Translation failed, feedback remains English only")
 
-        # === APPLY CUSTOM RUBRIC WEIGHTS (single-pass) ===
-        # rubric_weights is a list of 4 weights [content, completeness, writing, effort]
-        if rubric_weights and len(rubric_weights) == 4:
-            breakdown = result.get("breakdown", {})
-            cat_pcts = [
-                breakdown.get("content_accuracy", 0) / 40,
-                breakdown.get("completeness", 0) / 25,
-                breakdown.get("writing_quality", 0) / 20,
-                breakdown.get("effort_engagement", 0) / 15,
-            ]
-            total_weight = sum(rubric_weights) or 100
-            weighted_score = sum(
-                pct * (w / total_weight)
-                for pct, w in zip(cat_pcts, rubric_weights)
-            )
-            result["score"] = int(round(weighted_score * 100))
-            result["score"] = max(0, min(100, result["score"]))
-            s = result["score"]
-            result["letter_grade"] = _letter_grade(s)
-            _logger.info(f"  📊 Rubric-weighted score: {result['score']} ({result['letter_grade']}) [weights: {rubric_weights}]")
-
-        # === DETERMINISTIC COMPLETENESS CAPS (single-pass) ===
-        # The AI prompt asks it to penalize blank sections, but it doesn't reliably do so.
-        # Apply the same deterministic caps as grade_multipass() based on actual extraction data.
-        if extraction_result:
-            extraction_blanks = extraction_result.get("blank_questions", [])
-            extraction_missing = extraction_result.get("missing_sections", [])
-            blank_count = len(extraction_blanks) + len(extraction_missing)
-
-            # Override AI's unanswered_questions with deterministic extraction data.
-            # The AI often misses blank/missing sections even when told about them.
-            if blank_count > 0:
-                deterministic_unanswered = extraction_blanks + extraction_missing
-                ai_unanswered = result.get("unanswered_questions", [])
-                # Merge: keep AI's list but ensure extraction-detected items are included
-                merged = list(ai_unanswered)
-                for item in deterministic_unanswered:
-                    if not any(item.lower() in existing.lower() or existing.lower() in item.lower() for existing in merged):
-                        merged.append(item)
-                if merged != ai_unanswered:
-                    _logger.info(f"  🔧 Overriding unanswered_questions: AI had {len(ai_unanswered)}, extraction found {len(deterministic_unanswered)}, merged to {len(merged)}")
-                result["unanswered_questions"] = merged
-
-            if blank_count > 0:
-                caps = _completeness_cap_table(grading_style)
-                cap = caps.get(blank_count, 0) if blank_count < len(caps) else 0
-                old_score = result["score"]
-                if old_score > cap:
-                    result["score"] = cap
-                    s = result["score"]
-                    result["letter_grade"] = _letter_grade(s)
-                    blank_names = extraction_blanks + extraction_missing
-                    _logger.info(f"  📉 Completeness cap: {blank_count} blank/missing → capped {old_score} to {cap} ({result['letter_grade']})")
-                    _logger.info(f"      Blank sections: {blank_names}")
+        _apply_single_pass_post_processing(result, rubric_weights, grading_style, extraction_result)
 
         # Update student's writing profile (only if not flagged as AI)
         # This builds their baseline for future AI detection
