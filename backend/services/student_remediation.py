@@ -318,7 +318,6 @@ def _gen_variant_for_student(*, sid, segment, students_by_id, api_key,
     }
 
 
-
 def student_has_standard_evidence(db, student_id, class_content_ids, standard_code):
     """True iff the student has any non-draft submission (scoped to the given
     class content) whose results.standards_mastery contains `standard_code`.

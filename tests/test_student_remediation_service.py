@@ -1,5 +1,6 @@
 """Direct-import characterization tests for backend/services/student_remediation.py
 (Wave 5 Slice 2 - behavior-preserving extraction from student_portal_routes)."""
+from unittest.mock import MagicMock as _MM
 
 
 def test_validate_and_clean_lesson_keeps_only_three_fields_and_strips():
@@ -82,8 +83,6 @@ def test_remediation_names_re_exported_from_route_module():
 
 
 # ── Wave 5 Slice 5: post_remediate resolver extractions ──
-
-from unittest.mock import MagicMock as _MM
 
 
 def _r_chain(data=None):
