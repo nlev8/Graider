@@ -1,5 +1,5 @@
-"""Single-pass grading: grade_assignment — the ~1,100-line alternative to the multi-pass
-pipeline. Sends the whole submission (text or image) to one LLM call per provider and
+"""Core grading pipeline: grade_multipass (per-question orchestration) + grade_assignment
+(single-pass). Sends the whole submission (text or image) to one LLM call per provider and
 post-processes the structured result (caps, effort, rubric weights, AI/plagiarism flags,
 optional ELL translation). Extracted from assignment_grader.py. Wave 7 Phase B
 (grading-engine decomposition).
@@ -10,23 +10,30 @@ each wrapped in with_retry(..., label=...). Diagnostic prints became _logger.inf
 tests/test_grader_golden.py). GRADING_RUBRIC (the default rubric) moves here with grade_assignment,
 its only user; re-exported via assignment_grader.
 """
+import concurrent.futures
 import json
 import logging
 import os
+import re
 
 from backend.api_keys import get_api_key as _get_api_key
 from backend.retry import with_retry
 from backend.services.grader_json import _try_parse_json_fallback
 from backend.services.grader_text_prep import sanitize_pii_for_ai
-from backend.services.grading_leaves import _translate_feedback
+from backend.services.grading_leaves import _translate_feedback, generate_feedback, grade_per_question
 from backend.services.grading_models import GradingResponse, TokenTracker
-from backend.services.grading_prep import build_section_rubric
+from backend.services.grading_prep import (
+    build_section_rubric,
+    _distribute_points,
+    _is_math_subject,
+    _parse_expected_answers,
+)
 from backend.services.response_extraction import (
     extract_student_responses,
     filter_questions_from_response,
     format_extracted_for_grading,
 )
-from backend.services.submission_parsing import extract_from_graider_text
+from backend.services.submission_parsing import extract_from_graider_text, extract_from_tables
 from backend.services.writing_profile import get_writing_profile, update_writing_profile
 from backend.services.writing_style import analyze_writing_style, compare_writing_styles
 
@@ -1248,3 +1255,448 @@ Provide your response in the following JSON format ONLY (no other text):
             "breakdown": {},
             "feedback": f"API error: {e}"
         }
+
+
+def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
+                    grade_level: str = '6', subject: str = 'Social Studies',
+                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
+                    assignment_template: str = None, rubric_prompt: str = None,
+                    custom_markers: list = None, exclude_markers: list = None,
+                    marker_config: list = None, effort_points: int = 15,
+                    extraction_mode: str = 'structured', grading_style: str = 'standard',
+                    token_tracker: 'TokenTracker' = None,
+                    student_history: str = '', rubric_weights: list = None) -> dict:
+    """Multi-pass grading pipeline for consistent, robust scoring.
+
+    Pass 1: Extract responses (reuses existing extraction logic)
+    Pass 2: Grade each question individually (parallel, structured output)
+    Pass 3: Generate feedback (cheaper model)
+    Final: Aggregate scores, apply caps, build result
+    """
+    # Determine provider from model name
+    if ai_model.startswith("claude"):
+        provider = "anthropic"
+    elif ai_model.startswith("gemini"):
+        provider = "gemini"
+    else:
+        provider = "openai"
+
+    tracker = token_tracker or TokenTracker()
+    content = assignment_data.get("content", "")
+
+    # === EXTRACTION ===
+    # Priority: Graider structured tables > Graider text fallback > regex extraction
+    extraction_result = None
+
+    # Check for Graider table data (structured worksheets)
+    graider_tables = assignment_data.get("graider_tables")
+    if graider_tables:
+        _logger.info(f"  📊 Multi-pass: Using Graider table extraction ({len(graider_tables)} tables)")
+        extraction_result = extract_from_tables(graider_tables, exclude_markers)
+    elif assignment_data.get("type") == "text" and content:
+        # Try GRAIDER tag plain-text fallback before generic extraction
+        if '[GRAIDER:' in content:
+            extraction_result = extract_from_graider_text(content, exclude_markers)
+        if not extraction_result or not extraction_result.get("extracted_responses"):
+            extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+
+    if extraction_result:
+        answered = extraction_result.get("answered_questions", 0)
+        total = extraction_result.get("total_questions", 0)
+        _logger.info(f"  📋 Multi-pass: Extracted {answered}/{total} responses")
+
+        if answered == 0:
+            return {
+                "score": 0, "letter_grade": "INCOMPLETE",
+                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
+                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
+                "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
+                "skills_demonstrated": {"strengths": [], "developing": []},
+                "excellent_answers": [], "needs_improvement": []
+            }
+
+        # Force zero if 80%+ of questions are blank — prevents template text inflation
+        total_questions = extraction_result.get("total_questions", 0)
+        blank_questions_count = len(extraction_result.get("blank_questions", [])) + len(extraction_result.get("missing_sections", []))
+        if total_questions > 0 and blank_questions_count / total_questions >= 0.8:
+            _logger.info(f"  ⚠️  NEARLY BLANK: {blank_questions_count}/{total_questions} questions blank (≥80%)")
+            return {
+                "score": 0, "letter_grade": "INCOMPLETE",
+                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                "feedback": f"Your assignment is nearly blank — {blank_questions_count} out of {total_questions} questions have no response. Please complete all sections and resubmit.",
+                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Nearly blank submission."},
+                "plagiarism_detection": {"flag": "none", "reason": "Nearly blank submission."},
+                "skills_demonstrated": {"strengths": [], "developing": []},
+                "excellent_answers": [], "needs_improvement": []
+            }
+
+    if not extraction_result or not extraction_result.get("extracted_responses"):
+        # Fall back to single-pass for edge cases
+        _logger.info(f"  ⚠️ Multi-pass: No extracted responses, falling back to single-pass")
+        return grade_assignment(student_name, assignment_data, custom_ai_instructions,
+                               grade_level, subject, ai_model, student_id, assignment_template,
+                               rubric_prompt, custom_markers, exclude_markers, marker_config,
+                               effort_points, extraction_mode, grading_style)
+
+    responses = extraction_result["extracted_responses"]
+
+    # DEBUG: Log extracted responses before filtering
+    _logger.info(f"  🔍 Multi-pass: {len(responses)} extracted responses before filtering:")
+    for i, resp in enumerate(responses):
+        q = resp.get("question", "?")[:80]
+        a = resp.get("answer", "")[:120].replace('\n', ' ')
+        t = resp.get("type", "?")
+        _logger.info(f"      [{i+1}] Q: {q}")
+        _logger.info(f"           A: {a}")
+        _logger.info(f"           Type: {t}")
+
+    # Filter question/prompt text from extracted answers before grading.
+    # If filtering empties a response, move it to blank_questions so completeness caps apply.
+    filtered_out = []
+    for resp in responses:
+        answer = resp.get("answer", "")
+        if answer and resp.get("type") != "fitb":
+            cleaned = filter_questions_from_response(answer)
+            if cleaned and len(cleaned.strip()) >= 3:
+                resp["answer"] = cleaned
+            else:
+                q_label = resp.get("question", "Unknown")
+                _logger.info(f"      ⚠️ Response for '{q_label[:50]}' was only template text — marking blank")
+                extraction_result.setdefault("blank_questions", []).append(q_label)
+                filtered_out.append(resp)
+    if filtered_out:
+        responses = [r for r in responses if r not in filtered_out]
+        extraction_result["extracted_responses"] = responses
+
+    # Build expected answers lookup from gradingNotes within custom_ai_instructions
+    expected_answers = _parse_expected_answers(custom_ai_instructions)
+
+    # NOTE: accommodation context, student history, period differentiation, and rubric
+    # type overrides are ALREADY embedded in custom_ai_instructions by app.py (lines 975-1119).
+    # We pass the full string untruncated to each per-question call.
+
+    # Append the custom rubric prompt (from Settings) so per-question graders see it.
+    # In single-pass, rubric_prompt overrides GRADING_RUBRIC. In multipass, we append it
+    # to the teacher instructions so each per-question call gets the rubric categories/weights.
+    effective_instructions = custom_ai_instructions
+    if rubric_prompt:
+        effective_instructions += "\n\n" + rubric_prompt
+
+    # === PASS 2: PER-QUESTION GRADING (parallel) ===
+    total_content_points = 100 - effort_points
+    question_meta = _distribute_points(responses, marker_config, total_content_points)
+
+    # Use the selected model for per-question grading (no auto-upgrade)
+    grading_model = ai_model
+
+    _logger.info(f"  🔄 Multi-pass: Grading {len(responses)} questions with {grading_model}...")
+
+    # Submit all questions in parallel, track by index
+    question_results = [None] * len(responses)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_idx = {}
+        for i, resp in enumerate(responses):
+            question = resp.get("question", f"Question {i+1}")
+            answer = resp.get("answer", "")
+            resp_type = resp.get("type", "marker_response")
+            meta = question_meta[i] if i < len(question_meta) else {'points': 10, 'section_name': '', 'section_type': 'written'}
+
+            # Match expected answer by multiple strategies:
+            # 1. Question number from text (e.g., "1) What was..." → Q1 → index 0)
+            # 2. Term/question text match (for vocab: "Seminole Wars" → key match)
+            # 3. Section name match
+            # 4. Response list index (only works if no vocab terms shift indices)
+            expected = ""
+
+            # Strategy 1: Extract question number and match to Q-index
+            q_num_match = re.match(r'^(\d+)', question.strip())
+            if q_num_match:
+                q_idx = int(q_num_match.group(1)) - 1  # "1)" → index 0
+                expected = expected_answers.get(q_idx, "") or expected_answers.get(f"Q{q_num_match.group(1)}", "")
+
+            # Strategy 2: Match by term/question text or section name
+            if not expected:
+                expected = (expected_answers.get(question, "") or
+                            expected_answers.get(question.split(':')[0].strip(), "") or
+                            expected_answers.get(meta['section_name'], ""))
+
+            # Strategy 3: Fall back to list index
+            if not expected:
+                expected = expected_answers.get(i, "")
+
+            # SymPy pre-check: if math subject with expected answer, try exact match first
+            if _is_math_subject(subject) and expected and answer:
+                try:
+                    from backend.services.stem_grading import check_math_equivalence
+                    equiv = check_math_equivalence(answer, expected)
+                    if equiv.get('equivalent'):
+                        pts = meta['points']
+                        question_results[i] = {
+                            "grade": {"score": pts, "possible": pts,
+                                      "reasoning": f"Mathematically equivalent ({equiv['method']})",
+                                      "is_correct": True, "quality": "excellent"},
+                            "excellent": True, "improvement_note": ""
+                        }
+                        continue  # Skip LLM call — instant correct, zero cost
+                except Exception:
+                    pass  # SymPy failed — fall through to normal AI grading
+
+            f = executor.submit(
+                grade_per_question,
+                question=question,
+                student_answer=answer,
+                expected_answer=expected,
+                points=meta['points'],
+                grade_level=grade_level,
+                subject=subject,
+                teacher_instructions=effective_instructions,  # FULL — includes rubric
+                grading_style=grading_style,
+                ai_model=grading_model,
+                ai_provider=provider,
+                response_type=resp_type,
+                section_name=meta['section_name'],
+                section_type=meta['section_type'],
+                token_tracker=tracker
+            )
+            future_to_idx[f] = i
+
+        for future in concurrent.futures.as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                question_results[idx] = future.result()
+            except Exception as e:
+                _logger.info(f"    ⚠️ Question {idx+1} grading failed: {e}")
+                meta = question_meta[idx] if idx < len(question_meta) else {'points': 10}
+                question_results[idx] = {
+                    "grade": {"score": int(meta['points'] * 0.7), "possible": meta['points'],
+                              "reasoning": "Error during grading", "is_correct": True, "quality": "adequate"},
+                    "excellent": False, "improvement_note": ""
+                }
+
+    # === TEACHER LENIENCY POST-PROCESSING ===
+    # If the teacher requested leniency for specific section types, apply score floors in code.
+    # This is more reliable than prompt engineering — the AI scores normally, then we adjust.
+    _ei_lower = (effective_instructions or '').lower()
+    _has_vocab_leniency = any(phrase in _ei_lower for phrase in [
+        'lenient', 'accept general', 'accept basic', 'go easy', 'be generous',
+        'not strict', 'relaxed', 'don\'t be harsh', 'accept simple'
+    ]) and any(w in _ei_lower for w in ['vocab', 'definition', 'terms'])
+
+    if _has_vocab_leniency:
+        adjusted_count = 0
+        for i, resp in enumerate(responses):
+            if resp.get("type") == "vocab_term" and resp.get("answer", "").strip():
+                qr = question_results[i]
+                if qr:
+                    grade = qr.get("grade", {})
+                    pts = grade.get("possible", 9)
+                    current_score = grade.get("score", 0)
+                    min_score = int(pts * 0.65)  # At least 65% for any non-blank vocab answer
+                    if current_score < min_score:
+                        grade["score"] = min_score
+                        grade["quality"] = "adequate"
+                        # REPLACE reasoning entirely — the old reasoning says "too basic"
+                        # and the feedback generator echoes it. Clean reasoning = clean feedback.
+                        term = resp.get("question", "this term")
+                        grade["reasoning"] = f"Student provided a basic definition for {term} that shows general understanding. Teacher accepts general/dictionary-level definitions for vocabulary on this assignment."
+                        adjusted_count += 1
+        if adjusted_count > 0:
+            _logger.info(f"  📌 Vocab leniency: adjusted {adjusted_count} vocab scores to minimum 65%")
+
+    # === AGGREGATE SCORES ===
+    total_earned = sum(qr.get("grade", {}).get("score", 0) for qr in question_results if qr)
+    total_possible = sum(qr.get("grade", {}).get("possible", 10) for qr in question_results if qr)
+
+    blank_count = len(extraction_result.get("blank_questions", [])) + len(extraction_result.get("missing_sections", []))
+    if blank_count == 0:
+        effort_earned = effort_points
+    elif blank_count == 1:
+        effort_earned = int(effort_points * 0.7)
+    elif blank_count == 2:
+        effort_earned = int(effort_points * 0.4)
+    else:
+        effort_earned = 0  # 3+ blanks = no effort credit
+
+    raw_score = int(round((total_earned / max(total_possible, 1)) * (100 - effort_points) + effort_earned))
+    raw_score = max(0, min(100, raw_score))
+
+    # Completeness caps by grading style — each missing section drops max possible grade
+    if grading_style == 'strict':
+        caps = {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35, 7: 25, 8: 15}
+    elif grading_style == 'lenient':
+        caps = {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49, 7: 39, 8: 29}
+    else:
+        caps = {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39, 7: 29, 8: 19}
+    if blank_count >= len(caps):
+        cap = 0  # More blanks than cap table entries → zero
+    else:
+        cap = caps.get(blank_count, 0)
+    final_score = min(raw_score, cap)
+    if blank_count > 0:
+        _logger.info(f"  📉 Completeness: {blank_count} blank/missing → cap at {cap}")
+
+    if final_score >= 90: letter_grade = "A"
+    elif final_score >= 80: letter_grade = "B"
+    elif final_score >= 70: letter_grade = "C"
+    elif final_score >= 60: letter_grade = "D"
+    else: letter_grade = "F"
+
+    per_q_scores = [qr.get("grade", {}).get("score", 0) for qr in question_results if qr]
+    _logger.info(f"  📊 Per-question: {per_q_scores}")
+    _logger.info(f"  📊 Raw: {raw_score}, Cap: {cap}, Final: {final_score} ({letter_grade})")
+
+    # === PASS 3: FEEDBACK GENERATION ===
+    ell_language = None
+    if student_id and student_id != "UNKNOWN":
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        if os.path.exists(ell_file):
+            try:
+                with open(ell_file, 'r', encoding='utf-8') as f:
+                    ell_data = json.load(f)
+                ell_entry = ell_data.get(student_id, {})
+                lang = ell_entry.get("language")
+                if lang and lang != "none":
+                    ell_language = lang
+            except Exception:
+                pass
+
+    # === BUILD BREAKDOWN (before feedback so we can pass rubric scores) ===
+    content_pts = int(round((total_earned / max(total_possible, 1)) * 40))
+    completeness_pts = max(0, 25 - (blank_count * 6))
+    qualities = [qr.get("grade", {}).get("quality", "adequate") for qr in question_results if qr]
+    if qualities.count("excellent") + qualities.count("good") > len(qualities) * 0.7:
+        writing_pts = 18
+    elif qualities.count("developing") + qualities.count("insufficient") > len(qualities) * 0.5:
+        writing_pts = 10
+    else:
+        writing_pts = 15
+
+    rubric_breakdown = {
+        "content_accuracy": {"score": content_pts, "possible": 40},
+        "completeness": {"score": completeness_pts, "possible": 25},
+        "writing_quality": {"score": writing_pts, "possible": 20},
+        "effort_engagement": {"score": effort_earned, "possible": effort_points},
+    }
+
+    # === APPLY CUSTOM RUBRIC WEIGHTS ===
+    # rubric_weights is a list of 4 weights [content, completeness, writing, effort]
+    if rubric_weights and len(rubric_weights) == 4:
+        cat_pcts = [
+            content_pts / 40,                          # content_accuracy normalized
+            completeness_pts / 25,                     # completeness normalized
+            writing_pts / 20,                          # writing_quality normalized
+            effort_earned / max(effort_points, 1),     # effort_engagement normalized
+        ]
+        total_weight = sum(rubric_weights) or 100
+        weighted_score = sum(
+            pct * (w / total_weight)
+            for pct, w in zip(cat_pcts, rubric_weights)
+        )
+        final_score = int(round(weighted_score * 100))
+        final_score = max(0, min(100, final_score))
+        # Still apply completeness cap if there are blanks
+        if blank_count > 0:
+            final_score = min(final_score, cap)
+        # Recalculate letter grade
+        if final_score >= 90: letter_grade = "A"
+        elif final_score >= 80: letter_grade = "B"
+        elif final_score >= 70: letter_grade = "C"
+        elif final_score >= 60: letter_grade = "D"
+        else: letter_grade = "F"
+        _logger.info(f"  📊 Rubric-weighted score: {final_score} ({letter_grade}) [weights: {rubric_weights}]")
+
+    # Collect blank/missing info for feedback
+    blank_questions = extraction_result.get("blank_questions", [])
+    missing_sections = extraction_result.get("missing_sections", [])
+
+    # Use gpt-4o for feedback — it's 1 call per student and the most important output
+    feedback_model = ai_model
+    if provider == "openai":
+        feedback_model = "gpt-4o"  # Feedback is what teachers/parents read — needs quality
+    # Claude/Gemini: use the teacher's selected model
+
+    _logger.info(f"  🔄 Multi-pass: Generating feedback ({feedback_model})...")
+    feedback_result = generate_feedback(
+        question_results=question_results,
+        total_score=final_score, total_possible=100,
+        letter_grade=letter_grade,
+        grade_level=grade_level, subject=subject,
+        teacher_instructions=effective_instructions,
+        ell_language=ell_language,
+        ai_model=feedback_model,
+        ai_provider=provider,
+        student_responses=responses,
+        rubric_breakdown=rubric_breakdown,
+        blank_questions=blank_questions,
+        missing_sections=missing_sections,
+        token_tracker=tracker,
+        student_history=student_history,
+        grading_style=grading_style
+    )
+
+    # === BUILD RESULT ===
+    student_response_texts = [resp.get("answer", "")[:500] for resp in responses if resp.get("answer")]
+
+    result = {
+        "score": final_score,
+        "letter_grade": letter_grade,
+        "breakdown": {
+            "content_accuracy": min(content_pts, 40),
+            "completeness": min(completeness_pts, 25),
+            "writing_quality": min(writing_pts, 20),
+            "effort_engagement": effort_earned
+        },
+        "student_responses": student_response_texts,
+        "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+        "excellent_answers": feedback_result.get("excellent_answers", []),
+        "needs_improvement": feedback_result.get("needs_improvement", []),
+        "skills_demonstrated": feedback_result.get("skills_demonstrated", {"strengths": [], "developing": []}),
+        "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
+        "plagiarism_detection": {"flag": "none", "reason": ""},
+        "feedback": feedback_result.get("feedback", ""),
+        "multipass_grading": True,
+        "per_question_scores": [
+            {"question": responses[i].get("question", "")[:60],
+             "score": qr.get("grade", {}).get("score", 0),
+             "possible": qr.get("grade", {}).get("possible", 10),
+             "quality": qr.get("grade", {}).get("quality", "")}
+            for i, qr in enumerate(question_results) if qr
+        ],
+        "token_usage": tracker.summary()
+    }
+
+    # Add audit trail for AI Reasoning / Raw API Output
+    audit_input_parts = []
+    for i, resp in enumerate(responses):
+        q = resp.get("question", f"Q{i+1}")
+        a = resp.get("answer", "")
+        audit_input_parts.append(f"[{q}]\n{a}")
+    audit_response_parts = []
+    for i, qr in enumerate(question_results):
+        if qr:
+            g = qr.get("grade", {})
+            audit_response_parts.append(
+                f"Q{i+1}: {g.get('score', 0)}/{g.get('possible', 10)} "
+                f"({g.get('quality', 'N/A')}) - {g.get('reasoning', '')}"
+            )
+    result["_audit"] = {
+        "ai_input": "\n\n".join(audit_input_parts),
+        "ai_response": "\n".join(audit_response_parts) + "\n\n--- FEEDBACK ---\n" + feedback_result.get("feedback", "")
+    }
+
+    # Update writing profile
+    if student_id and student_id != "UNKNOWN" and content:
+        current_writing_style = analyze_writing_style(content)
+        if current_writing_style:
+            ai_flag = result.get("ai_detection", {}).get("flag", "none")
+            if ai_flag not in ["likely", "possible"]:
+                try:
+                    update_writing_profile(student_id, current_writing_style, student_name)
+                except Exception:
+                    pass
+
+    _logger.info(f"  ✅ Multi-pass grading complete: {final_score} ({letter_grade})")
+    return result
