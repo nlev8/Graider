@@ -94,6 +94,7 @@ from backend.services.planner_study_aids import (
 from backend.services.planner_study_aids import generate_slides_payload
 from backend.services.planner_content_tools import adjust_reading_level_content
 from backend.services.planner_standards import rewrite_for_alignment_content
+from backend.services.planner_standards import align_document_to_standards_content
 from backend.services.planner_assessments import grade_assessment_answers_logic
 
 # ── Tier 2 PR3: prompt construction extracted to ───────────────────────────
@@ -236,61 +237,17 @@ def align_document_to_standards():
 
     try:
         from backend.api_keys import get_api_key as _gak
-        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         teacher_id = getattr(g, 'user_id', 'local-dev')
         api_key = _gak('openai', teacher_id)
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             return jsonify({"error": "Missing or placeholder OpenAI API Key"})
 
-        adapter = OpenAIAdapter(api_key=api_key)
-
-        # Truncate document to fit in context with standards
-        truncated_doc = doc_text[:8000]
-
-        system_prompt = (
-            "You are an expert curriculum alignment specialist. "
-            "Analyze the educational document against the provided standards and return a detailed alignment analysis in JSON format. "
-            "Be specific about what content in the document maps to each standard. "
-            "Only include standards with at least some relevance (confidence > 0.2). "
-            "Sort matched_standards by confidence descending."
-        )
-
-        user_prompt = json.dumps({
-            "task": "Analyze this educational document and identify which standards it aligns to.",
-            "document_text": truncated_doc,
-            "available_standards": standards_ref,
-            "return_format": {
-                "matched_standards": [{"code": "str", "benchmark": "str", "confidence": "float 0.0-1.0", "evidence": "brief quote or description from document", "alignment_notes": "what is well-covered vs missing"}],
-                "unmatched_standards": ["standard codes not covered"],
-                "overall_alignment_score": "float 0.0-1.0",
-                "suggestions": ["improvement suggestion strings"],
-                "question_analysis": [{"question_text": "truncated question", "aligned_standard": "code or null", "alignment_quality": "strong|partial|weak|none", "rewrite_suggestion": "optional string or null"}]
-            }
-        })
-
-        completion = adapter.chat(LLMRequest(
-            model="gpt-4o",
-            system_prompt=system_prompt,
-            messages=[Message(role="user", content=[TextPart(text=user_prompt)])],
-            response_format=ResponseFormat(type="json_object"),
-            temperature=0.3,
-            metadata={"feature_label": "align_document_to_standards"},
+        return jsonify(align_document_to_standards_content(
+            doc_text=doc_text, standards_ref=standards_ref, api_key=api_key,
         ))
 
-        raw_content = completion.content_parts[0].text if completion.content_parts else "{}"
-        try:
-            result = json.loads(raw_content)
-        except json.JSONDecodeError:
-            _logger.warning("[align-standards] Non-JSON response: %s", raw_content[:500])
-            return jsonify({"error": "AI returned non-JSON response. Possibly rate limited."})
-
-        usage = _extract_usage(completion, "gpt-4o")
-        _record_planner_cost(usage)
-
-        return jsonify({**result, "usage": usage})
-
-    except Exception as e:
+    except Exception:
         _logger.exception("Standards alignment failed")
         return jsonify({"error": "An internal error occurred"}), 500
 
