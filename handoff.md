@@ -117,6 +117,27 @@ caps, rubric weighting, ELL translation, writing-profile updates, audit, error r
   `_completeness_cap_table(grading_style)` (+ `_COMPLETENESS_CAPS`) into `grading_pipeline.py`,
   deduping 9 inline sites across grade_assignment/grade_multipass/grade_with_ensemble.
   Boundary unit test `tests/test_grading_pipeline_helpers.py` + golden net + test_grading_factors.
+- **Slice 2 SHIPPED (#550):** the prompt-snapshot net (`tests/test_grader_prompt_snapshots.py` +
+  CallBook prompt capture in `grading_fakes.py`) — see the ⚠️ insight below. Per-question prompts
+  hashed over the SORTED set (parallel threads → non-deterministic record order).
+- **Slice 3 SHIPPED (#551):** first grade_assignment PHASE extracted —
+  `_apply_single_pass_post_processing(result, rubric_weights, grading_style, extraction_result)`
+  (rubric-weight recompute + completeness caps + unanswered-merge). Helper body AST/text
+  byte-identical to the dedented origin block; 3 DIRECT unit tests added (the grade_assignment
+  golden's fully-answered/no-weights fixture left this path a no-op, so the golden net alone did
+  NOT cover it — lesson: check whether the golden fixture actually exercises an extracted block).
+- **REMAINING phases (harder — coupled, do with fresh context):**
+  - **provider-resolution (~243–298):** sets `provider` + one of `claude_client`/`gemini_client`/
+    `openai_client` + `actual_model`, with EARLY-RETURN error sentinels (ImportError / no key).
+    Extraction is COUPLED to the LLM-call region — the later provider branches reference those
+    specific client names, so a `_resolve_grading_client(ai_model) -> (provider, client,
+    actual_model, error_or_None)` helper requires renaming the 3 client vars → one `client` at the
+    call sites. Golden-net covers all 3 provider branches + the parse paths.
+  - **prompt-assembly (~534–769 pre-slices):** ~235-line f-string built from ~20 locals → 
+    `_build_grading_prompt(...)`. MUST be guarded by the Slice-2 prompt-snapshot net (the golden
+    net does NOT pin prompt text). Do this one LAST.
+  - **parse phase + result/audit/token finalization:** the provider-branch response parsing →
+    `_parse_grading_response(...)`; golden-net covered.
 - **Phase boundaries inside grade_assignment** (line refs pre-Slice-1, approximate): provider/
   client init (~159), blank short-circuit (~215), context build — custom instr/history/
   accommodation/FITB (~328–365), pre-extract responses + writing-style (~374–490), **prompt
