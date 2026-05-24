@@ -55,3 +55,22 @@ def test_open_ended_ai_failure_falls_back_to_manual_review():
     q = out["results"]["questions"][0]
     assert q["points_earned"] == 0
     assert "Manual review" in q["feedback"]  # graceful fallback preserved
+
+
+def test_matching_partial_credit():
+    from backend.services.planner_assessments import grade_assessment_answers_logic
+    # 4 terms, student gets 2 right -> round(10 * 2/4) = 5 points
+    assessment = {"sections": [{"questions": [
+        {"number": 1, "type": "matching", "points": 10,
+         "terms": ["t0", "t1", "t2", "t3"],
+         "definitions": ["d0", "d1", "d2", "d3"],
+         "answer": {"t0": "d0", "t1": "d1", "t2": "d2", "t3": "d3"}},
+    ]}]}
+    # "0-0" must be non-empty so the question is not skipped by the no-answer guard;
+    # the per-term "0-0-match-<tIdx>" keys drive partial credit (t0=A, t1=B correct).
+    answers = {"0-0": "matching", "0-0-match-0": "A", "0-0-match-1": "B",
+               "0-0-match-2": "Z", "0-0-match-3": "Z"}
+    out = grade_assessment_answers_logic(assessment, answers)
+    q = out["results"]["questions"][0]
+    assert q["points_earned"] == 5          # round(10 * 2/4)
+    assert q["is_correct"] is False          # not all 4 matched
