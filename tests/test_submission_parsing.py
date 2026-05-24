@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import base64
 import tempfile
 
-from assignment_grader import parse_filename, read_image_file
+from assignment_grader import parse_filename, read_image_file, read_docx_file
 
 
 def test_standard_underscore_format():
@@ -79,3 +79,39 @@ def test_read_image_unsupported_ext_returns_none():
 
 def test_read_image_nonexistent_returns_none():
     assert read_image_file("/nonexistent/dir/x.png") is None  # open() fails -> None
+
+
+def test_read_image_unsupported_logs_warning(caplog):
+    # lock the print→logger contract (diagnostics go to the module logger, not stdout)
+    with caplog.at_level("WARNING", logger="backend.services.submission_parsing"):
+        assert read_image_file("photo.bmp") is None
+    assert "Unsupported image type" in caplog.text
+
+
+# ── read_docx_file (return-value golden; print→logger conversion preserves these) ──
+
+
+def test_read_docx_interleaves_paragraphs_and_tables():
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph("First paragraph.")
+    doc.add_paragraph("")  # blank — skipped
+    t = doc.add_table(rows=2, cols=2)
+    t.rows[0].cells[0].text = "Name"
+    t.rows[0].cells[1].text = "Score"
+    t.rows[1].cells[0].text = "Alice"
+    t.rows[1].cells[1].text = "90"
+    doc.add_paragraph("Closing paragraph.")
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        doc.save(f.name)
+        path = f.name
+    try:
+        # document order preserved; table rows joined with ' | '; blank para dropped
+        assert read_docx_file(path) == (
+            "First paragraph.\nName | Score\nAlice | 90\nClosing paragraph.")
+    finally:
+        os.unlink(path)
+
+
+def test_read_docx_missing_file_returns_none():
+    assert read_docx_file("/nonexistent/x.docx") is None
