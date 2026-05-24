@@ -27,26 +27,23 @@ protocol. Overarching mandate: "this is a sprint, do not suggest stopping; as cl
   _is_math_subject + MATH_SUBJECTS + build_section_rubric; swept dead `import hashlib`, #522/#523),
   `grader_json` (_try_parse_json_fallback, #524), `submission_parsing` (parse_filename, #525),
   `grader_export` (generate_email_content, #526), #527 golden-net hardening + dead-code cleanup.
-- **Wave 7 file-reader cluster STARTED via the print→logger pattern (VALIDATED by review #528):**
-  `read_image_file` (#528) + `read_docx_file` (#529, in CI) → `submission_parsing`. These are NOT
-  byte-identical — the grader (a former CLI tool) is print-heavy and `backend/services/` is ruff-T20
-  scanned, so diagnostic `print()` calls become `_logger.*` (RETURN VALUES unchanged + golden-tested;
-  the #528 reviewer confirmed nothing depends on the stdout). Each slice: golden return-value char tests
-  baselined first (generate a real .docx via python-docx; write image bytes to a tmp .png), verify the
-  ONLY diff vs origin/main is the print→logger lines (+ any dead-import sweep), explicit `as` shim,
-  bandit+ruff+mypy clean, full grading sweep green.
-  **REMAINING (the complex part — careful, fresh context advised):**
-  (1) the 3 big Graider parsers — `read_docx_file_structured` (~153 LOC), `extract_from_tables` (~149),
-  `extract_from_graider_text` (~164) → `submission_parsing`. Each is intricate Graider-table/marker
-  parsing with MANY prints; needs golden tests on REAL Graider-formatted inputs (understand the
-  GRAIDER_* marker + table format first — see how the planner GENERATES them + how these PARSE them).
-  (2) `read_assignment_file` (the dispatcher; imported by grading/pipeline.py → STRICT, needs explicit
-  `as` shim) — move LAST, after its callees. (3) roster (load_roster, build_roster_from_periods) +
-  CSV/report file-write (export_focus_csv, save_to_master_csv, export_detailed_report) → `grader_export`
-  (also print-heavy → logger). (4) **Phase B: LLM-coupled scoring core** (grade_per_question,
-  generate_feedback, grade_multipass, grade_assignment, detect_ai_plagiarism, grade_with_ensemble,
-  _translate_feedback) — build the full 3-SDK-stub (openai/anthropic/genai, raw clients — NOT
-  llm_adapter) golden net FIRST. assignment_grader.py now ~4,300 LOC (from 5,344).
+- **Wave 7 FILE-READER CLUSTER COMPLETE (print→logger pattern, validated by reviews #528/#531/#532):**
+  All 6 readers + parse_filename now in `submission_parsing.py` (683 LOC): `read_image_file` (#528),
+  `read_docx_file` (#529), `extract_from_graider_text` (#531), `extract_from_tables` (#532),
+  `read_docx_file_structured` (#533), `read_assignment_file` (#534, dispatcher). The grader being a
+  former CLI tool is print-heavy and `backend/services/` is ruff-T20 scanned, so diagnostic `print()`s
+  became `_logger.*` (RETURN VALUES unchanged + golden-tested on REAL Graider fixtures incl. a generated
+  `.docx`; the diff is verified to be ONLY the print→logger lines + any dead-var sweep). **assignment_grader.py
+  now 4,117 LOC (from 5,344).**
+  **REMAINING:**
+  (1) **roster** (load_roster, build_roster_from_periods — file I/O to ~/.graider_data; char-test with
+  tmp dirs; pipeline.py imports load_roster → STRICT, needs `as` shim) + **CSV/report file-write**
+  (export_focus_csv, save_to_master_csv, export_detailed_report) → new `grader_export` (also print-heavy
+  → logger; same proven pattern as the file-readers).
+  (2) **Phase B: LLM-coupled scoring core** (grade_per_question, generate_feedback, grade_multipass,
+  grade_assignment, detect_ai_plagiarism, grade_with_ensemble, _translate_feedback) — the big one;
+  build the full 3-SDK-stub (openai/anthropic/genai, RAW clients — NOT llm_adapter) golden net FIRST,
+  capturing real grade-output dicts on the grading fixtures, then extract behind it. Highest care.
 - **3 LINTER LESSONS (backend/services/ is ruff-T20 + Bandit + Mypy-Strict scanned; root grader was NOT) —
   PRE-CHECK locally per slice** with `bandit -q <file>`, `ruff check <file>`, `ruff check --select F401,F841 <file>`,
   AND the CI mypy command if a `backend/grading/` module imports the symbol:
@@ -94,28 +91,27 @@ golden net before touching `grade_per_question`/`generate_feedback`/`grade_multi
 
 ## 4. Concrete next step (fresh session)
 
-`/tmp/apply_*.py` scripts from earlier slices are GONE (don't survive a fresh session) and not
-needed — all those slices shipped. The remaining work is described procedurally below (§5) and
-in §2. Start: `git checkout main && git pull`, re-read §2 + §3 (protocol) + §6 (linter lessons),
-then take the next complex Graider parser (`read_docx_file_structured`) — build its golden char
-test on a REAL Graider-generated .docx first (understand the GRAIDER_* marker/table format), then
-extract with the print→logger pattern (§2). The GitNexus index is fresh (re-indexed post-#529).
+`/tmp/apply_*.py` scripts are GONE (don't survive a fresh session) and not needed — described
+procedurally below. Start: `git checkout main && git pull`, re-read §2 + §3 (protocol) + §6 (linter
+lessons). Next: **roster + CSV/report export → a new `grader_export` service** (same proven
+print→logger + golden-char-test + `as`-shim pattern as the file-readers; load_roster needs the `as`
+shim since pipeline.py imports it). After that, **Phase B (the LLM scoring core)** — build the
+3-SDK-stub golden net first (capture real grade-output dicts on tests/fixtures/grading/ submissions
+with the openai/anthropic/genai RAW clients stubbed, then extract behind it). GitNexus re-indexed
+post-#534.
 
 ## 5. Remaining Wave 7 (ranked)
 
-Pure helpers + the 2 simple file-readers are DONE (slices 1-9, #520-#529). Remaining:
-- **The 3 complex Graider parsers → `submission_parsing`** (the hard part — print-heavy + intricate):
-  `read_docx_file_structured`, `extract_from_tables`,
-  `extract_from_graider_text`, then `read_assignment_file` (dispatcher; LAST). Needs real fixture
-  files — generate a .docx via python-docx (like the Wave 6 extract_text slice); mock pdfplumber
-  for pdf or rely on byte-identical for that branch; image→base64. Do with FRESH context (meaty).
-- roster (`load_roster`, `build_roster_from_periods`) + writing-profile
-  persistence (`update_writing_profile`/`get_writing_profile` — file I/O to ~/.graider_data,
-  char-test with tmp dirs) + CSV/email export (`export_focus_csv`, `save_to_master_csv`,
-  `export_detailed_report`, `generate_email_content`) → a `grader_export` service.
+DONE (slices 1-13, #520-#534): all pure helpers + the entire file-reader cluster (parse_filename +
+6 readers + 3 Graider parsers) + hardening. Remaining:
+- **roster + CSV/report export → new `grader_export`** (print-heavy → logger; same pattern):
+  `load_roster` (+ `as` shim — pipeline.py imports it), `build_roster_from_periods`,
+  `export_focus_csv`, `save_to_master_csv`, `export_detailed_report`. File I/O to ~/.graider_data —
+  char-test with tmp dirs. (`generate_email_content` already in grader_export from slice 7.)
+- writing-profile persistence (`update_writing_profile`/`get_writing_profile` — file I/O, tmp-dir tests).
 - **Phase B (LAST, max care):** the LLM-coupled scoring core (`grade_per_question`,
   `generate_feedback`, `grade_multipass`, `grade_assignment`, `detect_ai_plagiarism`,
-  `grade_with_ensemble`, `_translate_feedback`) — needs the full SDK-stub golden net first.
+  `grade_with_ensemble`, `_translate_feedback`) — build the full 3-SDK-stub golden net FIRST.
 
 After Wave 7 (or a meaningful chunk): 3-model re-score (CQ 9 → 9.5?), gitnexus re-index.
 
@@ -145,10 +141,11 @@ After Wave 7 (or a meaningful chunk): 3-model re-score (CQ 9 → 9.5?), gitnexus
 ## 8. References
 - Scorecard: `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`
   (Wave 6 closeout re-score = last section).
-- Wave 6 PRs #502–#519 (all merged). Wave 7 PRs #520–#529 (all merged): #520 writing_style,
+- Wave 6 PRs #502–#519 (all merged). Wave 7 PRs #520–#534 (all merged): #520 writing_style,
   #521 grader_text_prep, #522/#523 grading_prep, #524 grader_json, #525 submission_parsing
-  (parse_filename), #526 grader_export, #527 hardening, #528 read_image_file, #529 read_docx_file.
-  Spec/plan for Wave 6: #501.
+  (parse_filename), #526 grader_export (generate_email_content), #527 hardening, #528 read_image_file,
+  #529 read_docx_file, #530 handoff refresh, #531 extract_from_graider_text, #532 extract_from_tables,
+  #533 read_docx_file_structured, #534 read_assignment_file. Spec/plan for Wave 6: #501.
 - No Wave 7 spec/plan doc yet (proven pattern from Waves 5/6; brainstorm was skipped per
   the user's "you decide and execute" + the established cadence). Consider a brief Wave 7
   spec if a fresh agent wants the anchor.
