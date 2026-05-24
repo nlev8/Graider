@@ -107,7 +107,7 @@ class TestGradePerQuestionPrompts:
         defaults.update(override_kwargs)
 
         with patch("openai.OpenAI", return_value=mock_client), \
-             patch("assignment_grader._get_api_key", return_value="test-key"):
+             patch("backend.services.grading_leaves._get_api_key", return_value="test-key"):
             from assignment_grader import grade_per_question
             grade_per_question(**defaults)
 
@@ -194,8 +194,7 @@ class TestGradeMultipassLogic:
              patch("assignment_grader.extract_from_tables", return_value=None), \
              patch("assignment_grader.extract_from_graider_text", return_value=None), \
              patch("assignment_grader.grade_per_question", side_effect=fake_grade_per_question) as mock_gpq, \
-             patch("assignment_grader.generate_feedback", side_effect=fake_generate_feedback), \
-             patch("assignment_grader._get_api_key", return_value="test-key"):
+             patch("assignment_grader.generate_feedback", side_effect=fake_generate_feedback):
             from assignment_grader import grade_multipass
             result = grade_multipass(
                 student_name="Test Student",
@@ -323,8 +322,8 @@ class TestGradeAssignmentSinglePass:
         assignment_data = {"type": "text", "content": content}
 
         with patch("openai.OpenAI", return_value=mock_client), \
-             patch("assignment_grader._get_api_key", return_value="test-key"), \
-             patch("assignment_grader.extract_student_responses", return_value=extraction):
+             patch("backend.services.grading_pipeline._get_api_key", return_value="test-key"), \
+             patch("backend.services.grading_pipeline.extract_student_responses", return_value=extraction):
             from assignment_grader import grade_assignment
             result = grade_assignment(
                 student_name="Test Student",
@@ -354,7 +353,7 @@ class TestGradeAssignmentSinglePass:
         # grade_assignment checks for blank submissions early
         assignment_data = {"type": "text", "content": "   \n\n   "}
 
-        with patch("assignment_grader._get_api_key", return_value="test-key"):
+        with patch("backend.services.grading_pipeline._get_api_key", return_value="test-key"):
             from assignment_grader import grade_assignment
             result = grade_assignment(
                 student_name="Test",
