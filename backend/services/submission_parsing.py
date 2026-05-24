@@ -5,6 +5,7 @@ decomposition). Diagnostic output uses the module logger (the grader's debug pri
 became _logger calls on extraction — return values are unchanged).
 """
 import logging
+import re
 from pathlib import Path
 
 _logger = logging.getLogger(__name__)
@@ -156,3 +157,167 @@ def read_docx_file(filepath: str) -> str:
     except Exception as e:
         _logger.warning("Error reading file: %s", e)
         return None
+
+
+def extract_from_graider_text(document_text, exclude_markers=None):
+    """Extract student responses from plain text containing [GRAIDER:TYPE:ID] markers.
+
+    Fallback for when structured table reading fails (e.g., tables were flattened
+    by Google Docs, copy-paste, or format conversion).  Parses the text between
+    consecutive GRAIDER markers to capture student answers.
+
+    Args:
+        document_text: Plain text that may contain [GRAIDER:...] tags.
+        exclude_markers: List of section names to skip.
+
+    Returns:
+        Same shape as extract_from_tables(), or None if no GRAIDER tags found.
+    """
+    tag_pattern = re.compile(r'\[GRAIDER:(VOCAB|QUESTION|SUMMARY):([^\]]+)\]')
+    matches = list(tag_pattern.finditer(document_text))
+
+    if not matches:
+        return None
+
+    _logger.info("Graider text fallback: Found %d GRAIDER markers in plain text", len(matches))
+
+    extracted = []
+    blank_questions = []
+    excluded_sections = []
+    exclude_lower = [em.lower().strip() for em in exclude_markers] if exclude_markers else []
+
+    type_map = {
+        "VOCAB": "vocab_term",
+        "QUESTION": "numbered_question",
+        "SUMMARY": "summary"
+    }
+
+    for i, match in enumerate(matches):
+        tag_type = match.group(1)
+        tag_id = match.group(2)
+
+        # Text after the tag up to the next tag (or GRAIDER_TABLE_V1 marker or end of doc)
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(document_text)
+        raw_block = document_text[start:end]
+        # Truncate at GRAIDER_TABLE_V1 marker if present (end-of-worksheet sentinel)
+        marker_pos = raw_block.find('GRAIDER_TABLE_V1')
+        if marker_pos != -1:
+            raw_block = raw_block[:marker_pos]
+        raw_block = raw_block.strip()
+
+        # The block contains: "  visible_header  (N pts)\nstudent answer\n..."
+        # Split into lines, skip the header line (contains the term/question + pts),
+        # and grab everything else as the student response.
+        lines = [ln.strip() for ln in raw_block.split('\n') if ln.strip()]
+
+        # First non-empty line is typically the visible header (term + pts)
+        header = lines[0] if lines else ""
+        # Student response is everything after the header line,
+        # filtering out section headers and metadata that appear between markers
+        section_headers = {'vocabulary', 'questions', 'summary', 'question', 'vocab'}
+        response_lines = []
+        for ln in lines[1:]:
+            # Skip section headers and metadata
+            if ln.lower() in section_headers:
+                continue
+            if 'GRAIDER_TABLE_V1' in ln:
+                continue
+            response_lines.append(ln)
+        response = '\n'.join(response_lines).strip()
+        # Strip placeholder text from response cell
+        response = response.replace("Type your answer here...", "").replace("Your Answer:", "").strip()
+
+        # Fix: Student typed answer on same line as header (no newline separation)
+        # Common when student types in the header cell of a Graider table
+        if not response or len(re.sub(r'[_\s]', '', response)) < 2:
+            pts_match = re.search(r'\(\d+\s*pts?\)', header)
+            if pts_match:
+                after_pts = header[pts_match.end():].strip()
+                if after_pts and len(re.sub(r'[_\s]', '', after_pts)) >= 2:
+                    response = after_pts
+                    header = header[:pts_match.end()].strip()
+                    _logger.debug("Text fallback: recovered same-line answer for %s:%s", tag_type, tag_id)
+
+            # Summary fallback: no (N pts) marker — check if prompt is followed by student text
+            if (not response or len(re.sub(r'[_\s]', '', response)) < 2) and tag_type == "SUMMARY":
+                prompt_keywords = {'write', 'explain', 'summarize', 'describe', 'sentence', 'summary', 'paragraph'}
+                best_split = None
+                for m in re.finditer(r'[.?!]\s+', header):
+                    before = header[:m.start() + 1].lower()
+                    after = header[m.end():].strip()
+                    after_clean = re.sub(r'[_\s]', '', after)
+                    has_prompt_word = any(kw in before for kw in prompt_keywords)
+                    if has_prompt_word and len(after_clean) >= 20:
+                        best_split = m
+                        break
+                if best_split:
+                    response = header[best_split.end():].strip()
+                    header = header[:best_split.start() + 1].strip()
+                    _logger.debug("Text fallback: recovered same-line answer for SUMMARY")
+
+        # Check exclusion
+        header_lower = header.lower()
+        is_excluded = any(em in header_lower for em in exclude_lower)
+        if is_excluded:
+            excluded_sections.append(header)
+            continue
+
+        # Build question label
+        if tag_type == "VOCAB":
+            question = tag_id
+        elif tag_type == "QUESTION":
+            question = header
+        elif tag_type == "SUMMARY":
+            question = "Summary"
+        else:
+            question = header
+
+        # Check if blank
+        response_cleaned = re.sub(r'[_\s]', '', response)
+        if len(response_cleaned) < 2:
+            # Deduplicate
+            if question not in blank_questions:
+                blank_questions.append(question)
+            continue
+
+        # Deduplicate: skip if already extracted for this tag
+        already_extracted = any(
+            e.get("tag_id") == tag_id and e.get("section") == tag_type
+            for e in extracted
+        )
+        if already_extracted:
+            continue
+
+        extracted.append({
+            "question": question,
+            "answer": response,
+            "type": type_map.get(tag_type, "numbered_question"),
+            "section": tag_type,
+            "tag_id": tag_id
+        })
+
+    # Cross-reference: remove blank entries that were successfully extracted
+    extracted_questions = {e.get("question", "").lower().strip() for e in extracted}
+    blank_questions = [
+        bq for bq in blank_questions
+        if bq.lower().strip() not in extracted_questions
+    ]
+
+    total_q = len(extracted) + len(blank_questions)
+    answered_q = len(extracted)
+    summary = f"Graider text fallback: Found {answered_q} responses out of {total_q} sections."
+    if blank_questions:
+        summary += f" {len(blank_questions)} left blank."
+
+    _logger.info("Graider text extraction: %d/%d answered", answered_q, total_q)
+
+    return {
+        "extracted_responses": extracted,
+        "blank_questions": blank_questions,
+        "total_questions": max(total_q, 1),
+        "answered_questions": answered_q,
+        "extraction_summary": summary,
+        "excluded_sections": excluded_sections,
+        "missing_sections": []  # Text fallback has no separate missing sections (avoids double-counting with blank_questions)
+    }
