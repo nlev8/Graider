@@ -621,3 +621,63 @@ def read_docx_file_structured(filepath: str) -> dict:
     except Exception as e:
         _logger.warning("Error in structured read: %s", e)
         return {"is_graider_table": False, "plain_text": None, "tables": []}
+
+
+def read_assignment_file(filepath: str) -> dict:
+    """
+    Read assignment file based on its extension.
+    Supports: .docx, .txt, .jpg, .jpeg, .png, .gif, .webp
+    
+    Returns dict with:
+    - type: "text" or "image"
+    - content: text content or base64 image data
+    """
+    filepath = Path(filepath)
+    extension = filepath.suffix.lower()
+    
+    # Text-based files
+    if extension == '.docx':
+        # Try structured table reading first (Graider-generated worksheets)
+        structured = read_docx_file_structured(filepath)
+        if structured.get("is_graider_table") and structured.get("tables"):
+            content = structured.get("plain_text", "")
+            if "GRAIDER_ANSWER_KEY_START" in content:
+                content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+            return {
+                "type": "text",
+                "content": content,
+                "graider_tables": structured["tables"]
+            }
+
+        # Fallback to standard text reading
+        content = read_docx_file(filepath)
+        if content:
+            # Strip embedded answer key from generated worksheets (handles -- and --- variants)
+            if "GRAIDER_ANSWER_KEY_START" in content:
+                content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+                _logger.info("Stripped embedded answer key at file read")
+            return {"type": "text", "content": content}
+        return None
+    
+    elif extension == '.txt':
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                return {"type": "text", "content": f.read()}
+        except Exception as e:
+            _logger.warning("Error reading text file: %s", e)
+            return None
+    
+    # Image files
+    elif extension in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+        image_data = read_image_file(filepath)
+        if image_data:
+            return {
+                "type": "image",
+                "content": image_data["data"],
+                "media_type": image_data["media_type"]
+            }
+        return None
+    
+    else:
+        _logger.warning("Unsupported file type: %s", extension)
+        return None

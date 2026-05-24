@@ -115,3 +115,56 @@ def test_read_docx_interleaves_paragraphs_and_tables():
 
 def test_read_docx_missing_file_returns_none():
     assert read_docx_file("/nonexistent/x.docx") is None
+
+
+# ── read_assignment_file (dispatcher: .docx/.txt/image → typed content dict) ──
+
+
+def test_read_assignment_graider_docx_returns_text_with_tables():
+    from docx import Document
+    from assignment_grader import read_assignment_file
+    doc = Document()
+    doc.add_paragraph("GRAIDER_TABLE_V1")
+    t = doc.add_table(rows=2, cols=1)
+    t.rows[0].cells[0].text = "[GRAIDER:VOCAB:Photosynthesis] Photosynthesis (5 pts)"
+    t.rows[1].cells[0].text = "Plants make food from sunlight"
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        doc.save(f.name)
+        path = f.name
+    try:
+        out = read_assignment_file(path)
+        assert out["type"] == "text"
+        assert len(out["graider_tables"]) == 1
+        assert out["graider_tables"][0]["tag_id"] == "Photosynthesis"
+    finally:
+        os.unlink(path)
+
+
+def test_read_assignment_txt_returns_text():
+    from assignment_grader import read_assignment_file
+    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w") as f:
+        f.write("My essay answer.")
+        path = f.name
+    try:
+        assert read_assignment_file(path) == {"type": "text", "content": "My essay answer."}
+    finally:
+        os.unlink(path)
+
+
+def test_read_assignment_image_returns_image():
+    from assignment_grader import read_assignment_file
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        f.write(b"\x89PNGdata")
+        path = f.name
+    try:
+        out = read_assignment_file(path)
+        assert out["type"] == "image"
+        assert out["media_type"] == "image/png"
+        assert base64.b64decode(out["content"]) == b"\x89PNGdata"
+    finally:
+        os.unlink(path)
+
+
+def test_read_assignment_unsupported_returns_none():
+    from assignment_grader import read_assignment_file
+    assert read_assignment_file("/tmp/nonexistent.xyz") is None
