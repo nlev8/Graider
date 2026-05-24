@@ -68,6 +68,7 @@ import ReviewModal from "./components/ReviewModal";
 import Sidebar from "./components/Sidebar";
 import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
+import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
 const AnalyticsTab = React.lazy(() => import("./tabs/AnalyticsTab"));
 var AdminTab = React.lazy(function() { return import("./tabs/AdminTab"); });
 
@@ -555,8 +556,6 @@ function App() {
   // VPortal credentials state
   const [vportalEmail, setVportalEmail] = useState("");
   const [vportalConfigured, setVportalConfigured] = useState(false);
-  const [outlookSendStatus, setOutlookSendStatus] = useState({ status: "idle", sent: 0, total: 0, failed: 0, message: "" });
-  const [outlookSendPolling, setOutlookSendPolling] = useState(false);
   const [pendingConfirmations, setPendingConfirmations] = useState(0);
   const [pendingConfirmationStudents, setPendingConfirmationStudents] = useState([]);
   const [confirmationStudentFilter, setConfirmationStudentFilter] = useState("");
@@ -1985,40 +1984,9 @@ function App() {
     }
   }, [activeTab]);
 
-  // Outlook send polling
-  useEffect(() => {
-    if (!outlookSendPolling) return;
-    var interval = setInterval(async function() {
-      try {
-        var data = await api.getOutlookSendStatus();
-        setOutlookSendStatus(data);
-        if (data.status === "done" || data.status === "error" || data.status === "idle") {
-          setOutlookSendPolling(false);
-          if (data.status === "done") {
-            addToast("Outlook: Sent " + data.sent + " of " + data.total + " emails" + (data.failed > 0 ? " (" + data.failed + " failed)" : ""), data.failed > 0 ? "warning" : "success");
-          }
-          // Mark portal confirmation emails as sent if any were being processed
-          if (pendingConfirmationIds.current.length > 0) {
-            var ids = pendingConfirmationIds.current;
-            pendingConfirmationIds.current = [];
-            api.markConfirmationsSent(ids, data.status === "done" ? "sent" : "failed").catch(function() {});
-            setPendingConfirmations(0);
-          }
-          // Mark file-based confirmations as sent and refresh count
-          if (pendingConfirmationFilenames.current.length > 0) {
-            var fnames = pendingConfirmationFilenames.current;
-            pendingConfirmationFilenames.current = [];
-            api.markFileConfirmationsSent(fnames).then(function() {
-              fetchPendingConfirmations();
-            }).catch(function() {});
-          }
-        }
-      } catch (err) {
-        // ignore polling errors
-      }
-    }, 2000);
-    return function() { clearInterval(interval); };
-  }, [outlookSendPolling]);
+  const { outlookSendStatus, setOutlookSendStatus, outlookSendPolling, setOutlookSendPolling } = useOutlookSendPolling({
+    addToast, pendingConfirmationIds, pendingConfirmationFilenames, setPendingConfirmations, fetchPendingConfirmations,
+  });
 
 
 
