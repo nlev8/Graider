@@ -4268,6 +4268,7 @@ ${signature}`;
               {/* Builder Tab */}
               {activeTab === "builder" && (
                 <BuilderTab
+                  assignment={assignment}
                   setAssignment={setAssignment}
                   savedAssignments={savedAssignments}
                   savedAssignmentData={savedAssignmentData}

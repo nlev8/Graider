@@ -4,6 +4,7 @@ import Icon from "./Icon";
 export default function Sidebar({ activeTab, TABS, handleLogout, isAdmin, setActiveTab, setSidebarCollapsed, sidebarCollapsed, theme }) {
   return (
         <div
+          data-testid="sidebar"
           style={{
             width: sidebarCollapsed ? "70px" : "260px",
             background:
@@ -24,6 +25,8 @@ export default function Sidebar({ activeTab, TABS, handleLogout, isAdmin, setAct
         >
           {/* Collapse Toggle - Right Edge */}
           <button
+            data-testid="sidebar-collapse-toggle"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             style={{
               position: "absolute",
