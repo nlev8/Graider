@@ -70,6 +70,7 @@ import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
 import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
 import { useSettingsAutoSave } from "./hooks/useSettingsAutoSave";
+import { usePortalSubmissions } from "./hooks/usePortalSubmissions";
 const AnalyticsTab = React.lazy(() => import("./tabs/AnalyticsTab"));
 var AdminTab = React.lazy(function() { return import("./tabs/AdminTab"); });
 
@@ -870,7 +871,6 @@ function App() {
     document.body.style.userSelect = "none";
   }
 
-  const [portalSubmissions, setPortalSubmissions] = useState([]);
   const [assessmentResults, setAssessmentResults] = useState([]);
   const [resultsPeriodFilter, setResultsPeriodFilter] = useState(""); // Filter results by class period
   // Grade-specific state (skipVerified, excludeGradedStudents, excludeApprovedStudents,
@@ -886,22 +886,7 @@ function App() {
     }).catch(function() {});
   }, [userApproved]);
 
-  // Fetch portal submissions for Results tab
-  useEffect(() => {
-    if (!user || showTutorial || userApproved !== true) return;
-    const loadPortalSubmissions = async () => {
-      try {
-        const data = await api.getPortalSubmissions();
-        if (data.submissions) setPortalSubmissions(data.submissions);
-        if (data.pending_confirmations != null) setPendingConfirmations(data.pending_confirmations);
-      } catch (e) {
-        // Silently fail - portal submissions are supplementary
-      }
-    };
-    loadPortalSubmissions();
-    const interval = setInterval(loadPortalSubmissions, 30000);
-    return () => clearInterval(interval);
-  }, [user, showTutorial, userApproved]);
+  const { portalSubmissions } = usePortalSubmissions({ user, showTutorial, userApproved, setPendingConfirmations });
 
   // Fetch assessment results for Results tab
   useEffect(function() {
