@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from assignment_grader import extract_from_graider_text
+from assignment_grader import extract_from_graider_text, extract_from_tables
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "grading",
                        "submission_social_studies.txt")
@@ -63,3 +63,51 @@ def test_graider_text_numbered_question_parsed():
     assert len(numbered) == 4  # the fixture has 4 numbered questions
     assert numbered[0]["section"] == "QUESTION"
     assert numbered[0]["tag_id"] == "1"
+
+
+# ── extract_from_tables (structured Graider table data → same dict shape) ──
+
+TABLE_DATA = [
+    {"tag_type": "VOCAB", "tag_id": "Photosynthesis", "header_text": "Photosynthesis (5 pts)",
+     "response": "The process plants use to make food from sunlight"},
+    {"tag_type": "QUESTION", "tag_id": "1",
+     "header_text": "1) What is the powerhouse of the cell? (10 pts)", "response": "The mitochondria"},
+    {"tag_type": "SUMMARY", "tag_id": "main", "header_text": "Summary (20 pts)",
+     "response": "Cells are the basic unit of life and all living things are made of them."},
+    {"tag_type": "VOCAB", "tag_id": "Osmosis", "header_text": "Osmosis (5 pts)", "response": "___"},
+]
+
+
+def test_tables_extracts_responses_and_blanks():
+    out = extract_from_tables(TABLE_DATA)
+    assert out["total_questions"] == 4
+    assert out["answered_questions"] == 3
+    assert out["blank_questions"] == ["Osmosis"]
+    assert out["extraction_summary"] == (
+        "Table extraction: Found 3 responses out of 4 sections. 1 left blank.")
+    assert [r["type"] for r in out["extracted_responses"]] == [
+        "vocab_term", "numbered_question", "summary"]
+
+
+def test_tables_vocab_and_summary_question_labels():
+    out = extract_from_tables(TABLE_DATA)
+    r = out["extracted_responses"]
+    assert r[0] == {"question": "Photosynthesis",
+                    "answer": "The process plants use to make food from sunlight",
+                    "type": "vocab_term", "section": "VOCAB", "tag_id": "Photosynthesis"}
+    assert r[2]["question"] == "Summary"  # SUMMARY label is fixed
+    assert r[1]["question"] == "1) What is the powerhouse of the cell? (10 pts)"  # QUESTION uses header
+
+
+def test_tables_exclude_markers_skips_section():
+    out = extract_from_tables(TABLE_DATA, exclude_markers=["Summary"])
+    assert out["excluded_sections"] == ["Summary (20 pts)"]
+
+
+def test_tables_empty_input_quirk():
+    # empty table_data reports total_questions: 1 (preserved quirk)
+    assert extract_from_tables([]) == {
+        "extracted_responses": [], "blank_questions": [], "total_questions": 1,
+        "answered_questions": 0,
+        "extraction_summary": "Table extraction: Found 0 responses out of 0 sections.",
+        "excluded_sections": [], "missing_sections": []}
