@@ -96,3 +96,61 @@ def test_export_focus_csv_groups_by_assignment_skips_unknown(tmp_path):
     assert content == (
         "Student ID,Score,Comment\n"
         '1950304,88,"Nice work, Alice! Good work here."\n')
+
+
+# ── save_to_master_csv (upsert master_grades.csv with score-based dedup) ──
+
+from datetime import datetime  # noqa: E402
+
+from assignment_grader import save_to_master_csv  # noqa: E402
+
+MASTER_HEADER = (
+    "Date,Student ID,Student Name,First Name,Last Name,Period,Assignment,Unit,Quarter,"
+    "Overall Score,Letter Grade,Content Accuracy,Completeness,Writing Quality,"
+    "Effort Engagement,Feedback,Approved,API Cost,Input Tokens,Output Tokens,API Calls,AI Model")
+
+
+def _master_rows(folder):
+    import os
+    with open(os.path.join(folder, "master_grades.csv")) as f:
+        return f.read().strip().split("\n")
+
+
+def test_master_csv_fresh_write(tmp_path):
+    g = [{"student_id": "S1", "student_name": "Alice", "first_name": "Alice", "last_name": "Smith",
+          "period": "3", "assignment": "Quiz 1.docx", "score": 80, "letter_grade": "B-",
+          "breakdown": {"content_accuracy": 30, "completeness": 20, "writing_quality": 18,
+                        "effort_engagement": 12}, "feedback": "ok"}]
+    save_to_master_csv(g, str(tmp_path))
+    rows = _master_rows(str(tmp_path))
+    assert rows[0] == MASTER_HEADER
+    assert len(rows) == 2  # header + 1
+    cells = rows[1].split(",")
+    assert cells[0] == datetime.now().strftime('%Y-%m-%d')  # Date
+    assert cells[1] == "S1" and cells[6] == "Quiz 1.docx" and cells[9] == "80"
+
+
+def test_master_csv_dedup_higher_score_replaces(tmp_path):
+    base = {"student_id": "S1", "first_name": "A", "student_name": "A", "assignment": "Quiz 1.docx",
+            "breakdown": {}}
+    save_to_master_csv([{**base, "score": 80}], str(tmp_path))
+    save_to_master_csv([{**base, "score": 95, "letter_grade": "A"}], str(tmp_path))
+    rows = _master_rows(str(tmp_path))
+    assert len(rows) == 2  # header + 1 (replaced, not duplicated)
+    assert rows[1].split(",")[9] == "95"
+
+
+def test_master_csv_dedup_lower_score_keeps_old(tmp_path):
+    base = {"student_id": "S1", "first_name": "A", "student_name": "A", "assignment": "Quiz 1.docx",
+            "breakdown": {}}
+    save_to_master_csv([{**base, "score": 90}], str(tmp_path))
+    save_to_master_csv([{**base, "score": 60}], str(tmp_path))
+    rows = _master_rows(str(tmp_path))
+    assert len(rows) == 2
+    assert rows[1].split(",")[9] == "90"  # old higher score kept
+
+
+def test_master_csv_skips_unknown(tmp_path):
+    save_to_master_csv([{"student_id": "UNKNOWN", "assignment": "Q", "score": 50, "breakdown": {}}],
+                       str(tmp_path))
+    assert len(_master_rows(str(tmp_path))) == 1  # header only
