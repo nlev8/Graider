@@ -1476,7 +1476,6 @@ def read_assignment_file(filepath: str) -> dict:
 # FERPA COMPLIANCE - PII SANITIZATION
 # =============================================================================
 
-import hashlib
 
 from backend.services.grader_text_prep import preprocess_for_ai_detection, sanitize_pii_for_ai
 
@@ -1953,105 +1952,7 @@ class FeedbackResponse(BaseModel):
     skills_demonstrated: SkillsDemonstrated
 
 
-def _parse_expected_answers(custom_instructions: str) -> dict:
-    """Parse expected answers from gradingNotes/custom instructions.
-
-    Returns dict mapping question index (int) or question text (str) to expected answer.
-    """
-    answers = {}
-    if not custom_instructions:
-        return answers
-
-    # Parse "Q1: answer" or "- Q1: answer" patterns
-    for match in re.finditer(r'(?:^|\n)\s*-?\s*Q(\d+)\s*:\s*(.+)', custom_instructions):
-        idx = int(match.group(1)) - 1  # 0-indexed
-        answers[idx] = match.group(2).strip()
-
-    # Parse "VOCABULARY EXPECTED DEFINITIONS:" section
-    in_vocab = False
-    for line in custom_instructions.split('\n'):
-        line = line.strip()
-        if 'EXPECTED' in line.upper() and ('DEFINITION' in line.upper() or 'ANSWER' in line.upper()):
-            in_vocab = True
-            continue
-        if in_vocab and line.startswith('- '):
-            parts = line[2:].split(':', 1)
-            if len(parts) == 2:
-                answers[parts[0].strip()] = parts[1].strip()
-        elif in_vocab and not line:
-            in_vocab = False
-
-    return answers
-
-
-def _distribute_points(responses: list, marker_config: list, total_points: int) -> list:
-    """Distribute point values and section metadata across extracted responses.
-
-    Uses marker_config if available, otherwise distributes evenly.
-    Returns list of dicts with 'points', 'section_name', and 'section_type' per response.
-    """
-    if not responses:
-        return []
-
-    # Build lookup: marker_name_lower -> {points, name, type}
-    marker_meta = {}
-    if marker_config:
-        for m in marker_config:
-            if isinstance(m, dict):
-                marker_meta[m.get('start', '').lower()] = {
-                    'points': m.get('points', 10),
-                    'name': m.get('start', 'Section'),
-                    'type': m.get('type', 'written')
-                }
-            elif isinstance(m, str):
-                marker_meta[m.lower()] = {
-                    'points': 10,
-                    'name': m,
-                    'type': 'written'
-                }
-
-    result = []
-    default_pts = total_points // max(len(responses), 1)
-
-    for resp in responses:
-        question = resp.get("question", "").lower()
-        matched = None
-        for marker_key, meta in marker_meta.items():
-            if marker_key in question:
-                matched = meta
-                break
-
-        if matched:
-            result.append({
-                'points': matched['points'],
-                'section_name': matched['name'],
-                'section_type': matched['type']
-            })
-        else:
-            result.append({
-                'points': default_pts,
-                'section_name': '',
-                'section_type': 'written'
-            })
-
-    return result
-
-
-MATH_SUBJECTS = {
-    'math', 'mathematics', 'algebra', 'pre-algebra', 'geometry',
-    'calculus', 'pre-calculus', 'trigonometry', 'statistics',
-    'ap calculus', 'ap statistics', 'integrated math',
-    'math 6', 'math 7', 'math 8',
-}
-
-
-def _is_math_subject(subject: str) -> bool:
-    """Check if the teacher-selected subject is a math subject.
-
-    STRICT: Only returns True when subject was explicitly set to a math
-    subject in Settings. Never guesses from question content or keywords.
-    """
-    return subject.strip().lower() in MATH_SUBJECTS
+from backend.services.grading_prep import MATH_SUBJECTS, _distribute_points, _is_math_subject, _parse_expected_answers
 
 
 def grade_per_question(question: str, student_answer: str, expected_answer: str,
