@@ -44,6 +44,24 @@ def test_distribute_points_empty_and_no_marker():
         {"points": 50, "section_name": "", "section_type": "written"}]
 
 
+def test_distribute_points_string_marker_defaults_10_written():
+    # string-marker branch: matched -> 10 points, name=marker, type "written"
+    assert _distribute_points([{"question": "essay part one"}], ["Essay"], 30) == [
+        {"points": 10, "section_name": "Essay", "section_type": "written"}]
+
+
+def test_distribute_points_integer_division_truncates():
+    # 100 // 3 -> 33 each (a point is lost; floor division contract)
+    assert _distribute_points(
+        [{"question": "a"}, {"question": "b"}, {"question": "c"}], None, 100) == [
+        {"points": 33, "section_name": "", "section_type": "written"}] * 3
+
+
+def test_parse_expected_answers_blank_line_resets_vocab_section():
+    # a blank line between vocab entries resets in_vocab, excluding later entries
+    assert _parse_expected_answers("EXPECTED ANSWERS:\n- a: 1\n\n- b: 2\n") == {"a": "1"}
+
+
 def test_is_math_subject():
     assert _is_math_subject("Algebra") is True
     assert _is_math_subject(" math 7 ") is True       # strip + lower

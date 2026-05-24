@@ -34,16 +34,8 @@ def analyze_writing_style(text: str) -> dict:
     long_words = [w for w in words if len(w) > 7]
     complex_word_ratio = len(long_words) / len(words)
 
-    # Detect common misspellings (lowercase words that might be proper nouns)
-    potential_misspellings = []
-    common_misspelled = re.findall(r'\b[a-z]+[A-Z][a-z]*\b|\b[a-z]{2,}\b', clean_text)
-
     # Check for specific patterns
     uses_contractions = bool(re.search(r"\b(don't|can't|won't|isn't|aren't|doesn't|didn't|wouldn't|couldn't|shouldn't|I'm|you're|they're|we're|it's|that's|what's|there's|here's)\b", clean_text, re.IGNORECASE))
-
-    # Capitalization habits
-    proper_caps = len(re.findall(r'\b[A-Z][a-z]+\b', clean_text))
-    all_caps = len(re.findall(r'\b[A-Z]{2,}\b', clean_text))
 
     # Simple vs complex vocabulary indicators
     simple_words = ['the', 'a', 'an', 'is', 'was', 'are', 'were', 'it', 'they', 'he', 'she', 'we', 'you', 'i', 'and', 'but', 'or', 'so', 'because', 'like', 'just', 'really', 'very', 'good', 'bad', 'big', 'small']

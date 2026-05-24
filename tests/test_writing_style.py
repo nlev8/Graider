@@ -64,3 +64,32 @@ def test_compare_writing_styles_consistent_returns_none():
     assert compare_writing_styles(consistent, HIST) == {
         "deviation": "none", "ai_likelihood": "none", "deviations": [],
         "reason": "Writing style consistent with history"}
+
+
+def test_compare_writing_styles_one_deviation_is_minor():
+    # single complexity deviation (3.0 -> 6.5, diff 3.5: >3 but <=4) -> minor / none
+    one = {"complexity_score": 6.5, "avg_sentence_length": 8.0,
+           "academic_word_count": 0, "avg_word_length": 4.0}
+    assert compare_writing_styles(one, HIST) == {
+        "deviation": "minor", "ai_likelihood": "none",
+        "deviations": ["Complexity jumped from 3.0 to 6.5"],
+        "reason": "Complexity jumped from 3.0 to 6.5"}
+
+
+def test_compare_writing_styles_many_deviations_is_likely():
+    # all four metrics elevated -> 4 deviations -> significant / likely
+    four = {"complexity_score": 9.0, "avg_sentence_length": 20.0,
+            "academic_word_count": 5, "avg_word_length": 6.0}
+    out = compare_writing_styles(four, HIST)
+    assert out["deviation"] == "significant"
+    assert out["ai_likelihood"] == "likely"
+    assert len(out["deviations"]) == 4
+
+
+def test_analyze_writing_style_contractions_and_uncapped_complexity():
+    # simple text with contractions -> uses_contractions True, low (clamped) complexity
+    out = analyze_writing_style(
+        "I don't think it's very hard. We can do it. It was fun and we like it a lot.")
+    assert out["uses_contractions"] is True
+    assert out["complexity_score"] == 1       # clamped to min(1)
+    assert out["simple_word_ratio"] == 0.571
