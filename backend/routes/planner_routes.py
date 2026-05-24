@@ -95,6 +95,7 @@ from backend.services.planner_study_aids import generate_slides_payload
 from backend.services.planner_content_tools import adjust_reading_level_content
 from backend.services.planner_standards import rewrite_for_alignment_content
 from backend.services.planner_standards import align_document_to_standards_content
+from backend.services.planner_standards import TextExtractionError, extract_text_from_upload
 from backend.services.planner_assessments import grade_assessment_answers_logic
 
 # ── Tier 2 PR3: prompt construction extracted to ───────────────────────────
@@ -3392,75 +3393,23 @@ def extract_text_from_file():
 
     file_data = file.read()
 
+    # Images need an OpenAI key (vision). Resolve it route-side (Flask g) and own
+    # the missing-key 400 here; non-image types never touch the key, preserving
+    # the original no-extra-key-lookup behavior.
+    api_key = None
+    if filename.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')):
+        from backend.api_keys import get_api_key as _gak
+        teacher_id = getattr(g, 'user_id', 'local-dev')
+        api_key = _gak('openai', teacher_id)
+        if not api_key:
+            return jsonify({"error": "OpenAI API key required for image text extraction"}), 400
+
     try:
-        # Documents — extract text directly
-        if filename.endswith('.docx'):
-            import io
-            from docx import Document
-            doc = Document(io.BytesIO(file_data))
-            text_parts = []
-            for para in doc.paragraphs:
-                if para.text.strip():
-                    text_parts.append(para.text)
-            for table in doc.tables:
-                for row in table.rows:
-                    row_text = ' | '.join([c.text.strip() for c in row.cells if c.text.strip()])
-                    if row_text:
-                        text_parts.append(row_text)
-            return jsonify({"text": '\n'.join(text_parts)})
-
-        elif filename.endswith('.pdf'):
-            import io
-            try:
-                import pdfplumber
-                with pdfplumber.open(io.BytesIO(file_data)) as pdf:
-                    text_parts = [page.extract_text() or '' for page in pdf.pages]
-                return jsonify({"text": '\n'.join(text_parts).strip()})
-            except ImportError:
-                from PyPDF2 import PdfReader
-                reader = PdfReader(io.BytesIO(file_data))
-                text_parts = [page.extract_text() or '' for page in reader.pages]
-                return jsonify({"text": '\n'.join(text_parts).strip()})
-
-        elif filename.endswith('.txt'):
-            return jsonify({"text": file_data.decode('utf-8', errors='replace')})
-
-        # Images — use GPT-4o vision to extract text
-        elif filename.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')):
-            import base64
-            from backend.api_keys import get_api_key as _gak
-            teacher_id = getattr(g, 'user_id', 'local-dev')
-            api_key = _gak('openai', teacher_id)
-            if not api_key:
-                return jsonify({"error": "OpenAI API key required for image text extraction"}), 400
-
-            ext = filename.rsplit('.', 1)[-1]
-            mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-                    "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp"}.get(ext, "image/png")
-            b64 = base64.b64encode(file_data).decode('utf-8')
-
-            from backend.services.llm_adapter import ImagePart, LLMRequest, Message, OpenAIAdapter, TextPart
-            adapter = OpenAIAdapter(api_key=api_key)
-            completion = adapter.chat(LLMRequest(
-                model="gpt-4o",
-                system_prompt="Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary.",
-                messages=[Message(role="user", content=[
-                    ImagePart(url=None, base64=b64, mime_type=mime),
-                    TextPart(text="Extract all text from this image."),
-                ])],
-                max_tokens=4000,
-                temperature=0,
-                metadata={"feature_label": "extract_text_image"},
-            ))
-
-            _record_planner_cost(_extract_usage(completion, "gpt-4o"))
-
-            return jsonify({"text": (completion.content_parts[0].text if completion.content_parts else "").strip()})
-
-        else:
-            return jsonify({"error": "Unsupported file type. Use .docx, .pdf, .txt, .png, .jpg, or .jpeg"}), 400
-
-    except Exception as e:
+        text = extract_text_from_upload(file_data=file_data, filename=filename, api_key=api_key)
+        return jsonify({"text": text})
+    except TextExtractionError as te:
+        return jsonify({"error": str(te)}), 400
+    except Exception:
         _logger.exception("Request failed: %s", request.path)
         return jsonify({"error": "An internal error occurred"}), 500
 

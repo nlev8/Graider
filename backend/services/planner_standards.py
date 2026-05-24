@@ -348,3 +348,81 @@ def align_document_to_standards_content(*, doc_text, standards_ref, api_key):
     _record_planner_cost(usage)
 
     return {**result, "usage": usage}
+
+
+class TextExtractionError(Exception):
+    """Raised by extract_text_from_upload for a file type that passed the route's
+    ALLOWED_DOC_EXTENSIONS gate but has no extraction branch (.doc/.rtf). The route
+    maps this to a 400 with this message. Wave 6 Slice 10.
+    """
+
+
+def extract_text_from_upload(*, file_data, filename, api_key):
+    """Extract plain text from an uploaded document (docx/pdf/txt) or image
+    (png/jpg/...). Pure dispatch (Flask-free): the route validates the upload,
+    resolves the OpenAI key for images (and owns the missing-key 400), and passes
+    the bytes + filename + key in. Returns the extracted text string; raises
+    TextExtractionError for an allowed-but-unhandled type. Wave 6 Slice 10 -
+    extracted from planner_routes.
+    """
+    # Documents — extract text directly
+    if filename.endswith('.docx'):
+        import io
+        from docx import Document
+        doc = Document(io.BytesIO(file_data))
+        text_parts = []
+        for para in doc.paragraphs:
+            if para.text.strip():
+                text_parts.append(para.text)
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = ' | '.join([c.text.strip() for c in row.cells if c.text.strip()])
+                if row_text:
+                    text_parts.append(row_text)
+        return '\n'.join(text_parts)
+
+    elif filename.endswith('.pdf'):
+        import io
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(file_data)) as pdf:
+                text_parts = [page.extract_text() or '' for page in pdf.pages]
+            return '\n'.join(text_parts).strip()
+        except ImportError:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(io.BytesIO(file_data))
+            text_parts = [page.extract_text() or '' for page in reader.pages]
+            return '\n'.join(text_parts).strip()
+
+    elif filename.endswith('.txt'):
+        return file_data.decode('utf-8', errors='replace')
+
+    # Images — use GPT-4o vision to extract text
+    elif filename.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')):
+        import base64
+
+        ext = filename.rsplit('.', 1)[-1]
+        mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp"}.get(ext, "image/png")
+        b64 = base64.b64encode(file_data).decode('utf-8')
+
+        from backend.services.llm_adapter import ImagePart, LLMRequest, Message, OpenAIAdapter, TextPart
+        adapter = OpenAIAdapter(api_key=api_key)
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="Extract ALL text from this image. Return only the extracted text, preserving paragraphs and structure. Do not add commentary.",
+            messages=[Message(role="user", content=[
+                ImagePart(url=None, base64=b64, mime_type=mime),
+                TextPart(text="Extract all text from this image."),
+            ])],
+            max_tokens=4000,
+            temperature=0,
+            metadata={"feature_label": "extract_text_image"},
+        ))
+
+        _record_planner_cost(_extract_usage(completion, "gpt-4o"))
+
+        return (completion.content_parts[0].text if completion.content_parts else "").strip()
+
+    else:
+        raise TextExtractionError("Unsupported file type. Use .docx, .pdf, .txt, .png, .jpg, or .jpeg")
