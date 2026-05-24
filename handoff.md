@@ -107,6 +107,36 @@ stopping; as close to 10/10 as possible. You decide and execute; use the 3 AIs a
 - **Deferred (handoff §6 carryover):** `writing_style.py` 4 carried-over dead locals in
   analyze_writing_style (pre-existing; remove in a non-identity commit with golden confirmation).
 
+## 5b. Wave 8 (grade_assignment internal decomposition → path to 9.5) — STARTED
+
+The unanimous 3-model next lever. `grade_assignment` (~1,138 LOC in `grading_pipeline.py`) is a
+second-order god-function mixing provider setup, extraction, prompt assembly, parse, scoring
+caps, rubric weighting, ELL translation, writing-profile updates, audit, error recovery.
+
+- **Slice 1 SHIPPED (#549):** extracted shared pure helpers `_letter_grade(score)` +
+  `_completeness_cap_table(grading_style)` (+ `_COMPLETENESS_CAPS`) into `grading_pipeline.py`,
+  deduping 9 inline sites across grade_assignment/grade_multipass/grade_with_ensemble.
+  Boundary unit test `tests/test_grading_pipeline_helpers.py` + golden net + test_grading_factors.
+- **Phase boundaries inside grade_assignment** (line refs pre-Slice-1, approximate): provider/
+  client init (~159), blank short-circuit (~215), context build — custom instr/history/
+  accommodation/FITB (~328–365), pre-extract responses + writing-style (~374–490), **prompt
+  assembly (~534–769)**, LLM call + provider-branch parse (~772–1120), rubric-weights post-proc
+  (~1122), completeness-caps post-proc (~1143), result/audit/token build (end). Suggested phase
+  helpers (keep in grading_pipeline.py, called by grade_assignment as orchestration):
+  `_resolve_grading_client`, `_build_grading_prompt`, `_parse_grading_response`,
+  `_apply_single_pass_post_processing`.
+- ⚠️ **CRITICAL SAFETY INSIGHT — the golden net does NOT pin prompt TEXT.** The SDK fakes route
+  on `response_format` type + coarse content markers and return a canned result REGARDLESS of the
+  exact prompt wording. So extracting `_build_grading_prompt` (or the per-question/feedback prompt
+  builders) is NOT protected by the golden net against subtle prompt drift. **BEFORE any
+  prompt-assembly extraction, add a prompt-SNAPSHOT test:** extend `tests/grading_fakes.py`'s
+  CallBook to capture the full prompt text per call, then pin grade_assignment's (and
+  grade_multipass per-question + generate_feedback) prompt for a fixture (hash + key substrings),
+  baseline green, extract, re-assert unchanged. Without this, a prompt regression ships silently.
+- The provider/parse/post-processing phase extractions ARE covered by the golden net (they affect
+  the result dict). Order suggestion: post-processing first (lowest risk, result-pinned), then
+  provider-resolution, then prompt-assembly LAST (after the snapshot net exists).
+
 ## 6. Standing constraints
 - venv `/Users/alexc/Downloads/Graider/venv/`. CI = 9 checks; ruff selects ONLY T20 (root
   assignment_grader.py is print-allowed; services/ is not). Commit trailer

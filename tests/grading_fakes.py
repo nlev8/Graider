@@ -142,11 +142,12 @@ def _route_text(blob: str) -> str:
 class CallBook:
     def __init__(self):
         self._lock = threading.Lock()
-        self.calls = []  # list of dicts: {provider, method, model, schema}
+        self.calls = []  # list of dicts: {provider, method, model, schema, prompt}
 
-    def record(self, provider, method, model, schema):
+    def record(self, provider, method, model, schema, prompt=""):
         with self._lock:
-            self.calls.append({"provider": provider, "method": method, "model": model, "schema": schema})
+            self.calls.append({"provider": provider, "method": method, "model": model,
+                               "schema": schema, "prompt": prompt})
 
     def count(self, *, provider=None, method=None, schema=None) -> int:
         with self._lock:
@@ -156,6 +157,16 @@ class CallBook:
                 and (method is None or c["method"] == method)
                 and (schema is None or c["schema"] == schema)
             )
+
+    def prompts(self, *, provider=None, method=None, schema=None) -> list:
+        """Return the captured prompt text for matching calls (for prompt-snapshot tests)."""
+        with self._lock:
+            return [
+                c["prompt"] for c in self.calls
+                if (provider is None or c["provider"] == provider)
+                and (method is None or c["method"] == method)
+                and (schema is None or c["schema"] == schema)
+            ]
 
     @property
     def total(self) -> int:
@@ -209,7 +220,7 @@ class _FakeOpenAI:
     def _parse(self, *, model, messages, response_format, **_kw):
         name = response_format.__name__
         user = _user_content(messages)
-        self._book.record("openai", "parse", model, name)
+        self._book.record("openai", "parse", model, name, prompt=user)
         if self._force_text:
             # Simulate a structured-parse miss: parsed=None, content carries JSON.
             return _oa_response(parsed=None, content=_route_text(user + ' "parsed_miss"'))
@@ -228,7 +239,7 @@ class _FakeOpenAI:
 
     def _create(self, *, model, messages, **_kw):
         user = _user_content(messages)
-        self._book.record("openai", "create", model, None)
+        self._book.record("openai", "create", model, None, prompt=user)
         return _oa_response(parsed=None, content=_route_text(user))
 
 
@@ -239,7 +250,7 @@ class _FakeAnthropic:
 
     def _create(self, *, model, messages, system="", **_kw):
         blob = (system or "") + "\n" + _user_content(messages)
-        self._book.record("anthropic", "create", model, None)
+        self._book.record("anthropic", "create", model, None, prompt=blob)
         return _anthropic_response(_route_text(blob))
 
 
@@ -253,7 +264,7 @@ class _FakeGeminiModel:
             blob = content
         else:  # list: [prompt_str, image_part]
             blob = "\n".join(c for c in content if isinstance(c, str))
-        self._book.record("gemini", "generate", self._model, None)
+        self._book.record("gemini", "generate", self._model, None, prompt=blob)
         return _gemini_response(_route_text(blob))
 
 
