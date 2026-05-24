@@ -68,3 +68,31 @@ def test_export_detailed_report_writes_csv(tmp_path):
         "Student ID,Student Name,Email,Assignment,Score,Letter Grade,"
         "Content (40),Completeness (25),Writing (20),Effort (15),Feedback,Filename\n"
         "S1,Alice,a@x.edu,Quiz,88,B+,35,22,18,13,Good work,alice.docx\n")
+
+
+# ── export_focus_csv (per-assignment Focus CSVs; random opener patched for determinism) ──
+
+from unittest.mock import patch  # noqa: E402
+
+from assignment_grader import export_focus_csv  # noqa: E402
+
+FOCUS_GRADES = [
+    {"student_id": "1950304", "first_name": "Alice", "score": 88, "feedback": "Good   work here.",
+     "filename": "Alice_Smith_Unit1_Quiz.docx"},
+    {"student_id": "UNKNOWN", "first_name": "Bob", "score": 50, "feedback": "x",
+     "filename": "Bob_Jones_Unit1_Quiz.docx"},
+]
+
+
+def test_export_focus_csv_groups_by_assignment_skips_unknown(tmp_path):
+    # patch random.choice (stdlib) so the opener is deterministic across pre/post extraction
+    with patch("random.choice", lambda seq: seq[0]):
+        files = export_focus_csv(FOCUS_GRADES, str(tmp_path), "ignored")
+    assert len(files) == 1                                   # both grades → one "Unit1 Quiz" group
+    assert os.path.basename(files[0]).startswith("Unit1_Quiz_")
+    with open(files[0]) as f:
+        content = f.read()
+    # UNKNOWN student is skipped; comment = opener[0] (score>=80 "Nice work") + cleaned feedback
+    assert content == (
+        "Student ID,Score,Comment\n"
+        '1950304,88,"Nice work, Alice! Good work here."\n')
