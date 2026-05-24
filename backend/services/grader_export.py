@@ -189,3 +189,135 @@ def export_focus_csv(grades: list, output_folder: str, assignment_name: str) -> 
         created_files.append(str(filepath))
     
     return created_files
+
+
+def save_to_master_csv(grades: list, output_folder: str):
+    """
+    Save grades to a master CSV file that tracks ALL grades over time.
+    This enables progress tracking across the entire school year.
+
+    DEDUPLICATION: If a student is re-graded on the same assignment,
+    the old row is REPLACED (not duplicated). The unique key is
+    (Student ID, Assignment).
+
+    Columns:
+    - Date, Student ID, Student Name, Period, Assignment, Unit, Quarter
+    - Overall Score, Letter Grade
+    - Content Accuracy, Completeness, Writing Quality, Effort & Engagement
+    """
+    master_file = Path(output_folder) / "master_grades.csv"
+
+    HEADER = [
+        'Date', 'Student ID', 'Student Name', 'First Name', 'Last Name',
+        'Period', 'Assignment', 'Unit', 'Quarter',
+        'Overall Score', 'Letter Grade',
+        'Content Accuracy', 'Completeness', 'Writing Quality', 'Effort Engagement',
+        'Feedback', 'Approved',
+        'API Cost', 'Input Tokens', 'Output Tokens', 'API Calls', 'AI Model'
+    ]
+
+    # Determine current quarter based on date
+    today = datetime.now()
+    month = today.month
+    if month >= 8 and month <= 10:
+        quarter = "Q1"
+    elif month >= 11 or month <= 1:
+        quarter = "Q2"
+    elif month >= 2 and month <= 4:
+        quarter = "Q3"
+    else:
+        quarter = "Q4"
+
+    # Normalize assignment name for dedup matching
+    # Handles: trailing "(1)", ".docx", extra whitespace, etc.
+    def _normalize_assignment(name):
+        n = name.strip()
+        n = re.sub(r'\s*\(\d+\)\s*$', '', n)      # Remove trailing (1), (2), etc.
+        n = re.sub(r'\.docx?\s*$', '', n, flags=re.IGNORECASE)  # Remove .docx/.doc
+        n = re.sub(r'\.pdf\s*$', '', n, flags=re.IGNORECASE)    # Remove .pdf
+        n = n.strip().lower()
+        return n
+
+    # Build set of (student_id, normalized_assignment) keys being written now
+    new_keys = set()
+    for grade in grades:
+        sid = grade.get('student_id', '')
+        assignment = grade.get('assignment', '')
+        if sid and sid != "UNKNOWN" and assignment:
+            new_keys.add((sid, _normalize_assignment(assignment)))
+
+    # Read existing rows, filtering out any that will be replaced (only if new score >= old)
+    existing_rows = []
+    kept_old_keys = set()
+    if master_file.exists():
+        try:
+            with open(master_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Skip header row (value unused)
+                for row in reader:
+                    if len(row) >= 7:
+                        row_sid = row[1]       # Student ID column
+                        row_assign = row[6]    # Assignment column
+                        key = (row_sid, _normalize_assignment(row_assign))
+                        if key in new_keys:
+                            # Compare scores — only replace if new is higher or equal
+                            old_score = float(row[9]) if len(row) > 9 and row[9] else 0
+                            new_grade = next((g for g in grades if g.get('student_id') == row_sid and _normalize_assignment(g.get('assignment', '')) == key[1]), None)
+                            new_score = float(new_grade.get('score', 0) or 0) if new_grade else 0
+                            if new_score >= old_score:
+                                continue  # Replace — new is higher or equal
+                            else:
+                                kept_old_keys.add(key)
+                                # Keep old row, skip the new grade
+                    existing_rows.append(row)
+        except Exception as e:
+            _logger.warning("Could not read existing master CSV: %s", e)
+
+    # Filter out grades where old score was kept
+    if kept_old_keys:
+        grades = [g for g in grades if (g.get('student_id', ''), _normalize_assignment(g.get('assignment', ''))) not in kept_old_keys]
+
+    # Write full file: header + existing (deduplicated) + new grades
+    with open(master_file, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(HEADER)
+
+        # Write back existing rows (minus duplicates)
+        for row in existing_rows:
+            writer.writerow(row)
+
+        # Write new grades
+        for grade in grades:
+            if grade.get('student_id') == "UNKNOWN":
+                continue
+
+            breakdown = grade.get('breakdown', {})
+
+            token_usage = grade.get('token_usage', {})
+
+            writer.writerow([
+                today.strftime('%Y-%m-%d'),
+                grade.get('student_id', ''),
+                grade.get('student_name', ''),
+                grade.get('first_name', ''),
+                grade.get('last_name', ''),
+                grade.get('period', ''),
+                grade.get('assignment', ''),
+                grade.get('unit', ''),
+                grade.get('grading_period', quarter),
+                grade.get('score', 0),
+                grade.get('letter_grade', ''),
+                breakdown.get('content_accuracy', 0),
+                breakdown.get('completeness', 0),
+                breakdown.get('writing_quality', 0),
+                breakdown.get('effort_engagement', 0),
+                grade.get('feedback', '').replace('\r', ' ').replace('\n', ' ')[:500],
+                grade.get('email_approval', 'pending'),
+                token_usage.get('total_cost', ''),
+                token_usage.get('total_input_tokens', ''),
+                token_usage.get('total_output_tokens', ''),
+                token_usage.get('api_calls', ''),
+                grade.get('ai_model', '')
+            ])
+    
+    _logger.info("Updated master grades file: %s", master_file)
