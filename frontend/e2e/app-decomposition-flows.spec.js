@@ -46,21 +46,17 @@ test.describe('App.jsx decomposition — HelpTab (slice 1)', () => {
 })
 
 test.describe('App.jsx decomposition — Sidebar collapse (slice 6)', () => {
-  test('collapse toggle works without crashing', async ({ page }) => {
+  test('collapse toggle actually collapses and expands the sidebar', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    // The collapse toggle is the first button in the sidebar nav region.
-    const toggle = page.locator('nav button').first()
-    if (await toggle.count()) {
-      await toggle.click()
-      await page.waitForTimeout(300)
-      // App still alive + tabs still navigable after collapse
-      const body = await page.textContent('body')
-      expect(body).not.toContain('Something went wrong')
-      await page.locator('text=Help').first().click()
-      await page.waitForTimeout(300)
-      expect((await page.textContent('body'))).not.toContain('Something went wrong')
-    }
+    const sidebar = page.getByTestId('sidebar')
+    const toggle = page.getByTestId('sidebar-collapse-toggle')
+    await expect(sidebar).toHaveCSS('width', '260px') // expanded by default
+    await toggle.click()
+    await expect(sidebar).toHaveCSS('width', '70px')  // collapsed
+    await toggle.click()
+    await expect(sidebar).toHaveCSS('width', '260px') // expanded again
+    expect(await page.textContent('body')).not.toContain('Something went wrong')
   })
 })
 
@@ -70,14 +66,14 @@ test.describe('App.jsx decomposition — Settings Billing / useSubscription (sli
     await page.waitForLoadState('networkidle')
     await page.locator('text=Settings').first().click()
     await page.waitForTimeout(400)
+    // Dev-mode local teacher is not a Clever user, so the Billing sub-tab renders.
     const billing = page.locator('text=Billing').first()
-    if (await billing.count()) {
-      await billing.click()
-      // useSubscription fires api.getSubscriptionStatus on billing select; allow it to settle
-      await page.waitForTimeout(800)
-      const body = await page.textContent('body')
-      expect(body).not.toContain('Something went wrong')
-      expect(body).toMatch(/Subscription|Billing|Plan|Usage/i)
-    }
+    await expect(billing).toBeVisible()
+    await billing.click()
+    // useSubscription fires api.getSubscriptionStatus on billing select; allow it to settle
+    await page.waitForTimeout(800)
+    const body = await page.textContent('body')
+    expect(body).not.toContain('Something went wrong')
+    expect(body).toMatch(/Subscription|Billing|Plan|Usage/i)
   })
 })
