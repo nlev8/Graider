@@ -4082,30 +4082,7 @@ Provide your response in the following JSON format ONLY (no other text):
 # EMAIL GENERATION
 # =============================================================================
 
-def generate_email_content(student_info: dict, grade_result: dict, assignment_name: str) -> tuple:
-    """
-    Generate email subject and body for a student.
-    
-    Returns: (subject, body)
-    """
-    first_name = student_info.get('first_name', 'Student').split()[0]  # Just first name
-    
-    subject = f"Grade for {assignment_name}: {grade_result['letter_grade']}"
-    
-    body = f"""Hi {first_name},
-
-Here is your grade and feedback for {assignment_name}:
-
-GRADE: {grade_result['score']}/100 ({grade_result['letter_grade']})
-
-FEEDBACK:
-{grade_result['feedback']}
-
-If you have any questions about your grade, please see me during class.
-
-- Mr. Crionas US History
-"""
-    return subject, body
+from backend.services.grader_export import generate_email_content as generate_email_content  # noqa: F401 explicit re-export (mypy no_implicit_reexport)
 
 
 def save_emails_to_folder(grades: list, output_folder: str, teacher_name: str = '', subject: str = '', school_name: str = ''):
