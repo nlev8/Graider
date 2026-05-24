@@ -1,19 +1,21 @@
 """Class gradebook assembly for the student portal.
 
 Wave 5 Slice 4 - extracted from backend/routes/student_portal_routes.py
-(behavior-preserving). Flask-free: no request/g/session access; the route keeps
-auth (the class-ownership 403), the request-arg parse, and jsonify, and passes
-the resolved `db` handle + class_name in. This function does the roster /
-content / submissions fetch and canonical-grade assembly, returning the
-response payload dict (including the two empty short-circuits — there is no
-cache here, so they are plain dict returns).
+(behavior-preserving). Flask-free: no request/g/session access; routes keep auth
+(the class-ownership 403 / interleaved 404s), request-arg parsing, and jsonify,
+and pass the resolved `db` handle + teacher_id/class_name in.
+- build_class_gradebook: roster/content/submissions fetch + canonical-grade
+  assembly -> payload dict (two empty short-circuits return plain dicts; no cache).
+- build_submission_detail: per-submission detail assembly -> (payload, err); the
+  interleaved not-found/not-authorized cases return (None, (message, status)) for
+  the route to translate via error_response.
 
 Helpers are imported from sibling services (student_mastery, dok) — never from
 the route module (no service->route imports).
 """
 import logging
 
-from backend.services.dok import _derive_uniform_dok
+from backend.services.dok import _derive_uniform_dok, _validate_dok
 from backend.services.student_mastery import (
     _select_submissions_by_mode,
     _coalesce,
@@ -202,3 +204,112 @@ def build_class_gradebook(db, class_id, class_name, attempt_mode):
         ],
         "grades": grades,
     }
+
+
+def build_submission_detail(db, submission_id, teacher_id):
+    """Assemble per-submission detail (metadata + per-question breakdown +
+    sibling attempts), or return an error to translate at the route.
+
+    Returns ``(payload, None)`` on success, or ``(None, (message, status))``
+    for the interleaved not-found / not-authorized cases. The route keeps the
+    Flask ``error_response`` translation and supplies ``teacher_id`` (the
+    service never reads Flask ``g``).
+    """
+    # 1) Look up the submission
+    sub_row = db.table('student_submissions').select(
+        'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status, score, total_points'
+    ).eq('id', submission_id).execute()
+    if not sub_row.data:
+        return (None, ("Submission not found", 404))
+    sub = sub_row.data[0]
+
+    # 2) Look up the content. Phase 4.2 #7: also fetch is_active and
+    # target_student_ids so the drawer header can render the remediation
+    # badges that match the gradebook column header.
+    content_id = sub.get('content_id')
+    content_row = db.table('published_content').select(
+        'id, title, class_id, is_active, target_student_ids, content'
+    ).eq('id', content_id).execute()
+    if not content_row.data:
+        return (None, ("Submission's content no longer exists", 404))
+    content = content_row.data[0]
+
+    # 3) Verify class ownership
+    class_row = db.table('classes').select('id, teacher_id').eq('id', content.get('class_id')).execute()
+    if not class_row.data or class_row.data[0].get('teacher_id') != teacher_id:
+        return (None, ("Not authorized", 403))
+
+    # 4) Look up the student
+    student_id = sub.get('student_id')
+    student_row = db.table('students').select(
+        'id, first_name, last_name'
+    ).eq('id', student_id).execute()
+    if not student_row.data:
+        return (None, ("Student not found", 404))
+    sdata = student_row.data[0]
+    student_name = ((sdata.get('first_name') or '') + ' ' + (sdata.get('last_name') or '')).strip()
+
+    # 5) Sibling attempts (same student × same content)
+    siblings_row = db.table('student_submissions').select(
+        'id, attempt_number, submitted_at, percentage'
+    ).eq('student_id', student_id).eq('content_id', content_id).execute()
+    siblings = sorted(
+        siblings_row.data or [],
+        key=lambda s: (s.get('attempt_number') or 0, _parse_ts(s.get('submitted_at'))),
+    )
+
+    # 6) Top-level score with row + results fallback. Use _coalesce so legitimate 0 isn't lost.
+    results = sub.get('results') or {}
+    points_earned = _coalesce(results.get('score'), sub.get('score'), default=0)
+    points_possible = _coalesce(results.get('total_points'), sub.get('total_points'), default=0)
+
+    # 7) Per-question normalization (spec fallback rules)
+    raw_questions = results.get('questions')
+    questions = []
+    if isinstance(raw_questions, list):
+        for q in raw_questions:
+            if not isinstance(q, dict):
+                _logger.warning("malformed question entry (type=%s) in submission %s — skipping",
+                                type(q).__name__, submission_id)
+                continue
+            questions.append({
+                "question_text": _coalesce(q.get('question'), q.get('question_text'), default=''),
+                "question_type": _coalesce(q.get('type'), q.get('question_type'), default='unknown'),
+                "student_answer": _coalesce(q.get('student_answer'), q.get('answer'), default=''),
+                "correct_answer": q.get('correct_answer'),
+                "is_correct": q.get('is_correct'),
+                "ai_feedback": _coalesce(q.get('feedback'), q.get('reasoning'), q.get('quality'), default=''),
+                "points_earned": _coalesce(q.get('points_earned'), q.get('score'), default=0),
+                "points_possible": _coalesce(q.get('points_possible'), q.get('points'), default=0),
+                "dok": _validate_dok(q.get('dok')),
+            })
+    elif raw_questions is not None:
+        _logger.warning("malformed results.questions (type=%s) in submission %s — returning empty",
+                        type(raw_questions).__name__, submission_id)
+
+    return ({
+        "submission_id": sub.get('id'),
+        "student_id": student_id,
+        "student_name": student_name,
+        "content_id": content_id,
+        "content_title": content.get('title', ''),
+        # Phase 4.2 #7: surface remediation flags so SubmissionDetail drawer
+        # header can render the badges (matches Gradebook column header).
+        "is_active": content.get('is_active'),
+        "target_student_ids": content.get('target_student_ids'),
+        # Phase 4.3 Sprint 1: uniform DOK across all questions, else null.
+        # Drives the optional "DOK N" pill in RemediationBadges.
+        "assessment_dok": _derive_uniform_dok(content.get('content')),
+        "attempt_number": sub.get('attempt_number'),
+        "total_attempts": len(siblings),
+        "submitted_at": sub.get('submitted_at'),
+        "percentage": sub.get('percentage'),
+        "points_earned": points_earned,
+        "points_possible": points_possible,
+        "questions": questions,
+        "sibling_attempts": [
+            {"submission_id": s.get('id'), "attempt_number": s.get('attempt_number'),
+             "submitted_at": s.get('submitted_at'), "percentage": s.get('percentage')}
+            for s in siblings
+        ],
+    }, None)
