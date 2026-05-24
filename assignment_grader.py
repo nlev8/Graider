@@ -580,7 +580,7 @@ def run_grading(
     print("=" * 60)
     
     # Focus CSVs (separated by assignment)
-    focus_files = export_focus_csv(all_grades, output_folder, assignment_name)
+    export_focus_csv(all_grades, output_folder, assignment_name)
     
     # Detailed report (one file with all grades)
     export_detailed_report(all_grades, output_folder, assignment_name)
