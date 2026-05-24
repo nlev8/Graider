@@ -3,8 +3,9 @@ pipeline swallow AI transients before Celery autoretry can see them.
 
 Four catch sites flagged by Codex round-1 review of PR #223:
 
-  - `assignment_grader.py::grade_per_question` outer try (line 4674)
-  - `assignment_grader.py::generate_feedback` outer try (line 4948)
+  - `grade_per_question` outer try (now in backend/services/grading_leaves.py,
+    Wave 7 Phase B; re-exported via assignment_grader)
+  - `generate_feedback` outer try (now in backend/services/grading_leaves.py)
   - `backend/services/portal_grading.py::grade_written_questions`
     per-question loop catch (line 184)
   - `backend/services/portal_grading.py::_safe_generate_feedback`
@@ -67,7 +68,7 @@ class TestGradePerQuestionTransientPropagates:
         def _raise_transient(*args, **kwargs):
             raise _FakeAPIConnectionError("provider 5xx storm")
 
-        with patch.object(assignment_grader, "with_retry",
+        with patch("backend.services.grading_leaves.with_retry",
                           side_effect=_raise_transient), \
              patch.object(assignment_grader, "openai_client",
                           create=True):
@@ -95,7 +96,7 @@ class TestGradePerQuestionTransientPropagates:
         def _raise_value_error(*args, **kwargs):
             raise ValueError("malformed schema")
 
-        with patch.object(assignment_grader, "with_retry",
+        with patch("backend.services.grading_leaves.with_retry",
                           side_effect=_raise_value_error), \
              patch.object(assignment_grader, "openai_client",
                           create=True):
@@ -130,7 +131,7 @@ class TestGenerateFeedbackTransientPropagates:
         def _raise_transient(*args, **kwargs):
             raise _FakeAPIConnectionError("provider down")
 
-        with patch.object(assignment_grader, "with_retry",
+        with patch("backend.services.grading_leaves.with_retry",
                           side_effect=_raise_transient), \
              patch.object(assignment_grader, "openai_client",
                           create=True):
@@ -151,7 +152,7 @@ class TestGenerateFeedbackTransientPropagates:
         def _raise_value_error(*args, **kwargs):
             raise ValueError("bad input")
 
-        with patch.object(assignment_grader, "with_retry",
+        with patch("backend.services.grading_leaves.with_retry",
                           side_effect=_raise_value_error), \
              patch.object(assignment_grader, "openai_client",
                           create=True):
