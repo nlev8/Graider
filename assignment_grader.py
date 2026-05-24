@@ -800,47 +800,7 @@ def build_roster_from_periods() -> dict:
 from backend.services.submission_parsing import parse_filename as parse_filename  # noqa: F401 explicit re-export (mypy no_implicit_reexport: grading/pipeline.py imports this)
 
 
-def read_docx_file(filepath: str) -> str:
-    """
-    Read text content from a Word document (.docx) in document order.
-    This properly interleaves paragraphs and tables as they appear.
-    """
-    try:
-        from docx import Document
-        from docx.document import Document as DocType
-        from docx.table import Table
-        from docx.text.paragraph import Paragraph
-    except ImportError:
-        print("❌ python-docx not installed. Run: pip install python-docx")
-        return None
-
-    try:
-        doc = Document(filepath)
-        full_text = []
-
-        # Iterate through document body elements in order
-        # This ensures tables and paragraphs appear in their actual document order
-        for element in doc.element.body:
-            # Check if it's a paragraph
-            if element.tag.endswith('p'):
-                para = Paragraph(element, doc)
-                if para.text.strip():
-                    full_text.append(para.text)
-            # Check if it's a table
-            elif element.tag.endswith('tbl'):
-                table = Table(element, doc)
-                for row in table.rows:
-                    row_text = []
-                    for cell in row.cells:
-                        if cell.text.strip():
-                            row_text.append(cell.text.strip())
-                    if row_text:
-                        full_text.append(' | '.join(row_text))
-
-        return '\n'.join(full_text)
-    except Exception as e:
-        print(f"  ⚠️  Error reading file: {e}")
-        return None
+from backend.services.submission_parsing import read_docx_file as read_docx_file  # noqa: F401 explicit re-export (grader-internal caller; consistency)
 
 
 def read_docx_file_structured(filepath: str) -> dict:
