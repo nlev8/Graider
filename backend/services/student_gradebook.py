@@ -75,7 +75,6 @@ def build_class_gradebook(db, class_id, class_name, attempt_mode):
     # Phase 4.2 #7: capture is_active and target_student_ids for the
     # remediation-badge UI. The grouping logic below keys off c['id'] only,
     # so adding these passthrough fields doesn't affect any join/aggregation.
-    content_titles = {c['id']: c.get('title', '') for c in assessments}
 
     if not assessments:
         return {
