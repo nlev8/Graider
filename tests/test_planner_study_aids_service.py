@@ -69,3 +69,21 @@ def test_generate_flashcards_content_raises_on_bad_json():
             assert False, "expected JSONDecodeError"
         except json.JSONDecodeError:
             pass  # route translates this to a 500 — contract preserved
+
+
+# ── generate_slides_payload (Wave 6 Slice 6) ──
+
+def test_generate_slides_payload_returns_shape():
+    from backend.services.planner_study_aids import generate_slides_payload
+    sd = {"title": "Cells", "theme": {}, "slides": [{"h": 1}, {"h": 2}]}
+    with patch('backend.api_keys.get_api_key', return_value='k'), \
+         patch('backend.services.slide_generator.generate_slide_content', return_value=dict(sd)), \
+         patch('backend.services.slide_generator.generate_slide_images', return_value={0: b"x"}):
+        out = generate_slides_payload(
+            content="cells", title="Cells", subject="Bio", grade="7", instructions="",
+            global_ai_notes="", lesson_plan=None, slide_count=10, max_images=5,
+            generate_images=True, deck_format="detailed", user_id="t1",
+        )
+    assert out["title"] == "Cells"
+    assert out["slide_count"] == 2
+    assert out["images_generated"] == 1

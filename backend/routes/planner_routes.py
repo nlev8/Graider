@@ -91,6 +91,7 @@ from backend.services.planner_study_aids import (
     generate_study_guide_content,
     generate_flashcards_content,
 )
+from backend.services.planner_study_aids import generate_slides_payload
 from backend.services.planner_assessments import grade_assessment_answers_logic
 
 # ── Tier 2 PR3: prompt construction extracted to ───────────────────────────
@@ -3787,47 +3788,12 @@ def generate_slides():
     user_id = getattr(g, 'user_id', 'local-dev')
 
     try:
-        from backend.api_keys import get_api_key as _gak
-        api_key = _gak('gemini', user_id)
-
-        from backend.services.slide_generator import (
-            generate_slide_content, generate_slide_images
-        )
-
-        # Phase 1: Generate slide content
-        slide_data = generate_slide_content(
-            content=content, subject=subject, grade=grade, title=title,
-            api_key=api_key, lesson_plan=lesson_plan,
-            global_ai_notes=global_ai_notes, instructions=instructions,
-            slide_count=slide_count,
-            deck_format=deck_format,
-        )
-
-        # Phase 2: Generate images (optional)
-        images_generated = 0
-        if generate_images:
-            try:
-                images = generate_slide_images(
-                    slide_data["slides"], slide_data["theme"],
-                    api_key=api_key, max_images=max_images,
-                )
-                images_generated = len(images)
-                # Store image references in session for export
-                # (images are too large for JSON response)
-                import base64
-                slide_data["_image_data"] = {
-                    str(k): base64.b64encode(v).decode('ascii') for k, v in images.items()
-                }
-            except Exception as e:
-                _logger.warning("Image generation failed, continuing without images: %s", e)
-                slide_data["_image_data"] = {}
-
-        return jsonify({
-            "slides": slide_data,
-            "title": slide_data.get("title", title),
-            "slide_count": len(slide_data.get("slides", [])),
-            "images_generated": images_generated,
-        })
+        return jsonify(generate_slides_payload(
+            content=content, title=title, subject=subject, grade=grade,
+            instructions=instructions, global_ai_notes=global_ai_notes,
+            lesson_plan=lesson_plan, slide_count=slide_count, max_images=max_images,
+            generate_images=generate_images, deck_format=deck_format, user_id=user_id,
+        ))
 
     except json.JSONDecodeError as e:
         _logger.error("Slide content JSON parse failed: %s", e)
