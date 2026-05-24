@@ -108,3 +108,17 @@ def test_build_platform_export_csv_returns_dict():
 def test_build_platform_export_unknown_returns_none():
     from backend.services.planner_export import build_platform_export
     assert build_platform_export(ASSESSMENT, "nonsense", None) is None
+
+
+def test_quizlet_export_is_tab_delimited(client, headers):
+    resp = _post(client, headers, 'quizlet')
+    assert resp.status_code == 200
+    decoded = base64.b64decode(resp.get_json()['document']).decode('utf-8')
+    assert "\t" in decoded and "What is a cell?" in decoded  # term<tab>definition
+
+
+def test_google_forms_export_has_header_row(client, headers):
+    resp = _post(client, headers, 'google_forms')
+    assert resp.status_code == 200
+    decoded = base64.b64decode(resp.get_json()['document']).decode('utf-8')
+    assert "Question Type" in decoded and "MULTIPLE_CHOICE" in decoded

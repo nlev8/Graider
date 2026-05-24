@@ -1318,7 +1318,7 @@ def _export_flashcards_docx(flashcards, filepath):
 
 
 # ── Wave 6 Slice 4: platform export dispatch moved from planner_routes ──
-def build_platform_export(assessment, platform, template_structure):
+def build_platform_export(assessment, platform, template_structure) -> dict | None:
     """Build the {document(b64), filename, format, mime_type} dict for a target
     platform (csv/wayground, canvas_qti, kahoot, quizlet, google_forms), or None
     for an unknown platform (the route translates None to a 400). Pure: the route
