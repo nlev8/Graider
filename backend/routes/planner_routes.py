@@ -86,6 +86,7 @@ from backend.services.planner_export import (  # noqa: F401
     generate_qti_xml,
     parse_template_structure,
 )
+from backend.services.planner_export import build_platform_export
 from backend.services.planner_study_aids import (
     generate_study_guide_content,
     generate_flashcards_content,
@@ -3239,10 +3240,6 @@ def export_assessment_for_platform():
         return jsonify({"error": "No assessment data provided"}), 400
 
     try:
-        import csv
-        import io
-        import base64
-
         # Get template structure if provided
         template_structure = None
         if template_id:
@@ -3252,206 +3249,10 @@ def export_assessment_for_platform():
                     template_meta = json.load(f)
                     template_structure = template_meta.get('structure', {})
 
-        # Flatten questions from all sections
-        all_questions = []
-        for section in assessment.get('sections', []):
-            for q in section.get('questions', []):
-                all_questions.append({
-                    **q,
-                    'section': section.get('name', '')
-                })
-
-        # Export based on platform
-        if platform == 'wayground' or platform == 'csv':
-            # Generic CSV format - can be customized based on template
-            output = io.StringIO()
-
-            # Determine columns based on template or default
-            if template_structure and template_structure.get('columns'):
-                columns = template_structure['columns']
-            else:
-                columns = ['Question Number', 'Question', 'Type', 'Options', 'Answer',
-                          'Points', 'DOK Level', 'Standard', 'Section']
-
-            writer = csv.writer(output)
-            writer.writerow(columns)
-
-            for q in all_questions:
-                options = '|'.join(q.get('options', [])) if q.get('options') else ''
-                answer = q.get('answer', '')
-                if isinstance(answer, dict):
-                    answer = str(answer)
-
-                row = [
-                    q.get('number', ''),
-                    q.get('question', ''),
-                    q.get('type', 'multiple_choice'),
-                    options,
-                    answer,
-                    q.get('points', 1),
-                    q.get('dok', 2),
-                    q.get('standard', ''),
-                    q.get('section', '')
-                ]
-                writer.writerow(row)
-
-            content = output.getvalue()
-            content_b64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-
-            safe_title = ''.join(c if c.isalnum() or c in ' -_' else '' for c in assessment.get('title', 'Assessment'))
-            filename = f"{safe_title.replace(' ', '_')}_{platform}.csv"
-
-            return jsonify({
-                "document": content_b64,
-                "filename": filename,
-                "format": "csv",
-                "mime_type": "text/csv"
-            })
-
-        elif platform == 'canvas_qti':
-            # QTI format for Canvas
-            # This is a simplified QTI - full implementation would be more complex
-            qti_xml = generate_qti_xml(assessment, all_questions)
-            content_b64 = base64.b64encode(qti_xml.encode('utf-8')).decode('utf-8')
-
-            safe_title = ''.join(c if c.isalnum() or c in ' -_' else '' for c in assessment.get('title', 'Assessment'))
-            filename = f"{safe_title.replace(' ', '_')}_qti.xml"
-
-            return jsonify({
-                "document": content_b64,
-                "filename": filename,
-                "format": "xml",
-                "mime_type": "application/xml"
-            })
-
-        elif platform == 'kahoot':
-            # Kahoot spreadsheet format
-            output = io.StringIO()
-            writer = csv.writer(output)
-
-            # Kahoot format: Question, Answer 1, Answer 2, Answer 3, Answer 4, Time limit, Correct answer(s)
-            writer.writerow(['Question', 'Answer 1', 'Answer 2', 'Answer 3', 'Answer 4',
-                           'Time limit', 'Correct answer(s)'])
-
-            for q in all_questions:
-                if q.get('options'):
-                    options = q.get('options', [])
-                    # Clean options (remove A), B), etc. prefixes)
-                    clean_options = []
-                    for opt in options[:4]:
-                        clean = opt.strip()
-                        if len(clean) > 2 and clean[1] == ')':
-                            clean = clean[2:].strip()
-                        clean_options.append(clean)
-
-                    # Pad to 4 options
-                    while len(clean_options) < 4:
-                        clean_options.append('')
-
-                    # Determine correct answer number
-                    correct = q.get('answer', 'A')
-                    if isinstance(correct, str) and len(correct) == 1:
-                        correct_num = ord(correct.upper()) - ord('A') + 1
-                    else:
-                        correct_num = 1
-
-                    writer.writerow([
-                        q.get('question', ''),
-                        clean_options[0],
-                        clean_options[1],
-                        clean_options[2],
-                        clean_options[3],
-                        30,  # Default 30 second time limit
-                        correct_num
-                    ])
-
-            content = output.getvalue()
-            content_b64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-
-            safe_title = ''.join(c if c.isalnum() or c in ' -_' else '' for c in assessment.get('title', 'Assessment'))
-            filename = f"{safe_title.replace(' ', '_')}_kahoot.csv"
-
-            return jsonify({
-                "document": content_b64,
-                "filename": filename,
-                "format": "csv",
-                "mime_type": "text/csv"
-            })
-
-        elif platform == 'quizlet':
-            # Quizlet import format: term<tab>definition (or question<tab>answer)
-            output = io.StringIO()
-
-            for q in all_questions:
-                question = q.get('question', '')
-                answer = q.get('answer', '')
-                if isinstance(answer, dict):
-                    answer = answer.get('answer', str(answer))
-                output.write(f"{question}\t{answer}\n")
-
-            content = output.getvalue()
-            content_b64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-
-            safe_title = ''.join(c if c.isalnum() or c in ' -_' else '' for c in assessment.get('title', 'Assessment'))
-            filename = f"{safe_title.replace(' ', '_')}_quizlet.txt"
-
-            return jsonify({
-                "document": content_b64,
-                "filename": filename,
-                "format": "txt",
-                "mime_type": "text/plain"
-            })
-
-        elif platform == 'google_forms':
-            # Google Forms compatible CSV
-            output = io.StringIO()
-            writer = csv.writer(output)
-
-            writer.writerow(['Question', 'Question Type', 'Required', 'Option 1',
-                           'Option 2', 'Option 3', 'Option 4', 'Correct Answer', 'Points'])
-
-            for q in all_questions:
-                q_type = q.get('type', 'multiple_choice')
-                if q_type == 'multiple_choice':
-                    gf_type = 'MULTIPLE_CHOICE'
-                elif q_type == 'short_answer':
-                    gf_type = 'SHORT_ANSWER'
-                elif q_type == 'true_false':
-                    gf_type = 'MULTIPLE_CHOICE'
-                else:
-                    gf_type = 'PARAGRAPH'
-
-                options = q.get('options', ['', '', '', ''])
-                while len(options) < 4:
-                    options.append('')
-
-                writer.writerow([
-                    q.get('question', ''),
-                    gf_type,
-                    'TRUE',
-                    options[0] if options else '',
-                    options[1] if len(options) > 1 else '',
-                    options[2] if len(options) > 2 else '',
-                    options[3] if len(options) > 3 else '',
-                    q.get('answer', ''),
-                    q.get('points', 1)
-                ])
-
-            content = output.getvalue()
-            content_b64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-
-            safe_title = ''.join(c if c.isalnum() or c in ' -_' else '' for c in assessment.get('title', 'Assessment'))
-            filename = f"{safe_title.replace(' ', '_')}_google_forms.csv"
-
-            return jsonify({
-                "document": content_b64,
-                "filename": filename,
-                "format": "csv",
-                "mime_type": "text/csv"
-            })
-
-        else:
+        result = build_platform_export(assessment, platform, template_structure)
+        if result is None:
             return jsonify({"error": f"Unknown platform: {platform}"}), 400
+        return jsonify(result)
 
     except Exception as e:
         _logger.exception("Platform export error")
