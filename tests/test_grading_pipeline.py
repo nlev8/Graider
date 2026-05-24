@@ -190,11 +190,11 @@ class TestGradeMultipassLogic:
 
         assignment_data = {"type": "text", "content": content}
 
-        with patch("assignment_grader.extract_student_responses", return_value=extraction_result), \
-             patch("assignment_grader.extract_from_tables", return_value=None), \
-             patch("assignment_grader.extract_from_graider_text", return_value=None), \
-             patch("assignment_grader.grade_per_question", side_effect=fake_grade_per_question) as mock_gpq, \
-             patch("assignment_grader.generate_feedback", side_effect=fake_generate_feedback):
+        with patch("backend.services.grading_pipeline.extract_student_responses", return_value=extraction_result), \
+             patch("backend.services.grading_pipeline.extract_from_tables", return_value=None), \
+             patch("backend.services.grading_pipeline.extract_from_graider_text", return_value=None), \
+             patch("backend.services.grading_pipeline.grade_per_question", side_effect=fake_grade_per_question) as mock_gpq, \
+             patch("backend.services.grading_pipeline.generate_feedback", side_effect=fake_generate_feedback):
             from assignment_grader import grade_multipass
             result = grade_multipass(
                 student_name="Test Student",
