@@ -58,3 +58,54 @@ def test_full_grid_canonical_grade_latest():
     assert out['assessments'][0]['publish_date'] == '2026-04-01'  # sourced from created_at
     assert out['grades']['s1']['ct1']['percentage'] == 88
     assert out['grades']['s1']['ct1']['total_attempts'] == 1
+
+
+# ── build_submission_detail (Wave 5 Slice 4b): the (payload, err) contract ──
+
+def _detail_db(tables):
+    db = MagicMock()
+    db.table.side_effect = lambda name: _chain(tables.get(name, []))
+    return db
+
+
+def test_submission_detail_not_found_returns_err_tuple():
+    from backend.services.student_gradebook import build_submission_detail
+    payload, err = build_submission_detail(_detail_db({'student_submissions': []}), 'missing', 't1')
+    assert payload is None
+    assert err == ("Submission not found", 404)
+
+
+def test_submission_detail_other_teacher_returns_403_err():
+    from backend.services.student_gradebook import build_submission_detail
+    db = _detail_db({
+        'student_submissions': [{'id': 'sub1', 'student_id': 's1', 'content_id': 'ct1'}],
+        'published_content': [{'id': 'ct1', 'title': 'Q', 'class_id': 'c1'}],
+        'classes': [{'id': 'c1', 'teacher_id': 'OTHER'}],
+    })
+    payload, err = build_submission_detail(db, 'sub1', 't1')
+    assert payload is None
+    assert err == ("Not authorized", 403)
+
+
+def test_submission_detail_success_returns_payload_none_err():
+    from backend.services.student_gradebook import build_submission_detail
+    db = _detail_db({
+        'student_submissions': [{
+            'id': 'sub1', 'student_id': 's1', 'content_id': 'ct1', 'attempt_number': 1,
+            'submitted_at': '2026-04-02T10:00:00Z', 'percentage': 75, 'status': 'graded',
+            'score': 15, 'total_points': 20,
+            'results': {'questions': [{'question': 'Q1', 'type': 'mc', 'answer': 'A',
+                                       'is_correct': True, 'points': 5, 'points_earned': 5}]},
+        }],
+        'published_content': [{'id': 'ct1', 'title': 'Quiz 1', 'class_id': 'c1',
+                               'is_active': True, 'target_student_ids': None, 'content': {}}],
+        'classes': [{'id': 'c1', 'teacher_id': 't1'}],
+        'students': [{'id': 's1', 'first_name': 'Amy', 'last_name': 'Lee'}],
+    })
+    payload, err = build_submission_detail(db, 'sub1', 't1')
+    assert err is None
+    assert payload['student_name'] == 'Amy Lee'
+    assert payload['points_earned'] == 15 and payload['points_possible'] == 20
+    assert len(payload['questions']) == 1
+    assert payload['questions'][0]['question_text'] == 'Q1'
+    assert payload['questions'][0]['points_earned'] == 5  # _coalesce keeps explicit values
