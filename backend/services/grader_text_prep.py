@@ -18,9 +18,11 @@ def sanitize_pii_for_ai(student_name: str, content: str) -> tuple:
     if not content:
         return "Student_0000", ""
 
-    # Create consistent anonymous identifier from student name
+    # Create consistent anonymous identifier from student name. md5 is used purely
+    # for stable anonymization bucketing (not security) — usedforsecurity=False is
+    # accurate and silences Bandit B324 while producing the identical digest.
     if student_name:
-        hash_val = int(hashlib.md5(student_name.encode()).hexdigest(), 16) % 10000
+        hash_val = int(hashlib.md5(student_name.encode(), usedforsecurity=False).hexdigest(), 16) % 10000
         anon_id = f"Student_{hash_val:04d}"
     else:
         anon_id = "Student_0000"
