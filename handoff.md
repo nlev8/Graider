@@ -126,13 +126,21 @@ caps, rubric weighting, ELL translation, writing-profile updates, audit, error r
   byte-identical to the dedented origin block; 3 DIRECT unit tests added (the grade_assignment
   golden's fully-answered/no-weights fixture left this path a no-op, so the golden net alone did
   NOT cover it — lesson: check whether the golden fixture actually exercises an extracted block).
+- **Slice 4 SHIPPED (#553):** grade_assignment ANTHROPIC + gemini (skipped, SDK absent) provider
+  goldens — the default grade_assignment golden exercised only the OpenAI branch, so this pins all
+  3 provider branches' parse paths. Prerequisite for Slice 5.
 - **REMAINING phases (harder — coupled, do with fresh context):**
-  - **provider-resolution (~243–298):** sets `provider` + one of `claude_client`/`gemini_client`/
-    `openai_client` + `actual_model`, with EARLY-RETURN error sentinels (ImportError / no key).
-    Extraction is COUPLED to the LLM-call region — the later provider branches reference those
-    specific client names, so a `_resolve_grading_client(ai_model) -> (provider, client,
-    actual_model, error_or_None)` helper requires renaming the 3 client vars → one `client` at the
-    call sites. Golden-net covers all 3 provider branches + the parse paths.
+  - **provider-resolution (Slice 5 — READY, de-risked by #553). RECIPE:** (1) Extract the
+    provider-determination + client-init + early-return ERROR block (~243–297) into
+    `_resolve_grading_client(ai_model) -> (provider, client, actual_model, error)`: rename
+    `claude_client`/`gemini_client`/`openai_client` → `client`; each success branch returns
+    `(provider, client, actual_model, None)`; OpenAI has no actual_model → return `ai_model`
+    (unused there); each ImportError/no-key path returns `(None, None, None, {ERROR dict})`.
+    (2) In grade_assignment: `provider, client, actual_model, _err = _resolve_grading_client(ai_model)`
+    then `if _err: return _err`. (3) Rename the 5 call-site usages (claude ~1078; gemini ~1097,
+    ~1103; openai ~1113, ~1137) → `client` (8 total token occurrences; all are the client vars).
+    This is a TRANSFORMATION (not byte-identical) → guards: the 3-provider goldens (#553),
+    `ruff --select F821`, broad sweep. Do it BY HAND, fresh.
   - **prompt-assembly (~534–769 pre-slices):** ~235-line f-string built from ~20 locals → 
     `_build_grading_prompt(...)`. MUST be guarded by the Slice-2 prompt-snapshot net (the golden
     net does NOT pin prompt text). Do this one LAST.
