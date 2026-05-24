@@ -1,7 +1,12 @@
 """Standards loading + matching for the planner. Pure logic extracted from planner_routes.py (no Flask)."""
 import os
 import json
+import logging
 from pathlib import Path
+
+from backend.services.assignment_post_processing import _extract_usage, _record_planner_cost
+
+_logger = logging.getLogger(__name__)
 
 # Path to standards data
 DATA_DIR = Path(__file__).parent.parent / 'data'
@@ -241,3 +246,50 @@ def load_standards(state, subject, grade=None):
 
     result['standards'] = standards
     return result
+
+
+def rewrite_for_alignment_content(*, enriched_questions, doc_text, grade, subject, api_key):
+    """Call the LLM to rewrite questions for standards alignment; return the
+    AI result dict + usage, or {'error': ...} on a non-JSON response (the route
+    jsonifies either). Wave 6 Slice 8 - extracted from planner_routes.
+    """
+    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+    adapter = OpenAIAdapter(api_key=api_key)
+
+    system_prompt = (
+        f"You are an expert curriculum specialist for grade {grade} {subject}. "
+        "Rewrite the given questions to better align with the target standards. "
+        "Preserve the general topic and difficulty level but adjust the focus, "
+        "vocabulary, and cognitive demand to match the standard's benchmark. "
+        "Keep the question appropriate for the grade level."
+    )
+
+    user_prompt = json.dumps({
+        "task": "Rewrite each question to better align with its target standard.",
+        "document_context": doc_text[:3000],
+        "questions": enriched_questions,
+        "return_format": {
+            "rewrites": [{"original_text": "str", "rewritten_text": "str", "standard_code": "str", "change_explanation": "brief explanation of what changed and why"}]
+        }
+    })
+
+    completion = adapter.chat(LLMRequest(
+        model="gpt-4o-mini",
+        system_prompt=system_prompt,
+        messages=[Message(role="user", content=[TextPart(text=user_prompt)])],
+        response_format=ResponseFormat(type="json_object"),
+        temperature=0.3,
+        metadata={"feature_label": "rewrite_for_alignment"},
+    ))
+
+    raw_content = completion.content_parts[0].text if completion.content_parts else "{}"
+    try:
+        result = json.loads(raw_content)
+    except json.JSONDecodeError:
+        _logger.warning("[rewrite-alignment] Non-JSON response: %s", raw_content[:500])
+        return {"error": "AI returned non-JSON response. Possibly rate limited."}
+
+    usage = _extract_usage(completion, "gpt-4o-mini")
+    _record_planner_cost(usage)
+
+    return {**result, "usage": usage}
