@@ -22,7 +22,7 @@ def test_difficulty_directive_clamps_grade_and_handles_nonnumeric():
     from backend.services.student_remediation import _difficulty_directive
     assert "grade-6" in _difficulty_directive("easier", "7")     # one below
     assert "grade-8" in _difficulty_directive("harder", "7")     # one above
-    assert _difficulty_directive("easier", "1").count("grade-") >= 0  # K-12 floor (max(1, 0))
+    assert "grade-1" in _difficulty_directive("easier", "1")  # K-12 floor: max(1, 0) clamps to grade-1, not grade-0
     assert "below the current grade" in _difficulty_directive("easier", "kindergarten")  # non-numeric phrasing
     assert _difficulty_directive("same", "7") == "Difficulty: grade-level review."
 
