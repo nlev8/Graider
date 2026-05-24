@@ -254,3 +254,42 @@ def test_translate_feedback_openai():
         t = g._translate_feedback("Great job on your essay!", "Spanish", ai_model="gpt-4o-mini")
     assert t == "FAKE_TRANSLATION: traducción simulada."
     assert book.count(provider="openai", method="create") == 1
+
+
+# ── grade_assignment provider routing (Wave 8 — harden before provider-resolution extraction) ──
+# The default grade_assignment golden above exercises only the OpenAI branch. These cover the
+# anthropic/gemini provider branches + their text-parse paths, so the upcoming
+# _resolve_grading_client extraction (which unifies claude_client/gemini_client/openai_client →
+# one `client` at the call sites) is guarded for ALL providers, not just OpenAI.
+
+def test_grade_assignment_anthropic_branch_golden(social_studies, ss_config):
+    with patched_llm() as book:
+        r = g.grade_assignment(
+            student_name="T", assignment_data={"type": "text", "content": social_studies},
+            custom_ai_instructions=ss_config["gradingNotes"], grade_level="6",
+            subject="Social Studies", ai_model="claude-haiku",
+            marker_config=ss_config["customMarkers"], effort_points=15, grading_style="standard",
+        )
+    assert r["score"] == 85
+    assert r["letter_grade"] == "B"
+    assert r["breakdown"] == {
+        "content_accuracy": 34, "completeness": 22, "writing_quality": 17, "effort_engagement": 12,
+    }
+    assert r["feedback"].startswith("FAKE_FEEDBACK:")
+    assert book.count(provider="anthropic") == 1
+    assert book.count(provider="openai") == 0  # routed to anthropic, not openai
+
+
+@pytest.mark.skipif(not GEMINI_SDK_AVAILABLE, reason="google.generativeai not installed in this env")
+def test_grade_assignment_gemini_branch_golden(social_studies, ss_config):
+    with patched_llm() as book:
+        r = g.grade_assignment(
+            student_name="T", assignment_data={"type": "text", "content": social_studies},
+            custom_ai_instructions=ss_config["gradingNotes"], grade_level="6",
+            subject="Social Studies", ai_model="gemini-flash",
+            marker_config=ss_config["customMarkers"], effort_points=15, grading_style="standard",
+        )
+    assert r["score"] == 85
+    assert r["letter_grade"] == "B"
+    assert book.count(provider="gemini") == 1
+    assert book.count(provider="openai") == 0
