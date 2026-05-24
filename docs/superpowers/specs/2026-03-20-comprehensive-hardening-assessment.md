@@ -935,3 +935,37 @@ The deferred judgment step for **Wave 5** (the `student_portal_routes.py` backen
 ## Honest note
 
 All three models completed cleanly and independently, verified the live code (Codex and Gemini both ran the 35 new service unit tests green), and unanimously landed on Code Quality 8.5 and Documentation 8 with the same `planner_routes.py` recommendation — no model scored Code Quality 9. The reconciled result is therefore a genuine, verified two-dimension uplift (the first to carry the overall across 8.0), not a stall: the headline Wave 5 lever closed the largest backend route god-file outside the grader, and the named path to 9 (planner_routes) is now the single clear next step. This dated section closes Wave 5 (the `2026-05-23-backend-route-deconcentration` spec + plan) and the Documentation lever.
+
+---
+
+# 2026-05-24 Post-Wave-6 (`planner_routes.py` de-concentration) 3-Model Reconciled Re-Score — **Code Quality 8.5 → 9**
+
+The deferred judgment step for **Wave 6** (the `backend/routes/planner_routes.py` de-concentration, PRs #502–#508 + #510–#518; spec/plan #501). This is the lever the prior (Post-Wave-5) re-score unanimously named as *"the single clear next step"* and *"a clean 9 requires the planner-routes split."* Codex, Gemini, and Claude each re-scored independently against the 2026-05-24 Post-Wave-5 baseline (Code Quality 8.5). Method: Claude (controller, first-hand), Codex (`codex exec`), Gemini (`GEMINI_CLI_TRUST_WORKSPACE=true gemini -p --yolo`). Conservative-floor reconciliation (lower score wins on a split unless strong disconfirming file:line evidence).
+
+| Model | Code Quality | Path-to-9 lever delivered? | Next lever |
+|-------|--------------|----------------------------|------------|
+| Claude (first-hand) | 9.0 | yes | `assignment_grader.py` (user-gated) |
+| Codex | 9.0 | yes | `assignment_grader.py` |
+| Gemini | 9.0 | yes | `assignment_grader.py` |
+| **Reconciled** | **8.5 → 9.0** | **yes** | `assignment_grader.py` |
+
+## Verdict: Code Quality 8.5 → 9.0. Overall ~8.1 → ~8.2.
+
+**Unanimous, no tie-break required.** All three models independently verified the live code with their own shell commands (each ran the new planner service tests — Codex `17 passed` with a writable HOME, Gemini `17/17 passed`; Codex also ran `compileall` + an import-graph check confirming one-way route→service edges and no service→route cycle) and landed on the same number and the same next lever. This is the first re-score in the program to reach Code Quality 9.
+
+**Verified progress (all three, file:line):**
+- **Headline: `backend/routes/planner_routes.py` 4,611 → 2,154 LOC (−53%)**, behavior-preserving, into Flask-free `backend/services/planner_*` modules (~4,200 service LOC): `planner_generation.py` (1,595 — all 5 generation handlers: brainstorm_lesson_ideas, generate_lesson_plan, generate_assessment, generate_assignment_from_lesson, regenerate_questions), `planner_export.py` (1,531), `planner_standards.py` (434 — rewrite_for_alignment, align_document_to_standards, extract_text_from_upload), `planner_study_aids.py` (213), `planner_assessments.py` (219), `planner_content_tools.py` (67), `openai_context.py` (15). 17 PRs total; the route handlers are now thin delegators (parse → resolve `g`/API key → delegate → `jsonify`).
+- **Services are genuinely Flask-free** — all three independently confirmed zero `flask`/`request`/`g`/`jsonify` references in the planner service modules; context (user_id, OpenAI key, the `_get_openai_context` tuple) is resolved route-side and passed in. One-way import graph (route → services), no cycle.
+- **Behavior preservation was mechanically enforced, not asserted:** every slice was characterization-test-first (route char tests baselined green BEFORE extraction + direct service-contract tests), prompt f-strings verified **byte-identical** via AST string-literal compare (an AST-aware dedent that skips multi-line-string interiors — a naive line dedent silently corrupts embedded JSON examples; caught and fixed in slice 11a), F401/F841 cleaned in each touched function, and two-stage reviewed (spec-compliance first-hand + a code-quality subagent on every PR — all APPROVE). Warts preserved verbatim and pinned by tests: the brainstorm/lesson-plan mock-fallback at 200; generate_assessment's discard of the post-process extra usage (`assignment, _ = ...`) vs generate_assignment's merge; the essay/project early-return that omits usage/method.
+
+**Why Code Quality is 9, not higher (unanimous grounds):**
+- The prior baseline's 9-bar was, explicitly and unanimously, "the planner-routes split" — the last de-concentratable backend route god-file. Wave 6 delivered exactly that (−53%, behavior-preserving, into independently-tested Flask-free services). With PlannerTab, SettingsTab, App.jsx (−33%), student_portal_routes (−37.5%), and now planner_routes (−53%) all de-concentrated, the broad-de-concentration bar the program set for 9 is met.
+- **Why not 9.5+:** two large concentrations remain — **`assignment_grader.py` (5,344 LOC, the single largest file, deliberately off-limits pending explicit user steer)** and **`frontend/src/App.jsx` (4,810 LOC)**. `planner_routes.py` itself is still 2,154 LOC (export/CRUD handlers + the deferred export-builder render). The path beyond 9 runs through the grader (the "final boss," user-gated) and the residual frontend god-files.
+
+## Path beyond 9 (remaining concentrated-complexity levers)
+
+**Unanimous next lever: `assignment_grader.py` (5,344 LOC)** — now the undisputed largest backend file, currently off-limits pending explicit user steer. Its decomposition (separating the core scoring engine from I/O and route-shim logic, preserving all 18 AI grading factors) is the backend path to 9.5+. Parallel frontend levers: the residual `App.jsx` (4,810) and `SettingsClassroom.jsx` (~2,307). Lower-priority planner follow-ups (deferred, recorded): the export builders (`export_lesson_plan`/`export_assessment`/`export_generated_assignment` — a docx-render extraction entangled with the Flask-`g`-bound `_save_grading_config_for_export`, which stays route-side) and a route-side dead-var sweep (CI-invisible since ruff selects only T20).
+
+## Honest note
+
+All three models completed cleanly and independently, verified the live post-Wave-6 code (each ran the new planner service tests green), and unanimously scored Code Quality 9.0 with the same `assignment_grader.py` next lever — the first 9 in the program. This is a genuine, earned full-step: the headline lever was the one every prior re-score named as gating, and it was delivered behavior-preserving under a characterization net with byte-identical prompt verification, not merely "files moved." The Overall ticks from ~8.1 to ~8.2 (a half-step on one of ~10 dimensions). The honest ceiling note stands: a 9.5+ requires opening the `assignment_grader.py` gate (user decision) and the residual frontend god-files. This dated section closes Wave 6 (the `2026-05-24-planner-routes-deconcentration` spec + plan).
