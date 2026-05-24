@@ -12,6 +12,12 @@ _logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).parent.parent / 'data'
 DOCUMENTS_DIR = os.path.expanduser("~/.graider_data/documents")
 
+# Image extensions routed to GPT-4o vision in extract_text_from_upload. Single
+# source of truth: the route imports this for its lazy-key check so the two
+# branches can never diverge (a divergence would let an image reach the service
+# with no key and fail in the 500 catch-all instead of the proper 400).
+IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')
+
 
 def load_support_documents_for_planning() -> str:
     """Load curriculum guides, standards, and other planning documents."""
@@ -398,7 +404,7 @@ def extract_text_from_upload(*, file_data, filename, api_key):
         return file_data.decode('utf-8', errors='replace')
 
     # Images — use GPT-4o vision to extract text
-    elif filename.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')):
+    elif filename.endswith(IMAGE_EXTENSIONS):
         import base64
 
         ext = filename.rsplit('.', 1)[-1]
