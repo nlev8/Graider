@@ -1,84 +1,154 @@
-# Handoff: 2026-05-22 — three slices shipped, clean stopping point
+# Handoff: 2026-05-24 — Wave 7 (assignment_grader.py decomposition) IN PROGRESS
 
-This session ran from a production incident (Railway/GCP edge outage) through three complete architecture-decomposition slices. Everything is shipped and merged; nothing is mid-flight. Written for a fresh `/clear` session per CLAUDE.md §12 (clean handoff beats `/compact` when starting a new topic). The next agent should read this first, then `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` (the canonical scorecard + every dated closeout section).
+Per CLAUDE.md §12, at a deep-session/compaction boundary. Read this, then
+`docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` (canonical
+scorecard; the Wave 6 closeout re-score is the last dated section).
 
 ## 1. Goal
 
-Decompose Graider's biggest-lever Architecture and Code-Quality concentrated complexity via repeated brainstorm → spec → plan → subagent-driven slices, each behavior-preserving under a characterization net, with post-slice 3-model reconciled re-scores, all CI-green and merged. This session closed the dual-path consolidation, shipped Tier 1 operational-safety hardening, and addressed the dependency-injection ground at the repository seam.
+Decompose `assignment_grader.py` (the 5,344-LOC grading engine) into Flask-free
+`backend/services/` modules — behavior-preserving under a heightened golden/characterization
+net — to push **Code Quality 9 → 9.5+**. This is the lever the unanimous Post-Wave-6
+re-score named as the path beyond 9. **The user explicitly OPENED THE GRADER GATE this
+session** (it was previously off-limits) after I recommended it with a heightened safety
+protocol. Overarching mandate: "this is a sprint, do not suggest stopping; as close to
+10/10 as possible. You decide and execute; use the 3 AIs at design forks."
 
 ## 2. TL;DR
 
-- **Production incident resolved.** A 2026-05-19 Railway/GCP edge outage (Google blocked Railway's GCP account) was diagnosed (TLS-layer, not app-layer) and recovered. Five hotfixes (#438–#442) made the app resilient to a degraded Redis: `/healthz` soft-dep contract, flask-limiter + flask-session startup probes that fall back to `memory://`/filesystem when Redis is unreachable, and `Retry(NoBackoff(), 0)` to stop redis-py's hang loop. Prod verified back (200s on `/` and `/healthz`).
-- **Slice 5 (dual-path completion) shipped** — #443 (PR1 additive: `PublishedContentRepository` + `find_existing_submission` + route char-net) + #444 (PR2 rewire + #431 fold-in). Issue #431 closed. Post-slice re-score (#445): Architecture **7 → 8**, Overall ~8.1.
-- **Slice 6 (Tier 1 OpSafety) shipped** — #446 (spec/plan) + #447 (railway-down runbook + customer comms templates) + #448 (graider.live status banner + deferred probe audit) + #449 (closeout). The BetterStack stack already existed; the real gap was the customer path from broken app → working status page, now closed by the banner.
-- **Slice 7 (DI provider) shipped** — #450 (spec) + #451 (spec-refinement + plan, race-recovery) + #452 (PR1 provider + factory `sb=_UNSET` evolution) + #453 (PR2 failure-seam migration + falsifiable char-net split + ergonomics proof) + #454 (closeout). DI addressed at the repository seam; honest framing: seam-level, not codebase-wide.
-- **No DI re-score run** (deliberate). Predictable "holds Architecture at 8" — seam-level DI is live and the testability win is demonstrated, but the ~80 other `get_supabase()` sites still acquire deps directly. The judgment is recorded in the DI closeout dated section instead of burning a 3-model dispatch.
+- **Wave 6 COMPLETE & SHIPPED.** `planner_routes.py` 4,611 → 2,154 LOC (−53%), all 5
+  generation handlers + the standards/content/export/study-aid/assessment helpers into
+  Flask-free `backend/services/planner_*`. **Code Quality 8.5 → 9.0, unanimous 3-model
+  (Claude/Codex/Gemini) — the first 9 in the program** (re-score #519). gitnexus re-indexed.
+- **Wave 7 IN PROGRESS — clean pure-extraction phase COMPLETE (7 slices shipped #520-#526).**
+  New Flask-free service modules carved from the grading engine: `writing_style` (analyze/compare,
+  #520), `grader_text_prep` (sanitize_pii_for_ai + preprocess_for_ai_detection; log_pii_sanitization
+  stayed — has a print, #521), `grading_prep` (_parse_expected_answers + _distribute_points +
+  _is_math_subject + MATH_SUBJECTS + build_section_rubric; swept dead `import hashlib`, #522/#523),
+  `grader_json` (_try_parse_json_fallback, #524), `submission_parsing` (parse_filename, #525),
+  `grader_export` (generate_email_content, #526), #527 golden-net hardening + dead-code cleanup.
+- **Wave 7 file-reader cluster STARTED via the print→logger pattern (VALIDATED by review #528):**
+  `read_image_file` (#528) + `read_docx_file` (#529, in CI) → `submission_parsing`. These are NOT
+  byte-identical — the grader (a former CLI tool) is print-heavy and `backend/services/` is ruff-T20
+  scanned, so diagnostic `print()` calls become `_logger.*` (RETURN VALUES unchanged + golden-tested;
+  the #528 reviewer confirmed nothing depends on the stdout). Each slice: golden return-value char tests
+  baselined first (generate a real .docx via python-docx; write image bytes to a tmp .png), verify the
+  ONLY diff vs origin/main is the print→logger lines (+ any dead-import sweep), explicit `as` shim,
+  bandit+ruff+mypy clean, full grading sweep green.
+  **REMAINING (the complex part — careful, fresh context advised):**
+  (1) the 3 big Graider parsers — `read_docx_file_structured` (~153 LOC), `extract_from_tables` (~149),
+  `extract_from_graider_text` (~164) → `submission_parsing`. Each is intricate Graider-table/marker
+  parsing with MANY prints; needs golden tests on REAL Graider-formatted inputs (understand the
+  GRAIDER_* marker + table format first — see how the planner GENERATES them + how these PARSE them).
+  (2) `read_assignment_file` (the dispatcher; imported by grading/pipeline.py → STRICT, needs explicit
+  `as` shim) — move LAST, after its callees. (3) roster (load_roster, build_roster_from_periods) +
+  CSV/report file-write (export_focus_csv, save_to_master_csv, export_detailed_report) → `grader_export`
+  (also print-heavy → logger). (4) **Phase B: LLM-coupled scoring core** (grade_per_question,
+  generate_feedback, grade_multipass, grade_assignment, detect_ai_plagiarism, grade_with_ensemble,
+  _translate_feedback) — build the full 3-SDK-stub (openai/anthropic/genai, raw clients — NOT
+  llm_adapter) golden net FIRST. assignment_grader.py now ~4,300 LOC (from 5,344).
+- **3 LINTER LESSONS (backend/services/ is ruff-T20 + Bandit + Mypy-Strict scanned; root grader was NOT) —
+  PRE-CHECK locally per slice** with `bandit -q <file>`, `ruff check <file>`, `ruff check --select F401,F841 <file>`,
+  AND the CI mypy command if a `backend/grading/` module imports the symbol:
+  (a) ruff **T20**/flake8-print → don't move functions with `print()` into services (kept log_pii_sanitization
+  in the grader); (b) **Bandit** → `hashlib.md5` needs `usedforsecurity=False` (B324; identical digest) — #521;
+  (c) **Mypy Strict `no_implicit_reexport`** → if a `backend/grading/` strict module imports the symbol from
+  assignment_grader (pipeline.py imports `load_roster, parse_filename, read_assignment_file`), the re-export
+  shim MUST be the explicit `from backend.services.X import fn as fn  # noqa: F401` form — #525 fixed
+  parse_filename; **load_roster + read_assignment_file slices will need it too.** RULE: always use the
+  explicit `as` form for grader shims. CI mypy cmd: `mypy backend/utils/auth_decorators.py
+  backend/utils/redaction.py backend/utils/errors.py backend/utils/ttl_cache.py backend/utils/logging_utils.py
+  backend/observability/events.py backend/supabase_client.py backend/supabase_resilient.py backend/retry.py
+  backend/grading/`.
 
-## 3. Current state
+## 3. The heightened grader protocol (FOLLOW THIS — it's a live scoring engine)
 
-### main HEAD
-- `751123d` (#454 DI closeout). `git log --oneline origin/main -6` shows #454→#449 in order.
-- Full backend suite: **5155 passed, 14 skipped, 1 known network flake** (`test_openai_chat_uses_breaker`; passes in isolation in ~19s — sibling of the anthropic/gemini breaker flakes). GitNexus index refreshed to `a369606`, embeddings 11211 preserved.
+A grading bug silently mis-grades real student work, so the route-slice protocol isn't
+enough. Per slice:
+1. **Char-test-first with GOLDEN outputs.** Capture the function's EXACT output on fixed
+   inputs (run it, hardcode the result), pin via `assert == golden`. Baseline green BEFORE
+   extraction. Import the function via `assignment_grader` (so the test stays valid through
+   the re-export shim).
+2. **Full grading-suite green before AND after.** Broad sweep:
+   `pytest tests/ -k "grad or grader or pipeline or writing or detection or feedback or
+   multipass or portal_grading or factor or ensemble" --ignore=tests/load --ignore=tests/e2e`
+   (~770 tests, ~2 min). Must stay green.
+3. **Re-export shim** (same pattern as Waves 5/6): move the function verbatim into
+   `backend/services/<name>.py`, replace the def in the grader with
+   `from backend.services.<name> import <fn>`. Internal AND external callers keep working.
+4. **Verify:** AST function-source byte-identical vs origin/main; ruff (+ manual
+   `--select F401,F841`); no import cycle (the service must not import assignment_grader);
+   shim identity (`g.<fn> is <imported fn>`).
+5. Two-stage review (spec first-hand + superpowers:code-reviewer), squash-auto-merge, watcher.
 
-### Shipped this session (all merged)
-| PRs | What |
-|---|---|
-| #438–#442 | Production incident hotfixes (Redis resilience) |
-| #443, #444, #445 | Slice 5 dual-path completion + re-score |
-| #446, #447, #448, #449 | Slice 6 Tier 1 OpSafety |
-| #450, #451, #452, #453, #454 | Slice 7 DI provider |
+⚠️ **The grader does NOT use `backend.services.llm_adapter`** — it calls the raw
+`openai`/`anthropic`/`genai` SDKs inline (`OpenAI(...).beta.chat.completions.parse()`,
+`.chat.completions.create()`, anthropic `.messages.create()`, gemini `.generate_content()`).
+So a FULL-pipeline golden net (for the LLM-coupled scoring core, Phase B) needs stubbing 3
+SDKs with exact response shapes (the existing suite avoided this). **Phase A = pure helpers
+only** (no scores affected → per-function golden tests suffice). Build the full SDK-stub
+golden net before touching `grade_per_question`/`generate_feedback`/`grade_multipass`/
+`grade_assignment`/`detect_ai_plagiarism`.
+⚠️ The single LLM key seam: `from backend.api_keys import get_api_key as _get_api_key`
+(grader line ~428) — all providers build clients with it.
 
-### New durable code/docs
-- `backend/providers.py` — the DI provider (get_supabase_provider / get_submission_repository / get_published_content_repository / override_supabase). 11 unit tests in `tests/test_providers.py`.
-- `repository_for(path_type, sb=_UNSET)` + `published_content_repository_for(path_type, sb=_UNSET)` — default-resolve via provider when omitted; sentinel distinguishes omitted from explicit-None.
-- `docs/runbooks/railway-down.md` + `docs/runbooks/customer-comms-templates.md`.
-- `landing/status-banner.js` + `landing/status-banner.test.js` (vanilla JS, node:test) + banner wired into `landing/index.html` + `landing/styles.css`.
-- `docs/observability.md` — appended a deferred probe-coverage audit section.
-- `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` — dated closeout sections for all three slices + the Slice 5 re-score + the 2026-05-19 incident.
+## 4. Concrete next step (fresh session)
 
-## 4. Open loops (BOTH require the user — an agent cannot do them)
+`/tmp/apply_*.py` scripts from earlier slices are GONE (don't survive a fresh session) and not
+needed — all those slices shipped. The remaining work is described procedurally below (§5) and
+in §2. Start: `git checkout main && git pull`, re-read §2 + §3 (protocol) + §6 (linter lessons),
+then take the next complex Graider parser (`read_docx_file_structured`) — build its golden char
+test on a REAL Graider-generated .docx first (understand the GRAIDER_* marker/table format), then
+extract with the print→logger pattern (§2). The GitNexus index is fresh (re-indexed post-#529).
 
-1. **Deploy the OpSafety landing banner.** It's merged but NOT live: the landing deploys via an explicit `cd landing && npx vercel --prod` (needs Vercel auth). Until then `graider.live` does not show the status banner. Verify after: `curl -sS https://graider.live/ | grep -c 'id="status-banner"'` → expect `1`.
-2. **OpSafety probe-coverage audit** — deferred to the next quarterly alert drill (first Monday of Jul 2026). Needs BetterStack dashboard access. The 6 config fields to verify are listed as a checklist in `docs/observability.md` ("Probe-coverage audit" section). The probe DID fire correctly on 2026-05-19, so this is a "verify the why," not a blocker.
+## 5. Remaining Wave 7 (ranked)
 
-## 5. What changed scope mid-flight (so the next agent doesn't re-derive)
+Pure helpers + the 2 simple file-readers are DONE (slices 1-9, #520-#529). Remaining:
+- **The 3 complex Graider parsers → `submission_parsing`** (the hard part — print-heavy + intricate):
+  `read_docx_file_structured`, `extract_from_tables`,
+  `extract_from_graider_text`, then `read_assignment_file` (dispatcher; LAST). Needs real fixture
+  files — generate a .docx via python-docx (like the Wave 6 extract_text slice); mock pdfplumber
+  for pdf or rely on byte-identical for that branch; image→base64. Do with FRESH context (meaty).
+- roster (`load_roster`, `build_roster_from_periods`) + writing-profile
+  persistence (`update_writing_profile`/`get_writing_profile` — file I/O to ~/.graider_data,
+  char-test with tmp dirs) + CSV/email export (`export_focus_csv`, `save_to_master_csv`,
+  `export_detailed_report`, `generate_email_content`) → a `grader_export` service.
+- **Phase B (LAST, max care):** the LLM-coupled scoring core (`grade_per_question`,
+  `generate_feedback`, `grade_multipass`, `grade_assignment`, `detect_ai_plagiarism`,
+  `grade_with_ensemble`, `_translate_feedback`) — needs the full SDK-stub golden net first.
 
-- **OpSafety scope correction:** the PR #434 roadmap listed "off-Railway status page" + "external uptime monitor" as Tier 1, but BetterStack (Uptime + Status Page at status.graider.live + Slack + iOS Critical Alerts) already shipped 2026-04-11. The real Tier 1 gap was the marketing-site banner (originally labeled Tier 2) + the runbook + comms templates. Don't rebuild the BetterStack stack — it exists.
-- **DI scope refinement (planning-time audit):** the call-site migration is narrower than the spec first assumed. (a) The char net pinned call-count at the `if sb:` guards — migrating makes `repository_for` fire even with a None client (repo no-ops via its own guard; observable effect identical), so ~2 TestFailureSeam tests were updated from call-count to falsifiable observable-effect assertions. (b) `submit_student_work` uses `get_supabase_or_raise` (raise-vs-None vs the provider's `get_supabase`) — deferred. (c) Dual-use sites (`sb` used for both repo + direct `db.table` queries) double-acquire — deferred. Only the clean repo-only `get_supabase`-based failure seams migrated.
-- **`landing/` is vanilla HTML/CSS/JS, NOT React.** The OpSafety spec assumed React; the plan corrected to vanilla JS + `node:test`. Any future landing work: it's plain `index.html` + `script.js` + `styles.css`, no build step beyond Vercel.
+After Wave 7 (or a meaningful chunk): 3-model re-score (CQ 9 → 9.5?), gitnexus re-index.
 
-## 6. Recommended next lever (ranked)
+## 6. Cleanup owed (deferred, recorded by the slice-1 reviewer)
+- `backend/services/writing_style.py`: 4 carried-over dead locals in `analyze_writing_style`
+  (`potential_misspellings`, `common_misspelled`, `proper_caps`, `all_caps`) — pre-existing,
+  kept byte-identical in slice 1; remove in a SEPARATE non-identity commit (golden tests
+  confirm output unchanged). Plus 2-3 uncovered `compare_writing_styles` branches
+  (minor/likely) + an un-capped-complexity analyze golden — add to harden the net.
+- Wave 6 route-side dead vars (`global_ai_notes` @ planner_routes ~492, ~40 `except ... as e`)
+  — CI-invisible (ruff=T20). One final cleanup PR.
 
-1. **PlannerTab.jsx decomposition** (RECOMMENDED) — `frontend/src/tabs/PlannerTab.jsx` (~7,405 LOC), the largest raw file, named across re-scores as the distinct Code-Quality concentrated-complexity lever (separate from the Architecture-tier work). A different kind of slice (frontend, no Celery/char-net coupling).
+## 7. Standing constraints
+- venv `/Users/alexc/Downloads/Graider/venv/`. CI ignores tests/load + tests/e2e. Commit
+  trailer `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`; PR trailer
+  `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Active frontend
+  `frontend/src/App.jsx` (never graider_app.py). Branch protection = 9 checks. Never commit
+  AGENTS.md/CLAUDE.md (GitNexus index noise) — `git add` explicit files.
+- Robust watcher pattern (run_in_background bash): poll `gh pr view N`, `gh pr update-branch`
+  on BEHIND, exit on MERGED/CHECK_FAILED; squash-auto-merge `gh pr merge N --squash --auto
+  --delete-branch`. Each grader slice is strictly sequential on the same file (~10 min CI).
+- AST-aware dedent (Wave 6 lesson): when moving a body that contains multi-line strings,
+  skip string-interior lines during dedent (venv is Python 3.14 → f-strings tokenize as
+  FSTRING_* not STRING; use AST node spans, not tokenize). Grader pure helpers are
+  module-level (0-indent) so verbatim move, no dedent needed.
 
-   **IMPORTANT — this is NOT greenfield; it's an in-progress multi-wave refactor (scouted 2026-05-22, deferred to a fresh session for the heavy analysis):**
-   - Existing plan: `docs/superpowers/plans/2026-05-04-planner-tab-extraction.md` (went through 3 Codex review rounds). Read it first.
-   - **Wave 1** (PR 1–7, PRs #193–#203): extracted the inline Planner JSX out of `App.jsx` into `PlannerTab.jsx` + decentralized ~91 Planner-only `useState` pairs out of App.
-   - **Wave 2** (PR 7a–7e, 8a–8d, PRs #199–#207): extracted clusters *out of* `PlannerTab.jsx` into `frontend/src/components/` (AttemptDrawer, ShareWithClasses, NewUnit+tag, matching, doc-upload, preview, lesson-gen) — these are the imports at the top of PlannerTab.jsx.
-   - **Despite both waves it's still 7,405 LOC / 75 useState / 6 useEffect / ~20 handlers / a ~6,100-line JSX return (line 1275 → end) with deeply nested conditional sub-renders.** That's how huge it started (~5,943 LOC inline originally).
-   - **The next slice's first job (do this FRESH, with full context budget):** identify the largest cohesive clusters STILL inline in PlannerTab.jsx (by line count + cohesion) that haven't been extracted by waves 1+2, pick one as the v1 extraction target, and brainstorm THAT cluster's extraction. Don't redesign the whole decomposition — continue the established cluster-extraction cadence (extract one cluster → component or hook, prove via Vite build + frontend test count floor + Playwright E2E smoke, no behavior change).
-   - Frontend "no behavior change" proof = Vite build succeeds + frontend test count ≥ floor (Frontend Build CI check) + Playwright `health-check.spec.js` E2E smoke. There is no backend-style char-net; the prior PlannerTab PRs relied on Codex parity review + the test suite (currently ~160+ frontend tests; `frontend/src/__tests__/PlannerTab.test.jsx` exists).
-   - Begin with `superpowers:brainstorming`, but the brainstorm should be SHORT — the decomposition strategy is already designed in the 2026-05-04 plan; the open question is just "which remaining inline cluster is next."
-2. **Broader DI conversion** — what would actually move Architecture 8 → 9 codebase-wide: the dual-use sites + `submit_student_work` + the 6 duplicate `_get_supabase()` defs + progressively the ~80 other `get_supabase()` call sites + AI clients + config. Multi-slice; each its own spec/plan. The provider seam from this session is the foundation.
-3. **Physical two-table consolidation** — the deferred dual-path end-state (`submissions`+`student_submissions`, `published_assessments`+`published_content`). Deliberately deferred for FERPA-data-safety reasons; needs its own design + migration. Highest blast radius.
-
-## 7. Concrete next step
-
-Start a fresh session: `/clear`, then "read handoff.md first." Then invoke `superpowers:brainstorming` for the PlannerTab.jsx decomposition (or whichever lever above the user picks). The established cadence: brainstorm (3-model consult on genuine design forks) → spec → writing-plans → subagent-driven-development with two-stage review (spec-compliance then code-quality) per task → closeout dated section → optional 3-model re-score.
-
-Standing constraints (from CLAUDE.md + this session): venv at `/Users/alexc/Downloads/Graider/venv/`; pytest always `--ignore=tests/load`; never contact `:3000`; all changes via PR (9 CI checks); commit trailer `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`; PR body trailer `🤖 Generated with [Claude Code](https://claude.com/claude-code)`; skip em-dash sweeps on internal docs (humanizer was for pitch decks); active frontend is `frontend/src/App.jsx` (never edit `graider_app.py` for UI); landing is vanilla JS on Vercel.
-
-## 8. Disproved / ruled-out this session (don't re-try)
-
-- **Reverting recent merges during the prod incident** — ruled out fast: the failure was a TLS handshake rejection (connection never reached Flask), which a code regression cannot cause. Reflexive revert would have done nothing.
-- **`flask.g`/`current_app`-based DI** — ruled out: the Celery/thread grading paths run outside Flask request context (`backend/supabase_client_scoped.py` documents this). The DI provider must be context-independent; that's why it's plain module functions + contextvars.
-- **A DI library (punq/dependency-injector)** — considered (Gemini leaned this way) and ruled out for v1: adds a runtime dependency + learning curve for a single-dev team, identical testability outcome to the hand-rolled provider. Revisit only if a re-score says the hand-rolled provider doesn't retire the objection.
-- **Running the DI re-score** — skipped deliberately (predictable hold-at-8); not a gap, a judgment recorded in the closeout.
-
-## 9. References
-
-- Assessment doc (canonical): `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`
-- Slice specs/plans: `docs/superpowers/specs/2026-05-19-dual-path-completion-design.md` + plan; `docs/superpowers/specs/2026-05-21-opsafety-tier1-design.md` + plan; `docs/superpowers/specs/2026-05-22-di-provider-design.md` + plan (`docs/superpowers/plans/2026-05-22-di-provider.md`).
-- Observability runbook: `docs/observability.md`. Incident runbook: `docs/runbooks/railway-down.md`.
-- PRs this session: #438–#454. All merged. Pre-existing OPEN PRs (#367, #115, #103, #90, #42, #40) are NOT from this session and were not touched — leave for the user to triage.
-- Stale local branches (chore/*, ci/*, docs/*) are pre-existing, not from this session.
+## 8. References
+- Scorecard: `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`
+  (Wave 6 closeout re-score = last section).
+- Wave 6 PRs #502–#519 (all merged). Wave 7 PRs #520–#529 (all merged): #520 writing_style,
+  #521 grader_text_prep, #522/#523 grading_prep, #524 grader_json, #525 submission_parsing
+  (parse_filename), #526 grader_export, #527 hardening, #528 read_image_file, #529 read_docx_file.
+  Spec/plan for Wave 6: #501.
+- No Wave 7 spec/plan doc yet (proven pattern from Waves 5/6; brainstorm was skipped per
+  the user's "you decide and execute" + the established cadence). Consider a brief Wave 7
+  spec if a fresh agent wants the anchor.
