@@ -7,6 +7,29 @@ from unittest.mock import patch, MagicMock
 from flask import Flask, g
 
 
+@pytest.fixture(autouse=True)
+def _disable_rate_limiter():
+    """Disable Flask-Limiter for the duration of each admin test.
+
+    backend.extensions.limiter is a module-level singleton. These tests use a
+    minimal Flask app that never calls limiter.init_app(), so in ISOLATION the
+    limiter has no storage and admin_claim's @limiter.limit("10 per hour") does
+    not enforce. But in the full CI suite, other test files import backend.app
+    (which inits the limiter's shared storage), after which the decorator DOES
+    enforce — and cumulative /api/admin/claim POSTs across the suite 429 a later
+    admin test (e.g. the expired-invite test got 429 instead of 400). Disabling
+    per the established test_student_account_coverage pattern. The static
+    test_claim_has_rate_limit_decorator checks source text, so it is unaffected.
+    """
+    from backend.extensions import limiter
+    prior = limiter.enabled
+    limiter.enabled = False
+    try:
+        yield
+    finally:
+        limiter.enabled = prior
+
+
 @pytest.fixture
 def app():
     """Create a minimal Flask app with admin routes registered."""
