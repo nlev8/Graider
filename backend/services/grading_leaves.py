@@ -16,7 +16,7 @@ import logging
 from backend.api_keys import get_api_key as _get_api_key
 from backend.retry import with_retry
 from backend.services.grader_json import _try_parse_json_fallback
-from backend.services.grading_models import DetectionResponse, FeedbackResponse, PerQuestionResponse
+from backend.services.grading_models import DetectionResponse, FeedbackResponse, PerQuestionResponse, TokenTracker
 from backend.services.grading_prep import _is_math_subject
 
 _logger = logging.getLogger(__name__)

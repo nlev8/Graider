@@ -969,3 +969,36 @@ The deferred judgment step for **Wave 6** (the `backend/routes/planner_routes.py
 ## Honest note
 
 All three models completed cleanly and independently, verified the live post-Wave-6 code (each ran the new planner service tests green), and unanimously scored Code Quality 9.0 with the same `assignment_grader.py` next lever — the first 9 in the program. This is a genuine, earned full-step: the headline lever was the one every prior re-score named as gating, and it was delivered behavior-preserving under a characterization net with byte-identical prompt verification, not merely "files moved." The Overall ticks from ~8.1 to ~8.2 (a half-step on one of ~10 dimensions). The honest ceiling note stands: a 9.5+ requires opening the `assignment_grader.py` gate (user decision) and the residual frontend god-files. This dated section closes Wave 6 (the `2026-05-24-planner-routes-deconcentration` spec + plan).
+
+---
+
+# 2026-05-24 Post-Wave-7 (`assignment_grader.py` decomposition) 3-Model Reconciled Re-Score — **Code Quality 9.0 → 9.2**
+
+The deferred judgment step for **Wave 7** — the decomposition of `assignment_grader.py`, the 5,344-LOC grading god-module that every prior re-score named as the gating "final boss" (user opened the gate this session). Phase A (pure helpers + file readers + roster/CSV export, PRs #520–#542) and Phase B (the LLM-coupled scoring core, PRs #543–#547) shipped behind a deterministic SDK-fake **golden net** (#541). Codex 5.5 (high), Gemini, and Claude each re-scored independently against the Post-Wave-6 baseline (Code Quality 9.0). Method: Claude (controller, first-hand), Codex (`codex exec -c model_reasoning_effort=high`), Gemini (`GEMINI_CLI_TRUST_WORKSPACE=true gemini -p --yolo`). Conservative-floor reconciliation (lower score wins on a split unless strong disconfirming file:line evidence).
+
+| Model | Code Quality | Highest-leverage next step |
+|-------|--------------|----------------------------|
+| Claude (first-hand) | 9.5 | split `grade_assignment`; extract CLI/email |
+| Codex 5.5 (high) | 9.2 | split `grade_assignment` (the one change closest to 9.5) |
+| Gemini | 9.2 | decompose the `grade_assignment` God Function; extract CLI |
+| **Reconciled** | **9.0 → 9.2** | **split `grade_assignment` into pipeline phases** |
+
+## Verdict: Code Quality 9.0 → 9.2. Overall ~8.2 → ~8.3.
+
+**Codex and Gemini independently converged on 9.2; Claude's 9.5 was reconciled down to the floor.** All three verified the live code with their own shell commands (Codex + Gemini both ran `tests/test_grader_golden.py` → `12 passed, 1 skipped`; Codex also ran the e2e grading pipeline → `2 passed`).
+
+**Verified progress (all three, file:line):**
+- **Headline: `assignment_grader.py` 5,344 → 658 LOC (−88%)** — the largest single-file reduction in the program. It is now a thin facade: CLI/email orchestration (`run_grading`, `save_emails_to_folder`, `create_outlook_drafts`) + re-export shims. The entire LLM-coupled scoring core moved into focused Flask-free `backend/services/` modules: `grading_models.py` (schemas + `TokenTracker` + `MODEL_PRICING`), `grading_leaves.py` (`grade_per_question`, `detect_ai_plagiarism`, `generate_feedback`, `_translate_feedback`), `grading_pipeline.py` (`grade_multipass`, `grade_assignment`, `grade_with_ensemble`, `grade_with_parallel_detection`), plus `writing_style`, `writing_profile`, `grader_text_prep`, `grading_prep`, `grader_json`, `submission_parsing`, `grader_export`, `grader_roster`.
+- **The keystone (all three praised it): the SDK-fake golden net** (`tests/grading_fakes.py` + `tests/test_grader_golden.py`, 12 active goldens). It patches the 3 RAW SDK entrypoints with provider-shaped, thread-safe, content-matched fakes and runs the REAL grading functions — pinning exact scores, token counts (incl. the gpt-4o feedback upgrade), blank short-circuit, the `.parsed`-None fallback contrast, and provider routing. Gemini: "the single most important quality improvement in this wave… you've frozen the behavior of the most volatile part of the system." Codex: "excellent characterization coverage."
+- **Behavior preservation was mechanically enforced:** every slice AST-verified function-source byte-identical to `origin/main` modulo mechanical `print()`→`_logger.*`; `ruff --select F821` used to statically confirm zero undefined names BEFORE runtime; re-export shims (explicit `as`, mypy no_implicit_reexport) keep all callers + mock-patch targets resolving; an AST importer-scan (not single-line grep) governed which "orphaned" imports were safe to prune vs kept as test re-exports. A latent test-quality bug class was caught & fixed: patches of internal seams on `assignment_grader` became AttributeError or SILENTLY VACUOUS after the move — all repointed and re-verified the mocks actually fire.
+
+**Why Code Quality is 9.2, not 9.5 (unanimous grounds):** the god-*module* is gone, but a **second-order god-*function*** remains — `grade_assignment` is ~1,138 LOC inside the 2,017-LOC `grading_pipeline.py`, still mixing provider setup, extraction policy, prompt construction, response parsing, scoring caps, rubric weighting, ELL translation, writing-profile updates, audit payloads, and error recovery. The 658-LOC facade also still bundles a ~206-LOC CLI runner + email side effects.
+
+## Path beyond 9.2 (unanimous)
+**To 9.5:** (1) split `grade_assignment` into named pipeline phases (provider/client resolution → text/image extraction → prompt assembly → provider call → structured/text parse → deterministic post-processing → audit/token finalization), keeping the public function as orchestration only; (2) extract the CLI/email layer out of the facade (`grader_cli.py` / `grader_email_export.py`); (3) finish lint hygiene (done this closeout: `TokenTracker` F821 + `focus_files` F841) + move dynamic `_logger.info(f"…")` to lazy `%`-style. **To 10:** provider adapters behind one interface, typed request/result objects instead of wide dicts, pure scoring/cap functions with table-driven tests, retire the re-export shims (migrate internal imports to `backend.services.*`), and add low-cost live/contract SDK smoke tests behind `live`/`sdk` markers (mitigating golden-net stale-out + the Gemini-SDK-absent skip).
+
+## New risk introduced (bounded, both external models)
+The re-export shims create dual import paths + mock-patch ambiguity → mitigate by migrating internal callers off `assignment_grader` and deprecating the shims. The golden net can't model provider refusals / SDK drift / multimodal edge cases → mitigate with markered live contract tests + visible Gemini-skip in CI reporting.
+
+## Honest note
+This is a genuine, earned uplift on the program's hardest target: the grading "final boss" — 5,344 LOC, deliberately gated until this session — decomposed −88% behind a faithful golden net that runs the real functions, not merely "files moved." The two external models independently landed on the same number and the same next lever (`grade_assignment`), so the reconciled 9.2 is conservative and verified. Overall ticks ~8.2 → ~8.3. The honest ceiling note stands: 9.5 needs the intra-function decomposition of `grade_assignment` + the CLI/email split; 10 needs the provider-adapter/typed-result re-architecture. This dated section closes Wave 7 (the `2026-05-24-wave7-phaseb-grader-golden-net` spec + the #520–#547 PR series).
