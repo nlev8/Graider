@@ -49,3 +49,48 @@ def test_aggregate_mastery_latest_sums_overall():
     out = _aggregate_mastery_for_student(subs, {"c1": "Quiz"}, "latest")
     assert out["A"]["percentage"] == 80.0
     assert out["A"]["points_possible"] == 10
+
+
+def test_aggregate_mastery_average_mode_averages_percentages():
+    from backend.services.student_mastery import _aggregate_mastery_for_student
+    subs = {"c1": [
+        {"id": "s1", "attempt_number": 1,
+         "results": {"standards_mastery": {"A": {"points_earned": 6, "points_possible": 10, "question_count": 1}}}},
+        {"id": "s2", "attempt_number": 2,
+         "results": {"standards_mastery": {"A": {"points_earned": 10, "points_possible": 10, "question_count": 1}}}},
+    ]}
+    out = _aggregate_mastery_for_student(subs, {"c1": "Quiz"}, "average")
+    assert out["A"]["percentage"] == 80.0  # mean of 60% and 100%, not summed
+
+
+def test_select_submissions_by_mode_best_vs_latest_vs_average():
+    from backend.services.student_mastery import _select_submissions_by_mode
+    subs = {"c1": [
+        {"id": "a", "percentage": 90, "attempt_number": 1, "submitted_at": "2026-01-01T00:00:00Z"},
+        {"id": "b", "percentage": 60, "attempt_number": 2, "submitted_at": "2026-01-02T00:00:00Z"},
+    ]}
+    assert _select_submissions_by_mode(subs, "best")["c1"][0]["id"] == "a"    # highest percentage
+    assert _select_submissions_by_mode(subs, "latest")["c1"][0]["id"] == "b"  # highest attempt_number
+    assert len(_select_submissions_by_mode(subs, "average")["c1"]) == 2       # average keeps all
+
+
+def test_build_standards_breakdown_sorts_worst_first_flat_input():
+    from backend.services.student_mastery import _build_standards_breakdown_for_student
+    mastery = {
+        "HI.1": {"percentage": 90, "points_earned": 9, "points_possible": 10, "question_count": 1, "contributing_submissions": []},
+        "LO.2": {"percentage": 40, "points_earned": 4, "points_possible": 10, "question_count": 1, "contributing_submissions": []},
+    }
+    rows = _build_standards_breakdown_for_student(mastery, {})
+    assert [r["code"] for r in rows] == ["LO.2", "HI.1"]  # ASC by percentage = worst-first
+    assert rows[0]["by_dok"] == []                         # flat input emits empty by_dok
+
+
+def test_build_trajectory_nulls_sort_last():
+    from backend.services.student_mastery import _build_trajectory_for_student
+    subs = [
+        {"id": "late", "content_id": "c1", "submitted_at": None, "percentage": 50, "attempt_number": 1, "results": {}},
+        {"id": "early", "content_id": "c1", "submitted_at": "2026-01-01T00:00:00Z", "percentage": 70, "attempt_number": 1, "results": {}},
+        {"id": "mid", "content_id": "c1", "submitted_at": "2026-02-01T00:00:00Z", "percentage": 80, "attempt_number": 1, "results": {}},
+    ]
+    out = _build_trajectory_for_student(subs, {"c1": "Quiz"})
+    assert [o["submission_id"] for o in out] == ["early", "mid", "late"]  # chronological; null submitted_at last
