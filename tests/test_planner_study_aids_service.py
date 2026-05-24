@@ -23,7 +23,7 @@ def test_generate_study_guide_content_returns_parsed_dict():
          patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
         mock_genai.Client.return_value.models.generate_content.return_value = _mock_genai_response(payload)
         out = generate_study_guide_content(
-            content="Cells are the basic unit of life.", title="Cells", subject="Bio",
+            content="Cells are the basic unit of life.", subject="Bio",
             grade="7", instructions="", global_ai_notes="", lesson_plan=None, user_id="t1",
         )
     assert out["title"] == "Cells"
@@ -37,7 +37,7 @@ def test_generate_study_guide_content_strips_code_fences():
          patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
         mock_genai.Client.return_value.models.generate_content.return_value = _mock_genai_response(fenced)
         out = generate_study_guide_content(
-            content="x", title="X", subject="", grade="", instructions="",
+            content="x", subject="", grade="", instructions="",
             global_ai_notes="", lesson_plan=None, user_id="t1",
         )
     assert out == {"title": "X", "sections": []}  # fences stripped, parsed
@@ -50,7 +50,7 @@ def test_generate_flashcards_content_returns_parsed_dict():
          patch('backend.services.llm_adapter.gemini_adapter.genai') as mock_genai:
         mock_genai.Client.return_value.models.generate_content.return_value = _mock_genai_response(payload)
         out = generate_flashcards_content(
-            content="cells", title="Vocab", subject="Bio", grade="7", instructions="",
+            content="cells", subject="Bio", grade="7", instructions="",
             global_ai_notes="", lesson_plan=None, card_count=10, user_id="t1",
         )
     assert out["cards"][0]["term"] == "cell"
@@ -63,7 +63,7 @@ def test_generate_flashcards_content_raises_on_bad_json():
         mock_genai.Client.return_value.models.generate_content.return_value = _mock_genai_response("not json at all")
         try:
             generate_flashcards_content(
-                content="x", title="V", subject="", grade="", instructions="",
+                content="x", subject="", grade="", instructions="",
                 global_ai_notes="", lesson_plan=None, card_count=5, user_id="t1",
             )
             assert False, "expected JSONDecodeError"

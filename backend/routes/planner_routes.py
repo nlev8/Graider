@@ -4008,7 +4008,7 @@ def generate_study_guide():
 
     try:
         study_guide = generate_study_guide_content(
-            content=content, title=title, subject=subject, grade=grade,
+            content=content, subject=subject, grade=grade,
             instructions=instructions, global_ai_notes=global_ai_notes,
             lesson_plan=lesson_plan, user_id=user_id,
         )
@@ -4101,7 +4101,7 @@ def generate_flashcards():
 
     try:
         flashcards = generate_flashcards_content(
-            content=content, title=title, subject=subject, grade=grade,
+            content=content, subject=subject, grade=grade,
             instructions=instructions, global_ai_notes=global_ai_notes,
             lesson_plan=lesson_plan, card_count=card_count, user_id=user_id,
         )

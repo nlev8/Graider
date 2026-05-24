@@ -7,12 +7,9 @@ the JSON, and return the result dict (raising json.JSONDecodeError on bad JSON,
 which the route translates to a 500 — same as before). No service->route imports.
 """
 import json
-import logging
-
-_logger = logging.getLogger(__name__)
 
 
-def generate_study_guide_content(*, content, title, subject, grade, instructions,
+def generate_study_guide_content(*, content, subject, grade, instructions,
                                  global_ai_notes, lesson_plan, user_id):
     """Build the prompt, call Gemini, parse + return the study_guide dict."""
     prompt_parts = []
@@ -91,7 +88,7 @@ def generate_study_guide_content(*, content, title, subject, grade, instructions
     return study_guide
 
 
-def generate_flashcards_content(*, content, title, subject, grade, instructions,
+def generate_flashcards_content(*, content, subject, grade, instructions,
                                 global_ai_notes, lesson_plan, card_count, user_id):
     """Build the prompt, call Gemini, parse + return the flashcards dict."""
     prompt_parts = []
