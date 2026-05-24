@@ -69,6 +69,7 @@ import Sidebar from "./components/Sidebar";
 import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
 import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
+import { useSettingsAutoSave } from "./hooks/useSettingsAutoSave";
 const AnalyticsTab = React.lazy(() => import("./tabs/AnalyticsTab"));
 var AdminTab = React.lazy(function() { return import("./tabs/AdminTab"); });
 
@@ -1611,27 +1612,7 @@ function App() {
     }
   }, [activeTab]);
 
-  // Auto-save settings when they change (debounced)
-  useEffect(() => {
-    if (!settingsLoaded) return; // Don't save until initial load is complete
-
-    const saveTimeout = setTimeout(() => {
-      api.saveGlobalSettings({ globalAINotes, config }).catch(console.error);
-    }, 1000); // Debounce 1 second
-
-    return () => clearTimeout(saveTimeout);
-  }, [config, globalAINotes, settingsLoaded]);
-
-  // Auto-save rubric when it changes (debounced)
-  useEffect(() => {
-    if (!settingsLoaded) return;
-
-    const saveTimeout = setTimeout(() => {
-      api.saveRubric(rubric).catch(console.error);
-    }, 1000);
-
-    return () => clearTimeout(saveTimeout);
-  }, [rubric, settingsLoaded]);
+  useSettingsAutoSave({ config, globalAINotes, rubric, settingsLoaded });
 
   // Show onboarding wizard on first run
   useEffect(() => {
