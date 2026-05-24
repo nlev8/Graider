@@ -9,6 +9,11 @@ student_portal_routes.py so existing imports and
 import logging
 
 from backend.services.dok import DOK_OPTIONS, DOK_DESCRIPTIONS
+from backend.services.student_mastery import (
+    _sanitize_standards_mastery,
+    _select_submissions_by_mode,
+    _aggregate_mastery_for_student,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -311,3 +316,81 @@ def _gen_variant_for_student(*, sid, segment, students_by_id, api_key,
         'lesson': clean_lesson,
         'usage': _merge_usage(_extract_usage(completion, "gpt-4o"), _extra_usage),
     }
+
+
+def student_has_standard_evidence(db, student_id, class_content_ids, standard_code):
+    """True iff the student has any non-draft submission (scoped to the given
+    class content) whose results.standards_mastery contains `standard_code`.
+
+    Wave 5 Slice 5 - extracted verbatim from post_remediate's single-student
+    historical-evidence check. The route keeps the warning log + 400.
+    """
+    subs = db.table('student_submissions').select(
+        'id, percentage, results, status, submitted_at'
+    ).eq('student_id', student_id).in_(
+        'content_id', class_content_ids
+    ).neq('status', 'draft').execute()
+    for s in (subs.data or []):
+        mastery = (s.get('results') or {}).get('standards_mastery') or {}
+        if isinstance(mastery, dict) and standard_code in mastery:
+            return True
+    return False
+
+
+def resolve_red_tier_students(db, class_id, class_content_ids, class_content_titles, standard_code):
+    """Return the list of student_ids in the class who are red-tier (<70%) on
+    `standard_code`, using the full Progress-Rank aggregation pipeline so the set
+    EXACTLY matches the Progress Rank grid. Scoped to current-class content.
+
+    Wave 5 Slice 5 - extracted verbatim from post_remediate's red-tier resolver.
+    The route keeps the empty->400 + warning log.
+    """
+    # Resolve roster (skip orphans).
+    enrollments = db.table('class_students').select('student_id').eq('class_id', class_id).execute()
+    enrolled_ids = [r['student_id'] for r in (enrollments.data or []) if r.get('student_id')]
+    valid_ids = []
+    if enrolled_ids:
+        stu_rows = db.table('students').select('id').in_('id', enrolled_ids).execute()
+        existing = {s['id'] for s in (stu_rows.data or []) if s.get('id')}
+        valid_ids = [sid for sid in enrolled_ids if sid in existing]
+    # Pull class submissions scoped to current-class content (matches
+    # Progress Rank semantic). Out-of-class submissions on the same
+    # standard must NOT influence red-tier classification for this class.
+    red_tier = []
+    if valid_ids:
+        class_subs = db.table('student_submissions').select(
+            'id, student_id, content_id, attempt_number, submitted_at, percentage, results, status'
+        ).in_('student_id', valid_ids).in_(
+            'content_id', class_content_ids
+        ).neq('status', 'draft').execute()
+
+        # Phase 4.3 Sprint 2 (Codex MAJOR): sanitize before aggregation
+        # so old-shape and malformed entries are normalized in place
+        # before _aggregate_mastery_for_student inspects them. The
+        # aggregator's internal adapter handles shape conversion, but
+        # this also drops malformed entries early.
+        for s in (class_subs.data or []):
+            _sanitize_standards_mastery(s)
+
+        # Group submissions by student -> content_id -> [submissions].
+        from collections import defaultdict
+        per_student = defaultdict(lambda: defaultdict(list))
+        for s in (class_subs.data or []):
+            sid = s.get('student_id')
+            cid = s.get('content_id')
+            if sid and cid:
+                per_student[sid][cid].append(s)
+        # For each student: select latest per content, aggregate mastery, read standard's percentage.
+        # Reuse class_content_titles built above -- avoids a redundant published_content fetch.
+        for sid, by_cid in per_student.items():
+            selected = _select_submissions_by_mode(by_cid, 'latest')
+            mastery = _aggregate_mastery_for_student(selected, class_content_titles, 'latest')
+            std_entry = mastery.get(standard_code) if isinstance(mastery, dict) else None
+            if not std_entry:
+                continue
+            pct = std_entry.get('percentage')
+            if pct is None:
+                continue
+            if pct < 70:
+                red_tier.append(sid)
+    return red_tier

@@ -1,5 +1,6 @@
 """Direct-import characterization tests for backend/services/student_remediation.py
 (Wave 5 Slice 2 - behavior-preserving extraction from student_portal_routes)."""
+from unittest.mock import MagicMock as _MM
 
 
 def test_validate_and_clean_lesson_keeps_only_three_fields_and_strips():
@@ -79,3 +80,57 @@ def test_remediation_names_re_exported_from_route_module():
     assert _build_remediation_prompt is svc_fn
     assert REMEDIATION_COUNT_DEFAULT == 8
     assert callable(_gen_variant_for_student)
+
+
+# ── Wave 5 Slice 5: post_remediate resolver extractions ──
+
+
+def _r_chain(data=None):
+    c = _MM()
+    for m in ('select', 'eq', 'neq', 'in_', 'order', 'range', 'limit'):
+        getattr(c, m).return_value = c
+    c.execute.return_value = _MM(data=data if data is not None else [])
+    return c
+
+
+def _r_db(table_map):
+    db = _MM()
+    db.table.side_effect = lambda name: _r_chain(table_map.get(name, []))
+    return db
+
+
+def test_student_has_standard_evidence_true_when_standard_present():
+    from backend.services.student_remediation import student_has_standard_evidence
+    db = _r_db({'student_submissions': [
+        {'id': 's1', 'status': 'graded', 'results': {'standards_mastery': {'STD.1': {'percentage': 40}}}},
+    ]})
+    assert student_has_standard_evidence(db, 'stu1', ['ct1'], 'STD.1') is True
+    assert student_has_standard_evidence(db, 'stu1', ['ct1'], 'OTHER.9') is False
+
+
+def test_student_has_standard_evidence_false_when_no_submissions():
+    from backend.services.student_remediation import student_has_standard_evidence
+    assert student_has_standard_evidence(_r_db({'student_submissions': []}), 'stu1', ['ct1'], 'STD.1') is False
+
+
+def test_resolve_red_tier_students_flags_below_70():
+    from backend.services.student_remediation import resolve_red_tier_students
+    db = _r_db({
+        'class_students': [{'student_id': 's1'}, {'student_id': 's2'}],
+        'students': [{'id': 's1'}, {'id': 's2'}],
+        'student_submissions': [
+            {'id': 'a', 'student_id': 's1', 'content_id': 'ct1', 'attempt_number': 1,
+             'submitted_at': '2026-04-01T00:00:00Z', 'percentage': 40, 'status': 'graded',
+             'results': {'standards_mastery': {'STD.1': {'points_earned': 4, 'points_possible': 10, 'question_count': 1}}}},
+            {'id': 'b', 'student_id': 's2', 'content_id': 'ct1', 'attempt_number': 1,
+             'submitted_at': '2026-04-01T00:00:00Z', 'percentage': 90, 'status': 'graded',
+             'results': {'standards_mastery': {'STD.1': {'points_earned': 9, 'points_possible': 10, 'question_count': 1}}}},
+        ],
+    })
+    red = resolve_red_tier_students(db, 'c1', ['ct1'], {'ct1': 'Quiz'}, 'STD.1')
+    assert red == ['s1']  # s1 at 40% < 70 is red-tier; s2 at 90% is not
+
+
+def test_resolve_red_tier_students_empty_when_no_roster():
+    from backend.services.student_remediation import resolve_red_tier_students
+    assert resolve_red_tier_students(_r_db({'class_students': []}), 'c1', ['ct1'], {}, 'STD.1') == []
