@@ -293,3 +293,58 @@ def rewrite_for_alignment_content(*, enriched_questions, doc_text, grade, subjec
     _record_planner_cost(usage)
 
     return {**result, "usage": usage}
+
+
+def align_document_to_standards_content(*, doc_text, standards_ref, api_key):
+    """Call the LLM to analyze a document against the given standards reference;
+    return the alignment result dict + usage, or {'error': ...} on a non-JSON
+    response (the route jsonifies either). Wave 6 Slice 9 - extracted from
+    planner_routes.
+    """
+    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+    adapter = OpenAIAdapter(api_key=api_key)
+
+    # Truncate document to fit in context with standards
+    truncated_doc = doc_text[:8000]
+
+    system_prompt = (
+        "You are an expert curriculum alignment specialist. "
+        "Analyze the educational document against the provided standards and return a detailed alignment analysis in JSON format. "
+        "Be specific about what content in the document maps to each standard. "
+        "Only include standards with at least some relevance (confidence > 0.2). "
+        "Sort matched_standards by confidence descending."
+    )
+
+    user_prompt = json.dumps({
+        "task": "Analyze this educational document and identify which standards it aligns to.",
+        "document_text": truncated_doc,
+        "available_standards": standards_ref,
+        "return_format": {
+            "matched_standards": [{"code": "str", "benchmark": "str", "confidence": "float 0.0-1.0", "evidence": "brief quote or description from document", "alignment_notes": "what is well-covered vs missing"}],
+            "unmatched_standards": ["standard codes not covered"],
+            "overall_alignment_score": "float 0.0-1.0",
+            "suggestions": ["improvement suggestion strings"],
+            "question_analysis": [{"question_text": "truncated question", "aligned_standard": "code or null", "alignment_quality": "strong|partial|weak|none", "rewrite_suggestion": "optional string or null"}]
+        }
+    })
+
+    completion = adapter.chat(LLMRequest(
+        model="gpt-4o",
+        system_prompt=system_prompt,
+        messages=[Message(role="user", content=[TextPart(text=user_prompt)])],
+        response_format=ResponseFormat(type="json_object"),
+        temperature=0.3,
+        metadata={"feature_label": "align_document_to_standards"},
+    ))
+
+    raw_content = completion.content_parts[0].text if completion.content_parts else "{}"
+    try:
+        result = json.loads(raw_content)
+    except json.JSONDecodeError:
+        _logger.warning("[align-standards] Non-JSON response: %s", raw_content[:500])
+        return {"error": "AI returned non-JSON response. Possibly rate limited."}
+
+    usage = _extract_usage(completion, "gpt-4o")
+    _record_planner_cost(usage)
+
+    return {**result, "usage": usage}
