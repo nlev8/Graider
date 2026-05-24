@@ -93,6 +93,7 @@ from backend.services.planner_study_aids import (
 )
 from backend.services.planner_study_aids import generate_slides_payload
 from backend.services.planner_content_tools import adjust_reading_level_content
+from backend.services.planner_standards import rewrite_for_alignment_content
 from backend.services.planner_assessments import grade_assessment_answers_logic
 
 # ── Tier 2 PR3: prompt construction extracted to ───────────────────────────
@@ -330,54 +331,18 @@ def rewrite_for_alignment():
 
     try:
         from backend.api_keys import get_api_key as _gak
-        from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
         teacher_id = getattr(g, 'user_id', 'local-dev')
         api_key = _gak('openai', teacher_id)
 
         if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
             return jsonify({"error": "Missing or placeholder OpenAI API Key"})
 
-        adapter = OpenAIAdapter(api_key=api_key)
-
-        system_prompt = (
-            f"You are an expert curriculum specialist for grade {grade} {subject}. "
-            "Rewrite the given questions to better align with the target standards. "
-            "Preserve the general topic and difficulty level but adjust the focus, "
-            "vocabulary, and cognitive demand to match the standard's benchmark. "
-            "Keep the question appropriate for the grade level."
-        )
-
-        user_prompt = json.dumps({
-            "task": "Rewrite each question to better align with its target standard.",
-            "document_context": doc_text[:3000],
-            "questions": enriched_questions,
-            "return_format": {
-                "rewrites": [{"original_text": "str", "rewritten_text": "str", "standard_code": "str", "change_explanation": "brief explanation of what changed and why"}]
-            }
-        })
-
-        completion = adapter.chat(LLMRequest(
-            model="gpt-4o-mini",
-            system_prompt=system_prompt,
-            messages=[Message(role="user", content=[TextPart(text=user_prompt)])],
-            response_format=ResponseFormat(type="json_object"),
-            temperature=0.3,
-            metadata={"feature_label": "rewrite_for_alignment"},
+        return jsonify(rewrite_for_alignment_content(
+            enriched_questions=enriched_questions, doc_text=doc_text,
+            grade=grade, subject=subject, api_key=api_key,
         ))
 
-        raw_content = completion.content_parts[0].text if completion.content_parts else "{}"
-        try:
-            result = json.loads(raw_content)
-        except json.JSONDecodeError:
-            _logger.warning("[rewrite-alignment] Non-JSON response: %s", raw_content[:500])
-            return jsonify({"error": "AI returned non-JSON response. Possibly rate limited."})
-
-        usage = _extract_usage(completion, "gpt-4o-mini")
-        _record_planner_cost(usage)
-
-        return jsonify({**result, "usage": usage})
-
-    except Exception as e:
+    except Exception:
         _logger.exception("Rewrite for alignment failed")
         return jsonify({"error": "An internal error occurred"}), 500
 
