@@ -57,6 +57,38 @@ except ImportError:
 _logger = logging.getLogger(__name__)
 
 
+# ── Shared deterministic scoring helpers (used by every grading path) ──────────
+
+def _letter_grade(score: int) -> str:
+    """Map a 0–100 score to an A/B/C/D/F letter grade. Single source of truth for the
+    threshold ladder previously duplicated across grade_assignment / grade_multipass /
+    grade_with_ensemble."""
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
+
+
+# Completeness cap tables by grading style: each blank/missing section lowers the max grade.
+# (default for 'standard' or any unknown style → the standard table — matches the prior
+# if/elif/else selection exactly.)
+_COMPLETENESS_CAPS = {
+    "strict":   {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35, 7: 25, 8: 15},
+    "lenient":  {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49, 7: 39, 8: 29},
+    "standard": {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39, 7: 29, 8: 19},
+}
+
+
+def _completeness_cap_table(grading_style: str) -> dict:
+    """Return the blank-count → max-score cap table for a grading style."""
+    return _COMPLETENESS_CAPS.get(grading_style, _COMPLETENESS_CAPS["standard"])
+
+
 GRADING_RUBRIC = """
 You are grading 6th grade Social Studies assignments. Be ENCOURAGING and GENEROUS.
 These are 11-12 year old students - grade with appropriate expectations for their age.
@@ -1137,7 +1169,7 @@ Provide your response in the following JSON format ONLY (no other text):
             result["score"] = int(round(weighted_score * 100))
             result["score"] = max(0, min(100, result["score"]))
             s = result["score"]
-            result["letter_grade"] = "A" if s >= 90 else "B" if s >= 80 else "C" if s >= 70 else "D" if s >= 60 else "F"
+            result["letter_grade"] = _letter_grade(s)
             _logger.info(f"  📊 Rubric-weighted score: {result['score']} ({result['letter_grade']}) [weights: {rubric_weights}]")
 
         # === DETERMINISTIC COMPLETENESS CAPS (single-pass) ===
@@ -1163,18 +1195,13 @@ Provide your response in the following JSON format ONLY (no other text):
                 result["unanswered_questions"] = merged
 
             if blank_count > 0:
-                if grading_style == 'strict':
-                    caps = {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35, 7: 25, 8: 15}
-                elif grading_style == 'lenient':
-                    caps = {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49, 7: 39, 8: 29}
-                else:
-                    caps = {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39, 7: 29, 8: 19}
+                caps = _completeness_cap_table(grading_style)
                 cap = caps.get(blank_count, 0) if blank_count < len(caps) else 0
                 old_score = result["score"]
                 if old_score > cap:
                     result["score"] = cap
                     s = result["score"]
-                    result["letter_grade"] = "A" if s >= 90 else "B" if s >= 80 else "C" if s >= 70 else "D" if s >= 60 else "F"
+                    result["letter_grade"] = _letter_grade(s)
                     blank_names = extraction_blanks + extraction_missing
                     _logger.info(f"  📉 Completeness cap: {blank_count} blank/missing → capped {old_score} to {cap} ({result['letter_grade']})")
                     _logger.info(f"      Blank sections: {blank_names}")
@@ -1529,12 +1556,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     raw_score = max(0, min(100, raw_score))
 
     # Completeness caps by grading style — each missing section drops max possible grade
-    if grading_style == 'strict':
-        caps = {0: 100, 1: 85, 2: 75, 3: 65, 4: 55, 5: 45, 6: 35, 7: 25, 8: 15}
-    elif grading_style == 'lenient':
-        caps = {0: 100, 1: 95, 2: 89, 3: 79, 4: 69, 5: 59, 6: 49, 7: 39, 8: 29}
-    else:
-        caps = {0: 100, 1: 89, 2: 79, 3: 69, 4: 59, 5: 49, 6: 39, 7: 29, 8: 19}
+    caps = _completeness_cap_table(grading_style)
     if blank_count >= len(caps):
         cap = 0  # More blanks than cap table entries → zero
     else:
@@ -1543,11 +1565,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     if blank_count > 0:
         _logger.info(f"  📉 Completeness: {blank_count} blank/missing → cap at {cap}")
 
-    if final_score >= 90: letter_grade = "A"
-    elif final_score >= 80: letter_grade = "B"
-    elif final_score >= 70: letter_grade = "C"
-    elif final_score >= 60: letter_grade = "D"
-    else: letter_grade = "F"
+    letter_grade = _letter_grade(final_score)
 
     per_q_scores = [qr.get("grade", {}).get("score", 0) for qr in question_results if qr]
     _logger.info(f"  📊 Per-question: {per_q_scores}")
@@ -1606,11 +1624,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         if blank_count > 0:
             final_score = min(final_score, cap)
         # Recalculate letter grade
-        if final_score >= 90: letter_grade = "A"
-        elif final_score >= 80: letter_grade = "B"
-        elif final_score >= 70: letter_grade = "C"
-        elif final_score >= 60: letter_grade = "D"
-        else: letter_grade = "F"
+        letter_grade = _letter_grade(final_score)
         _logger.info(f"  📊 Rubric-weighted score: {final_score} ({letter_grade}) [weights: {rubric_weights}]")
 
     # Collect blank/missing info for feedback
@@ -1977,16 +1991,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
     final_score = round(median_score)  # Use median as final
 
     # Determine letter grade
-    if final_score >= 90:
-        letter_grade = "A"
-    elif final_score >= 80:
-        letter_grade = "B"
-    elif final_score >= 70:
-        letter_grade = "C"
-    elif final_score >= 60:
-        letter_grade = "D"
-    else:
-        letter_grade = "F"
+    letter_grade = _letter_grade(final_score)
 
     # Pick the best feedback (from the model closest to median score)
     best_model = min(results.keys(), key=lambda m: abs(results[m].get('score', 0) - median_score) if results[m].get('letter_grade') != 'ERROR' else 999)
