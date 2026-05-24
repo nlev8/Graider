@@ -6,12 +6,15 @@ import time
 
 from backend.services.assignment_post_processing import (
     _build_question_count_instruction,
+    _classify_question_type,
+    _hydrate_question,
     _build_section_categories_prompt,
     _build_subject_boundary_prompt,
     _extract_usage,
     _merge_usage,
     _post_process_assignment,
     _record_planner_cost,
+    _validate_question,
 )
 from backend.services.planner_prompts import _build_assignment_prompt, _build_period_differentiation_block
 from backend.services.planner_standards import load_support_documents_for_planning
@@ -1494,3 +1497,99 @@ Make the questions specific to the lesson content. Include a variety of question
     usage = _merge_usage(usage, extra_usage)
     _record_planner_cost(usage)
     return {"assignment": assignment, "method": "AI", "usage": usage, "content_only_mode": content_only}
+
+
+def generate_replacement_questions(*, questions_to_replace, existing_questions, config, api_key):
+    """Regenerate specific questions (classify/hydrate/validate each replacement).
+    Returns {"replacements", "usage"}; raises on failure (the route maps it to a
+    generic 500 — NO mock fallback). Wave 6 Slice 11e - extracted from planner_routes.
+    """
+    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+    adapter = OpenAIAdapter(api_key=api_key)
+
+    grade = config.get('grade', '')
+    subject = config.get('subject', '')
+    global_notes = config.get('globalAINotes', '')
+
+    # Build replacement specs
+    specs = []
+    for i, q in enumerate(questions_to_replace):
+        spec = f"{i + 1}. Type: {q.get('question_type', 'short_answer')}"
+        if q.get('points'):
+            spec += f", Points: {q['points']}"
+        if q.get('dok'):
+            spec += f", DOK level: {q['dok']}"
+        if q.get('standard'):
+            spec += f", Standard: {q['standard']}"
+        specs.append(spec)
+
+    existing_list = "\n".join(f"- {q}" for q in existing_questions[:50]) if existing_questions else "None"
+
+    regen_standard_codes = list(set(
+        q.get('standard', '') for q in questions_to_replace if q.get('standard')
+    ))
+    subject_boundary = _build_subject_boundary_prompt(subject, grade, regen_standard_codes)
+
+    prompt = f"""Generate {len(questions_to_replace)} replacement question(s) for a grade {grade} {subject} assessment.
+{subject_boundary}
+Each replacement must match the specified type, DOK level, and point value exactly.
+Cognitive rigor (DOK) is fixed by the specifications above; teacher instructions modify vocabulary and scaffolding tone only — they MUST NOT change DOK.
+DO NOT duplicate any of these existing questions:
+{existing_list}
+
+{f'Teacher instructions: {global_notes}' if global_notes else ''}
+{f"Teacher's additional requirements (MUST reflect in every question): {config.get('requirements', '').strip()}" if config.get('requirements', '').strip() else ''}
+
+Replacement specifications:
+{chr(10).join(specs)}
+
+Return a JSON object with a "questions" array. Each element must include:
+- "question": the question text
+- "answer": the correct answer
+- "points": point value
+- "question_type": exact type as specified
+- "dok": DOK level as specified
+- "number": sequential number starting from 1
+
+For multiple_choice questions, include an "options" array of 4 strings (A) through D) format.
+For true_false questions, answer must be "True" or "False".
+For matching questions, include "terms" and "definitions" arrays.
+For math questions, include step-by-step solution in the answer.
+
+Make questions grade-appropriate, clear, and assessable by AI grading systems."""
+
+    completion = adapter.chat(LLMRequest(
+        model="gpt-4o",
+        system_prompt="You are an expert assessment developer. Generate high-quality assessment questions that are clear, unambiguous, and appropriate for AI-based grading. Always return valid JSON.",
+        messages=[Message(role="user", content=[TextPart(text=prompt)])],
+        response_format=ResponseFormat(type="json_object"),
+        temperature=0.8,
+        metadata={"feature_label": "regenerate_questions"},
+    ))
+
+    content = completion.content_parts[0].text if completion.content_parts else "{}"
+    result = json.loads(content)
+    new_questions = result.get('questions', [])
+
+    # Post-process each replacement through the standard pipeline
+    replacements = []
+    for i, q_spec in enumerate(questions_to_replace):
+        if i < len(new_questions):
+            new_q = new_questions[i]
+            # Preserve DOK and standard from original spec
+            new_q['dok'] = q_spec.get('dok', new_q.get('dok', 1))
+            new_q['standard'] = q_spec.get('standard', new_q.get('standard', ''))
+            # Run through classification and hydration pipeline
+            _classify_question_type(new_q)
+            _hydrate_question(new_q)
+            _validate_question(new_q)
+            replacements.append({
+                "section_index": q_spec['section_index'],
+                "question_index": q_spec['question_index'],
+                "question": new_q,
+            })
+
+    usage = _extract_usage(completion, "gpt-4o")
+    _record_planner_cost(usage)
+
+    return {"replacements": replacements, "usage": usage}
