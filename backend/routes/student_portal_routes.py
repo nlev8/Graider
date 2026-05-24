@@ -44,8 +44,6 @@ from backend.services.dok import (
     DOK_OPTIONS,
     DOK_DESCRIPTIONS,
     REMEDIATION_DOK_DEFAULT,
-    _validate_dok,
-    _derive_uniform_dok,
 )
 from backend.observability import critical_path
 from backend.services.student_progress_reports import (
