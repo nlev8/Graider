@@ -901,3 +901,37 @@ All three models verified the live code with their own shell commands and **unan
 ## Honest note
 
 Both Codex and Gemini completed cleanly and independently landed on 8.5 with concrete file:line evidence and the same App.jsx recommendation; Claude (controller) held the 8 floor on the explicit multi-file 9-bar. No model scored 9. The reconciled 8 is therefore a held dimension with a verified upward trajectory, not a stall: two of the three named frontend/concentration items the original cap cited (PlannerTab, then SettingsTab) are now closed, and the third (App.jsx) plus the backend grader/route files are the named path to 9.
+
+# 2026-05-24 Post-Wave-5 (backend route de-concentration) + App.jsx + docs 3-Model Reconciled Re-Score
+
+The deferred judgment step for **Wave 5** (the `student_portal_routes.py` backend de-concentration, PRs #493–#499), weighed together with the App.jsx decomposition (PRs #488–#490) and the Documentation lever (PR #491) shipped in the same session. Codex, Gemini, and Claude each re-scored independently against the 2026-05-23 Post-SettingsTab baseline (Code Quality 8, Documentation 7, overall 7.9). Method: Claude (controller, first-hand), Codex (`codex exec`), Gemini (`gemini -p`, `GEMINI_CLI_TRUST_WORKSPACE=true --skip-trust`). Conservative-floor reconciliation: on a split the lower score wins unless a model presents strong disconfirming file:line evidence.
+
+| Model | Code Quality | Documentation | Next lever |
+|-------|--------------|---------------|------------|
+| Claude (first-hand) | 8.5 | 8 | `planner_routes.py` |
+| Codex | 8.5 | 8 | `planner_routes.py` |
+| Gemini | 8.5 | 8 | `planner_routes.py` |
+| **Reconciled** | **8 → 8.5** | **7 → 8** | `planner_routes.py` |
+
+## Verdict: Code Quality 8 → 8.5, Documentation 7 → 8. Overall 7.9 → ~8.1.
+
+**Unanimous, no tie-break required.** All three models independently verified the live code with their own shell commands and landed on the same two numbers and the same next lever. This is the first re-score in the program with a unanimous half-step on Code Quality *and* a full-step on Documentation — the largest combined aggregate uptick in recent waves, and the point at which the holistic overall crosses 8.0.
+
+**Verified progress (all three, file:line):**
+- **Wave 5 (headline): `backend/routes/student_portal_routes.py` 3,686 → 2,302 LOC (−37.5%)**, behavior-preserving, into **five new Flask-free, independently-unit-tested service modules** (`student_mastery` 493, `student_remediation` 396 incl. the two `post_remediate` resolvers, `student_progress_reports` 197, `student_gradebook` 315, `student_comparison` 225 — ~1,626 service LOC + ~650 new test LOC). Seven PRs, each byte-identical/behavior-equivalence verified, gated by the existing endpoint test nets + new per-service unit tests + the 9 CI checks, two-stage reviewed (every nit fixed: test gaps, weak assertions, dead code, orphaned imports). The progress-rank cache asymmetry was preserved via a `(payload, cacheable)` contract; submission-detail via `(payload, err)`; the `post_remediate` generation/ThreadPool/OpenAI orchestration was deliberately left route-side (circular-import surface + thread semantics).
+- **`frontend/src/App.jsx` 7,144 → 4,810 LOC (−33%)** via extracted domain hooks + components (PRs #488–#490 + earlier).
+- **Documentation: from essentially no architecture/API docs to a verified onboarding suite** — `docs/API_REFERENCE.md` (308 endpoints, code-derived; live route scan independently confirmed 308; auth column distinguishes Teacher / School Admin / District Admin / Clever session / Public, with the District-Admin and School-Admin surfaces corrected during PR #491's accuracy pass) + `docs/ARCHITECTURE.md` (stack, repo layout, frontend shell, backend blueprints/services/grading engine, two publish paths, persistence, local dev, testing pyramid, CI).
+
+**Why Code Quality is 8.5, not 9 (unanimous grounds):**
+- The 9-bar set by prior re-scores is "broad de-concentration across these — App.jsx, SettingsTab, `assignment_grader.py`, `planner_routes.py`, `student_portal_routes.py` — not any single file." Four of the named items are now de-concentrated (PlannerTab, SettingsTab, App.jsx −33%, student_portal_routes −37.5%), which is genuinely broad — hence the half-step up from the held-8.
+- But two central concentrations remain: **`backend/routes/planner_routes.py` (4,611 LOC, untouched)** — the last backend route god-file — and **`assignment_grader.py` (5,344 LOC, deliberately off-limits)**. `App.jsx` is also still 4,810. A clean 9 requires the planner-routes split; the grader is a separate, user-gated lever.
+
+**Why Documentation is 8, not higher (Codex caveat, recorded):** a handful of API-reference `Purpose` cells are blank or truncated (e.g. a few Student-Accounts rows). The suite is comprehensive, accurate, and onboarding-grade — clearly an 8 vs the prior ~no-docs state — but per-row purpose completeness and any deeper per-module/sequence docs are the path beyond 8.
+
+## Path to Code Quality 9 (remaining concentrated-complexity levers)
+
+**Unanimous next lever: `backend/routes/planner_routes.py` (4,611 LOC)** — the last backend route god-file, route-heavy and tied to generation/export/post-processing flows. The same `backend/services/` extraction pattern proven across Wave 5 applies: move planner generation, export, and post-processing helpers into Flask-free services. After that, `assignment_grader.py` (5,344, off-limits pending explicit user steer) and the still-large `App.jsx` (4,810) are the remaining items; reaching 9 needs the planner-routes split at minimum, consistent with every prior re-score.
+
+## Honest note
+
+All three models completed cleanly and independently, verified the live code (Codex and Gemini both ran the 35 new service unit tests green), and unanimously landed on Code Quality 8.5 and Documentation 8 with the same `planner_routes.py` recommendation — no model scored Code Quality 9. The reconciled result is therefore a genuine, verified two-dimension uplift (the first to carry the overall across 8.0), not a stall: the headline Wave 5 lever closed the largest backend route god-file outside the grader, and the named path to 9 (planner_routes) is now the single clear next step. This dated section closes Wave 5 (the `2026-05-23-backend-route-deconcentration` spec + plan) and the Documentation lever.
