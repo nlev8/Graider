@@ -1692,12 +1692,12 @@ def post_remediate(class_id):
         # Capture per-request context BEFORE submitting to the worker pool.
         # Workers must NEVER read Flask globals (Codex round 2 MAJOR).
         from backend.api_keys import get_api_key as _gak
-        from backend.routes.planner_routes import _get_openai_context
+        from backend.services.openai_context import build_openai_context
         from backend.services.assignment_post_processing import _merge_usage
         api_key = _gak('openai', g.teacher_id)
         if not api_key or 'your-key-here' in api_key:
             return error_response("Missing OpenAI API key", 500)
-        _ctx_uid, _ctx_client = _get_openai_context()
+        _ctx_uid, _ctx_client = build_openai_context(getattr(g, 'user_id', 'local-dev'))
         captured_teacher_id = g.teacher_id
         captured_class_id = class_id
 
@@ -1809,13 +1809,13 @@ def post_remediate(class_id):
     final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
 
     # 8) Generate via OpenAIAdapter (matches planner_routes pattern).
-    # Verified imports -- _get_openai_context lives in planner_routes; the post-processing
+    # Verified imports -- build_openai_context is the pure helper in services; the post-processing
     # helpers (incl. _extract_usage/_merge_usage) live in assignment_post_processing
     # and are merely re-imported by planner_routes. Importing direct from the source
     # avoids an unnecessary circular-import surface.
     from backend.api_keys import get_api_key as _gak
     from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
-    from backend.routes.planner_routes import _get_openai_context
+    from backend.services.openai_context import build_openai_context
     from backend.services.assignment_post_processing import (
         _post_process_assignment, _extract_usage, _merge_usage,
     )
@@ -1825,7 +1825,7 @@ def post_remediate(class_id):
     if not api_key or 'your-key-here' in api_key:
         return error_response("Missing OpenAI API key", 500)
     adapter = OpenAIAdapter(api_key=api_key)
-    _ctx_uid, _ctx_client = _get_openai_context()
+    _ctx_uid, _ctx_client = build_openai_context(getattr(g, 'user_id', 'local-dev'))
 
     # Narrow try/except: only the LLM call + JSON parse + post-process.
     # Anything outside (imports, api_key, adapter ctor, ctx fetch) should

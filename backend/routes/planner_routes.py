@@ -11,6 +11,7 @@ import re
 import logging
 import subprocess
 from flask import Blueprint, request, jsonify, g, send_file
+from backend.services.openai_context import build_openai_context
 from werkzeug.utils import secure_filename
 from pathlib import Path
 from backend.extensions import limiter
@@ -130,7 +131,7 @@ def _get_openai_context():
     """
     try:
         user_id = getattr(g, 'user_id', 'local-dev')
-        return user_id, None
+        return build_openai_context(user_id)
     except Exception as e:
         _logger.warning("OpenAI context unavailable (non-fatal): %s", e)
         return None, None
