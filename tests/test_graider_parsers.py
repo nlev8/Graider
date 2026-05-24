@@ -111,3 +111,59 @@ def test_tables_empty_input_quirk():
         "answered_questions": 0,
         "extraction_summary": "Table extraction: Found 0 responses out of 0 sections.",
         "excluded_sections": [], "missing_sections": []}
+
+
+# ── read_docx_file_structured (detects [GRAIDER:..] 2-row tables in a .docx) ──
+
+
+def _make_graider_docx():
+    import tempfile
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph("GRAIDER_TABLE_V1")
+    t1 = doc.add_table(rows=2, cols=1)
+    t1.rows[0].cells[0].text = "[GRAIDER:VOCAB:Photosynthesis] Photosynthesis (5 pts)"
+    t1.rows[1].cells[0].text = "The process plants use to make food from sunlight"
+    t2 = doc.add_table(rows=2, cols=1)
+    t2.rows[0].cells[0].text = "[GRAIDER:QUESTION:1] 1) What is the powerhouse of the cell? (10 pts)"
+    t2.rows[1].cells[0].text = "The mitochondria"
+    f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+    doc.save(f.name)
+    return f.name
+
+
+def test_structured_detects_graider_tables():
+    from assignment_grader import read_docx_file_structured
+    import os
+    path = _make_graider_docx()
+    try:
+        out = read_docx_file_structured(path)
+        assert out["is_graider_table"] is True
+        assert out["tables"] == [
+            {"tag_type": "VOCAB", "tag_id": "Photosynthesis", "header_text": "Photosynthesis (5 pts)",
+             "response": "The process plants use to make food from sunlight"},
+            {"tag_type": "QUESTION", "tag_id": "1",
+             "header_text": "1) What is the powerhouse of the cell? (10 pts)",
+             "response": "The mitochondria"}]
+        assert out["plain_text"] == (
+            "GRAIDER_TABLE_V1\nPhotosynthesis (5 pts)\n"
+            "The process plants use to make food from sunlight\n"
+            "1) What is the powerhouse of the cell? (10 pts)\nThe mitochondria")
+    finally:
+        os.unlink(path)
+
+
+def test_structured_non_graider_docx_returns_false():
+    from assignment_grader import read_docx_file_structured
+    import os, tempfile
+    from docx import Document
+    d = Document()
+    d.add_paragraph("Just a normal essay with no markers.")
+    f = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+    d.save(f.name)
+    try:
+        out = read_docx_file_structured(f.name)
+        assert out["is_graider_table"] is False
+        assert out["tables"] == []
+    finally:
+        os.unlink(f.name)
