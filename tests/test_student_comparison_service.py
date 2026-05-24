@@ -53,3 +53,27 @@ def test_two_students_distribution_stats():
     assert a['mean'] == 70.0          # (60 + 80) / 2
     assert a['min'] == 60 and a['max'] == 80
     assert a['submission_rate'] == 1.0  # 2 of 2 enrolled
+
+
+def test_average_mode_means_attempts_and_skips_nonnumeric():
+    from backend.services.student_comparison import build_assessment_comparison
+    found = [{'id': 'ct1', 'title': 'Quiz', 'content_type': 'assessment', 'content': {}, 'settings': {}}]
+    db = _db({
+        'class_students': [{'student_id': 's1'}, {'student_id': 's2'}],
+        'students': [{'id': 's1'}, {'id': 's2'}],
+        'student_submissions': [
+            # s1: two numeric attempts -> mean 70
+            {'id': 'a1', 'student_id': 's1', 'content_id': 'ct1', 'attempt_number': 1,
+             'submitted_at': '2026-04-01T00:00:00Z', 'percentage': 60, 'status': 'graded', 'results': {}},
+            {'id': 'a2', 'student_id': 's1', 'content_id': 'ct1', 'attempt_number': 2,
+             'submitted_at': '2026-04-02T00:00:00Z', 'percentage': 80, 'status': 'graded', 'results': {}},
+            # s2: only a non-numeric percentage -> skipped from the distribution entirely
+            {'id': 'b1', 'student_id': 's2', 'content_id': 'ct1', 'attempt_number': 1,
+             'submitted_at': '2026-04-01T00:00:00Z', 'percentage': 'N/A', 'status': 'graded', 'results': {}},
+        ],
+    })
+    out = build_assessment_comparison(db, 'c1', 'P1', ['ct1'], found, 'average')
+    a = out['assessments'][0]
+    assert a['n'] == 1            # s2 skipped (non-numeric _raw_percentage), only s1 counts
+    assert a['mean'] == 70.0      # mean of s1's two attempts (60, 80)
+    assert a['submission_rate'] == 0.5  # 1 counted of 2 enrolled
