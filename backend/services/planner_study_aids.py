@@ -7,6 +7,9 @@ the JSON, and return the result dict (raising json.JSONDecodeError on bad JSON,
 which the route translates to a 500 — same as before). No service->route imports.
 """
 import json
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 def generate_study_guide_content(*, content, subject, grade, instructions,
@@ -158,3 +161,53 @@ def generate_flashcards_content(*, content, subject, grade, instructions,
 
     flashcards = json.loads(response_text)
     return flashcards
+
+
+def generate_slides_payload(*, content, title, subject, grade, instructions,
+                            global_ai_notes, lesson_plan, slide_count, max_images,
+                            generate_images, deck_format, user_id):
+    """Generate the slide-deck payload (content via slide_generator + optional
+    images). Returns {slides, title, slide_count, images_generated}. Flask-free;
+    the route keeps request parse + the 400 guard + jsonify/except.
+    """
+    from backend.api_keys import get_api_key as _gak
+    api_key = _gak('gemini', user_id)
+
+    from backend.services.slide_generator import (
+        generate_slide_content, generate_slide_images
+    )
+
+    # Phase 1: Generate slide content
+    slide_data = generate_slide_content(
+        content=content, subject=subject, grade=grade, title=title,
+        api_key=api_key, lesson_plan=lesson_plan,
+        global_ai_notes=global_ai_notes, instructions=instructions,
+        slide_count=slide_count,
+        deck_format=deck_format,
+    )
+
+    # Phase 2: Generate images (optional)
+    images_generated = 0
+    if generate_images:
+        try:
+            images = generate_slide_images(
+                slide_data["slides"], slide_data["theme"],
+                api_key=api_key, max_images=max_images,
+            )
+            images_generated = len(images)
+            # Store image references in session for export
+            # (images are too large for JSON response)
+            import base64
+            slide_data["_image_data"] = {
+                str(k): base64.b64encode(v).decode('ascii') for k, v in images.items()
+            }
+        except Exception as e:
+            _logger.warning("Image generation failed, continuing without images: %s", e)
+            slide_data["_image_data"] = {}
+
+    return {
+        "slides": slide_data,
+        "title": slide_data.get("title", title),
+        "slide_count": len(slide_data.get("slides", [])),
+        "images_generated": images_generated,
+    }
