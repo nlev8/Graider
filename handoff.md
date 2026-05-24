@@ -113,10 +113,29 @@ The unanimous 3-model next lever. `grade_assignment` (~1,138 LOC in `grading_pip
 second-order god-function mixing provider setup, extraction, prompt assembly, parse, scoring
 caps, rubric weighting, ELL translation, writing-profile updates, audit, error recovery.
 
-- **Slice 1 SHIPPED (#549):** extracted shared pure helpers `_letter_grade(score)` +
-  `_completeness_cap_table(grading_style)` (+ `_COMPLETENESS_CAPS`) into `grading_pipeline.py`,
-  deduping 9 inline sites across grade_assignment/grade_multipass/grade_with_ensemble.
-  Boundary unit test `tests/test_grading_pipeline_helpers.py` + golden net + test_grading_factors.
+- **Slices 1–4 SHIPPED (#549–#553):**
+  - #549 — pure helpers `_letter_grade` + `_completeness_cap_table` (+ `_COMPLETENESS_CAPS`),
+    deduping 9 inline sites; unit test `tests/test_grading_pipeline_helpers.py`.
+  - #550 — the prompt-SNAPSHOT net (`tests/test_grader_prompt_snapshots.py` + CallBook prompt
+    capture in `grading_fakes.py`); per-question prompts hashed over the SORTED set (parallel
+    threads → non-deterministic record order).
+  - #551 — first PHASE extracted: `_apply_single_pass_post_processing(result, rubric_weights,
+    grading_style, extraction_result)` (rubric-weights + caps + unanswered-merge); AST/text
+    byte-identical to the dedented origin block; 3 direct unit tests (the grade_assignment golden's
+    fully-answered/no-weights fixture left this a no-op, so the golden net alone didn't cover it).
+  - #553 — grade_assignment ANTHROPIC + gemini provider goldens (gemini skips, SDK absent), so
+    all 3 provider branches are pinned — prerequisite for Slice 5.
+- **Slice 5 (provider-resolution) — READY, de-risked, NOT a verbatim move (do it FRESH). RECIPE:**
+  (1) Extract the provider-determination + client-init + early-return ERROR block (~243–297) into
+  `_resolve_grading_client(ai_model) -> (provider, client, actual_model, error)`: rename
+  `claude_client`/`gemini_client`/`openai_client` → `client`; each success branch returns
+  `(provider, client, actual_model, None)`; OpenAI has no actual_model → return `ai_model` (unused
+  there); each ImportError/no-key path returns `(None, None, None, {ERROR dict})`.
+  (2) In grade_assignment: `provider, client, actual_model, _err = _resolve_grading_client(ai_model)`
+  then `if _err: return _err`.
+  (3) Rename the 5 call-site usages (claude ~1078; gemini ~1097, ~1103; openai ~1113, ~1137) →
+  `client` (8 total token occurrences; all are the client vars). Guards: the 3-provider goldens
+  (#553) + `ruff --select F821` + broad sweep. Then prompt-assembly LAST behind the #550 snapshot net.
 - **Phase boundaries inside grade_assignment** (line refs pre-Slice-1, approximate): provider/
   client init (~159), blank short-circuit (~215), context build — custom instr/history/
   accommodation/FITB (~328–365), pre-extract responses + writing-style (~374–490), **prompt
