@@ -21,19 +21,16 @@ SETUP:
 """
 
 import os
-import csv
 import json
 import re
-import random
-import threading
 import concurrent.futures
-from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-from typing import List, Optional
 
-# Structured output models for reliable JSON responses from OpenAI
-from pydantic import BaseModel
+# NOTE (Wave 7 Phase B): csv, random, threading, datetime, typing.List/Optional and
+# pydantic.BaseModel were dropped here — they became unused after the response schemas +
+# TokenTracker moved to backend/services/grading_models.py and the export/roster helpers
+# moved to their own services in earlier slices.
 
 # ── Tier 2 Slice 2 PR1+PR2: pure parsing/extraction helpers extracted to ────
 # backend/services/response_extraction.py (no Flask, no network, no I/O).
@@ -55,46 +52,17 @@ from backend.services.response_extraction import (  # noqa: F401
 )
 
 
-class GradingBreakdown(BaseModel):
-    content_accuracy: int
-    completeness: int
-    writing_quality: int
-    effort_engagement: int
-
-
-class SkillsDemonstrated(BaseModel):
-    strengths: List[str]
-    developing: List[str]
-
-
-class AiDetectionResult(BaseModel):
-    flag: str  # "none", "unlikely", "possible", "likely"
-    confidence: int
-    reason: str
-
-
-class PlagiarismDetectionResult(BaseModel):
-    flag: str  # "none", "possible", "likely"
-    reason: str
-
-
-class GradingResponse(BaseModel):
-    score: int
-    letter_grade: str
-    breakdown: GradingBreakdown
-    student_responses: List[str]
-    unanswered_questions: List[str]
-    excellent_answers: List[str]
-    needs_improvement: List[str]
-    skills_demonstrated: SkillsDemonstrated
-    ai_detection: AiDetectionResult
-    plagiarism_detection: PlagiarismDetectionResult
-    feedback: str
-
-
-class DetectionResponse(BaseModel):
-    ai_detection: AiDetectionResult
-    plagiarism_detection: PlagiarismDetectionResult
+# Structured-output response schemas moved to backend/services/grading_models.py
+# (Wave 7 Phase B). Re-exported so existing `from assignment_grader import GradingResponse`
+# (and the other schemas) callers keep resolving unchanged.
+from backend.services.grading_models import (  # noqa: F401
+    AiDetectionResult as AiDetectionResult,
+    DetectionResponse as DetectionResponse,
+    GradingBreakdown as GradingBreakdown,
+    GradingResponse as GradingResponse,
+    PlagiarismDetectionResult as PlagiarismDetectionResult,
+    SkillsDemonstrated as SkillsDemonstrated,
+)
 
 # Import student history for personalized feedback
 try:
@@ -121,74 +89,13 @@ load_dotenv(os.path.join(app_dir, '.env'), override=True)
 # TOKEN / COST TRACKING
 # =============================================================================
 
-MODEL_PRICING = {
-    # OpenAI — price per 1M tokens
-    "gpt-4o-mini":    {"input": 0.15,  "output": 0.60},
-    "gpt-4o":         {"input": 2.50,  "output": 10.00},
-    # Claude
-    "claude-3-5-haiku-latest":    {"input": 0.80,  "output": 4.00},
-    "claude-haiku-4-5-20251001":  {"input": 0.80,  "output": 4.00},
-    "claude-sonnet-4-20250514":   {"input": 3.00,  "output": 15.00},
-    "claude-opus-4-20250514":     {"input": 15.00, "output": 75.00},
-    # Gemini
-    "gemini-2.0-flash":    {"input": 0.10,  "output": 0.40},
-    "gemini-2.0-pro-exp":  {"input": 1.25,  "output": 5.00},
-}
-
-class TokenTracker:
-    """Accumulates token usage across multiple API calls for a single student grading."""
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self.total_input_tokens = 0
-        self.total_output_tokens = 0
-        self.calls = []
-
-    def record_openai(self, response, model: str):
-        if not response or not hasattr(response, 'usage') or not response.usage:
-            return
-        inp = response.usage.prompt_tokens or 0
-        out = response.usage.completion_tokens or 0
-        self._add(model, inp, out)
-
-    def record_anthropic(self, response, model: str):
-        if not response or not hasattr(response, 'usage') or not response.usage:
-            return
-        inp = response.usage.input_tokens or 0
-        out = response.usage.output_tokens or 0
-        self._add(model, inp, out)
-
-    def record_gemini(self, response, model: str):
-        if not response or not hasattr(response, 'usage_metadata') or not response.usage_metadata:
-            return
-        inp = getattr(response.usage_metadata, 'prompt_token_count', 0) or 0
-        out = getattr(response.usage_metadata, 'candidates_token_count', 0) or 0
-        self._add(model, inp, out)
-
-    def _add(self, model: str, input_tokens: int, output_tokens: int):
-        pricing = MODEL_PRICING.get(model, {"input": 0, "output": 0})
-        cost = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
-        with self._lock:
-            self.total_input_tokens += input_tokens
-            self.total_output_tokens += output_tokens
-            self.calls.append({
-                "model": model,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "cost": round(cost, 6)
-            })
-
-    def summary(self) -> dict:
-        total_cost = sum(c["cost"] for c in self.calls)
-        return {
-            "total_input_tokens": self.total_input_tokens,
-            "total_output_tokens": self.total_output_tokens,
-            "total_tokens": self.total_input_tokens + self.total_output_tokens,
-            "total_cost": round(total_cost, 6),
-            "total_cost_display": f"${total_cost:.4f}",
-            "api_calls": len(self.calls),
-            "calls": self.calls
-        }
+# MODEL_PRICING + TokenTracker moved to backend/services/grading_models.py (Wave 7 Phase B).
+# MODEL_PRICING uses the explicit `as` form — external importers (planner_routes,
+# assistant_routes, assignment_post_processing) do `from assignment_grader import MODEL_PRICING`.
+from backend.services.grading_models import (  # noqa: F401
+    MODEL_PRICING as MODEL_PRICING,
+    TokenTracker as TokenTracker,
+)
 
 
 # Student-response extraction moved to backend/services/response_extraction.py (re-exported via the shim above).
@@ -817,28 +724,17 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
 # MULTI-PASS GRADING PIPELINE
 # =============================================================================
 
-class QuestionGrade(BaseModel):
-    score: int
-    possible: int
-    reasoning: str
-    is_correct: bool
-    quality: str  # "excellent", "good", "adequate", "developing", "insufficient"
+# Per-question / feedback response schemas moved to backend/services/grading_models.py
+# (Wave 7 Phase B). Re-exported for `from assignment_grader import ...` callers.
+from backend.services.grading_models import (  # noqa: F401
+    FeedbackResponse as FeedbackResponse,
+    PerQuestionResponse as PerQuestionResponse,
+    QuestionGrade as QuestionGrade,
+)
 
 
-class PerQuestionResponse(BaseModel):
-    grade: QuestionGrade
-    excellent: bool
-    improvement_note: str
-
-
-class FeedbackResponse(BaseModel):
-    feedback: str
-    excellent_answers: List[str]
-    needs_improvement: List[str]
-    skills_demonstrated: SkillsDemonstrated
-
-
-from backend.services.grading_prep import MATH_SUBJECTS, build_section_rubric, _distribute_points, _is_math_subject, _parse_expected_answers
+from backend.services.grading_prep import build_section_rubric, _distribute_points, _is_math_subject, _parse_expected_answers
+from backend.services.grading_prep import MATH_SUBJECTS as MATH_SUBJECTS  # noqa: F401 re-export (tests + callers import via assignment_grader)
 
 
 def grade_per_question(question: str, student_answer: str, expected_answer: str,
