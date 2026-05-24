@@ -797,7 +797,7 @@ def build_roster_from_periods() -> dict:
 # FILE PARSING - Extract student name from filename
 # =============================================================================
 
-from backend.services.submission_parsing import parse_filename
+from backend.services.submission_parsing import parse_filename as parse_filename  # noqa: F401 explicit re-export (mypy no_implicit_reexport: grading/pipeline.py imports this)
 
 
 def read_docx_file(filepath: str) -> str:
