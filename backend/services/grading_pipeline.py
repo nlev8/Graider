@@ -834,6 +834,28 @@ This suggests possible AI use - be extra vigilant in your authenticity check!
     return writing_style_context, current_writing_style, style_comparison
 
 
+def _detect_fitb_assignment(content, custom_ai_instructions):
+    """Detect whether a submission is a fill-in-the-blank assignment — from content keywords,
+    the teacher's FILL-IN-THE-BLANK rubric override, or a timestamps + filled-underscores
+    pattern (common in video worksheets). Extracted verbatim from grade_assignment (Wave 8)."""
+    is_fitb = False
+    content_lower = content.lower() if content else ''
+    if 'fill-in' in content_lower or 'fill in the blank' in content_lower or 'fillintheblank' in content_lower.replace(' ', '').replace('-', ''):
+        is_fitb = True
+    # Also check custom AI instructions for FITB rubric type
+    if 'FILL-IN-THE-BLANK' in (custom_ai_instructions or '').upper():
+        is_fitb = True
+    # Also detect FITB by timestamp pattern (e.g., "1. (0:00)" format common in video worksheets)
+    if not is_fitb and content:
+        import re as _re
+        has_timestamps = bool(_re.search(r'\d+\.\s*\(\d+:\d+', content))
+        has_filled_underscores = len(_re.findall(r'_{2,}([^_\n]+)_{2,}', content)) >= 2
+        if has_timestamps and has_filled_underscores:
+            is_fitb = True
+            _logger.info(f"  📝 FITB detected via timestamps + filled underscores")
+    return is_fitb
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -887,21 +909,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
         custom_ai_instructions, student_id)
 
     # Check if this is a fill-in-the-blank assignment
-    is_fitb = False
-    content_lower = content.lower() if content else ''
-    if 'fill-in' in content_lower or 'fill in the blank' in content_lower or 'fillintheblank' in content_lower.replace(' ', '').replace('-', ''):
-        is_fitb = True
-    # Also check custom AI instructions for FITB rubric type
-    if 'FILL-IN-THE-BLANK' in (custom_ai_instructions or '').upper():
-        is_fitb = True
-    # Also detect FITB by timestamp pattern (e.g., "1. (0:00)" format common in video worksheets)
-    if not is_fitb and content:
-        import re as _re
-        has_timestamps = bool(_re.search(r'\d+\.\s*\(\d+:\d+', content))
-        has_filled_underscores = len(_re.findall(r'_{2,}([^_\n]+)_{2,}', content)) >= 2
-        if has_timestamps and has_filled_underscores:
-            is_fitb = True
-            _logger.info(f"  📝 FITB detected via timestamps + filled underscores")
+    is_fitb = _detect_fitb_assignment(content, custom_ai_instructions)
 
     # PRE-EXTRACT student responses to prevent AI hallucination
     extraction_result = None
