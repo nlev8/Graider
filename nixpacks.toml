@@ -4,14 +4,26 @@ providers = ["python", "node"]
 # directly (Flask static_folder), so it must be produced here — the repo
 # no longer commits it. `cd frontend && npm ci` installs the FRONTEND deps
 # (the auto root `npm ci` only covers the small root package.json); the
-# build emits to ../backend/static per frontend/vite.config.js. The assert
-# fails the deploy loudly if no bundle was produced (the /healthz
-# healthcheck passes without a frontend, so it can't catch this).
+# build emits to ../backend/static per frontend/vite.config.js.
+#
+# Fail-loud guards (a build that ships dummy Supabase config breaks auth
+# silently — /healthz only checks the BACKEND Supabase client, so it can't
+# catch it):
+#   1. test -n VITE_*  → fail if the client config isn't in the BUILD env
+#      (wrong Railway service/environment, not deployed, etc.).
+#   2. force-feed VITE_* into the `npm run build` subshell → covers env
+#      inheritance + busts the layer cache when values change.
+#   3. test -s index.html → fail if no bundle was produced.
+#   4. grep the built JS for the REAL url → fail if it didn't inline (the
+#      'https://dummy.supabase.co' fallback literal is ALWAYS present, so we
+#      grep for the configured url, not against dummy).
 [phases.build]
 dependsOn = ["install"]
 cmds = [
-  "cd frontend && npm ci && npm run build",
+  "test -n \"$VITE_SUPABASE_URL\" && test -n \"$VITE_SUPABASE_ANON_KEY\"",
+  "cd frontend && npm ci && VITE_SUPABASE_URL=\"$VITE_SUPABASE_URL\" VITE_SUPABASE_ANON_KEY=\"$VITE_SUPABASE_ANON_KEY\" npm run build",
   "test -s backend/static/index.html",
+  "grep -Rq -- \"$VITE_SUPABASE_URL\" backend/static/assets/ || { echo 'FATAL: VITE_SUPABASE_URL not baked into bundle'; exit 1; }",
 ]
 
 [start]
