@@ -55,59 +55,6 @@ def _get_classlink_config():
     return client_id, client_secret, redirect_uri
 
 
-def _link_classlink_account(classlink_id, email):
-    """Link ClassLink user to existing Graider account by email match.
-
-    Same pattern as clever_routes.py account merging (lines 366-393).
-    If exactly one Supabase user exists with the same email, create a
-    persistent classlink_id → supabase_user_id mapping.
-
-    Edge cases:
-    - No match: No link created. User operates as classlink:{id} — this
-      works fine, they just start fresh. No "stuck" state.
-    - Multiple matches: Skip linking, log warning. Ambiguous — don't guess.
-    - Already linked: Skip (idempotent).
-    """
-    try:
-        from backend.storage import load as storage_load, save as storage_save
-
-        links = storage_load('classlink_links', 'system') or {}
-        if classlink_id in links:
-            return  # Already linked
-
-        from backend.supabase_client import get_supabase
-        sb = get_supabase()
-        if not sb or not email:
-            return
-
-        # Check if teacher_data has any entries with this email
-        result = sb.table('teacher_data').select('teacher_id').eq(
-            'data_key', 'settings'
-        ).execute()
-
-        matches = []
-        for row in (result.data or []):
-            tid = row.get('teacher_id', '')
-            settings = storage_load('settings', tid)
-            if settings and isinstance(settings, dict):
-                config = settings.get('config', settings)
-                if config.get('email', '').lower() == email.lower():
-                    matches.append(tid)
-
-        if len(matches) == 1:
-            links[classlink_id] = matches[0]
-            storage_save('classlink_links', links, 'system')
-            logger.info("Linked ClassLink user %s to teacher %s via email match",
-                        classlink_id, matches[0])
-        elif len(matches) > 1:
-            logger.warning("ClassLink user %s email %s matches %d teachers — skipping auto-link",
-                           classlink_id, redact_email(email), len(matches))
-        # No matches: user operates as classlink:{id} — starts fresh, no error
-
-    except Exception as e:
-        logger.warning("ClassLink account linking failed: %s", e)
-        sentry_sdk.capture_exception(e)
-
 
 def _classlink_guid(tenant_id, person_id):
     """Build the tenant-scoped ClassLink identity GUID.
@@ -417,25 +364,49 @@ def classlink_callback():
         logger.exception("ClassLink user info error: %s", e)
         return redirect("/?classlink_error=userinfo_error")
 
-    # Prefer id_token claims as source of truth for standard OIDC fields;
-    # fall back to userinfo only for ClassLink-specific fields (TenantId, Role)
-    # that are not guaranteed OIDC claims.
-    classlink_id = str(id_claims.get('sub') or user_data.get('UserId', ''))
+    # OIDC Core: if userinfo carries a `sub`, it MUST equal the id_token `sub`
+    # before we trust any other userinfo claim.
+    userinfo_sub = str(user_data.get('sub', '') or '')
+    if userinfo_sub and userinfo_sub != str(id_claims.get('sub', '') or ''):
+        logger.warning("ClassLink userinfo sub does not match id_token sub")
+        return redirect("/?classlink_error=identity_mismatch")
+
+    # Standard OIDC fields prefer the signed id_token; ClassLink-specific fields
+    # (TenantId, SourcedId, Role) come from userinfo.
     first_name = id_claims.get('given_name') or user_data.get('FirstName', '')
     last_name = id_claims.get('family_name') or user_data.get('LastName', '')
     email = id_claims.get('email') or user_data.get('Email', '')
-    role = (id_claims.get('Role') or user_data.get('Role') or '').lower()
-    tenant_id = str(user_data.get('TenantId', ''))  # ClassLink-specific; not in id_token
+
+    # Role may arrive as a string, a comma-separated string, or a list.
+    raw_role = id_claims.get('Role') or user_data.get('Role') or ''
+    if isinstance(raw_role, (list, tuple)):
+        raw_role = raw_role[0] if raw_role else ''
+    role = str(raw_role).split(',')[0].strip().lower()
+
+    # Tenant-scoped identity (fail closed — never a non-scoped fallback).
+    tenant_id = str(user_data.get('TenantId', '') or '').strip()
+    if not tenant_id:
+        logger.warning("ClassLink login rejected: userinfo missing TenantId")
+        return redirect("/?classlink_error=missing_tenant")
+
+    person_id = _extract_person_id(user_data)
+    if not person_id:
+        logger.warning("ClassLink login rejected: userinfo missing SourcedId/UserId")
+        return redirect("/?classlink_error=missing_identity")
+
+    guid = _classlink_guid(tenant_id, person_id)
+    if not guid:
+        return redirect("/?classlink_error=missing_identity")
 
     # Student login → redirect to student portal
     if role == 'student':
         # Clear OAuth-flow markers (single-use enforcement on success).
-        # Teacher path uses session.clear() below; student path needs explicit pops.
         session.pop('classlink_oauth_state', None)
         session.pop('classlink_oauth_nonce', None)
         session.pop('classlink_oauth_initiated_by_us', None)
         session['classlink_student'] = {
-            'classlink_id': classlink_id,
+            'classlink_id': person_id,
+            'user_id': guid,
             'name': f"{first_name} {last_name}",
             'email': email,
             'tenant_id': tenant_id,
@@ -447,24 +418,19 @@ def classlink_callback():
     session.permanent = True
 
     session['classlink_user'] = {
-        'classlink_id': classlink_id,
+        'classlink_id': person_id,
+        'user_id': guid,
         'email': email,
         'name': {'first': first_name, 'last': last_name},
         'type': role or 'teacher',
         'tenant_id': tenant_id,
     }
 
-    # Link to existing Graider account by email
-    _link_classlink_account(classlink_id, email)
-
-    # Resolve teacher_id for roster sync
-    teacher_id = _resolve_classlink_user_id(classlink_id)
-
-    # Background roster sync (if OneRoster configured)
-    _trigger_roster_sync(teacher_id, tenant_id)
+    # Background roster sync (if OneRoster configured) — keyed by the GUID.
+    _trigger_roster_sync(guid, tenant_id)
 
     audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {redact_email(email)}",
-              user="teacher", teacher_id=teacher_id)
+              user="teacher", teacher_id=guid)
 
     return redirect("/?classlink_login=success")
 
