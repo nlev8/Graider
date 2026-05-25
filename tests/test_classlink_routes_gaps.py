@@ -584,6 +584,11 @@ class TestClasslinkGuid:
         assert _classlink_guid("2284", "") is None
         assert _classlink_guid("  ", "abc") is None
 
+    def test_returns_none_on_none_component(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        assert _classlink_guid(None, "abc") is None
+        assert _classlink_guid("2284", None) is None
+
 
 # ──────────────────────────────────────────────────────────────────
 # _extract_person_id
@@ -599,9 +604,18 @@ class TestExtractPersonId:
         from backend.routes.classlink_routes import _extract_person_id
         assert _extract_person_id({"sourcedId": "s2"}) == "s2"
 
-    def test_falls_back_to_userid(self):
+    def test_uppercase_sourcedid_wins_over_lowercase(self):
         from backend.routes.classlink_routes import _extract_person_id
-        assert _extract_person_id({"UserId": "u1"}) == "u1"
+        assert _extract_person_id({"SourcedId": "s1", "sourcedId": "s-lower"}) == "s1"
+
+    def test_falls_back_to_userid_and_warns(self, caplog):
+        import logging
+        from backend.routes.classlink_routes import _extract_person_id
+        with caplog.at_level(logging.WARNING, logger="backend.routes.classlink_routes"):
+            result = _extract_person_id({"UserId": "u1"})
+        assert result == "u1"
+        # The UserId fallback must NOT be silent (documented contract).
+        assert "UserId" in caplog.text
 
     def test_none_when_no_person_field(self):
         from backend.routes.classlink_routes import _extract_person_id
