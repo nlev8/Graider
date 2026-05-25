@@ -4,7 +4,10 @@
 assignment_grader.py. Wave 7 Slice 2 (grading-engine decomposition).
 """
 import hashlib
+import logging
 import re
+
+_logger = logging.getLogger(__name__)
 
 # Given names that are ALSO ordinary English words. When such a name part appears in lowercase
 # inside a student answer it is almost certainly the word ("founded in may", "grace under
@@ -309,3 +312,13 @@ def preprocess_for_ai_detection(text: str) -> str:
         return ""
 
     return "\n\n".join(result_parts)
+
+
+def log_pii_sanitization(student_name: str, original_len: int, sanitized_len: int, removals: dict):
+    """
+    Log PII sanitization actions for audit purposes.
+    Does not log actual PII - only counts and types of removals.
+    """
+    # This could be extended to write to an audit log file
+    if any(removals.values()):
+        _logger.info(f"  🔒 PII sanitized for student submission (removed: {', '.join(k for k, v in removals.items() if v > 0)})")
