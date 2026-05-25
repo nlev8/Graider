@@ -673,6 +673,123 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     return custom_section, history_context, accommodation_context
 
 
+def _detect_blank_submission(content: str) -> dict | None:
+    """Detect a blank/empty TEXT submission before sending it to the API, using 5 heuristics
+    (filled-in blanks, content-after-colons, paragraph-length responses, blank-line ratio,
+    and unanswered questions). Returns an INCOMPLETE result dict when the submission is blank,
+    else None. Pure heuristics — no LLM. Extracted verbatim from grade_assignment (Wave 8)."""
+    import re
+
+    # Method 1: Check for filled-in blanks (text between underscores like ___answer___)
+    filled_blanks = re.findall(r'_{2,}([^_\n]+)_{2,}', content)
+    filled_blanks = [b.strip() for b in filled_blanks if b.strip() and len(b.strip()) > 1]
+
+    # Method 2: Check for content after colons that isn't just blanks
+    # e.g., "Nationalism: the belief that..." vs "Nationalism: ___"
+    after_colons = re.findall(r':\s*([^_\n:]{10,})', content)
+    # Filter out template instruction text that isn't student writing
+    _instruction_patterns = re.compile(
+        r'^(define|summarize|explain|describe|write|use|answer|identify|list|compare|analyze|discuss|'
+        r'read|complete|fill|circle|match|select|choose|highlight|underline|review|include)\b',
+        re.IGNORECASE
+    )
+    after_colons = [
+        a.strip() for a in after_colons
+        if a.strip()
+        and not a.strip().startswith('_')
+        and not _instruction_patterns.match(a.strip())
+        and not a.strip().endswith('?')
+        and 'complete sentences' not in a.lower()
+        and 'using evidence' not in a.lower()
+        and 'in your own words' not in a.lower()
+        and 'from the reading' not in a.lower()
+        and 'pp ' not in a.strip()[:5]  # page references like "pp 348-349"
+    ]
+
+    # Method 3: Look for paragraph-length responses (likely written answers)
+    paragraphs = [p.strip() for p in content.split('\n\n') if len(p.strip()) > 50]
+    # Filter out paragraphs that are mostly underscores
+    real_paragraphs = [p for p in paragraphs if p.count('_') < len(p) * 0.3]
+
+    # Method 4: Count lines that are JUST underscores (blank response lines)
+    blank_lines = len(re.findall(r'^[\s_]+$', content, re.MULTILINE))
+    total_lines = len([l for l in content.split('\n') if l.strip()])
+    blank_ratio = blank_lines / max(total_lines, 1)
+
+    # Method 5: Check for questions followed by no response
+    # Look for question patterns and check if there's content after them
+    lines = content.split('\n')
+    unanswered_questions = []
+    question_indices = []
+
+    for i, line in enumerate(lines):
+        line_stripped = line.strip()
+        # Check if line is a question (ends with ? or starts with number/bullet or is a vocab term with colon)
+        is_question = (
+            line_stripped.endswith('?') or
+            re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*\d+[\.\)]\s*\w', line_stripped) or  # "• 1. Question" or "1) Question"
+            re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*[a-zA-Z][\.\)]\s*\w', line_stripped) or  # "• a. Question" or "a) Question"
+            (line_stripped.endswith(':') and len(line_stripped) > 5 and '_' not in line_stripped)  # "Nationalism:"
+        )
+        if is_question and len(line_stripped) > 5:
+            question_indices.append(i)
+
+    # Check content between consecutive questions
+    for idx, q_idx in enumerate(question_indices):
+        line_stripped = lines[q_idx].strip()
+        # Determine where the next question starts (or end of document)
+        next_q_idx = question_indices[idx + 1] if idx + 1 < len(question_indices) else len(lines)
+
+        # Get content between this question and the next
+        content_between = []
+        for j in range(q_idx + 1, min(next_q_idx, q_idx + 6)):  # Check up to 5 lines after
+            if j < len(lines):
+                between_line = lines[j].strip()
+                # Skip empty lines and lines that are just underscores
+                if between_line and not re.match(r'^[_\s\-\.]+$', between_line):
+                    # Check if this line has actual content (not just template markers)
+                    if len(between_line) > 3 and between_line.count('_') < len(between_line) * 0.5:
+                        content_between.append(between_line)
+
+        # If no substantive content found after this question, mark as unanswered
+        if not content_between:
+            unanswered_questions.append(line_stripped[:60] + "..." if len(line_stripped) > 60 else line_stripped)
+
+    # Determine if submission is blank
+    has_filled_blanks = len(filled_blanks) >= 2
+    has_written_responses = len(after_colons) >= 2 or len(real_paragraphs) >= 1
+    mostly_blank_lines = blank_ratio > 0.4
+    many_unanswered = len(unanswered_questions) >= 3
+
+    is_blank = (not has_filled_blanks and not has_written_responses and mostly_blank_lines) or \
+               (many_unanswered and not has_filled_blanks and not has_written_responses)
+
+    if is_blank:
+        _logger.info(f"  ⚠️  BLANK/EMPTY SUBMISSION DETECTED")
+        _logger.info(f"      Filled blanks: {len(filled_blanks)}, Written responses: {len(after_colons)}")
+        _logger.info(f"      Blank line ratio: {blank_ratio:.1%}, Unanswered questions: {len(unanswered_questions)}")
+        return {
+            "score": 0,
+            "letter_grade": "INCOMPLETE",
+            "breakdown": {
+                "content_accuracy": 0,
+                "completeness": 0,
+                "critical_thinking": 0,
+                "communication": 0
+            },
+            "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
+            "student_responses": [],
+            "unanswered_questions": unanswered_questions[:10],
+            "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
+            "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
+            "authenticity_flag": "clean",
+            "authenticity_reason": "",
+            "skills_demonstrated": {}
+        }
+
+    return None
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -715,114 +832,9 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 
     # Check for empty/blank student submissions before sending to API
     if assignment_data.get("type") == "text" and content:
-        import re
-
-        # Method 1: Check for filled-in blanks (text between underscores like ___answer___)
-        filled_blanks = re.findall(r'_{2,}([^_\n]+)_{2,}', content)
-        filled_blanks = [b.strip() for b in filled_blanks if b.strip() and len(b.strip()) > 1]
-
-        # Method 2: Check for content after colons that isn't just blanks
-        # e.g., "Nationalism: the belief that..." vs "Nationalism: ___"
-        after_colons = re.findall(r':\s*([^_\n:]{10,})', content)
-        # Filter out template instruction text that isn't student writing
-        _instruction_patterns = re.compile(
-            r'^(define|summarize|explain|describe|write|use|answer|identify|list|compare|analyze|discuss|'
-            r'read|complete|fill|circle|match|select|choose|highlight|underline|review|include)\b',
-            re.IGNORECASE
-        )
-        after_colons = [
-            a.strip() for a in after_colons
-            if a.strip()
-            and not a.strip().startswith('_')
-            and not _instruction_patterns.match(a.strip())
-            and not a.strip().endswith('?')
-            and 'complete sentences' not in a.lower()
-            and 'using evidence' not in a.lower()
-            and 'in your own words' not in a.lower()
-            and 'from the reading' not in a.lower()
-            and 'pp ' not in a.strip()[:5]  # page references like "pp 348-349"
-        ]
-
-        # Method 3: Look for paragraph-length responses (likely written answers)
-        paragraphs = [p.strip() for p in content.split('\n\n') if len(p.strip()) > 50]
-        # Filter out paragraphs that are mostly underscores
-        real_paragraphs = [p for p in paragraphs if p.count('_') < len(p) * 0.3]
-
-        # Method 4: Count lines that are JUST underscores (blank response lines)
-        blank_lines = len(re.findall(r'^[\s_]+$', content, re.MULTILINE))
-        total_lines = len([l for l in content.split('\n') if l.strip()])
-        blank_ratio = blank_lines / max(total_lines, 1)
-
-        # Method 5: Check for questions followed by no response
-        # Look for question patterns and check if there's content after them
-        lines = content.split('\n')
-        unanswered_questions = []
-        question_indices = []
-
-        for i, line in enumerate(lines):
-            line_stripped = line.strip()
-            # Check if line is a question (ends with ? or starts with number/bullet or is a vocab term with colon)
-            is_question = (
-                line_stripped.endswith('?') or
-                re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*\d+[\.\)]\s*\w', line_stripped) or  # "• 1. Question" or "1) Question"
-                re.match(r'^[•\*\-\u2022\u2023\u25E6\u2043\u2219\s]*[a-zA-Z][\.\)]\s*\w', line_stripped) or  # "• a. Question" or "a) Question"
-                (line_stripped.endswith(':') and len(line_stripped) > 5 and '_' not in line_stripped)  # "Nationalism:"
-            )
-            if is_question and len(line_stripped) > 5:
-                question_indices.append(i)
-
-        # Check content between consecutive questions
-        for idx, q_idx in enumerate(question_indices):
-            line_stripped = lines[q_idx].strip()
-            # Determine where the next question starts (or end of document)
-            next_q_idx = question_indices[idx + 1] if idx + 1 < len(question_indices) else len(lines)
-
-            # Get content between this question and the next
-            content_between = []
-            for j in range(q_idx + 1, min(next_q_idx, q_idx + 6)):  # Check up to 5 lines after
-                if j < len(lines):
-                    between_line = lines[j].strip()
-                    # Skip empty lines and lines that are just underscores
-                    if between_line and not re.match(r'^[_\s\-\.]+$', between_line):
-                        # Check if this line has actual content (not just template markers)
-                        if len(between_line) > 3 and between_line.count('_') < len(between_line) * 0.5:
-                            content_between.append(between_line)
-
-            # If no substantive content found after this question, mark as unanswered
-            if not content_between:
-                unanswered_questions.append(line_stripped[:60] + "..." if len(line_stripped) > 60 else line_stripped)
-
-        # Determine if submission is blank
-        has_filled_blanks = len(filled_blanks) >= 2
-        has_written_responses = len(after_colons) >= 2 or len(real_paragraphs) >= 1
-        mostly_blank_lines = blank_ratio > 0.4
-        many_unanswered = len(unanswered_questions) >= 3
-
-        is_blank = (not has_filled_blanks and not has_written_responses and mostly_blank_lines) or \
-                   (many_unanswered and not has_filled_blanks and not has_written_responses)
-
-        if is_blank:
-            _logger.info(f"  ⚠️  BLANK/EMPTY SUBMISSION DETECTED")
-            _logger.info(f"      Filled blanks: {len(filled_blanks)}, Written responses: {len(after_colons)}")
-            _logger.info(f"      Blank line ratio: {blank_ratio:.1%}, Unanswered questions: {len(unanswered_questions)}")
-            return {
-                "score": 0,
-                "letter_grade": "INCOMPLETE",
-                "breakdown": {
-                    "content_accuracy": 0,
-                    "completeness": 0,
-                    "critical_thinking": 0,
-                    "communication": 0
-                },
-                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
-                "student_responses": [],
-                "unanswered_questions": unanswered_questions[:10],
-                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
-                "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
-                "authenticity_flag": "clean",
-                "authenticity_reason": "",
-                "skills_demonstrated": {}
-            }
+        blank_result = _detect_blank_submission(content)
+        if blank_result is not None:
+            return blank_result
 
     # FERPA: Use anonymous placeholder instead of real student name
     
