@@ -3,16 +3,15 @@
 Audit MAJOR #4 sprint follow-up to PR #294. Companion to existing
 test_classlink_oidc.py + test_classlink_sso.py + test_classlink_sso_
 contract.py which cover the OIDC discovery, login URL, callback
-happy/error paths, session, and logout. Targets the remaining 37
-uncovered LOC (82% baseline → ~100%):
+happy/error paths, session, and logout. Targets uncovered LOC:
 
-* _resolve_classlink_user_id — exception fallback to classlink:{id}
 * _trigger_roster_sync._bg_sync — no OneRoster config skip; happy
   path that drives the inner asyncio loop + roster normalize +
   sync_roster_to_db; outer except swallow
 * Callback gaps: no access_token, token-exchange exception, iat
   in the future, iat >24h stale, userinfo non-200, userinfo
   exception
+* _classlink_guid + _extract_person_id helpers
 """
 from __future__ import annotations
 
@@ -63,37 +62,6 @@ def _mock_oidc_config():
     }
 
 
-
-# ──────────────────────────────────────────────────────────────────
-# _resolve_classlink_user_id
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestResolveClasslinkUserId:
-    def test_linked_returns_supabase_uuid(self):
-        with patch(
-            "backend.storage.load",
-            return_value={"cl-123": "teacher-uuid-1"},
-        ):
-            from backend.routes.classlink_routes import _resolve_classlink_user_id
-            assert _resolve_classlink_user_id("cl-123") == "teacher-uuid-1"
-
-    def test_unlinked_returns_classlink_prefix(self):
-        with patch(
-            "backend.storage.load",
-            return_value={},
-        ):
-            from backend.routes.classlink_routes import _resolve_classlink_user_id
-            assert _resolve_classlink_user_id("cl-X") == "classlink:cl-X"
-
-    def test_storage_exception_falls_back_to_prefix(self):
-        with patch(
-            "backend.storage.load",
-            side_effect=RuntimeError("storage down"),
-        ):
-            from backend.routes.classlink_routes import _resolve_classlink_user_id
-            # Falls back to classlink:{id} on exception
-            assert _resolve_classlink_user_id("cl-fallback") == "classlink:cl-fallback"
 
 
 # ──────────────────────────────────────────────────────────────────

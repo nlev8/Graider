@@ -1089,3 +1089,38 @@ class TestClassLinkStateNonceHardening:
                     f"/api/classlink/callback?code=def&state={second_state}"
                 )
         assert "classlink_login=success" in fresh_callback.location
+
+
+class TestClassLinkAuthResolution:
+    def test_teacher_id_resolved_from_session_user_id(self):
+        import os as _os
+        from flask import Flask, g, jsonify
+        from backend.auth import init_auth
+        app = Flask(__name__)
+        app.config['TESTING'] = True
+        app.config['SECRET_KEY'] = 'test-secret'
+        init_auth(app)
+
+        @app.route('/api/_whoami')
+        def _whoami():
+            return jsonify({
+                "teacher_id": getattr(g, 'teacher_id', None),
+                "user_id": getattr(g, 'user_id', None),
+                "auth_source": getattr(g, 'auth_source', None),
+                "district_id": getattr(g, 'district_id', None),
+            })
+
+        with patch.dict(_os.environ, {'FLASK_ENV': 'production'}):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess['classlink_user'] = {
+                        'user_id': 'classlink:dist-A:p1',
+                        'classlink_id': 'p1',
+                        'email': 'a@school.edu',
+                        'tenant_id': 'dist-A',
+                    }
+                data = client.get('/api/_whoami').get_json()
+        assert data['teacher_id'] == 'classlink:dist-A:p1'
+        assert data['user_id'] == 'classlink:dist-A:p1'
+        assert data['auth_source'] == 'classlink'
+        assert data['district_id'] == 'dist-A'

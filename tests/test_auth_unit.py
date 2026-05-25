@@ -407,27 +407,22 @@ class TestInitAuthSsoPath:
         assert body['auth_source'] == 'clever'
 
     def test_classlink_session_resolves_user(self, auth_app, monkeypatch):
-        # NOTE: we don't patch _resolve_classlink_user_id (lazy-imported
-        # inside check_auth). Instead we let it run and stub the storage
-        # layer it depends on so the function returns the documented
-        # `classlink:{id}` fallback. That covers the same branch and
-        # is more robust to lazy-import binding quirks across pytest
-        # state.
+        # The tenant-scoped GUID is stored as `user_id` in the session at
+        # callback time (Task 3 refactor). auth.py reads it verbatim —
+        # no resolver call needed.
         monkeypatch.setenv('FLASK_ENV', 'production')
         client = auth_app.test_client()
         with client.session_transaction() as sess:
             sess['classlink_user'] = {
+                'user_id': 'classlink:t-1:cl-link-1',
                 'classlink_id': 'cl-link-1',
                 'email': 'cl@school.edu',
                 'tenant_id': 't-1',
             }
-        with patch('backend.storage.load', return_value=None):
-            resp = client.get('/api/protected')
+        resp = client.get('/api/protected')
         assert resp.status_code == 200
         body = resp.get_json()
-        # Real `_resolve_classlink_user_id` returns the `classlink:{id}`
-        # fallback when no link exists; that's the documented contract.
-        assert body['user_id'] == 'classlink:cl-link-1'
+        assert body['user_id'] == 'classlink:t-1:cl-link-1'
         assert body['auth_source'] == 'classlink'
 
 

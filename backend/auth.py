@@ -204,11 +204,11 @@ def init_auth(app):
             g.district_id = clever_user.get('district', '')
             return None
 
-        # ClassLink SSO session
+        # ClassLink SSO session — identity GUID was formed (tenant-scoped) at
+        # the OAuth callback and stored as `user_id`; read it verbatim.
         classlink_user = session.get('classlink_user') if hasattr(session, 'get') else None
         if classlink_user and not has_bearer:
-            from backend.routes.classlink_routes import _resolve_classlink_user_id
-            g.user_id = _resolve_classlink_user_id(classlink_user['classlink_id'])
+            g.user_id = classlink_user.get('user_id', '')
             g.teacher_id = g.user_id
             g.user_email = classlink_user.get('email', '')
             g.auth_source = 'classlink'

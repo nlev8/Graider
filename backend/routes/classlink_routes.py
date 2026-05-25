@@ -94,19 +94,6 @@ def _extract_person_id(user_data):
     return None
 
 
-def _resolve_classlink_user_id(classlink_id):
-    """Resolve ClassLink user ID to Graider teacher_id.
-
-    Returns linked Supabase UUID if exists, otherwise 'classlink:{id}'.
-    Same pattern as auth.py resolve_clever_user_id().
-    """
-    try:
-        from backend.storage import load as storage_load
-        links = storage_load('classlink_links', 'system') or {}
-        return links.get(str(classlink_id), f"classlink:{classlink_id}")
-    except Exception:
-        return f"classlink:{classlink_id}"
-
 
 def _trigger_roster_sync(teacher_id, tenant_id):
     """Trigger background OneRoster roster sync after ClassLink login.
