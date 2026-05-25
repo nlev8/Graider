@@ -1,194 +1,111 @@
-# Handoff: 2026-05-24 — Wave 7 (assignment_grader.py decomposition) PHASE B COMPLETE
-
-Per CLAUDE.md §12. Read this, then
-`docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md` (canonical scorecard)
-and `docs/superpowers/specs/2026-05-24-wave7-phaseb-grader-golden-net.md` (Phase B design).
+# Handoff: 2026-05-25 — Wave 8 (grade_assignment + grade_multipass decomposition) + FERPA fix
 
 ## 1. Goal
+Continue Wave 8: decompose the two large grader functions in
+`backend/services/grading_pipeline.py` into small pure module-level `_helper`s under STRICT
+behavior-preservation (golden + prompt-snapshot + AST-byte-identity nets). Overarching mandate:
+"sprint, do not stop; as close to 10/10 as possible; you decide and execute; use the 3 AIs
+(Claude superpowers + Codex 5.5-high + Gemini, advisory) at genuine design forks."
 
-Decompose `assignment_grader.py` (the 5,344-LOC grading engine) into Flask-free
-`backend/services/` modules — behavior-preserving under a heightened golden/characterization
-net — to push **Code Quality 9 → 9.5+**. Overarching mandate: "this is a sprint, do not suggest
-stopping; as close to 10/10 as possible. You decide and execute; use the 3 AIs at design forks."
+## 2. TL;DR — shipped this session (all merged to main)
+- **FERPA PII fix (#565 + review follow-up #566):** new content-preserving
+  `sanitize_grading_prompt_for_ai()` applied at ALL 6 LLM send boundaries (4 leaves +
+  pipeline paths + portal + assignment_player route). Preserves naked numbers/dates (answers).
+  Common-word-name over-redaction (Grace/May/Mark…) fixed in #566.
+- **Principle #13 added to CLAUDE.md (#567):** "Review Gates Before Auto-Merge" — class A
+  (behavior-preserving refactor, nets gate, auto-merge OK) vs class B (net-new / compliance /
+  security → code review is a HARD pre-gate; no `--auto` with a review in flight).
+- **Wave 8 — 7 grade_assignment/grade_multipass slices (#568–#574):**
+  | # | helper | fn | LOC |
+  |---|--------|-----|-----|
+  | 568 | `_detect_blank_submission` | grade_assignment | 711->605 |
+  | 569 | `_analyze_submission_writing_style` (3-tuple) | grade_assignment | 605->573 |
+  | 570 | `_detect_fitb_assignment` | grade_assignment | 573->559 |
+  | 571 | `_pre_extract_responses` (4-tuple, **3-AI consult**) | grade_assignment | 559->450 |
+  | 572 | `_load_ell_language` | grade_assignment | 450->438 |
+  | 573 | `_finalize_grading_result` (kwargs, **3-AI consult**) | grade_assignment | 438->405 |
+  | 574 | `_apply_vocab_leniency` (in-place) | grade_multipass | 432->404 |
+  | 575 | `_multipass_perform_extraction` (2-tuple, **3-AI consult**) | grade_multipass | 404->361 |
+  - **grade_assignment: 711 -> 405 LOC (-43%).** grade_multipass: 432 -> 361 (-16%).
+  - Every slice: AST byte-identical to origin block, golden + prompt-snapshot nets unchanged,
+    +unit tests in `tests/test_grading_pipeline_helpers.py` (now ~25 helper tests). Broad
+    sweeps green throughout.
 
-## 2. TL;DR — Wave 7 COMPLETE (the grading core is fully decomposed)
+## 3. Current state
+- main HEAD = #575. GitNexus index fresh. No open PRs.
+- No open PRs. Working tree clean except always-uncommitted AGENTS.md/CLAUDE.md + local noise
+  (.claude/scheduled_tasks.lock, flask_session/, tests/reports/).
 
-- **`assignment_grader.py`: 5,344 → 658 LOC (−88%).** It is now a thin **facade**: CLI/email
-  orchestration (`run_grading`, `save_emails_to_folder`, `create_outlook_drafts`,
-  `log_pii_sanitization`) + re-export shims. NO LLM scoring code remains inline.
-- **The entire LLM-coupled grading core now lives in `backend/services/`:**
-  - `grading_models.py` — 9 Pydantic response schemas + `TokenTracker` + `MODEL_PRICING` (#543)
-  - `grading_leaves.py` — `grade_per_question`, `detect_ai_plagiarism`, `generate_feedback`,
-    `_translate_feedback` (#544)
-  - `grading_pipeline.py` — `grade_multipass`, `grade_assignment`, `grade_with_ensemble`,
-    `grade_with_parallel_detection` + `GRADING_RUBRIC` + `ASSIGNMENT_INSTRUCTIONS` (#545/#546/#547)
-  - Earlier Wave-7 services: `writing_style`, `writing_profile`, `grader_text_prep`,
-    `grading_prep`, `grader_json`, `submission_parsing`, `grader_export`, `grader_roster`.
-- **THE GOLDEN NET (#541) is the keystone — `tests/grading_fakes.py` + `tests/test_grader_golden.py`.**
-  It patches the 3 RAW SDK entrypoints (`openai.OpenAI`, `anthropic.Anthropic`,
-  `google.generativeai.GenerativeModel`+`configure`) with provider-shaped, thread-safe,
-  content-matched fakes; sets env API keys; keeps `with_retry` real. 12 goldens pin the EXACT
-  scoring output (grade_multipass 88/B, grade_assignment 85/B, parallel detection, blank
-  short-circuit, `.parsed`-None contrast, provider routing, token usage). It runs the REAL
-  functions, so any behavior change during extraction flips a pin. **This is what made the
-  whole Phase B safe.** Gemini goldens skip in this venv (it ships `google-genai`, not
-  `google.generativeai` — the grader's gemini branch ImportErrors gracefully).
-- **Wave 7 PRs (all merged): #520–#539** (pure helpers + file-reader cluster + roster/CSV export),
-  **#540** (writing_profile), **#541** (golden net), **#542** (build_roster_from_periods),
-  **#543** (grading_models), **#544** (grading_leaves), **#545** (grade_assignment),
-  **#546** (grade_multipass), **#547** (entry points — Phase B complete).
+## 4. grade_assignment is at its SAFE FLOOR (405 LOC) — do NOT extract further
+Remaining blocks are the irreducible dispatch core, confirmed unsafe by the 3-AI consult:
+- **provider dispatch** sets `response_text`, which the `except json.JSONDecodeError` handler
+  needs (preview + debug temp-file + regex recovery) — extracting it forces restructuring the
+  handler = behavior risk.
+- **message-building** has a conditional-`full_prompt` coupling (only set on the text path,
+  rebuilt in the image-dispatch path) — subtle undefined-var risk if naively moved.
 
-## 3. The proven slice protocol (FOLLOW for any further grader work)
+## 5. Next Wave 8 targets (grade_multipass, 361 LOC) — each a design fork, CONSULT FIRST
+DONE: vocab leniency (#574), EXTRACTION block (#575). Remaining:
+1. **AGGREGATE SCORES / PASS-3 / result tail** (~150 lines, biggest win -> ~270 LOC): effort calc
+   + completeness cap + final_score/letter_grade + breakdown + custom rubric weights, feeding the
+   PASS-3 `generate_feedback` call + result assembly. Many interwoven outputs -> CONSULT on the
+   split; likely a kwargs `_finalize_multipass_result(...)` mirroring `_finalize_grading_result`.
+2. **PASS-2 parallel per-question grading** (~80 lines): ThreadPoolExecutor + the 3 question-index
+   matching strategies + sympy pre-check. Complex/coupled to question_results collection.
+3. **Filtering-dedup**: the filter-question-text block in grade_multipass (~18 lines) is
+   near-identical to one already inside `_pre_extract_responses`. DRY opportunity — but it's a
+   cross-cutting change (2 call sites); verify the blocks are truly identical first.
+## 5b. CLI/email facade split — ✅ COMPLETE (Code Quality 9.5 reached)
+SHIPPED (PRs #577 pt.1, #578 pt.2a, #579 pt.2b): `save_emails_to_folder`+`create_outlook_drafts`→
+`grader_export.py`, `log_pii_sanitization`→`grader_text_prep.py`, `ASSIGNMENT_NAME`→`grading_models.py`,
+`run_grading`+3 CLI path constants→new `grader_cli.py` (verbatim, T20-exempt, no cycle). **`assignment_grader.py`
+658→332 LOC with ZERO top-level functions** — a pure re-export-shim layer + `__main__`. 3-model unanimous
+re-score: **Code Quality 9.4→9.5 (first 9.5, #580)**. `run_grading` is the CLI `__main__` + test route-callback
+(`conftest_routes`/`test_grading_routes`) — kept importable via shim; `backend/grading/pipeline.py` imports
+of save_emails/ASSIGNMENT_NAME preserved via re-exports.
 
-1. **Golden-char-test first**, baseline green BEFORE extraction (import via `assignment_grader`
-   so the shim keeps it valid). For the LLM core, the SDK-fake golden net (#541) IS the net —
-   leaf/orchestrator extractions need NO new test, just keep it green.
-2. **Verbatim move** into `backend/services/<mod>.py`; `print()`→`_logger.info(`/`.warning(`
-   (services/ is ruff-T20 scanned). The conversion is mechanical & exact — verify
-   `AST print-call count == raw "print(" substring count` so a regex is safe.
-3. **Re-export shim** in `assignment_grader.py`: `from backend.services.<mod> import <fn> as <fn>
-   # noqa: F401`. ALWAYS the explicit `as` form (mypy no_implicit_reexport; pipeline.py is strict).
-4. **Verify (scripted):** (a) AST function-source byte-identical vs `origin/main` modulo
-   print→logger (+ any behavior-neutral dead-var removal); (b) `ruff check --select F821` → 0
-   undefined names (catches missing imports up front, BEFORE test failures — this is gold for big
-   moves); (c) `ruff check --select F401,F841`; (d) `ruff check`; (e) `bandit -q -ll`; (f) shim
-   identity `g.<fn> is <imported fn>`; (g) no import cycle (`grep -c assignment_grader <service>`).
-5. **Broad sweep:** `pytest tests/ -k "grad or grader or pipeline or writing or detection or
-   feedback or multipass or portal_grading or factor or ensemble or roster or token or model or
-   translate or transient or issue224 or rubric or text_prep or submission or json"
-   --ignore=tests/load --ignore=tests/e2e`.
-6. Commit explicit files (NEVER AGENTS.md/CLAUDE.md), PR, `gh pr merge N --squash --auto
-   --delete-branch`, robust background watcher. STRICTLY SEQUENTIAL on `assignment_grader.py`.
+## 5c. Path 9.5 → 10 (unanimous next lever): PROVIDER ADAPTERS
+Both Codex + Gemini named the same step. Extract the per-provider execution + response normalization
+(the OpenAI/Anthropic/Gemini switch-blocks + structured/text parse + JSON-fallback + error recovery)
+out of `grade_assignment` (~406 LOC) and `grade_per_question` into provider-specific grading adapters
+behind ONE interface, so those functions become orchestration + policy/post-processing only. This is
+the dispatch core the Wave-8 consult deliberately left in place (the response_text→except coupling) —
+the adapter interface is the clean way to finally extract it. Then: typed request/result objects instead
+of wide dicts; retire the re-export shims (migrate internal callers to `backend.services.*`); live/contract
+SDK smoke tests behind markers. Also still open: grade_multipass AGGREGATE/PASS-3 tail + PASS-2 block;
+per-branch parse.
 
-## 4. HARD-WON LESSONS (Phase B)
+## 6. The proven slice protocol (FOLLOW exactly)
+1. Locate block by content markers (Python, not fragile line numbers).
+2. Move verbatim into a module-level `_helper` (Python line-range edit handles emoji/regex/f-strings
+   safely; the Edit tool mangles unicode escapes — use Python for those).
+3. Caller: replace block with the helper call (early-return helpers return dict-or-None or a tuple
+   with an `early_result` slot; in-place mutators return None like `_apply_single_pass_post_processing`).
+4. **Verify (all must pass):** `python -c "import ast; ast.parse(...)"`; `ruff --select F821,F401,F841`;
+   AST byte-identity of helper body vs `git show HEAD:...` origin block; then
+   `pytest tests/test_grading_pipeline_helpers.py tests/test_grader_golden.py
+   tests/test_grader_prompt_snapshots.py`; then a broad `-k` grading sweep.
+5. Add unit tests for the now-testable helper.
+6. **Sequential discipline (same file):** ONE PR in flight at a time. Prep next slice locally on
+   the current branch, commit, record SHA; when the open PR merges, `git checkout -b ... origin/main`
+   + `git cherry-pick <SHA>` (squash-merge makes plain rebase messy — cherry-pick onto fresh main).
+7. PR -> `gh pr merge N --squash --auto`; branch protection is **strict** (must be up-to-date) so the
+   watcher must `gh pr update-branch N` when BEHIND. 9 required checks; Backend Tests is the ~4min pole.
 
-- **Patch targets follow the function.** When a function moves to a service, tests that patch its
-  INTERNAL seams break. Two failure modes seen:
-  (a) **AttributeError** — `patch("assignment_grader._get_api_key")` after `_get_api_key` was
-  pruned → repoint to where the function now resolves it (`grading_leaves`/`grading_pipeline`).
-  (b) **SILENT VACUOUS PASS** — `patch("assignment_grader.grade_per_question")` when grade_multipass
-  moved to grading_pipeline: the patch no longer intercepts, `mock_gpq` is never called, and
-  loop-based assertions skip → test goes green while testing NOTHING. ALWAYS verify the mock was
-  actually called (e.g. `len(mock.call_args_list) > 0`) after repointing. Fixed in
-  test_transient_errors_issue224 (#544) and test_grading_pipeline (#545/#546).
-- **Re-export detection MUST be AST-based, not single-line grep.** Tests import via multi-line
-  `from assignment_grader import (\n  X,\n  Y,\n)` blocks that a `grep "import.*X"` misses. Use an
-  `ast.ImportFrom` walk over tests/ + backend/ before pruning ANY "orphaned" import. Symbols found
-  this way (MATH_SUBJECTS, sanitize_pii_for_ai, preprocess_for_ai_detection, build_section_rubric,
-  _try_parse_json_fallback, compare_writing_styles, analyze_writing_style, _distribute_points,
-  _is_math_subject, _parse_expected_answers) stay as explicit `as` re-exports.
-- **`ruff --select F821`** statically catches undefined names after a move (missing imports, moved
-  constants like GRADING_RUBRIC / ASSIGNMENT_INSTRUCTIONS) — run it instead of discovering them
-  via runtime NameError in the golden net.
-- **Ordering by call-dependency, not the consensus's tentative number.** grade_multipass CALLS
-  grade_assignment (single-pass fallback), so grade_assignment had to be extracted FIRST and both
-  live in the SAME module (grading_pipeline.py) → the call is intra-module, no back-import.
-- **`backend/api_keys.get_api_key` env fallback** (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/
-  `GEMINI_API_KEY`) is the test seam — ThreadPoolExecutor workers see env, NOT contextvars, so the
-  golden net sets env keys rather than patching `_get_api_key` (which moves on extraction).
+## 7. 3-AI consult mechanics
+- Codex: `codex exec -c model_reasoning_effort="high" "$(cat /tmp/prompt.md)" < /dev/null`
+  (the `< /dev/null` avoids the stdin hang).
+- Gemini (ADVISORY ONLY): `gemini -p "$(cat /tmp/prompt.md)" --skip-trust` — `--skip-trust` runs
+  untrusted (NO file tools) = safe. NEVER `--yolo` (it auto-approved edits and clobbered 4 files
+  earlier; reverted). Inline the code block in the prompt so Gemini needs no file access.
+- Reconcile on the conservative floor (lowest behavior-preservation risk wins).
 
-## 5. State & what's next
+## 8. Path to 9.5 (Wave 8 goal) — re-score pending
+Caps/weights dedup (`_letter_grade`/`_completeness_cap_table`) shipped earlier (#549). After the
+grade_multipass forks land, run the 3-model Code Quality re-score (was 9.2 after Wave 7) to measure
+9.5. Canonical scorecard: `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`.
 
-- Wave 7 is DONE. `assignment_grader.py` (658 LOC) remaining functions are NON-LLM CLI/email:
-  `run_grading` (the grading-thread entry, calls the now-service grading fns via shims),
-  `save_emails_to_folder`, `create_outlook_drafts`, `log_pii_sanitization` (has a print; tiny stub).
-  These are a possible FUTURE wave (CLI/email layer → `backend/services/grader_email.py` +
-  `grader_runner.py`) but are NOT LLM scoring core and were out of Phase B scope.
-- **CLOSEOUT DONE:** 3-model re-score reconciled **Code Quality 9.0 → 9.2** (Codex 9.2, Gemini 9.2,
-  Claude 9.5 → conservative floor; both external models converged on 9.2 and on the same next lever).
-  Appended to the scorecard spec. Reviewers' verdict: god-*module* eliminated, but `grade_assignment`
-  (~1,138 LOC) is now a second-order god-*function*. **Path to 9.5 = split `grade_assignment` into
-  named pipeline phases + extract the CLI/email layer out of the 658-LOC facade.** This is the clear
-  next wave (Wave 8 candidate). gitnexus re-indexed at closeout. Lint hygiene the reviewers flagged
-  is fixed (grading_leaves `TokenTracker` F821 ×4 + `focus_files` F841).
-- **Pre-existing flaky e2e:** `tests/test_e2e_multi_teacher.py::...test_three_teachers_publish_and_grade`
-  fails only under the big combined `-k` run (test-pollution); passes standalone + alongside the
-  touched tests. NOT a Phase-B regression. A test-isolation cleanup candidate (unrelated).
-- **Deferred (handoff §6 carryover):** `writing_style.py` 4 carried-over dead locals in
-  analyze_writing_style (pre-existing; remove in a non-identity commit with golden confirmation).
-
-## 5b. Wave 8 (grade_assignment internal decomposition → path to 9.5) — STARTED
-
-The unanimous 3-model next lever. `grade_assignment` (~1,138 LOC in `grading_pipeline.py`) is a
-second-order god-function mixing provider setup, extraction, prompt assembly, parse, scoring
-caps, rubric weighting, ELL translation, writing-profile updates, audit, error recovery.
-
-- **Slice 1 SHIPPED (#549):** extracted shared pure helpers `_letter_grade(score)` +
-  `_completeness_cap_table(grading_style)` (+ `_COMPLETENESS_CAPS`) into `grading_pipeline.py`,
-  deduping 9 inline sites across grade_assignment/grade_multipass/grade_with_ensemble.
-  Boundary unit test `tests/test_grading_pipeline_helpers.py` + golden net + test_grading_factors.
-- **Slice 2 SHIPPED (#550):** the prompt-snapshot net (`tests/test_grader_prompt_snapshots.py` +
-  CallBook prompt capture in `grading_fakes.py`) — see the ⚠️ insight below. Per-question prompts
-  hashed over the SORTED set (parallel threads → non-deterministic record order).
-- **Slice 3 SHIPPED (#551):** first grade_assignment PHASE extracted —
-  `_apply_single_pass_post_processing(result, rubric_weights, grading_style, extraction_result)`
-  (rubric-weight recompute + completeness caps + unanswered-merge). Helper body AST/text
-  byte-identical to the dedented origin block; 3 DIRECT unit tests added (the grade_assignment
-  golden's fully-answered/no-weights fixture left this path a no-op, so the golden net alone did
-  NOT cover it — lesson: check whether the golden fixture actually exercises an extracted block).
-- **Slice 4 SHIPPED (#553):** grade_assignment ANTHROPIC + gemini (skipped, SDK absent) provider
-  goldens — the default grade_assignment golden exercised only the OpenAI branch, so this pins all
-  3 provider branches' parse paths. Prerequisite for Slice 5.
-- **Slice 5 SHIPPED (#556):** second phase extracted — `_resolve_grading_client(ai_model) ->
-  (provider, client, actual_model, error)` (provider determination + client init + early-return
-  ERROR sentinels); the 3 provider-specific client vars unified to one `client` at the 5 call
-  sites. A TRANSFORMATION (not byte-identical), validated by the 3-provider goldens (#553) +
-  prompt-snapshot net + F821 + broad sweep (991 passed). **grade_assignment now 1,030 LOC**
-  (from 1,138 at Wave 8 start; Slices 3+5).
-- **Slice 6 SHIPPED (#558):** parse-phase dedup — `_strip_markdown_fences(text)` (the ``` -fence
-  strip duplicated in the OpenAI text-fallback + Claude/Gemini parse). Both paths golden-covered.
-- **Slice 7 SHIPPED (#559):** prompt section-builders `_grading_style_instructions(grading_style)`
-  + `_extraction_mode_instructions(extraction_mode)`. Snapshot-verified byte-identical.
-- **Slice 8 SHIPPED (#560):** `_authenticity_section(is_fitb, custom_markers, age_range,
-  grade_level)` (~130 lines: FITB exemption vs full AI/plagiarism detection). Snapshot-verified.
-  **grade_assignment now 830 LOC** (from 1,138 at Wave 8 start, −27%).
-- **Slice 9 SHIPPED (#562):** `_build_grading_prompt(*, <17 kwargs>)` — the 121-line prompt
-  f-string. Chose keyword args over a dataclass so the f-string body is BYTE-IDENTICAL (snapshot
-  sha256 c5ab6a530c4306a1 unchanged); `ASSIGNMENT_INSTRUCTIONS` stays module-level. **grade_assignment
-  now 728 LOC** (from 1,138 at Wave 8 start, −36%). NB: the 17-param signature is acceptable for an
-  internal single-call helper; a dataclass `_GradingPromptContext` is a trivial follow-up if a
-  reviewer prefers (would need `{ctx.x}` rewrites OR top-of-helper unpacking — snapshot still guards).
-- **REMAINING (smaller tail — do FRESH):**
-  - **parse phase (~now 990–1090):** interleaved with the per-provider call — the SHARED markdown-strip
-    is already extracted (#558); remaining is the per-branch `json.loads`/`_try_parse_json_fallback`
-    (openai tries json.loads-first; claude/gemini use the fallback directly). Lower value; golden-
-    covered (all 3 providers).
-  - **context-build + pre-extract phases** (custom-instr/history/accommodation; writing-style +
-    FITB detection + pre-extraction) — extractable but interleaved.
-  - Then: **CLI/email facade split** — move `run_grading`/`save_emails_to_folder`/
-    `create_outlook_drafts` out of assignment_grader.py (658-LOC facade) into `grader_cli.py` /
-    `grader_email_export.py`.
-- **Phase boundaries inside grade_assignment** (line refs pre-Slice-1, approximate): provider/
-  client init (~159), blank short-circuit (~215), context build — custom instr/history/
-  accommodation/FITB (~328–365), pre-extract responses + writing-style (~374–490), **prompt
-  assembly (~534–769)**, LLM call + provider-branch parse (~772–1120), rubric-weights post-proc
-  (~1122), completeness-caps post-proc (~1143), result/audit/token build (end). Suggested phase
-  helpers (keep in grading_pipeline.py, called by grade_assignment as orchestration):
-  `_resolve_grading_client`, `_build_grading_prompt`, `_parse_grading_response`,
-  `_apply_single_pass_post_processing`.
-- ⚠️ **CRITICAL SAFETY INSIGHT — the golden net does NOT pin prompt TEXT.** The SDK fakes route
-  on `response_format` type + coarse content markers and return a canned result REGARDLESS of the
-  exact prompt wording. So extracting `_build_grading_prompt` (or the per-question/feedback prompt
-  builders) is NOT protected by the golden net against subtle prompt drift. **BEFORE any
-  prompt-assembly extraction, add a prompt-SNAPSHOT test:** extend `tests/grading_fakes.py`'s
-  CallBook to capture the full prompt text per call, then pin grade_assignment's (and
-  grade_multipass per-question + generate_feedback) prompt for a fixture (hash + key substrings),
-  baseline green, extract, re-assert unchanged. Without this, a prompt regression ships silently.
-- The provider/parse/post-processing phase extractions ARE covered by the golden net (they affect
-  the result dict). Order suggestion: post-processing first (lowest risk, result-pinned), then
-  provider-resolution, then prompt-assembly LAST (after the snapshot net exists).
-
-## 6. Standing constraints
-- venv `/Users/alexc/Downloads/Graider/venv/`. CI = 9 checks; ruff selects ONLY T20 (root
-  assignment_grader.py is print-allowed; services/ is not). Commit trailer
-  `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`; PR trailer
-  `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Active frontend
-  `frontend/src/App.jsx`. Never commit AGENTS.md/CLAUDE.md (`git add` explicit files).
-- Watcher pattern (run_in_background bash): poll `gh pr view N`, `gh pr update-branch` on BEHIND,
-  exit MERGED/CHECK_FAILED. Each grader slice strictly sequential on assignment_grader.py.
-
-## 7. References
-- Scorecard: `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`.
-- Phase B design: `docs/superpowers/specs/2026-05-24-wave7-phaseb-grader-golden-net.md`.
-- Golden net: `tests/grading_fakes.py`, `tests/test_grader_golden.py`.
-- Wave 7 PRs #520–#547 (all merged).
+## 9. References
+- PRs: #565-#574. Spec: `docs/superpowers/specs/2026-05-24-ferpa-pii-sanitization-fix.md`.
+- Golden net: `tests/grading_fakes.py` + `tests/test_grader_golden.py`; prompt snapshots:
+  `tests/test_grader_prompt_snapshots.py`; helper units: `tests/test_grading_pipeline_helpers.py`.
