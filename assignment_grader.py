@@ -129,8 +129,9 @@ ROSTER_FILE = "/Users/alexc/Downloads/Assignment Grader/all_students_updated.xls
 
 # BYOK: API keys resolved per-request via contextvars → user keys → env vars
 
-# Assignment name (used in output files and emails)
-ASSIGNMENT_NAME = ""  # Set dynamically from assignment config; empty = use filename
+# Assignment name (used in output files and emails) — relocated to grading_models.py so the
+# CLI/email service modules can reference it without importing this facade (no-cycle rule).
+from backend.services.grading_models import ASSIGNMENT_NAME as ASSIGNMENT_NAME  # noqa: F401, E402
 
 # Marker phrase(s) that indicate where student work begins
 # Only content within the section (until next header) will be graded
