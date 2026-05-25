@@ -982,6 +982,26 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
     return is_fitb, extraction_result, extracted_responses_text, None
 
 
+def _load_ell_language(student_id):
+    """Load the student's ELL feedback-translation language from
+    ~/.graider_data/ell_students.json, or None if unset / not an ELL student. Best-effort
+    (malformed/missing file → None). Extracted verbatim from grade_assignment (Wave 8)."""
+    ell_language = None
+    if student_id and student_id != "UNKNOWN":
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        if os.path.exists(ell_file):
+            try:
+                with open(ell_file, 'r', encoding='utf-8') as f:
+                    ell_data = json.load(f)
+                ell_entry = ell_data.get(student_id, {})
+                lang = ell_entry.get("language")
+                if lang and lang != "none":
+                    ell_language = lang
+            except Exception:
+                pass
+    return ell_language
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -1095,19 +1115,7 @@ ASSIGNMENT TEMPLATE (The questions/prompts the student was asked to answer):
     fitb_authenticity_section = _authenticity_section(is_fitb, custom_markers, age_range, grade_level)
 
     # Load ELL designation for this student (teacher-controlled bilingual feedback)
-    ell_language = None
-    if student_id and student_id != "UNKNOWN":
-        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
-        if os.path.exists(ell_file):
-            try:
-                with open(ell_file, 'r', encoding='utf-8') as f:
-                    ell_data = json.load(f)
-                ell_entry = ell_data.get(student_id, {})
-                lang = ell_entry.get("language")
-                if lang and lang != "none":
-                    ell_language = lang
-            except Exception:
-                pass
+    ell_language = _load_ell_language(student_id)
 
     # Always grade in English only — bilingual translation is handled as a separate post-grading step
     ell_instruction = "Write feedback in English only."
