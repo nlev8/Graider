@@ -17,6 +17,7 @@ from backend.services.grading_pipeline import (
     _completeness_cap_table,
     _detect_blank_submission,
     _detect_fitb_assignment,
+    _finalize_grading_result,
     _letter_grade,
     _load_ell_language,
     _pre_extract_responses,
@@ -200,3 +201,34 @@ def test_load_ell_language_reads_from_file(tmp_path, monkeypatch):
     assert _load_ell_language("stu-1") == "Spanish"
     # 'none' sentinel and unknown students yield None
     assert _load_ell_language("stu-missing") is None
+
+
+# ── _finalize_grading_result (Wave 8 slice: extracted from grade_assignment; 3-AI kwargs contract) ─
+
+def test_finalize_grading_result_core_path():
+    result = {"score": 85, "letter_grade": "B", "feedback": "Good work.\\nKeep it up.",
+              "breakdown": {}, "ai_detection": {"flag": "none"}}
+    out = _finalize_grading_result(
+        result, original_text='{"score":85}', ell_language=None, ai_model="gpt-4o-mini",
+        token_tracker=None, student_name="Maria Garcia", rubric_weights=None,
+        grading_style="standard",
+        extraction_result={"blank_questions": [], "missing_sections": []},
+        student_id=None, current_writing_style=None, style_comparison=None,
+        extracted_responses_section="Q1: answer")
+    assert out is result                       # mutates in place + returns the same dict
+    assert "\\n" not in out["feedback"]        # escaped-newline fix applied
+    assert out["_audit"] == {"ai_input": "Q1: answer", "ai_response": '{"score":85}'}
+    assert "writing_style_deviation" not in out  # no style_comparison ⇒ not annotated
+    assert "token_usage" not in out            # token_tracker None ⇒ no usage block
+
+
+def test_finalize_grading_result_annotates_style_deviation():
+    result = {"score": 70, "feedback": "ok", "breakdown": {}, "ai_detection": {"flag": "none"}}
+    cmp = {"ai_likelihood": "likely", "deviations": ["x"]}
+    out = _finalize_grading_result(
+        result, original_text="{}", ell_language=None, ai_model="gpt-4o-mini", token_tracker=None,
+        student_name="S", rubric_weights=None, grading_style="standard",
+        extraction_result={"blank_questions": [], "missing_sections": []},
+        student_id=None, current_writing_style=None, style_comparison=cmp,
+        extracted_responses_section="")
+    assert out["writing_style_deviation"] == cmp
