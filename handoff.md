@@ -129,23 +129,28 @@ caps, rubric weighting, ELL translation, writing-profile updates, audit, error r
 - **Slice 4 SHIPPED (#553):** grade_assignment ANTHROPIC + gemini (skipped, SDK absent) provider
   goldens — the default grade_assignment golden exercised only the OpenAI branch, so this pins all
   3 provider branches' parse paths. Prerequisite for Slice 5.
-- **REMAINING phases (harder — coupled, do with fresh context):**
-  - **provider-resolution (Slice 5 — READY, de-risked by #553). RECIPE:** (1) Extract the
-    provider-determination + client-init + early-return ERROR block (~243–297) into
-    `_resolve_grading_client(ai_model) -> (provider, client, actual_model, error)`: rename
-    `claude_client`/`gemini_client`/`openai_client` → `client`; each success branch returns
-    `(provider, client, actual_model, None)`; OpenAI has no actual_model → return `ai_model`
-    (unused there); each ImportError/no-key path returns `(None, None, None, {ERROR dict})`.
-    (2) In grade_assignment: `provider, client, actual_model, _err = _resolve_grading_client(ai_model)`
-    then `if _err: return _err`. (3) Rename the 5 call-site usages (claude ~1078; gemini ~1097,
-    ~1103; openai ~1113, ~1137) → `client` (8 total token occurrences; all are the client vars).
-    This is a TRANSFORMATION (not byte-identical) → guards: the 3-provider goldens (#553),
-    `ruff --select F821`, broad sweep. Do it BY HAND, fresh.
-  - **prompt-assembly (~534–769 pre-slices):** ~235-line f-string built from ~20 locals → 
-    `_build_grading_prompt(...)`. MUST be guarded by the Slice-2 prompt-snapshot net (the golden
-    net does NOT pin prompt text). Do this one LAST.
-  - **parse phase + result/audit/token finalization:** the provider-branch response parsing →
-    `_parse_grading_response(...)`; golden-net covered.
+- **Slice 5 SHIPPED (#556):** second phase extracted — `_resolve_grading_client(ai_model) ->
+  (provider, client, actual_model, error)` (provider determination + client init + early-return
+  ERROR sentinels); the 3 provider-specific client vars unified to one `client` at the 5 call
+  sites. A TRANSFORMATION (not byte-identical), validated by the 3-provider goldens (#553) +
+  prompt-snapshot net + F821 + broad sweep (991 passed). **grade_assignment now 1,030 LOC**
+  (from 1,138 at Wave 8 start; Slices 3+5).
+- **REMAINING phases (the HARD, sprawling/coupled ones — do FRESH, sub-phase them):**
+  - **prompt-assembly (~now 643–1050):** NOT a clean self-contained block — it's a series of
+    section-builds (extracted-responses ~643, template ~652, rubric ~664, grading-style ~703,
+    authenticity/FITB ~732) culminating in the big `prompt_text = f"""..."""` (~894) AND the
+    text/image `messages` construction (~1054), interleaved with writing-style analysis + FITB
+    detection. ~20+ threaded locals. Recommend SUB-PHASING (e.g., extract each section-builder
+    first, then the f-string) rather than one 400-line helper. MUST stay behind the Slice-2
+    prompt-snapshot net (golden net does NOT pin prompt text); F821 catches any missed local.
+  - **parse phase (~1090–1210):** interleaved with the per-provider call — openai does call+parse
+    inline (structured `.parsed` → text fallback), claude/gemini set `response_text` then a shared
+    markdown-strip + json.loads + `_try_parse_json_fallback`. Extract the SHARED text-parse first
+    (`_parse_grading_response(response_text)`), then consider separating call from parse. Golden-net
+    covered (all 3 providers, #553).
+  - Then: **CLI/email facade split** — move `run_grading`/`save_emails_to_folder`/
+    `create_outlook_drafts` out of assignment_grader.py (658-LOC facade) into `grader_cli.py` /
+    `grader_email_export.py`.
 - **Phase boundaries inside grade_assignment** (line refs pre-Slice-1, approximate): provider/
   client init (~159), blank short-circuit (~215), context build — custom instr/history/
   accommodation/FITB (~328–365), pre-extract responses + writing-style (~374–490), **prompt
