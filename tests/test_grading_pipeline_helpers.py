@@ -14,6 +14,7 @@ from backend.services.grading_pipeline import (
     _COMPLETENESS_CAPS,
     _apply_single_pass_post_processing,
     _completeness_cap_table,
+    _detect_blank_submission,
     _letter_grade,
 )
 
@@ -76,3 +77,39 @@ def test_post_processing_noop_when_no_weights_and_no_blanks():
     assert result["score"] == 85
     assert result["letter_grade"] == "B"
     assert result["unanswered_questions"] == ["x"]
+
+
+# ── _detect_blank_submission (Wave 8 slice: extracted from grade_assignment) ──────────────────
+# Returns an INCOMPLETE result dict for blank submissions, else None. Pure heuristics, no LLM.
+
+def test_detect_blank_submission_all_underscore_lines_is_blank():
+    # Many question lines with only underscores after them → blank.
+    content = "\n".join([
+        "1. What caused the war?", "______________________",
+        "2. Name a key figure:", "______________________",
+        "3. Summarize the outcome:", "______________________",
+        "4. Why did it matter?", "______________________",
+    ])
+    out = _detect_blank_submission(content)
+    assert out is not None
+    assert out["score"] == 0
+    assert out["letter_grade"] == "INCOMPLETE"
+    assert out["student_responses"] == []
+    assert "blank assignment" in out["feedback"].lower()
+
+
+def test_detect_blank_submission_with_written_answers_returns_none():
+    # Real paragraph-length responses → not blank.
+    content = (
+        "1. What caused the war?\n"
+        "The war was caused by rising tensions over territory and trade, which built up "
+        "over many years until conflict finally broke out between the two sides.\n"
+        "2. Name a key figure:\nGeneral Washington led the troops effectively.\n"
+    )
+    assert _detect_blank_submission(content) is None
+
+
+def test_detect_blank_submission_filled_blanks_returns_none():
+    # Two+ filled-in blanks → not blank.
+    content = "The capital is ___Paris___ and the year was ___1789___ in this lesson."
+    assert _detect_blank_submission(content) is None
