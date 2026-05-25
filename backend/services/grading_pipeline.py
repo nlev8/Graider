@@ -214,6 +214,73 @@ def _apply_single_pass_post_processing(result, rubric_weights, grading_style, ex
                 _logger.info(f"      Blank sections: {blank_names}")
 
 
+def _resolve_grading_client(ai_model):
+    """Resolve the provider, SDK client, and concrete model name for grade_assignment.
+
+    Returns (provider, client, actual_model, error): on a missing SDK or unconfigured API key,
+    error is an ERROR result dict and the other fields are None; otherwise error is None. The
+    OpenAI branch has no model-map — actual_model is returned as ai_model (call sites use
+    model=ai_model directly). Extracted from grade_assignment (Wave 8 — phase split).
+    """
+    # Determine which API to use based on model name
+    if ai_model.startswith("claude"):
+        provider = "anthropic"
+    elif ai_model.startswith("gemini"):
+        provider = "gemini"
+    else:
+        provider = "openai"
+
+    if provider == "anthropic":
+        try:
+            import anthropic
+        except ImportError:
+            _logger.info("❌ anthropic not installed. Run: pip install anthropic")
+            return None, None, None, {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API not available - pip install anthropic"}
+
+        if not _get_api_key('anthropic'):
+            return None, None, None, {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API key not configured"}
+
+        client = anthropic.Anthropic(api_key=_get_api_key('anthropic'))
+        claude_model_map = {
+            "claude-haiku": "claude-3-5-haiku-latest",
+            "claude-sonnet": "claude-sonnet-4-20250514",
+            "claude-opus": "claude-opus-4-20250514",
+        }
+        actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
+        _logger.info(f"  🤖 Using Claude model: {actual_model}")
+        return provider, client, actual_model, None
+
+    if provider == "gemini":
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            _logger.info("❌ google-generativeai not installed. Run: pip install google-generativeai")
+            return None, None, None, {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Google AI not available - pip install google-generativeai"}
+
+        if not _get_api_key('gemini'):
+            return None, None, None, {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Gemini API key not configured"}
+
+        genai.configure(api_key=_get_api_key('gemini'))
+        gemini_model_map = {
+            "gemini-flash": "gemini-2.0-flash",
+            "gemini-pro": "gemini-2.0-pro-exp",
+        }
+        actual_model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
+        client = genai.GenerativeModel(actual_model)
+        _logger.info(f"  🤖 Using Gemini model: {actual_model}")
+        return provider, client, actual_model, None
+
+    # OpenAI
+    try:
+        from openai import OpenAI
+    except ImportError:
+        _logger.info("❌ openai not installed. Run: pip install openai")
+        return None, None, None, {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "OpenAI API not available"}
+
+    client = OpenAI(api_key=_get_api_key('openai'))
+    return provider, client, ai_model, None
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -240,61 +307,11 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     - authenticity_flag: 'clean', 'review', or 'flagged'
     - authenticity_reason: Explanation for flagged or review status
     """
-    # Determine which API to use based on model name
-    if ai_model.startswith("claude"):
-        provider = "anthropic"
-    elif ai_model.startswith("gemini"):
-        provider = "gemini"
-    else:
-        provider = "openai"
-
-    # Initialize the appropriate client
-    if provider == "anthropic":
-        try:
-            import anthropic
-        except ImportError:
-            _logger.info("❌ anthropic not installed. Run: pip install anthropic")
-            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API not available - pip install anthropic"}
-
-        if not _get_api_key('anthropic'):
-            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Anthropic API key not configured"}
-
-        claude_client = anthropic.Anthropic(api_key=_get_api_key('anthropic'))
-        claude_model_map = {
-            "claude-haiku": "claude-3-5-haiku-latest",
-            "claude-sonnet": "claude-sonnet-4-20250514",
-            "claude-opus": "claude-opus-4-20250514",
-        }
-        actual_model = claude_model_map.get(ai_model, "claude-3-5-haiku-latest")
-        _logger.info(f"  🤖 Using Claude model: {actual_model}")
-
-    elif provider == "gemini":
-        try:
-            import google.generativeai as genai
-        except ImportError:
-            _logger.info("❌ google-generativeai not installed. Run: pip install google-generativeai")
-            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Google AI not available - pip install google-generativeai"}
-
-        if not _get_api_key('gemini'):
-            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "Gemini API key not configured"}
-
-        genai.configure(api_key=_get_api_key('gemini'))
-        gemini_model_map = {
-            "gemini-flash": "gemini-2.0-flash",
-            "gemini-pro": "gemini-2.0-pro-exp",
-        }
-        actual_model = gemini_model_map.get(ai_model, "gemini-2.0-flash")
-        gemini_client = genai.GenerativeModel(actual_model)
-        _logger.info(f"  🤖 Using Gemini model: {actual_model}")
-
-    else:  # OpenAI
-        try:
-            from openai import OpenAI
-        except ImportError:
-            _logger.info("❌ openai not installed. Run: pip install openai")
-            return {"score": 0, "letter_grade": "ERROR", "breakdown": {}, "feedback": "OpenAI API not available"}
-
-        openai_client = OpenAI(api_key=_get_api_key('openai'))
+    # Resolve provider + SDK client + concrete model (early-returns an ERROR dict on
+    # missing SDK / unconfigured key).
+    provider, client, actual_model, _client_err = _resolve_grading_client(ai_model)
+    if _client_err:
+        return _client_err
 
     content = assignment_data.get("content", "")
 
@@ -1075,7 +1092,7 @@ Provide your response in the following JSON format ONLY (no other text):
             else:
                 claude_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
 
-            response = with_retry(lambda: claude_client.messages.create(
+            response = with_retry(lambda: client.messages.create(
                 model=actual_model,
                 max_tokens=2000,
                 messages=[{"role": "user", "content": claude_content}]
@@ -1094,13 +1111,13 @@ Provide your response in the following JSON format ONLY (no other text):
                 }
                 full_prompt = prompt_text + "\n\nSTUDENT'S WORK (see attached image):\nIMPORTANT: Only grade what you can CLEARLY see in the image. If text is unclear or cut off, mark as incomplete rather than guessing."
                 response = with_retry(
-                    lambda: gemini_client.generate_content([full_prompt, image_part]),
+                    lambda: client.generate_content([full_prompt, image_part]),
                     label="grade_assignment_gemini_image",
                 )
             else:
                 text_content = messages[0]["content"] if isinstance(messages[0]["content"], str) else messages[0]["content"][0]["text"]
                 response = with_retry(
-                    lambda: gemini_client.generate_content(text_content),
+                    lambda: client.generate_content(text_content),
                     label="grade_assignment_gemini_text",
                 )
             if token_tracker:
@@ -1110,7 +1127,7 @@ Provide your response in the following JSON format ONLY (no other text):
         else:
             # OpenAI API call with structured output for guaranteed schema
             try:
-                response = with_retry(lambda: openai_client.beta.chat.completions.parse(
+                response = with_retry(lambda: client.beta.chat.completions.parse(
                     model=ai_model,
                     messages=messages,
                     response_format=GradingResponse,
@@ -1134,7 +1151,7 @@ Provide your response in the following JSON format ONLY (no other text):
             except Exception as structured_err:
                 # Structured output not supported for this model — fall back to standard call
                 _logger.info(f"  ⚠️  Structured output failed ({structured_err}), falling back to standard API")
-                response = with_retry(lambda: openai_client.chat.completions.create(
+                response = with_retry(lambda: client.chat.completions.create(
                     model=ai_model,
                     messages=messages,
                     max_tokens=2000,
