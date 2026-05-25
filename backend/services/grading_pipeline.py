@@ -1512,6 +1512,63 @@ def _apply_vocab_leniency(effective_instructions, responses, question_results):
             _logger.info(f"  📌 Vocab leniency: adjusted {adjusted_count} vocab scores to minimum 65%")
 
 
+def _multipass_perform_extraction(assignment_data, content, custom_markers, exclude_markers,
+                                  assignment_template):
+    """Compute the multipass extraction_result (priority: Graider tables > Graider text > regex)
+    and short-circuit blank/nearly-blank submissions. Returns (extraction_result, early_result):
+    early_result is an INCOMPLETE result dict to return immediately (0 answered, or >=80% blank),
+    else None — the caller continues (the no-responses single-pass fallback stays in
+    grade_multipass where its args are in scope). Extracted from grade_multipass (Wave 8)."""
+    # Priority: Graider structured tables > Graider text fallback > regex extraction
+    extraction_result = None
+
+    # Check for Graider table data (structured worksheets)
+    graider_tables = assignment_data.get("graider_tables")
+    if graider_tables:
+        _logger.info(f"  📊 Multi-pass: Using Graider table extraction ({len(graider_tables)} tables)")
+        extraction_result = extract_from_tables(graider_tables, exclude_markers)
+    elif assignment_data.get("type") == "text" and content:
+        # Try GRAIDER tag plain-text fallback before generic extraction
+        if '[GRAIDER:' in content:
+            extraction_result = extract_from_graider_text(content, exclude_markers)
+        if not extraction_result or not extraction_result.get("extracted_responses"):
+            extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
+
+    if extraction_result:
+        answered = extraction_result.get("answered_questions", 0)
+        total = extraction_result.get("total_questions", 0)
+        _logger.info(f"  📋 Multi-pass: Extracted {answered}/{total} responses")
+
+        if answered == 0:
+            return extraction_result, {
+                "score": 0, "letter_grade": "INCOMPLETE",
+                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
+                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
+                "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
+                "skills_demonstrated": {"strengths": [], "developing": []},
+                "excellent_answers": [], "needs_improvement": []
+            }
+
+        # Force zero if 80%+ of questions are blank — prevents template text inflation
+        total_questions = extraction_result.get("total_questions", 0)
+        blank_questions_count = len(extraction_result.get("blank_questions", [])) + len(extraction_result.get("missing_sections", []))
+        if total_questions > 0 and blank_questions_count / total_questions >= 0.8:
+            _logger.info(f"  ⚠️  NEARLY BLANK: {blank_questions_count}/{total_questions} questions blank (≥80%)")
+            return extraction_result, {
+                "score": 0, "letter_grade": "INCOMPLETE",
+                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                "feedback": f"Your assignment is nearly blank — {blank_questions_count} out of {total_questions} questions have no response. Please complete all sections and resubmit.",
+                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Nearly blank submission."},
+                "plagiarism_detection": {"flag": "none", "reason": "Nearly blank submission."},
+                "skills_demonstrated": {"strengths": [], "developing": []},
+                "excellent_answers": [], "needs_improvement": []
+            }
+    return extraction_result, None
+
+
 def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
                     grade_level: str = '6', subject: str = 'Social Studies',
                     ai_model: str = 'gpt-4o-mini', student_id: str = None,
@@ -1540,53 +1597,10 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
     content = assignment_data.get("content", "")
 
     # === EXTRACTION ===
-    # Priority: Graider structured tables > Graider text fallback > regex extraction
-    extraction_result = None
-
-    # Check for Graider table data (structured worksheets)
-    graider_tables = assignment_data.get("graider_tables")
-    if graider_tables:
-        _logger.info(f"  📊 Multi-pass: Using Graider table extraction ({len(graider_tables)} tables)")
-        extraction_result = extract_from_tables(graider_tables, exclude_markers)
-    elif assignment_data.get("type") == "text" and content:
-        # Try GRAIDER tag plain-text fallback before generic extraction
-        if '[GRAIDER:' in content:
-            extraction_result = extract_from_graider_text(content, exclude_markers)
-        if not extraction_result or not extraction_result.get("extracted_responses"):
-            extraction_result = extract_student_responses(content, custom_markers, exclude_markers, assignment_template)
-
-    if extraction_result:
-        answered = extraction_result.get("answered_questions", 0)
-        total = extraction_result.get("total_questions", 0)
-        _logger.info(f"  📋 Multi-pass: Extracted {answered}/{total} responses")
-
-        if answered == 0:
-            return {
-                "score": 0, "letter_grade": "INCOMPLETE",
-                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
-                "feedback": "You submitted a blank assignment with no responses. Please complete all sections and resubmit.",
-                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
-                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Blank submission — no content to evaluate."},
-                "plagiarism_detection": {"flag": "none", "reason": "Blank submission — no content to evaluate."},
-                "skills_demonstrated": {"strengths": [], "developing": []},
-                "excellent_answers": [], "needs_improvement": []
-            }
-
-        # Force zero if 80%+ of questions are blank — prevents template text inflation
-        total_questions = extraction_result.get("total_questions", 0)
-        blank_questions_count = len(extraction_result.get("blank_questions", [])) + len(extraction_result.get("missing_sections", []))
-        if total_questions > 0 and blank_questions_count / total_questions >= 0.8:
-            _logger.info(f"  ⚠️  NEARLY BLANK: {blank_questions_count}/{total_questions} questions blank (≥80%)")
-            return {
-                "score": 0, "letter_grade": "INCOMPLETE",
-                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
-                "feedback": f"Your assignment is nearly blank — {blank_questions_count} out of {total_questions} questions have no response. Please complete all sections and resubmit.",
-                "student_responses": [], "unanswered_questions": extraction_result.get("blank_questions", []) + extraction_result.get("missing_sections", []),
-                "ai_detection": {"flag": "none", "confidence": 0, "reason": "Nearly blank submission."},
-                "plagiarism_detection": {"flag": "none", "reason": "Nearly blank submission."},
-                "skills_demonstrated": {"strengths": [], "developing": []},
-                "excellent_answers": [], "needs_improvement": []
-            }
+    extraction_result, early_result = _multipass_perform_extraction(
+        assignment_data, content, custom_markers, exclude_markers, assignment_template)
+    if early_result is not None:
+        return early_result
 
     if not extraction_result or not extraction_result.get("extracted_responses"):
         # Fall back to single-pass for edge cases

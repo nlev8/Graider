@@ -21,6 +21,7 @@ from backend.services.grading_pipeline import (
     _finalize_grading_result,
     _letter_grade,
     _load_ell_language,
+    _multipass_perform_extraction,
     _pre_extract_responses,
 )
 
@@ -247,6 +248,34 @@ def test_apply_vocab_leniency_only_affects_vocab_terms():
     qr = [{"grade": {"score": 1, "possible": 10, "quality": "poor", "reasoning": "weak"}}]
     _apply_vocab_leniency("be lenient on vocabulary terms", responses, qr)
     assert qr[0]["grade"]["score"] == 1       # non-vocab response untouched
+
+
+# ── _multipass_perform_extraction (Wave 8 slice: extracted from grade_multipass; 3-AI 2-tuple) ──
+# Returns (extraction_result, early_result): early_result is an INCOMPLETE dict on blank/nearly-blank,
+# else None (caller continues; the single-pass fallback stays inline in grade_multipass).
+
+def test_multipass_extraction_non_text_no_tables_returns_none_none():
+    er, early = _multipass_perform_extraction({"type": "image"}, "", None, None, None)
+    assert er is None and early is None       # caller will hit the inline single-pass fallback
+
+
+def test_multipass_extraction_graider_text_extracts_responses():
+    content = ("Vocabulary\n\n[GRAIDER:VOCAB:Louisiana Purchase]\n"
+               "Louisiana Purchase: (5 pts)\nThe US bought a huge amount of land from France in 1803.\n")
+    er, early = _multipass_perform_extraction({"type": "text", "content": content}, content,
+                                              None, None, None)
+    assert early is None                       # responses present ⇒ no short-circuit
+    assert er and er.get("answered_questions") == 1
+    assert er["extracted_responses"][0]["answer"].startswith("The US bought")
+
+
+def test_multipass_extraction_blank_short_circuits_to_incomplete():
+    # A GRAIDER tag whose only "answer" echoes the term ⇒ 0 answered ⇒ INCOMPLETE early-return.
+    content = "[GRAIDER:VOCAB:Photosynthesis]\nPhotosynthesis:\n"
+    er, early = _multipass_perform_extraction({"type": "text", "content": content}, content,
+                                              None, None, None)
+    assert early is not None and early["letter_grade"] == "INCOMPLETE"
+    assert early["score"] == 0
 
 
 def test_finalize_grading_result_annotates_style_deviation():
