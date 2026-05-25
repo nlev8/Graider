@@ -639,6 +639,40 @@ Provide your response in the following JSON format ONLY (no other text):
 """
 
 
+def _build_personalization_context(custom_ai_instructions, student_id):
+    """Build the teacher-instructions / history / accommodation prompt sections for
+    grade_assignment. Returns (custom_section, history_context, accommodation_context)."""
+    # Build custom instructions section if provided
+    custom_section = ''
+    if custom_ai_instructions:
+        custom_section = f"""
+---
+TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
+{custom_ai_instructions}
+---
+"""
+
+    # Build student history context for personalized feedback
+    history_context = ''
+    if student_id and student_id != "UNKNOWN":
+        try:
+            history_context = build_history_context(student_id)
+        except Exception as e:
+            _logger.info(f"  Note: Could not load student history: {e}")
+
+    # Build accommodation context for IEP/504 students (FERPA compliant)
+    # NOTE: Only accommodation TYPE is sent to AI - no student identifying info
+    accommodation_context = ''
+    if student_id and student_id != "UNKNOWN":
+        try:
+            accommodation_context = build_accommodation_prompt(student_id)
+            if accommodation_context:
+                _logger.info(f"  Applying accommodations for student")
+        except Exception as e:
+            _logger.info(f"  Note: Could not load accommodations: {e}")
+    return custom_section, history_context, accommodation_context
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -792,34 +826,9 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 
     # FERPA: Use anonymous placeholder instead of real student name
     
-    # Build custom instructions section if provided
-    custom_section = ''
-    if custom_ai_instructions:
-        custom_section = f"""
----
-TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
-{custom_ai_instructions}
----
-"""
-
-    # Build student history context for personalized feedback
-    history_context = ''
-    if student_id and student_id != "UNKNOWN":
-        try:
-            history_context = build_history_context(student_id)
-        except Exception as e:
-            _logger.info(f"  Note: Could not load student history: {e}")
-
-    # Build accommodation context for IEP/504 students (FERPA compliant)
-    # NOTE: Only accommodation TYPE is sent to AI - no student identifying info
-    accommodation_context = ''
-    if student_id and student_id != "UNKNOWN":
-        try:
-            accommodation_context = build_accommodation_prompt(student_id)
-            if accommodation_context:
-                _logger.info(f"  Applying accommodations for student")
-        except Exception as e:
-            _logger.info(f"  Note: Could not load accommodations: {e}")
+    # Build personalization context (teacher instructions, history, accommodations)
+    custom_section, history_context, accommodation_context = _build_personalization_context(
+        custom_ai_instructions, student_id)
 
     # Check if this is a fill-in-the-blank assignment
     is_fitb = False
