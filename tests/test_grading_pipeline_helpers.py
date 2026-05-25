@@ -18,6 +18,7 @@ from backend.services.grading_pipeline import (
     _detect_blank_submission,
     _detect_fitb_assignment,
     _letter_grade,
+    _load_ell_language,
     _pre_extract_responses,
 )
 
@@ -179,3 +180,23 @@ def test_pre_extract_markers_override_fitb_flag():
 def test_pre_extract_non_text_returns_empty_continue_values():
     assert _pre_extract_responses(
         False, {"type": "image"}, "", None, None, None, None, "structured") == (False, None, '', None)
+
+
+# ── _load_ell_language (Wave 8 slice: extracted from grade_assignment) ─────────────────────────
+
+def test_load_ell_language_none_for_unknown_or_missing_student():
+    assert _load_ell_language(None) is None
+    assert _load_ell_language("UNKNOWN") is None
+
+
+def test_load_ell_language_reads_from_file(tmp_path, monkeypatch):
+    import json as _json
+    import os as _os
+    data_dir = tmp_path / ".graider_data"
+    data_dir.mkdir()
+    (data_dir / "ell_students.json").write_text(_json.dumps({"stu-1": {"language": "Spanish"}}))
+    monkeypatch.setattr(_os.path, "expanduser",
+                        lambda p: p.replace("~", str(tmp_path)) if p.startswith("~") else p)
+    assert _load_ell_language("stu-1") == "Spanish"
+    # 'none' sentinel and unknown students yield None
+    assert _load_ell_language("stu-missing") is None
