@@ -134,7 +134,7 @@ def build_portal_ai_notes(global_ai_notes="", assignment_title="",
 
 def grade_written_questions(questions, answers, ai_notes, grade_level, subject,
                             grading_style, ai_model="gpt-4o-mini",
-                            token_tracker=None):
+                            token_tracker=None, student_name=""):
     """Grade written questions using the multipass per-question grader.
 
     Args:
@@ -183,6 +183,7 @@ def grade_written_questions(questions, answers, ai_notes, grade_level, subject,
                 section_name=q.get("section_name", ""),
                 section_type="written",
                 token_tracker=token_tracker,
+                student_name=student_name,
             )
             results.append(result)
         except Exception as e:
@@ -658,6 +659,7 @@ def grade_portal_submission_sync(
             subject=teacher_config.get("subject", ""),
             grading_style=teacher_config.get("grading_style", "standard"),
             ai_model=ai_model,
+            student_name=student_info.get("student_name", ""),
         )
 
         # Calculate scores: combine instant (MC/TF) + written results
@@ -788,6 +790,7 @@ def grade_portal_submission_sync(
             student_responses=student_responses,
             student_history=history_context,
             grading_style=teacher_config.get("grading_style", "standard"),
+            student_name=student_info.get("student_name", ""),
         )
         feedback_text = feedback_result.get("feedback", "") or feedback_text
         breakdown = feedback_result.get("rubric_breakdown", breakdown)

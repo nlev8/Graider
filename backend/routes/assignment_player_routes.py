@@ -177,7 +177,7 @@ def submit_assignment(assignment_id):
         student_name = _sanitize_student_name(data.get('student_name', 'Unknown'))
 
         # Grade the assignment
-        results = grade_assignment(assignment, student_answers)
+        results = grade_assignment(assignment, student_answers, student_name=student_name)
         results['student_name'] = student_name
         results['submitted_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
         results['assignment_id'] = assignment_id
@@ -379,7 +379,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
         }
 
 
-def grade_assignment(assignment, student_answers):
+def grade_assignment(assignment, student_answers, student_name=''):
     """Grade all student answers against the assignment.
 
     Uses three strategies:
@@ -449,7 +449,7 @@ def grade_assignment(assignment, student_answers):
                     question, student_answer, q_type, q_points,
                     grade_level, subject, teacher_instructions,
                     grading_style, section_name, ai_model, ai_provider,
-                    ocr_result=ocr_result,
+                    ocr_result=ocr_result, student_name=student_name,
                 )
             else:
                 # For programmatic types with image uploads (e.g., math_equation with photo),
@@ -494,7 +494,7 @@ def grade_assignment(assignment, student_answers):
 def _grade_with_ai(question, student_answer, q_type, q_points,
                    grade_level, subject, teacher_instructions,
                    grading_style, section_name, ai_model, ai_provider,
-                   ocr_result=None):
+                   ocr_result=None, student_name=''):
     """Grade a text-based question using the multipass AI pipeline.
 
     This gives portal submissions the same quality grading as marked Word docs,
@@ -552,6 +552,7 @@ def _grade_with_ai(question, student_answer, q_type, q_points,
             response_type=response_type,
             section_name=section_name,
             section_type='written',
+            student_name=student_name,
         )
 
         # Convert AI result format to portal result format

@@ -72,6 +72,75 @@ def sanitize_pii_for_ai(student_name: str, content: str) -> tuple:
     return anon_id, sanitized
 
 
+def sanitize_grading_prompt_for_ai(student_name: str, text: str) -> str:
+    """FERPA: redact student PII from text about to be sent to an external LLM, WITHOUT
+    corrupting legitimate gradeable content.
+
+    Unlike sanitize_pii_for_ai (used for whole-submission anonymization + audit), this is applied
+    to the FINAL PROMPT STRING at each LLM send boundary, where the text IS the content the model
+    grades. So it must NOT redact naked numeric/date answers (828,000 / 8280000 / 1803 / 2/15/1861)
+    — those are student answers, not PII.
+
+    Redacts: student-name parts (len>2, word-boundary, case-insensitive); emails; phones (with
+    separators); SSNs; street addresses; and IDs/DOB/zip ONLY when context-labeled
+    (e.g. "Student ID: 1234567", "DOB: 02/15/2009", "Zip: 33101").
+    Preserves: all naked numbers/dates (legitimate answers).
+    """
+    if not text:
+        return text
+
+    sanitized = text
+
+    # Structured PII FIRST (so a name embedded in an email, e.g. jane.doe@…, is caught whole
+    # before name-redaction could break the email's local part).
+
+    # SSN (distinctive XXX-XX-XXXX format) — safe to always redact
+    sanitized = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '[SSN-REMOVED]', sanitized)
+
+    # Email addresses
+    sanitized = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[EMAIL-REMOVED]', sanitized)
+
+    # Phone numbers — REQUIRE separators so a bare 10-digit answer is NOT treated as a phone
+    sanitized = re.sub(r'\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b', '[PHONE-REMOVED]', sanitized)
+    sanitized = re.sub(r'\(\d{3}\)\s*\d{3}[-.\s]?\d{4}', '[PHONE-REMOVED]', sanitized)
+
+    # Street addresses: street-number + 1-4 Capitalized name words + a street-type suffix.
+    # Case-SENSITIVE + capitalized-name requirement avoids false positives on lowercase graded
+    # content (e.g. "in 1803 for the new way") that a loose/ignorecase pattern would mangle.
+    sanitized = re.sub(
+        r'\b\d{1,6}\s+(?:[A-Z][A-Za-z.]*\s+){1,4}'
+        r'(?:Street|Avenue|Road|Drive|Lane|Boulevard|Court|Circle|Place|Way|Highway|Terrace|Trail|'
+        r'St|Ave|Rd|Dr|Ln|Blvd|Ct|Cir|Pl|Hwy)\b\.?',
+        '[ADDRESS-REMOVED]',
+        sanitized,
+    )
+
+    # Context-LABELED IDs / DOB / zip — only redacted when a label precedes the number, so naked
+    # numeric/date ANSWERS survive. The label is preserved; only the value is redacted.
+    sanitized = re.sub(
+        r'(?i)\b(student\s*id|id\s*number|local\s*id|student\s*number)\b(\s*[:#]?\s*)\d{4,10}\b',
+        r'\1\2[ID-REMOVED]', sanitized,
+    )
+    sanitized = re.sub(
+        r'(?i)\b(dob|date\s*of\s*birth|birth\s*date|birthday)\b(\s*[:#]?\s*)\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
+        r'\1\2[DOB-REMOVED]', sanitized,
+    )
+    sanitized = re.sub(
+        r'(?i)\b(zip|zip\s*code|postal\s*code)\b(\s*[:#]?\s*)\d{5}(?:-\d{4})?\b',
+        r'\1\2[ZIP-REMOVED]', sanitized,
+    )
+
+    # Student name variations LAST (word-boundary, case-insensitive; len>2 avoids "I"/"Al")
+    if student_name:
+        for part in student_name.split():
+            if len(part) > 2:
+                sanitized = re.sub(
+                    rf'\b{re.escape(part)}\b', '[STUDENT]', sanitized, flags=re.IGNORECASE
+                )
+
+    return sanitized
+
+
 def preprocess_for_ai_detection(text: str) -> str:
     """
     Preprocess extracted text to focus on student-written content for AI detection.
