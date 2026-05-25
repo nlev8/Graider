@@ -142,18 +142,14 @@ caps, rubric weighting, ELL translation, writing-profile updates, audit, error r
 - **Slice 8 SHIPPED (#560):** `_authenticity_section(is_fitb, custom_markers, age_range,
   grade_level)` (~130 lines: FITB exemption vs full AI/plagiarism detection). Snapshot-verified.
   **grade_assignment now 830 LOC** (from 1,138 at Wave 8 start, −27%).
-- **REMAINING (the HARD parts — do FRESH; the first needs a DESIGN decision):**
-  - **prompt_text f-string (~924–1100, ~175 lines) — DESIGN DECISION NEEDED.** It interpolates
-    **18 names**: simple (`age_range`, `grade_level`, `grading_style`, `subject`, module-const
-    `ASSIGNMENT_INSTRUCTIONS`) + 13 section-strings (`accommodation_context`,
-    `assignment_template_section`, `custom_section`, `effective_rubric`, `ell_instruction`,
-    `extracted_responses_section`, `extraction_instructions`, `fitb_authenticity_section`,
-    `grading_style_instructions`, `history_context`, `section_rubric`, `teacher_override_section`,
-    `writing_style_context`). A mechanical `_build_grading_prompt(...)` would be a ~17-param helper
-    — a CODE SMELL, not a clean phase. RECOMMEND a context object (dataclass/dict bundling the
-    section-strings) — consider a quick 3-model consult on the cleanest shape. MUST stay behind the
-    prompt-snapshot net (sha256 c5ab6a530c4306a1); F821 catches missed locals.
-  - **parse phase (~1110–1210):** interleaved with the per-provider call — the SHARED markdown-strip
+- **Slice 9 SHIPPED (#562):** `_build_grading_prompt(*, <17 kwargs>)` — the 121-line prompt
+  f-string. Chose keyword args over a dataclass so the f-string body is BYTE-IDENTICAL (snapshot
+  sha256 c5ab6a530c4306a1 unchanged); `ASSIGNMENT_INSTRUCTIONS` stays module-level. **grade_assignment
+  now 728 LOC** (from 1,138 at Wave 8 start, −36%). NB: the 17-param signature is acceptable for an
+  internal single-call helper; a dataclass `_GradingPromptContext` is a trivial follow-up if a
+  reviewer prefers (would need `{ctx.x}` rewrites OR top-of-helper unpacking — snapshot still guards).
+- **REMAINING (smaller tail — do FRESH):**
+  - **parse phase (~now 990–1090):** interleaved with the per-provider call — the SHARED markdown-strip
     is already extracted (#558); remaining is the per-branch `json.loads`/`_try_parse_json_fallback`
     (openai tries json.loads-first; claude/gemini use the fallback directly). Lower value; golden-
     covered (all 3 providers).
