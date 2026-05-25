@@ -16,6 +16,7 @@ from backend.services.grading_pipeline import (
     _apply_single_pass_post_processing,
     _completeness_cap_table,
     _detect_blank_submission,
+    _detect_fitb_assignment,
     _letter_grade,
 )
 
@@ -130,3 +131,23 @@ def test_analyze_writing_style_no_history_yields_no_context_or_comparison():
     ctx, _style, comparison = _analyze_submission_writing_style(content, {"type": "text"}, None)
     assert ctx == ''          # no deviation prompt fragment without a historical baseline
     assert comparison is None  # no comparison without >= 2 prior samples
+
+
+# ── _detect_fitb_assignment (Wave 8 slice: extracted from grade_assignment) ───────────────────
+
+def test_detect_fitb_by_content_keyword():
+    assert _detect_fitb_assignment("This is a fill-in-the-blank worksheet.", "") is True
+
+
+def test_detect_fitb_by_rubric_override():
+    assert _detect_fitb_assignment("Plain content", "RUBRIC: FILL-IN-THE-BLANK") is True
+
+
+def test_detect_fitb_by_timestamps_and_filled_underscores():
+    # video-worksheet pattern: "N. (M:SS)" timestamps + >=2 filled underscore blanks
+    content = "1. (0:15) The capital is ___Paris___\n2. (1:30) The year was ___1789___"
+    assert _detect_fitb_assignment(content, "") is True
+
+
+def test_detect_fitb_false_for_normal_assignment():
+    assert _detect_fitb_assignment("Explain the causes of the war in a paragraph.", "") is False
