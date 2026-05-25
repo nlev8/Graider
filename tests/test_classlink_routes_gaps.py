@@ -559,3 +559,50 @@ class TestCallbackEdgeCases:
                 )
         assert resp.status_code == 302
         assert "classlink_error=userinfo_error" in resp.location
+
+
+# ──────────────────────────────────────────────────────────────────
+# _classlink_guid
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestClasslinkGuid:
+    def test_assembles_prefixed_composite(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        assert _classlink_guid("2284", "abc") == "classlink:2284:abc"
+
+    def test_encodes_colon_in_components_to_prevent_collision(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        # ("a:b","c") and ("a","b:c") must NOT collide
+        assert _classlink_guid("a:b", "c") == "classlink:a%3Ab:c"
+        assert _classlink_guid("a", "b:c") == "classlink:a:b%3Ac"
+        assert _classlink_guid("a:b", "c") != _classlink_guid("a", "b:c")
+
+    def test_returns_none_on_empty_component(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        assert _classlink_guid("", "abc") is None
+        assert _classlink_guid("2284", "") is None
+        assert _classlink_guid("  ", "abc") is None
+
+
+# ──────────────────────────────────────────────────────────────────
+# _extract_person_id
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestExtractPersonId:
+    def test_prefers_sourcedid(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"SourcedId": "s1", "UserId": "u1"}) == "s1"
+
+    def test_accepts_lowercase_sourcedid(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"sourcedId": "s2"}) == "s2"
+
+    def test_falls_back_to_userid(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"UserId": "u1"}) == "u1"
+
+    def test_none_when_no_person_field(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"Email": "x@y.z"}) is None

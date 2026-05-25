@@ -20,6 +20,7 @@ import jwt as pyjwt
 import requests
 import sentry_sdk
 from flask import Blueprint, request, redirect, jsonify, session, g
+import urllib.parse
 from urllib.parse import urlencode
 
 from backend.utils.audit import audit_log
@@ -106,6 +107,45 @@ def _link_classlink_account(classlink_id, email):
     except Exception as e:
         logger.warning("ClassLink account linking failed: %s", e)
         sentry_sdk.capture_exception(e)
+
+
+def _classlink_guid(tenant_id, person_id):
+    """Build the tenant-scoped ClassLink identity GUID.
+
+    Format: ``classlink:{tenant}:{person}`` with each component percent-encoded
+    so a literal ':' inside a component cannot create an ambiguous (colliding)
+    GUID. Mirrors ClassLink's recommended TenantId+SourcedId globally-unique id.
+
+    Returns None if either component is empty (caller MUST fail closed).
+    """
+    tenant = str(tenant_id or "").strip()
+    person = str(person_id or "").strip()
+    if not tenant or not person:
+        return None
+    return (
+        "classlink:"
+        + urllib.parse.quote(tenant, safe="")
+        + ":"
+        + urllib.parse.quote(person, safe="")
+    )
+
+
+def _extract_person_id(user_data):
+    """Resolve the person component of the GUID from the ClassLink userinfo body.
+
+    Precedence: OneRoster ``SourcedId`` (preferred — reconciles with rostering),
+    then ``UserId``. NEVER falls back to the OIDC ``sub`` alone, which is not
+    guaranteed to equal the OneRoster sourcedId. Returns None if absent (caller
+    fails closed). When falling back to UserId, logs a warning (not silent).
+    """
+    sourced = str(user_data.get("SourcedId") or user_data.get("sourcedId") or "").strip()
+    if sourced:
+        return sourced
+    user_id = str(user_data.get("UserId") or "").strip()
+    if user_id:
+        logger.warning("ClassLink userinfo has no SourcedId; using UserId as person id")
+        return user_id
+    return None
 
 
 def _resolve_classlink_user_id(classlink_id):
