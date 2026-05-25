@@ -856,61 +856,14 @@ def _detect_fitb_assignment(content, custom_ai_instructions):
     return is_fitb
 
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
-    """
-    Use OpenAI GPT to grade a student assignment.
-
-    FERPA COMPLIANCE: Student name is NOT sent to OpenAI.
-    We use "Student" as a placeholder to protect privacy.
-
-    Supports both text and image inputs.
-
-    Parameters:
-    - student_name: Name of the student (kept local, not sent to API)
-    - assignment_data: dict with "type" ("text" or "image") and "content"
-    - custom_ai_instructions: Additional grading instructions from the teacher
-    - grade_level: The student's grade level (e.g., '6', '7', '8')
-    - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
-    - ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
-    - assignment_template: The original assignment template with all questions (for context)
-
-    Returns dict with:
-    - score: numeric grade (0-100)
-    - letter_grade: A, B, C, D, or F
-    - feedback: detailed feedback for the student
-    - breakdown: points for each rubric category
-    - authenticity_flag: 'clean', 'review', or 'flagged'
-    - authenticity_reason: Explanation for flagged or review status
-    """
-    # Resolve provider + SDK client + concrete model (early-returns an ERROR dict on
-    # missing SDK / unconfigured key).
-    provider, client, actual_model, _client_err = _resolve_grading_client(ai_model)
-    if _client_err:
-        return _client_err
-
-    content = assignment_data.get("content", "")
-
-    # Strip embedded answer key from generated worksheets (handles -- and --- variants)
-    if content and "GRAIDER_ANSWER_KEY_START" in content:
-        content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
-        assignment_data = {**assignment_data, "content": content}
-        _logger.info(f"  🧹 Stripped embedded answer key from document")
-
-    # Check for empty/blank student submissions before sending to API
-    if assignment_data.get("type") == "text" and content:
-        blank_result = _detect_blank_submission(content)
-        if blank_result is not None:
-            return blank_result
-
-    # FERPA: Use anonymous placeholder instead of real student name
-    
-    # Build personalization context (teacher instructions, history, accommodations)
-    custom_section, history_context, accommodation_context = _build_personalization_context(
-        custom_ai_instructions, student_id)
-
-    # Check if this is a fill-in-the-blank assignment
-    is_fitb = _detect_fitb_assignment(content, custom_ai_instructions)
-
+def _pre_extract_responses(is_fitb, assignment_data, content, custom_markers, exclude_markers,
+                           assignment_template, marker_config, extraction_mode):
+    """Pre-extract student responses (FITB-aware) to prevent AI hallucination, before grading.
+    Resolves is_fitb against custom markers (markers override FITB), then either packages the
+    full FITB document or runs marker/GRAIDER extraction + question-text filtering. Returns the
+    4-tuple (is_fitb, extraction_result, extracted_responses_text, early_result): early_result is
+    None unless NO responses were extracted, in which case it is the 0-score INCOMPLETE dict the
+    caller must return immediately. Extracted verbatim from grade_assignment (Wave 8)."""
     # PRE-EXTRACT student responses to prevent AI hallucination
     extraction_result = None
     extracted_responses_text = ''
@@ -1007,7 +960,7 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
                 # If no responses found, return early with 0 score
                 if answered == 0:
                     _logger.info(f"  ⚠️  NO RESPONSES EXTRACTED - Document is blank or markers don't match")
-                    return {
+                    return is_fitb, extraction_result, extracted_responses_text, {
                         "score": 0,
                         "letter_grade": "INCOMPLETE",
                         "breakdown": {
@@ -1026,6 +979,70 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
                         "skills_demonstrated": {},
                         "extraction_result": extraction_result
                     }
+    return is_fitb, extraction_result, extracted_responses_text, None
+
+
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
+    """
+    Use OpenAI GPT to grade a student assignment.
+
+    FERPA COMPLIANCE: Student name is NOT sent to OpenAI.
+    We use "Student" as a placeholder to protect privacy.
+
+    Supports both text and image inputs.
+
+    Parameters:
+    - student_name: Name of the student (kept local, not sent to API)
+    - assignment_data: dict with "type" ("text" or "image") and "content"
+    - custom_ai_instructions: Additional grading instructions from the teacher
+    - grade_level: The student's grade level (e.g., '6', '7', '8')
+    - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
+    - ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
+    - assignment_template: The original assignment template with all questions (for context)
+
+    Returns dict with:
+    - score: numeric grade (0-100)
+    - letter_grade: A, B, C, D, or F
+    - feedback: detailed feedback for the student
+    - breakdown: points for each rubric category
+    - authenticity_flag: 'clean', 'review', or 'flagged'
+    - authenticity_reason: Explanation for flagged or review status
+    """
+    # Resolve provider + SDK client + concrete model (early-returns an ERROR dict on
+    # missing SDK / unconfigured key).
+    provider, client, actual_model, _client_err = _resolve_grading_client(ai_model)
+    if _client_err:
+        return _client_err
+
+    content = assignment_data.get("content", "")
+
+    # Strip embedded answer key from generated worksheets (handles -- and --- variants)
+    if content and "GRAIDER_ANSWER_KEY_START" in content:
+        content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+        assignment_data = {**assignment_data, "content": content}
+        _logger.info(f"  🧹 Stripped embedded answer key from document")
+
+    # Check for empty/blank student submissions before sending to API
+    if assignment_data.get("type") == "text" and content:
+        blank_result = _detect_blank_submission(content)
+        if blank_result is not None:
+            return blank_result
+
+    # FERPA: Use anonymous placeholder instead of real student name
+    
+    # Build personalization context (teacher instructions, history, accommodations)
+    custom_section, history_context, accommodation_context = _build_personalization_context(
+        custom_ai_instructions, student_id)
+
+    # Check if this is a fill-in-the-blank assignment
+    is_fitb = _detect_fitb_assignment(content, custom_ai_instructions)
+
+    # PRE-EXTRACT student responses to prevent AI hallucination
+    is_fitb, extraction_result, extracted_responses_text, early_result = _pre_extract_responses(
+        is_fitb, assignment_data, content, custom_markers, exclude_markers,
+        assignment_template, marker_config, extraction_mode)
+    if early_result is not None:
+        return early_result
 
     # Analyze current submission's writing style for AI detection
     writing_style_context, current_writing_style, style_comparison = _analyze_submission_writing_style(
