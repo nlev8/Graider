@@ -6,6 +6,25 @@ assignment_grader.py. Wave 7 Slice 2 (grading-engine decomposition).
 import hashlib
 import re
 
+# Given names that are ALSO ordinary English words. When such a name part appears in lowercase
+# inside a student answer it is almost certainly the word ("founded in may", "grace under
+# pressure"), not the student's identity — redacting it case-insensitively would corrupt grading
+# (Dev Principle #3: never fix FERPA by breaking grading). For these we redact only the
+# Capitalized / ALL-CAPS standalone form, which is the actual identity reference.
+_COMMON_WORD_NAMES = frozenset({
+    'grace', 'may', 'mark', 'hope', 'will', 'art', 'rose', 'joy', 'dawn', 'faith', 'sky', 'ray',
+    'jean', 'gene', 'summer', 'autumn', 'crystal', 'pearl', 'ruby', 'olive', 'ivy', 'iris',
+    'angel', 'chase', 'drew', 'frank', 'rich', 'bill', 'sunny', 'star', 'jay', 'lane', 'reed',
+    'wade', 'hart', 'noble', 'price', 'paige', 'page', 'sage', 'colt', 'cliff', 'dale', 'glen',
+    'heath', 'king', 'earl', 'duke', 'rey', 'sonny', 'major', 'justice', 'honor', 'merry',
+})
+
+# Words that appear inside the redaction tokens this function emits ([STUDENT], [ID-REMOVED], …).
+# A name part equal to one of these would otherwise rewrite INSIDE an already-inserted token.
+_RESERVED_TOKEN_WORDS = frozenset({
+    'student', 'removed', 'ssn', 'email', 'phone', 'address', 'dob', 'zip',
+})
+
 
 def sanitize_pii_for_ai(student_name: str, content: str) -> tuple:
     """
@@ -115,25 +134,43 @@ def sanitize_grading_prompt_for_ai(student_name: str, text: str) -> str:
         sanitized,
     )
 
-    # Context-LABELED IDs / DOB / zip — only redacted when a label precedes the number, so naked
-    # numeric/date ANSWERS survive. The label is preserved; only the value is redacted.
+    # Context-LABELED IDs / DOB / zip / SSN — only redacted when a label precedes the number, so
+    # naked numeric/date ANSWERS survive. The label is preserved; only the value is redacted.
+    # The separator class allows :, #, or a dash so form-style "DOB - 02/15/2009" is caught.
+    # IDs have no length ceiling (label-gated ⇒ no false-positive risk on long SIS IDs).
     sanitized = re.sub(
-        r'(?i)\b(student\s*id|id\s*number|local\s*id|student\s*number)\b(\s*[:#]?\s*)\d{4,10}\b',
+        r'(?i)\b(student\s*id|id\s*number|local\s*id|student\s*number)\b(\s*[:#\-–]?\s*)\d{4,}\b',
         r'\1\2[ID-REMOVED]', sanitized,
     )
     sanitized = re.sub(
-        r'(?i)\b(dob|date\s*of\s*birth|birth\s*date|birthday)\b(\s*[:#]?\s*)\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
+        r'(?i)\b(dob|date\s*of\s*birth|birth\s*date|birthday)\b(\s*[:#\-–]?\s*)\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',
         r'\1\2[DOB-REMOVED]', sanitized,
     )
     sanitized = re.sub(
-        r'(?i)\b(zip|zip\s*code|postal\s*code)\b(\s*[:#]?\s*)\d{5}(?:-\d{4})?\b',
+        r'(?i)\b(zip|zip\s*code|postal\s*code)\b(\s*[:#\-–]?\s*)\d{5}(?:-\d{4})?\b',
         r'\1\2[ZIP-REMOVED]', sanitized,
     )
+    # Labeled SSN catches the bare-9-digit form ("SSN: 123456789") the literal XXX-XX-XXXX rule
+    # above misses; the naked 9-digit form stays preserved (it could be a gradeable answer).
+    sanitized = re.sub(
+        r'(?i)\b(ssn|social\s*security(?:\s*number)?)\b(\s*[:#\-–]?\s*)\d{3}-?\d{2}-?\d{4}\b',
+        r'\1\2[SSN-REMOVED]', sanitized,
+    )
 
-    # Student name variations LAST (word-boundary, case-insensitive; len>2 avoids "I"/"Al")
+    # Student name variations LAST (word-boundary; len>2 avoids "I"/"Al"). Normal name parts are
+    # redacted case-insensitively (strong PII removal). Common-word names (Grace/May/Mark/…) are
+    # redacted only in Capitalized / ALL-CAPS form so their lowercase use as ordinary words in an
+    # answer survives. Parts equal to a reserved token word are skipped to avoid mangling tokens.
     if student_name:
         for part in student_name.split():
-            if len(part) > 2:
+            if len(part) <= 2 or part.lower() in _RESERVED_TOKEN_WORDS:
+                continue
+            if part.lower() in _COMMON_WORD_NAMES:
+                sanitized = re.sub(
+                    rf'\b(?:{re.escape(part.capitalize())}|{re.escape(part.upper())})\b',
+                    '[STUDENT]', sanitized,
+                )
+            else:
                 sanitized = re.sub(
                     rf'\b{re.escape(part)}\b', '[STUDENT]', sanitized, flags=re.IGNORECASE
                 )
