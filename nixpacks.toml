@@ -1,4 +1,18 @@
 providers = ["python", "node"]
 
+# Build the Vite frontend at deploy. The deploy serves backend/static
+# directly (Flask static_folder), so it must be produced here — the repo
+# no longer commits it. `cd frontend && npm ci` installs the FRONTEND deps
+# (the auto root `npm ci` only covers the small root package.json); the
+# build emits to ../backend/static per frontend/vite.config.js. The assert
+# fails the deploy loudly if no bundle was produced (the /healthz
+# healthcheck passes without a frontend, so it can't catch this).
+[phases.build]
+dependsOn = ["install"]
+cmds = [
+  "cd frontend && npm ci && npm run build",
+  "test -s backend/static/index.html",
+]
+
 [start]
 cmd = "cd backend && gunicorn app:app --bind 0.0.0.0:$PORT"
