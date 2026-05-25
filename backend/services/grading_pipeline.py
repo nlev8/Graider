@@ -281,6 +281,21 @@ def _resolve_grading_client(ai_model):
     return provider, client, ai_model, None
 
 
+def _strip_markdown_fences(text: str) -> str:
+    """Strip leading/trailing ``` code fences from an LLM text response, then trim whitespace.
+    Shared by grade_assignment's OpenAI text-fallback and Claude/Gemini parse paths (Wave 8)."""
+    if text.startswith("```"):
+        lines = text.split('\n')
+        start = 1 if lines[0].startswith("```") else 0
+        end = len(lines)
+        for i in range(len(lines)-1, -1, -1):
+            if lines[i].strip() == "```":
+                end = i
+                break
+        text = '\n'.join(lines[start:end])
+    return text.strip()
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -1168,16 +1183,7 @@ Provide your response in the following JSON format ONLY (no other text):
                 pass  # result already set from parsed.model_dump()
             else:
                 # Text fallback: clean up and parse JSON manually
-                if response_text.startswith("```"):
-                    lines = response_text.split('\n')
-                    start = 1 if lines[0].startswith("```") else 0
-                    end = len(lines)
-                    for i in range(len(lines)-1, -1, -1):
-                        if lines[i].strip() == "```":
-                            end = i
-                            break
-                    response_text = '\n'.join(lines[start:end])
-                response_text = response_text.strip()
+                response_text = _strip_markdown_fences(response_text)
                 original_text = response_text
 
                 try:
@@ -1191,16 +1197,7 @@ Provide your response in the following JSON format ONLY (no other text):
         # For Claude/Gemini providers, parse their text response
         if provider in ("anthropic", "gemini"):
             # Clean up response (remove markdown code blocks if present)
-            if response_text.startswith("```"):
-                lines = response_text.split('\n')
-                start = 1 if lines[0].startswith("```") else 0
-                end = len(lines)
-                for i in range(len(lines)-1, -1, -1):
-                    if lines[i].strip() == "```":
-                        end = i
-                        break
-                response_text = '\n'.join(lines[start:end])
-            response_text = response_text.strip()
+            response_text = _strip_markdown_fences(response_text)
             original_text = response_text
 
             result = _try_parse_json_fallback(response_text)
