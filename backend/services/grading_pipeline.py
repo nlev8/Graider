@@ -360,6 +360,139 @@ If a question is listed as "UNANSWERED", it means the student left it blank - do
 """
 
 
+def _authenticity_section(is_fitb, custom_markers, age_range, grade_level):
+    """Authenticity/detection guidance block for the grade_assignment prompt (FITB-aware)."""
+    if is_fitb and not custom_markers:
+        # Pure FITB (no markers) — skip all detection
+        return f"""AUTHENTICITY CHECKS - FILL-IN-THE-BLANK EXEMPTION:
+This is a fill-in-the-blank assignment. Students are expected to write short factual answers (names, dates, places, vocabulary terms).
+These answers will naturally match textbook/source material — that is the CORRECT behavior, NOT plagiarism or AI use.
+DO NOT flag any answers for AI use or plagiarism. Set ai_detection to "none" and plagiarism_detection to "none".
+Focus ONLY on whether the answers are factually correct and complete.
+
+HARD CAPS FOR INCOMPLETE WORK (MANDATORY - each skipped section = one letter grade drop):
+Count the number of skipped/unanswered blanks or sections:
+- 0 skipped = eligible for A (up to 100)
+- 1 skipped = MAXIMUM 89 (B) - NO EXCEPTIONS
+- 2 skipped = MAXIMUM 79 (C) - NO EXCEPTIONS
+- 3 skipped = MAXIMUM 69 (D) - NO EXCEPTIONS
+- 4+ skipped = MAXIMUM 59 (F)
+- 5+ skipped = MAXIMUM 49 (F)
+- 6+ skipped = MAXIMUM 39 (F)
+
+NEARLY BLANK SUBMISSIONS - Score based on effort shown:
+- If student answered only 1-2 blanks out of 5+ = score 10-25 (F)
+- If student answered only 3-4 blanks out of 10+ = score 25-40 (F)
+- Empty or nearly empty = score in the 0-30 range"""
+    else:
+        # Full detection — with FITB exemption note for hybrid assignments
+        fitb_exemption_note = ""
+        if is_fitb:
+            fitb_exemption_note = """IMPORTANT - FILL-IN-THE-BLANK EXEMPTION:
+This assignment contains fill-in-the-blank sections mixed with written response sections.
+Fill-in-the-blank answers (short factual responses like names, dates, places, vocabulary terms) are EXEMPT from AI/plagiarism detection.
+These answers are EXPECTED to match textbook/source material — that is correct behavior, NOT cheating.
+ONLY apply AI/plagiarism checks to WRITTEN responses (paragraphs, reflections, summaries, explanations).
+Do NOT use fill-in-the-blank answers as evidence of AI use or plagiarism.
+
+"""
+        return f"""{fitb_exemption_note}CRITICAL - AUTHENTICITY CHECKS (YOU MUST CHECK THIS CAREFULLY!):
+
+1. AI DETECTION - Compare the student's simple answers to their written paragraphs:
+STEP 1: Look at their short answers (fill-in-blanks, one-word responses). Note the vocabulary level.
+STEP 2: Look at their paragraph responses. Compare the vocabulary and complexity.
+STEP 3: If there's a MISMATCH (simple short answers but sophisticated paragraphs), flag as "likely" AI.
+
+AUTOMATIC "likely" AI FLAGS - if you see ANY of these phrases, it's 100% AI:
+- "transformed the nation into a continental power"
+- "transforming a limited mission"
+- "historic deal that doubled"
+- "fueling westward expansion"
+- "triggered intense political debates"
+- "spurred exploration"
+- "fundamentally altered the trajectory"
+- "establishing the precedent for"
+- "constitutional questions regarding federal authority"
+- "resonate through subsequent decades"
+- "vital for trade and growth"
+- "securing vital trade routes"
+- "manifest destiny"
+- "territorial expansion"
+- "abundant natural resources"
+- Any phrase starting with "Transforming...", "Establishing...", "Securing..."
+- Any phrase a {age_range} year old would NEVER write
+
+CRITICAL CONTRAST CHECK - THIS IS THE MOST IMPORTANT CHECK:
+Look at the student's spelling and grammar in simple answers. If they write:
+- Misspellings like "Tomas Jefferson", "the u's", "france" (lowercase)
+- Simple phrases like "It doubled in size", "idk"
+- Basic vocabulary and short sentences
+
+BUT THEN write sophisticated phrases like:
+- "Transforming a limited mission to buy New Orleans into a historic deal"
+- Any sentence with words like "vital", "securing", "expanding", "historic deal"
+
+That is 100% AI or copied - flag as "likely" IMMEDIATELY. A student who misspells "Thomas" does NOT write "transforming a limited mission into a historic deal."
+
+Real grade {grade_level} students write: "it made the US bigger", "they needed the river for boats", "so ships could go there"
+AI writes: "it transformed the nation into a continental power", "securing vital trade routes"
+
+OBVIOUS COPY-PASTE DEFINITIONS (flag as PLAGIARISM "likely" IMMEDIATELY):
+- "exclusive possession or control of the supply of or trade in a commodity or service" = Google definition of monopoly
+- "an ideology emphasizing intense loyalty to one's nation" = textbook definition
+- "government-provided financial incentives" = too sophisticated
+- "implementing three interconnected policies" = not student language
+- "authority not explicitly stated in the U.S. Constitution but deemed necessary" = textbook definition of implied powers
+- ANY definition that sounds like it was copied from a dictionary or Wikipedia = PLAGIARISM
+
+A real {age_range} year old defines monopoly as: "when one company controls everything" or "only one person sells something"
+NOT: "exclusive possession or control of the supply of or trade in a commodity or service"
+
+2. PLAGIARISM DETECTION - Look for:
+- SUDDEN SHIFTS in writing quality (simple answers + sophisticated paragraphs = copied/AI)
+- Textbook-perfect definitions that don't match the student's other answers
+- Phrases that sound memorized or copied verbatim
+- Statistics or specific numbers not in the reading (like "828,000 square miles")
+- DICTIONARY DEFINITIONS - If a vocabulary definition sounds like it was copied from Google/dictionary (e.g., "exclusive possession or control of the supply of or trade in a commodity or service" for monopoly), flag as PLAGIARISM "likely"
+- SOPHISTICATED VOCABULARY MISMATCH - Words like "ideology", "emphasizing", "fostering", "interconnected", "implementing" are NOT how grade {grade_level} students write definitions
+- FRAGMENT ANSWERS that are clearly pasted (no complete sentence, just a definition dump)
+- If student writes simple answers for some questions but sophisticated definitions for vocabulary = COPY/PASTE from Google
+
+HARD CAPS FOR AI USE / PLAGIARISM (apply FIRST, before other caps):
+- AI flag "likely" = MAX score is 50 (F) - this is cheating
+- AI flag "possible" = MAX score is 65 (D) - suspicious, needs verification
+- Plagiarism flag "likely" = MAX score is 50 (F) - this is cheating
+- Plagiarism flag "possible" = MAX score is 65 (D) - suspicious
+- If BOTH AI and plagiarism are flagged = MAX score is 40 (F)
+
+In feedback for AI/plagiarism flags:
+- Clearly state the work appears to be AI-generated or copied
+- Explain that academic integrity is important
+- Recommend the student redo the assignment in their own words
+- Note this will be reviewed by the teacher
+
+THEN apply HARD CAPS FOR INCOMPLETE WORK (MANDATORY - each skipped section = one letter grade drop):
+Count the number of skipped/unanswered written sections (Student Task, Reflection, Explain, etc.):
+- 0 skipped = eligible for A (up to 100)
+- 1 skipped = MAXIMUM 89 (B) - NO EXCEPTIONS
+- 2 skipped = MAXIMUM 79 (C) - NO EXCEPTIONS
+- 3 skipped = MAXIMUM 69 (D) - NO EXCEPTIONS
+- 4+ skipped = MAXIMUM 59 (F)
+- 5+ skipped = MAXIMUM 49 (F)
+- 6+ skipped = MAXIMUM 39 (F)
+
+NEARLY BLANK SUBMISSIONS - Score based on effort shown:
+- If student answered only 1-2 questions out of 5+ = score 10-25 (F)
+- If student answered only 3-4 questions out of 10+ = score 25-40 (F)
+- A single poor answer like "idk" or "going again" does NOT earn 50 points
+- The score should reflect ACTUAL WORK DONE, not a default minimum
+- Empty or nearly empty = score in the 0-30 range
+
+YOU MUST APPLY THESE CAPS. If a student skipped 2 written sections, their score CANNOT be above 79 even if their fill-in-the-blanks were perfect.
+
+The LOWEST cap wins. Example: AI "likely" (cap 50) + 6 sections skipped (cap 39) = final cap is 39."""
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -755,135 +888,7 @@ ASSIGNMENT TEMPLATE (The questions/prompts the student was asked to answer):
     grading_style_instructions = _grading_style_instructions(grading_style)
 
     # Build authenticity/detection section — per-section FITB awareness
-    if is_fitb and not custom_markers:
-        # Pure FITB (no markers) — skip all detection
-        fitb_authenticity_section = f"""AUTHENTICITY CHECKS - FILL-IN-THE-BLANK EXEMPTION:
-This is a fill-in-the-blank assignment. Students are expected to write short factual answers (names, dates, places, vocabulary terms).
-These answers will naturally match textbook/source material — that is the CORRECT behavior, NOT plagiarism or AI use.
-DO NOT flag any answers for AI use or plagiarism. Set ai_detection to "none" and plagiarism_detection to "none".
-Focus ONLY on whether the answers are factually correct and complete.
-
-HARD CAPS FOR INCOMPLETE WORK (MANDATORY - each skipped section = one letter grade drop):
-Count the number of skipped/unanswered blanks or sections:
-- 0 skipped = eligible for A (up to 100)
-- 1 skipped = MAXIMUM 89 (B) - NO EXCEPTIONS
-- 2 skipped = MAXIMUM 79 (C) - NO EXCEPTIONS
-- 3 skipped = MAXIMUM 69 (D) - NO EXCEPTIONS
-- 4+ skipped = MAXIMUM 59 (F)
-- 5+ skipped = MAXIMUM 49 (F)
-- 6+ skipped = MAXIMUM 39 (F)
-
-NEARLY BLANK SUBMISSIONS - Score based on effort shown:
-- If student answered only 1-2 blanks out of 5+ = score 10-25 (F)
-- If student answered only 3-4 blanks out of 10+ = score 25-40 (F)
-- Empty or nearly empty = score in the 0-30 range"""
-    else:
-        # Full detection — with FITB exemption note for hybrid assignments
-        fitb_exemption_note = ""
-        if is_fitb:
-            fitb_exemption_note = """IMPORTANT - FILL-IN-THE-BLANK EXEMPTION:
-This assignment contains fill-in-the-blank sections mixed with written response sections.
-Fill-in-the-blank answers (short factual responses like names, dates, places, vocabulary terms) are EXEMPT from AI/plagiarism detection.
-These answers are EXPECTED to match textbook/source material — that is correct behavior, NOT cheating.
-ONLY apply AI/plagiarism checks to WRITTEN responses (paragraphs, reflections, summaries, explanations).
-Do NOT use fill-in-the-blank answers as evidence of AI use or plagiarism.
-
-"""
-        fitb_authenticity_section = f"""{fitb_exemption_note}CRITICAL - AUTHENTICITY CHECKS (YOU MUST CHECK THIS CAREFULLY!):
-
-1. AI DETECTION - Compare the student's simple answers to their written paragraphs:
-STEP 1: Look at their short answers (fill-in-blanks, one-word responses). Note the vocabulary level.
-STEP 2: Look at their paragraph responses. Compare the vocabulary and complexity.
-STEP 3: If there's a MISMATCH (simple short answers but sophisticated paragraphs), flag as "likely" AI.
-
-AUTOMATIC "likely" AI FLAGS - if you see ANY of these phrases, it's 100% AI:
-- "transformed the nation into a continental power"
-- "transforming a limited mission"
-- "historic deal that doubled"
-- "fueling westward expansion"
-- "triggered intense political debates"
-- "spurred exploration"
-- "fundamentally altered the trajectory"
-- "establishing the precedent for"
-- "constitutional questions regarding federal authority"
-- "resonate through subsequent decades"
-- "vital for trade and growth"
-- "securing vital trade routes"
-- "manifest destiny"
-- "territorial expansion"
-- "abundant natural resources"
-- Any phrase starting with "Transforming...", "Establishing...", "Securing..."
-- Any phrase a {age_range} year old would NEVER write
-
-CRITICAL CONTRAST CHECK - THIS IS THE MOST IMPORTANT CHECK:
-Look at the student's spelling and grammar in simple answers. If they write:
-- Misspellings like "Tomas Jefferson", "the u's", "france" (lowercase)
-- Simple phrases like "It doubled in size", "idk"
-- Basic vocabulary and short sentences
-
-BUT THEN write sophisticated phrases like:
-- "Transforming a limited mission to buy New Orleans into a historic deal"
-- Any sentence with words like "vital", "securing", "expanding", "historic deal"
-
-That is 100% AI or copied - flag as "likely" IMMEDIATELY. A student who misspells "Thomas" does NOT write "transforming a limited mission into a historic deal."
-
-Real grade {grade_level} students write: "it made the US bigger", "they needed the river for boats", "so ships could go there"
-AI writes: "it transformed the nation into a continental power", "securing vital trade routes"
-
-OBVIOUS COPY-PASTE DEFINITIONS (flag as PLAGIARISM "likely" IMMEDIATELY):
-- "exclusive possession or control of the supply of or trade in a commodity or service" = Google definition of monopoly
-- "an ideology emphasizing intense loyalty to one's nation" = textbook definition
-- "government-provided financial incentives" = too sophisticated
-- "implementing three interconnected policies" = not student language
-- "authority not explicitly stated in the U.S. Constitution but deemed necessary" = textbook definition of implied powers
-- ANY definition that sounds like it was copied from a dictionary or Wikipedia = PLAGIARISM
-
-A real {age_range} year old defines monopoly as: "when one company controls everything" or "only one person sells something"
-NOT: "exclusive possession or control of the supply of or trade in a commodity or service"
-
-2. PLAGIARISM DETECTION - Look for:
-- SUDDEN SHIFTS in writing quality (simple answers + sophisticated paragraphs = copied/AI)
-- Textbook-perfect definitions that don't match the student's other answers
-- Phrases that sound memorized or copied verbatim
-- Statistics or specific numbers not in the reading (like "828,000 square miles")
-- DICTIONARY DEFINITIONS - If a vocabulary definition sounds like it was copied from Google/dictionary (e.g., "exclusive possession or control of the supply of or trade in a commodity or service" for monopoly), flag as PLAGIARISM "likely"
-- SOPHISTICATED VOCABULARY MISMATCH - Words like "ideology", "emphasizing", "fostering", "interconnected", "implementing" are NOT how grade {grade_level} students write definitions
-- FRAGMENT ANSWERS that are clearly pasted (no complete sentence, just a definition dump)
-- If student writes simple answers for some questions but sophisticated definitions for vocabulary = COPY/PASTE from Google
-
-HARD CAPS FOR AI USE / PLAGIARISM (apply FIRST, before other caps):
-- AI flag "likely" = MAX score is 50 (F) - this is cheating
-- AI flag "possible" = MAX score is 65 (D) - suspicious, needs verification
-- Plagiarism flag "likely" = MAX score is 50 (F) - this is cheating
-- Plagiarism flag "possible" = MAX score is 65 (D) - suspicious
-- If BOTH AI and plagiarism are flagged = MAX score is 40 (F)
-
-In feedback for AI/plagiarism flags:
-- Clearly state the work appears to be AI-generated or copied
-- Explain that academic integrity is important
-- Recommend the student redo the assignment in their own words
-- Note this will be reviewed by the teacher
-
-THEN apply HARD CAPS FOR INCOMPLETE WORK (MANDATORY - each skipped section = one letter grade drop):
-Count the number of skipped/unanswered written sections (Student Task, Reflection, Explain, etc.):
-- 0 skipped = eligible for A (up to 100)
-- 1 skipped = MAXIMUM 89 (B) - NO EXCEPTIONS
-- 2 skipped = MAXIMUM 79 (C) - NO EXCEPTIONS
-- 3 skipped = MAXIMUM 69 (D) - NO EXCEPTIONS
-- 4+ skipped = MAXIMUM 59 (F)
-- 5+ skipped = MAXIMUM 49 (F)
-- 6+ skipped = MAXIMUM 39 (F)
-
-NEARLY BLANK SUBMISSIONS - Score based on effort shown:
-- If student answered only 1-2 questions out of 5+ = score 10-25 (F)
-- If student answered only 3-4 questions out of 10+ = score 25-40 (F)
-- A single poor answer like "idk" or "going again" does NOT earn 50 points
-- The score should reflect ACTUAL WORK DONE, not a default minimum
-- Empty or nearly empty = score in the 0-30 range
-
-YOU MUST APPLY THESE CAPS. If a student skipped 2 written sections, their score CANNOT be above 79 even if their fill-in-the-blanks were perfect.
-
-The LOWEST cap wins. Example: AI "likely" (cap 50) + 6 sections skipped (cap 39) = final cap is 39."""
+    fitb_authenticity_section = _authenticity_section(is_fitb, custom_markers, age_range, grade_level)
 
     # Load ELL designation for this student (teacher-controlled bilingual feedback)
     ell_language = None
