@@ -493,6 +493,152 @@ YOU MUST APPLY THESE CAPS. If a student skipped 2 written sections, their score 
 The LOWEST cap wins. Example: AI "likely" (cap 50) + 6 sections skipped (cap 39) = final cap is 39."""
 
 
+def _build_grading_prompt(
+    *,
+    age_range,
+    grade_level,
+    subject,
+    grading_style,
+    accommodation_context,
+    assignment_template_section,
+    custom_section,
+    effective_rubric,
+    ell_instruction,
+    extracted_responses_section,
+    extraction_instructions,
+    fitb_authenticity_section,
+    grading_style_instructions,
+    history_context,
+    section_rubric,
+    teacher_override_section,
+    writing_style_context,
+) -> str:
+    """Assemble the single-pass grade_assignment prompt from its prepared sections.
+    Extracted verbatim (Wave 8) — guarded by the prompt-snapshot net (the f-string body is
+    byte-identical). ASSIGNMENT_INSTRUCTIONS is a module-level constant."""
+    return f"""
+{effective_rubric}
+
+{section_rubric}
+
+{ASSIGNMENT_INSTRUCTIONS}
+{custom_section}
+{grading_style_instructions}
+{accommodation_context}
+{history_context}
+{writing_style_context}
+{assignment_template_section}
+---
+
+STUDENT CONTEXT:
+- Grade Level: {grade_level}
+- Subject: {subject}
+- Expected Age Range: {age_range} years old
+
+{extracted_responses_section}
+
+{extraction_instructions}
+
+IMPORTANT: Assess ALL sections that appear in the EXTRACTED RESPONSES, UNANSWERED QUESTIONS, and MISSING SECTIONS above.
+If a section appears in MISSING SECTIONS, the student entirely omitted a required part of the assignment — penalize accordingly.
+If a section appears in UNANSWERED QUESTIONS, the student left a required section blank — penalize accordingly.
+Only the extracted/marked sections, unanswered questions, and missing sections count toward the grade.
+
+Your "student_responses" field MUST contain ONLY the raw answer text from each "STUDENT ANSWER:" line above.
+Do NOT include question numbers, section names, or labels like "[1] Summary:" - just the student's actual written text.
+Example: If the verified response shows 'STUDENT ANSWER: "The treaty was signed in 1803"', your student_responses should contain "The treaty was signed in 1803" - not "Summary: The treaty was signed in 1803".
+If no responses were extracted, the student gets a 0.
+
+For MATCHING exercises specifically:
+- Look for numbers placed next to vocabulary terms in the extracted responses
+- The number indicates which definition the student chose
+- Grade whether they matched correctly
+
+GRADING GUIDELINES:
+- Assess EVERY answer the student provided.
+- For fill-in-the-blank: check if the answer is factually correct or close enough.
+- Accept multiple valid answers and synonyms.
+- DO NOT penalize spelling mistakes if the meaning is clear.
+- Be age-appropriate - these are grade {grade_level} students ({age_range} years old).
+- IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
+
+CRITICAL - COMPLETENESS REQUIREMENTS:
+- Check the EXTRACTED RESPONSES, UNANSWERED QUESTIONS, and MISSING SECTIONS lists above.
+- MISSING SECTIONS are sections the teacher REQUIRED but the student ENTIRELY OMITTED from their submission.
+  Each missing section must be treated the SAME as a skipped section — it lowers the grade by one full letter.
+- UNANSWERED QUESTIONS are sections the student included but left blank — also penalize.
+- IMPORTANT: Individual vocabulary terms or bullet points WITHIN a section that HAS a student answer are NOT unanswered questions. Only count items explicitly listed in the UNANSWERED QUESTIONS section above.
+- For the sections that WERE extracted, check if the student answered them adequately, especially:
+  * "Explain in your own words" sections - these require written responses, not blank
+  * "Reflection" or "Final Reflection" questions - these MUST be answered
+  * "Student Task" sections - these are major components requiring written responses
+  * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
+  * Summary sections
+  * Primary source analysis tasks
+- Skipping or omitting written sections shows AVOIDANCE OF EFFORT and must be penalized!
+- Count total skipped = UNANSWERED QUESTIONS + MISSING SECTIONS.
+{f"""- LENIENT PENALTY SCALE (teacher selected lenient grading):
+  * 0 sections skipped/missing = eligible for A (90-100)
+  * 1 section skipped/missing = eligible for A/B (85-95) - minor deduction only
+  * 2 sections skipped/missing = maximum B (80-89)
+  * 3 sections skipped/missing = maximum C (70-79)
+  * 4+ sections skipped/missing = maximum D (60-69)
+  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
+- Students who attempt most sections with genuine effort should receive at minimum a C (70+).
+- An "A" grade (90+) is possible if ALL answered sections show genuine effort and understanding.""" if grading_style == 'lenient' else f"""- STRICT PENALTY SCALE (teacher selected strict grading):
+  * 0 sections skipped/missing = eligible for A (90-100)
+  * 1 section skipped/missing = maximum B- (80-85) - dropped one letter
+  * 2 sections skipped/missing = maximum C (70-75) - dropped two letters
+  * 3 sections skipped/missing = maximum D (60-65) - dropped three letters
+  * 4+ sections skipped/missing = F (below 60) - shows no effort
+  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
+- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum D (65)
+- An "A" grade (90+) is ONLY possible if ALL sections are completed with thorough, well-developed responses.""" if grading_style == 'strict' else """- STANDARD PENALTY SCALE:
+  * 0 sections skipped/missing = eligible for A (90-100)
+  * 1 section skipped/missing = maximum B (80-89) - dropped one letter
+  * 2 sections skipped/missing = maximum C (70-79) - dropped two letters
+  * 3 sections skipped/missing = maximum D (60-69) - dropped three letters
+  * 4+ sections skipped/missing = F (below 60) - shows no effort on written work
+  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
+- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum C (75)
+- An "A" grade (90+) is ONLY possible if ALL sections are completed with quality responses."""}
+- This applies to ALL assignments - skipping reflections, explanations, or analysis tasks is unacceptable
+- In the "unanswered_questions" field, ONLY list items from the UNANSWERED QUESTIONS and MISSING SECTIONS lists above — do NOT invent new unanswered items from individual vocab terms or bullet points within answered sections
+
+{fitb_authenticity_section}
+{teacher_override_section}
+Provide your response in the following JSON format ONLY (no other text):
+{{
+    "score": <FIRST calculate raw score, THEN apply the caps above. If 2 sections skipped, max is 79>,
+    "letter_grade": "<A, B, C, D, or F - must match the capped score>",
+    "breakdown": {{
+        "content_accuracy": <points out of 40 - correctness of answers>,
+        "completeness": <points out of 25 - ALL sections must be attempted. MISSING SECTIONS and UNANSWERED QUESTIONS both count as skipped. Written responses (reflections, explanations, Student Tasks) count heavily! 0-5 if 2+ major sections skipped/missing, 6-12 if 1 major section skipped/missing, 13-20 if minor gaps only, 21-25 only if ALL parts fully completed>,
+        "writing_quality": <points out of 20>,
+        "effort_engagement": <points out of 15>
+    }},
+    "student_responses": ["<EXTRACT ONLY the actual answer text that appears after 'STUDENT ANSWER:' in the verified responses above. Do NOT include the question/section name, number, or label. WRONG: 'Summary: The treaty was...' or '[1] Summary: The treaty...' - RIGHT: 'The treaty was signed in 1803 and...' - just the raw answer text the student wrote>"],
+    "unanswered_questions": ["<ONLY list sections/questions from the UNANSWERED QUESTIONS and MISSING SECTIONS lists above. Do NOT list individual vocab terms or bullet points that appear WITHIN a section the student completed — those are part of the student's response, not separate unanswered questions. If a section has a STUDENT ANSWER with content, it is NOT unanswered even if individual terms within it seem brief.>"],
+    "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
+    "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
+    "skills_demonstrated": {{
+        "strengths": ["<List 2-4 specific skills the student showed strength in. Go BEYOND the rubric categories - identify skills like: reading comprehension, critical thinking, source analysis, making connections, vocabulary usage, following directions, organization, creativity, historical thinking, cause-and-effect reasoning, comparing/contrasting, using evidence, drawing conclusions, summarizing, note-taking, attention to detail, etc. Only include skills clearly demonstrated in THIS assignment.>"],
+        "developing": ["<List 1-2 skills the student is still developing or struggled with. Same skill types as above. Be specific about what skill needs work based on their answers.>"]
+    }},
+    "ai_detection": {{
+        "flag": "<none, unlikely, possible, or likely>",
+        "confidence": <number 0-100 representing confidence in the assessment>,
+        "reason": "<Brief explanation if not 'none', otherwise empty string>"
+    }},
+    "plagiarism_detection": {{
+        "flag": "<none, possible, or likely>",
+        "reason": "<Brief explanation if not 'none', otherwise empty string>"
+    }},
+    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up! 8) IF STUDENT HISTORY IS PROVIDED ABOVE: Reference their progress! Mention streaks, acknowledge CONSISTENT SKILLS (e.g., 'Your reading comprehension continues to be a real strength!'), celebrate IMPROVING SKILLS (e.g., 'I notice your critical thinking is getting sharper - great progress!'), and gently encourage SKILLS TO DEVELOP (e.g., 'Keep working on making connections between ideas'). Connect current work to past achievements when relevant. 9) BILINGUAL FEEDBACK: {ell_instruction}>"
+}}
+"""
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -921,127 +1067,25 @@ FINAL AUTHORITY — TEACHER'S GRADING INSTRUCTIONS (repeated here because they o
 If the teacher says to accept general definitions, accept them. Do NOT contradict the teacher's instructions
 in your scoring or feedback. The teacher knows their students better than any rubric."""
 
-    prompt_text = f"""
-{effective_rubric}
-
-{section_rubric}
-
-{ASSIGNMENT_INSTRUCTIONS}
-{custom_section}
-{grading_style_instructions}
-{accommodation_context}
-{history_context}
-{writing_style_context}
-{assignment_template_section}
----
-
-STUDENT CONTEXT:
-- Grade Level: {grade_level}
-- Subject: {subject}
-- Expected Age Range: {age_range} years old
-
-{extracted_responses_section}
-
-{extraction_instructions}
-
-IMPORTANT: Assess ALL sections that appear in the EXTRACTED RESPONSES, UNANSWERED QUESTIONS, and MISSING SECTIONS above.
-If a section appears in MISSING SECTIONS, the student entirely omitted a required part of the assignment — penalize accordingly.
-If a section appears in UNANSWERED QUESTIONS, the student left a required section blank — penalize accordingly.
-Only the extracted/marked sections, unanswered questions, and missing sections count toward the grade.
-
-Your "student_responses" field MUST contain ONLY the raw answer text from each "STUDENT ANSWER:" line above.
-Do NOT include question numbers, section names, or labels like "[1] Summary:" - just the student's actual written text.
-Example: If the verified response shows 'STUDENT ANSWER: "The treaty was signed in 1803"', your student_responses should contain "The treaty was signed in 1803" - not "Summary: The treaty was signed in 1803".
-If no responses were extracted, the student gets a 0.
-
-For MATCHING exercises specifically:
-- Look for numbers placed next to vocabulary terms in the extracted responses
-- The number indicates which definition the student chose
-- Grade whether they matched correctly
-
-GRADING GUIDELINES:
-- Assess EVERY answer the student provided.
-- For fill-in-the-blank: check if the answer is factually correct or close enough.
-- Accept multiple valid answers and synonyms.
-- DO NOT penalize spelling mistakes if the meaning is clear.
-- Be age-appropriate - these are grade {grade_level} students ({age_range} years old).
-- IMPORTANT: If the teacher provided custom grading instructions above, follow them carefully.
-
-CRITICAL - COMPLETENESS REQUIREMENTS:
-- Check the EXTRACTED RESPONSES, UNANSWERED QUESTIONS, and MISSING SECTIONS lists above.
-- MISSING SECTIONS are sections the teacher REQUIRED but the student ENTIRELY OMITTED from their submission.
-  Each missing section must be treated the SAME as a skipped section — it lowers the grade by one full letter.
-- UNANSWERED QUESTIONS are sections the student included but left blank — also penalize.
-- IMPORTANT: Individual vocabulary terms or bullet points WITHIN a section that HAS a student answer are NOT unanswered questions. Only count items explicitly listed in the UNANSWERED QUESTIONS section above.
-- For the sections that WERE extracted, check if the student answered them adequately, especially:
-  * "Explain in your own words" sections - these require written responses, not blank
-  * "Reflection" or "Final Reflection" questions - these MUST be answered
-  * "Student Task" sections - these are major components requiring written responses
-  * Any prompt asking students to "Write a few sentences" or "Describe" or "Explain"
-  * Summary sections
-  * Primary source analysis tasks
-- Skipping or omitting written sections shows AVOIDANCE OF EFFORT and must be penalized!
-- Count total skipped = UNANSWERED QUESTIONS + MISSING SECTIONS.
-{f"""- LENIENT PENALTY SCALE (teacher selected lenient grading):
-  * 0 sections skipped/missing = eligible for A (90-100)
-  * 1 section skipped/missing = eligible for A/B (85-95) - minor deduction only
-  * 2 sections skipped/missing = maximum B (80-89)
-  * 3 sections skipped/missing = maximum C (70-79)
-  * 4+ sections skipped/missing = maximum D (60-69)
-  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
-- Students who attempt most sections with genuine effort should receive at minimum a C (70+).
-- An "A" grade (90+) is possible if ALL answered sections show genuine effort and understanding.""" if grading_style == 'lenient' else f"""- STRICT PENALTY SCALE (teacher selected strict grading):
-  * 0 sections skipped/missing = eligible for A (90-100)
-  * 1 section skipped/missing = maximum B- (80-85) - dropped one letter
-  * 2 sections skipped/missing = maximum C (70-75) - dropped two letters
-  * 3 sections skipped/missing = maximum D (60-65) - dropped three letters
-  * 4+ sections skipped/missing = F (below 60) - shows no effort
-  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
-- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum D (65)
-- An "A" grade (90+) is ONLY possible if ALL sections are completed with thorough, well-developed responses.""" if grading_style == 'strict' else """- STANDARD PENALTY SCALE:
-  * 0 sections skipped/missing = eligible for A (90-100)
-  * 1 section skipped/missing = maximum B (80-89) - dropped one letter
-  * 2 sections skipped/missing = maximum C (70-79) - dropped two letters
-  * 3 sections skipped/missing = maximum D (60-69) - dropped three letters
-  * 4+ sections skipped/missing = F (below 60) - shows no effort on written work
-  * ALL or nearly all sections blank = 0 (INCOMPLETE) - student did not attempt the assignment
-- Students who ONLY do fill-in-the-blanks and skip ALL written responses = maximum C (75)
-- An "A" grade (90+) is ONLY possible if ALL sections are completed with quality responses."""}
-- This applies to ALL assignments - skipping reflections, explanations, or analysis tasks is unacceptable
-- In the "unanswered_questions" field, ONLY list items from the UNANSWERED QUESTIONS and MISSING SECTIONS lists above — do NOT invent new unanswered items from individual vocab terms or bullet points within answered sections
-
-{fitb_authenticity_section}
-{teacher_override_section}
-Provide your response in the following JSON format ONLY (no other text):
-{{
-    "score": <FIRST calculate raw score, THEN apply the caps above. If 2 sections skipped, max is 79>,
-    "letter_grade": "<A, B, C, D, or F - must match the capped score>",
-    "breakdown": {{
-        "content_accuracy": <points out of 40 - correctness of answers>,
-        "completeness": <points out of 25 - ALL sections must be attempted. MISSING SECTIONS and UNANSWERED QUESTIONS both count as skipped. Written responses (reflections, explanations, Student Tasks) count heavily! 0-5 if 2+ major sections skipped/missing, 6-12 if 1 major section skipped/missing, 13-20 if minor gaps only, 21-25 only if ALL parts fully completed>,
-        "writing_quality": <points out of 20>,
-        "effort_engagement": <points out of 15>
-    }},
-    "student_responses": ["<EXTRACT ONLY the actual answer text that appears after 'STUDENT ANSWER:' in the verified responses above. Do NOT include the question/section name, number, or label. WRONG: 'Summary: The treaty was...' or '[1] Summary: The treaty...' - RIGHT: 'The treaty was signed in 1803 and...' - just the raw answer text the student wrote>"],
-    "unanswered_questions": ["<ONLY list sections/questions from the UNANSWERED QUESTIONS and MISSING SECTIONS lists above. Do NOT list individual vocab terms or bullet points that appear WITHIN a section the student completed — those are part of the student's response, not separate unanswered questions. If a section has a STUDENT ANSWER with content, it is NOT unanswered even if individual terms within it seem brief.>"],
-    "excellent_answers": ["<Quote 2-4 specific answers that were particularly strong, accurate, or showed great understanding. Include the exact text the student wrote.>"],
-    "needs_improvement": ["<Quote 1-3 specific answers that were incorrect or incomplete, along with what the correct/better answer would be. Format: 'You wrote [X] but [correct info]' or 'For the question about [topic], [guidance]'>"],
-    "skills_demonstrated": {{
-        "strengths": ["<List 2-4 specific skills the student showed strength in. Go BEYOND the rubric categories - identify skills like: reading comprehension, critical thinking, source analysis, making connections, vocabulary usage, following directions, organization, creativity, historical thinking, cause-and-effect reasoning, comparing/contrasting, using evidence, drawing conclusions, summarizing, note-taking, attention to detail, etc. Only include skills clearly demonstrated in THIS assignment.>"],
-        "developing": ["<List 1-2 skills the student is still developing or struggled with. Same skill types as above. Be specific about what skill needs work based on their answers.>"]
-    }},
-    "ai_detection": {{
-        "flag": "<none, unlikely, possible, or likely>",
-        "confidence": <number 0-100 representing confidence in the assessment>,
-        "reason": "<Brief explanation if not 'none', otherwise empty string>"
-    }},
-    "plagiarism_detection": {{
-        "flag": "<none, possible, or likely>",
-        "reason": "<Brief explanation if not 'none', otherwise empty string>"
-    }},
-    "feedback": "<Write 3-4 paragraphs of thorough, personalized feedback that sounds like a real teacher wrote it - warm, encouraging, and specific. IMPORTANT GUIDELINES: 1) VARY your sentence structure and openings - don't start every sentence the same way. Mix short punchy sentences with longer ones. 2) QUOTE specific answers from the student's work when praising them (e.g., 'I loved how you explained that [quote their answer]' or 'Your answer about [topic] - '[their exact words]' - shows real understanding'). 3) When mentioning areas to improve, be gentle and constructive - reference specific questions they struggled with and give them a hint or the right direction. 4) Sound HUMAN - use contractions (you're, that's, I'm), occasional casual phrases ('Nice!', 'Great thinking here'), and vary your enthusiasm. 5) End with genuine encouragement that connects to something specific they did well. 6) Do NOT use the student's name - say 'you' or 'your'. 7) Avoid repetitive phrases like 'Great job!' at the start of every paragraph - mix it up! 8) IF STUDENT HISTORY IS PROVIDED ABOVE: Reference their progress! Mention streaks, acknowledge CONSISTENT SKILLS (e.g., 'Your reading comprehension continues to be a real strength!'), celebrate IMPROVING SKILLS (e.g., 'I notice your critical thinking is getting sharper - great progress!'), and gently encourage SKILLS TO DEVELOP (e.g., 'Keep working on making connections between ideas'). Connect current work to past achievements when relevant. 9) BILINGUAL FEEDBACK: {ell_instruction}>"
-}}
-"""
+    prompt_text = _build_grading_prompt(
+        age_range=age_range,
+        grade_level=grade_level,
+        subject=subject,
+        grading_style=grading_style,
+        accommodation_context=accommodation_context,
+        assignment_template_section=assignment_template_section,
+        custom_section=custom_section,
+        effective_rubric=effective_rubric,
+        ell_instruction=ell_instruction,
+        extracted_responses_section=extracted_responses_section,
+        extraction_instructions=extraction_instructions,
+        fitb_authenticity_section=fitb_authenticity_section,
+        grading_style_instructions=grading_style_instructions,
+        history_context=history_context,
+        section_rubric=section_rubric,
+        teacher_override_section=teacher_override_section,
+        writing_style_context=writing_style_context,
+    )
 
     _logger.info(f"  🤖 Grading with AI...")
 
