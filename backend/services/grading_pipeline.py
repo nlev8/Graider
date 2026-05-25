@@ -296,6 +296,70 @@ def _strip_markdown_fences(text: str) -> str:
     return text.strip()
 
 
+def _grading_style_instructions(grading_style: str) -> str:
+    """Single-pass grading-style guidance block for the grade_assignment prompt."""
+    if grading_style == 'lenient':
+        return """
+GRADING APPROACH: LENIENT
+- Prioritize EFFORT over perfection. If a student attempted a section, they deserve significant credit.
+- Brief answers that show understanding should receive 70-80% credit even if not fully developed.
+- Do NOT penalize short answers if they demonstrate the student understood the material.
+- A student who attempts ALL sections with genuine effort should receive at minimum a B (80+).
+- Writing quality expectations should be relaxed - focus on content understanding, not eloquence.
+- One-sentence answers to open-ended questions are acceptable if they show comprehension.
+- Reserve grades below C only for students who clearly did not try or left sections truly blank/missing.
+"""
+    elif grading_style == 'strict':
+        return """
+GRADING APPROACH: STRICT
+- Hold students to high standards for their grade level.
+- Brief, underdeveloped answers to open-ended questions should be penalized.
+- Writing quality matters - expect complete sentences and proper grammar.
+- Full credit requires thorough, well-developed responses that demonstrate deep understanding.
+- Partial answers receive proportionally reduced credit.
+"""
+    else:
+        return """
+GRADING APPROACH: STANDARD
+- Balance accuracy, completeness, writing quality, and effort evenly per the rubric.
+- Brief answers should receive partial credit proportional to their quality.
+- Students should be encouraged but held to grade-level expectations.
+"""
+
+
+def _extraction_mode_instructions(extraction_mode: str) -> str:
+    """Extraction-mode guidance block for the grade_assignment prompt."""
+    if extraction_mode == 'ai':
+        return """
+CRITICAL - AI EXTRACTION MODE:
+The content above contains RAW section content that includes BOTH prompts/questions AND student responses.
+YOUR JOB is to identify what is a prompt/question vs what the student actually wrote.
+
+IDENTIFYING STUDENT RESPONSES:
+- Questions end with "?" - anything AFTER the "?" on the same line is the student's answer
+- Vocabulary format "Term:" - anything after the ":" is the student's definition
+- Prompts like "Write your answer:", "Explain...", etc. are instructions, not student content
+- Look for the actual student-written text, which is usually less formal and may have spelling errors
+- If a section has only a prompt with no student response, mark it as BLANK/UNANSWERED
+
+For example:
+- "1. What year was the Louisiana Purchase? 1803" → Student answer is "1803"
+- "Antebellum: the period before the war" → Student answer is "the period before the war"
+- "Antebellum:" with nothing after → BLANK, student didn't answer
+- "Write your answer:" with nothing after → BLANK
+
+Be thorough in separating prompts from responses. Students often write answers on the same line as questions.
+"""
+    else:
+        return """
+CRITICAL - PRE-EXTRACTED RESPONSES:
+The student responses have been PRE-EXTRACTED from the document and listed above.
+DO NOT invent or hallucinate any responses that are not in the VERIFIED STUDENT RESPONSES section.
+ONLY grade the responses that were explicitly extracted and shown to you.
+If a question is listed as "UNANSWERED", it means the student left it blank - do not imagine an answer.
+"""
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -685,64 +749,10 @@ ASSIGNMENT TEMPLATE (The questions/prompts the student was asked to answer):
     effective_rubric = rubric_prompt if rubric_prompt else GRADING_RUBRIC
 
     # Build extraction mode-specific instructions
-    if extraction_mode == 'ai':
-        extraction_instructions = """
-CRITICAL - AI EXTRACTION MODE:
-The content above contains RAW section content that includes BOTH prompts/questions AND student responses.
-YOUR JOB is to identify what is a prompt/question vs what the student actually wrote.
-
-IDENTIFYING STUDENT RESPONSES:
-- Questions end with "?" - anything AFTER the "?" on the same line is the student's answer
-- Vocabulary format "Term:" - anything after the ":" is the student's definition
-- Prompts like "Write your answer:", "Explain...", etc. are instructions, not student content
-- Look for the actual student-written text, which is usually less formal and may have spelling errors
-- If a section has only a prompt with no student response, mark it as BLANK/UNANSWERED
-
-For example:
-- "1. What year was the Louisiana Purchase? 1803" → Student answer is "1803"
-- "Antebellum: the period before the war" → Student answer is "the period before the war"
-- "Antebellum:" with nothing after → BLANK, student didn't answer
-- "Write your answer:" with nothing after → BLANK
-
-Be thorough in separating prompts from responses. Students often write answers on the same line as questions.
-"""
-    else:
-        extraction_instructions = """
-CRITICAL - PRE-EXTRACTED RESPONSES:
-The student responses have been PRE-EXTRACTED from the document and listed above.
-DO NOT invent or hallucinate any responses that are not in the VERIFIED STUDENT RESPONSES section.
-ONLY grade the responses that were explicitly extracted and shown to you.
-If a question is listed as "UNANSWERED", it means the student left it blank - do not imagine an answer.
-"""
+    extraction_instructions = _extraction_mode_instructions(extraction_mode)
 
     # Build grading style instructions
-    if grading_style == 'lenient':
-        grading_style_instructions = """
-GRADING APPROACH: LENIENT
-- Prioritize EFFORT over perfection. If a student attempted a section, they deserve significant credit.
-- Brief answers that show understanding should receive 70-80% credit even if not fully developed.
-- Do NOT penalize short answers if they demonstrate the student understood the material.
-- A student who attempts ALL sections with genuine effort should receive at minimum a B (80+).
-- Writing quality expectations should be relaxed - focus on content understanding, not eloquence.
-- One-sentence answers to open-ended questions are acceptable if they show comprehension.
-- Reserve grades below C only for students who clearly did not try or left sections truly blank/missing.
-"""
-    elif grading_style == 'strict':
-        grading_style_instructions = """
-GRADING APPROACH: STRICT
-- Hold students to high standards for their grade level.
-- Brief, underdeveloped answers to open-ended questions should be penalized.
-- Writing quality matters - expect complete sentences and proper grammar.
-- Full credit requires thorough, well-developed responses that demonstrate deep understanding.
-- Partial answers receive proportionally reduced credit.
-"""
-    else:
-        grading_style_instructions = """
-GRADING APPROACH: STANDARD
-- Balance accuracy, completeness, writing quality, and effort evenly per the rubric.
-- Brief answers should receive partial credit proportional to their quality.
-- Students should be encouraged but held to grade-level expectations.
-"""
+    grading_style_instructions = _grading_style_instructions(grading_style)
 
     # Build authenticity/detection section — per-section FITB awareness
     if is_fitb and not custom_markers:
