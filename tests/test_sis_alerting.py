@@ -107,8 +107,12 @@ SIS_CAPTURES = [
     # removing _sanitize_for_audit + _NON_PRINTABLE_RE + `import re` (Codex
     # gate review found logging raw/truncated state values leaks auth secrets;
     # presence-boolean logging replaces it). Pins track the except blocks.
-    ("backend/routes/classlink_routes.py", 106),
-    ("backend/routes/classlink_routes.py", 165),
+    # 2026-05-25 (PR #582, ClassLink SSO certification-readiness): the pin at
+    # 106 tracked `_link_classlink_account`'s except — that function (email
+    # auto-linking) was DELETED for tenant-scoped identity, so its pin is
+    # removed (no catch left to protect). The surviving `_trigger_roster_sync`
+    # `_bg_sync` capture shifted 165 -> 143 as the file shrank (~52 lines).
+    ("backend/routes/classlink_routes.py", 143),
     ("backend/routes/oneroster_routes.py", 157),
     ("backend/routes/oneroster_routes.py", 204),
     ("backend/routes/oneroster_routes.py", 218),
