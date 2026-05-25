@@ -76,6 +76,10 @@ class FeedbackResponse(BaseModel):
     skills_demonstrated: SkillsDemonstrated
 
 
+# Assignment name (used in output files and emails)
+ASSIGNMENT_NAME = ""  # Set dynamically from assignment config; empty = use filename
+
+
 # =============================================================================
 # TOKEN / COST TRACKING
 # =============================================================================
