@@ -82,6 +82,13 @@ jobs:
       - name: Build
         run: cd frontend && npm run build
 
+      - name: Verify committed frontend bundle is current
+        run: |
+          if ! git diff --exit-code -- backend/static; then
+            echo "::error::backend/static is stale: a fresh Vite build changed the committed bundle. The deploy serves backend/static directly (no build at deploy), so run 'cd frontend && npm run build' (Node per .nvmrc) and commit backend/static, then push."
+            exit 1
+          fi
+
   frontend-e2e-smoke:
     # Closes audit MAJOR #5 Phase 1 of GH issue #217 (Codex full-codebase
     # audit 2026-05-06): runs the Playwright health-check spec against a
