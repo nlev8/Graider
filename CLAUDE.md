@@ -667,6 +667,19 @@ Be honest about what you actually tried and what failed. **Do NOT sanitize the f
 
 `handoff.md` is committable when the handoff itself is documentation of an open investigation (e.g., what shipped tonight at audit MAJOR #5 Stage 3a). Default: leave uncommitted unless it serves as artifact.
 
+### 13. Review Gates Before Auto-Merge (class the PR first)
+
+Classify every PR **before opening it**, because the class determines whether auto-merge-on-green is safe:
+
+- **Class A — behavior-preserving refactor:** the golden net (results) + prompt-snapshot net (wording) + AST byte-identity vs `main` *prove* behavior is unchanged. Green CI ≈ provably correct → squash-auto-merge on green is earned and fine.
+- **Class B — net-new behavior, OR anything compliance / security / FERPA:** green CI only covers the cases you imagined to test. A code review is a **HARD pre-gate**, not a concurrent advisory.
+
+For Class B the sequence is strict and removes the race structurally: **create PR → review → fix to clean → THEN merge.** Do NOT call `gh pr merge --auto` with a review in flight; for Class B, merge **manually** after the review returns clean. Never let a review run *alongside* an armed auto-merge — it can only catch issues after the merge has already fired.
+
+The tell that forces the classification: **"am I adding logic, or just moving it?"** Adding/changing logic (especially regexes, scoring, redaction, auth) ⇒ Class B ⇒ review gates the merge. Moving code verbatim ⇒ Class A ⇒ nets gate the merge.
+
+> Origin: 2026-05-24, PR #565 (FERPA prompt sanitization). Auto-merge was armed *concurrently* with the code review; the review caught a Critical over-redaction (common-word student names corrupting answers) but only *after* #565 had auto-merged on green. Fixed forward in #566. The error wasn't "no review" — it was that the review wasn't sequenced as a gate.
+
 ---
 
 ## Post-Processing Pipeline (planner_routes.py)
@@ -689,7 +702,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **Graider** (17586 symbols, 49463 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Graider** (19219 symbols, 48216 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
