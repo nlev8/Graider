@@ -1002,6 +1002,76 @@ def _load_ell_language(student_id):
     return ell_language
 
 
+def _finalize_grading_result(
+    result,
+    *,
+    original_text,
+    ell_language,
+    ai_model,
+    token_tracker,
+    student_name,
+    rubric_weights,
+    grading_style,
+    extraction_result,
+    student_id,
+    current_writing_style,
+    style_comparison,
+    extracted_responses_section,
+):
+    """Finalize a parsed grading result: newline-fix + strip bilingual sections, optional ELL
+    translation, single-pass post-processing (caps/weights), best-effort writing-profile update,
+    writing-style-deviation annotation, audit trail, and token usage. Returns the result dict.
+    Extracted verbatim from grade_assignment (Wave 8; 3-AI-agreed keyword-only contract)."""
+    feedback = result.get("feedback", "")
+    if "\\n" in feedback:
+        feedback = feedback.replace("\\n", "\n")
+        result["feedback"] = feedback
+
+    # Strip any accidental bilingual sections from grading response
+    if "\n---\n" in feedback:
+        feedback = feedback.split("\n---\n")[0].strip()
+        result["feedback"] = feedback
+
+    # Two-pass bilingual feedback: translate via separate dedicated API call
+    if ell_language and result.get("feedback"):
+        _logger.info(f"  🌐 Translating feedback to {ell_language}...")
+        translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker, student_name=student_name)
+        if translated:
+            result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
+            _logger.info(f"  ✅ Bilingual feedback added ({ell_language})")
+        else:
+            _logger.info(f"  ⚠️  Translation failed, feedback remains English only")
+
+    _apply_single_pass_post_processing(result, rubric_weights, grading_style, extraction_result)
+
+    # Update student's writing profile (only if not flagged as AI)
+    # This builds their baseline for future AI detection
+    if student_id and student_id != "UNKNOWN" and current_writing_style:
+        ai_flag = result.get("ai_detection", {}).get("flag", "none")
+        if ai_flag not in ["likely", "possible"]:
+            try:
+                update_writing_profile(student_id, current_writing_style, student_name)
+                _logger.info(f"  📊 Updated writing profile for {student_name}")
+            except Exception as e:
+                _logger.info(f"  Note: Could not update writing profile: {e}")
+
+    # Add style comparison info to result for transparency
+    if style_comparison and style_comparison.get("ai_likelihood") in ["likely", "possible"]:
+        result["writing_style_deviation"] = style_comparison
+
+    # Add audit trail data
+    result["_audit"] = {
+        "ai_input": extracted_responses_section,
+        "ai_response": original_text
+    }
+
+    # Add token usage tracking
+    if token_tracker:
+        result["token_usage"] = token_tracker.summary()
+
+    return result
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -1337,54 +1407,21 @@ in your scoring or feedback. The teacher knows their students better than any ru
                 raise json.JSONDecodeError("Failed to parse response", response_text, 0)
 
         # Post-processing: fix double-escaped newlines from some AI providers
-        feedback = result.get("feedback", "")
-        if "\\n" in feedback:
-            feedback = feedback.replace("\\n", "\n")
-            result["feedback"] = feedback
-
-        # Strip any accidental bilingual sections from grading response
-        if "\n---\n" in feedback:
-            feedback = feedback.split("\n---\n")[0].strip()
-            result["feedback"] = feedback
-
-        # Two-pass bilingual feedback: translate via separate dedicated API call
-        if ell_language and result.get("feedback"):
-            _logger.info(f"  🌐 Translating feedback to {ell_language}...")
-            translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker, student_name=student_name)
-            if translated:
-                result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
-                _logger.info(f"  ✅ Bilingual feedback added ({ell_language})")
-            else:
-                _logger.info(f"  ⚠️  Translation failed, feedback remains English only")
-
-        _apply_single_pass_post_processing(result, rubric_weights, grading_style, extraction_result)
-
-        # Update student's writing profile (only if not flagged as AI)
-        # This builds their baseline for future AI detection
-        if student_id and student_id != "UNKNOWN" and current_writing_style:
-            ai_flag = result.get("ai_detection", {}).get("flag", "none")
-            if ai_flag not in ["likely", "possible"]:
-                try:
-                    update_writing_profile(student_id, current_writing_style, student_name)
-                    _logger.info(f"  📊 Updated writing profile for {student_name}")
-                except Exception as e:
-                    _logger.info(f"  Note: Could not update writing profile: {e}")
-
-        # Add style comparison info to result for transparency
-        if style_comparison and style_comparison.get("ai_likelihood") in ["likely", "possible"]:
-            result["writing_style_deviation"] = style_comparison
-
-        # Add audit trail data
-        result["_audit"] = {
-            "ai_input": extracted_responses_section,
-            "ai_response": original_text
-        }
-
-        # Add token usage tracking
-        if token_tracker:
-            result["token_usage"] = token_tracker.summary()
-
-        return result
+        return _finalize_grading_result(
+            result,
+            original_text=original_text,
+            ell_language=ell_language,
+            ai_model=ai_model,
+            token_tracker=token_tracker,
+            student_name=student_name,
+            rubric_weights=rubric_weights,
+            grading_style=grading_style,
+            extraction_result=extraction_result,
+            student_id=student_id,
+            current_writing_style=current_writing_style,
+            style_comparison=style_comparison,
+            extracted_responses_section=extracted_responses_section,
+        )
 
     except json.JSONDecodeError as e:
         _logger.info(f"  ⚠️  Error parsing AI response: {e}")
