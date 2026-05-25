@@ -1035,3 +1035,34 @@ The deferred judgment step for **Wave 8** — splitting the two remaining gradin
 
 ## Honest note
 A genuine, earned half-step on the program's hardest target. Wave 8 took the `grade_assignment` god-function from 1,138 → 405 LOC (cumulative −64%) behind the SDK-fake golden net + a prompt-snapshot net, with **every slice AST-verified byte-identical** to its origin block — not "files moved," but behavior frozen and mechanically proven. Two independent models (Claude first-hand, Codex via shell) verified the live code and the green nets; Gemini corroborated on those facts. The reconciled 9.4 is conservative: the primary 9.5 lever is delivered, but the unanimous discipline does not credit the full 9.5 while a named co-requisite (the CLI/email split) is outstanding and `grade_multipass`'s tail is still concentrated. Overall ticks ~8.3 → ~8.4. This dated section records Wave 8 (PRs #568–#575).
+
+---
+
+# 2026-05-25 Post-CLI/email-split 3-Model Reconciled Re-Score — **Code Quality 9.4 → 9.5** (first 9.5 in the program)
+
+The deferred judgment step after completing the **CLI/email facade split** — the one named co-requisite the 9.4 re-score said was blocking the full step to 9.5. Codex 5.5 (high) and Claude verified the live code independently with their own shell commands; Gemini scored advisory (tool-less under `--skip-trust`). Conservative-floor reconciliation.
+
+| Model | Code Quality | Verification | Highest-leverage next step (→10) |
+|-------|--------------|--------------|----------------------------------|
+| Claude (first-hand) | 9.5 | facade 332 LOC / 0 inline funcs; shim identity; golden+snapshot green | provider adapters |
+| Codex 5.5 (high) | 9.5 | `rg "^def "` → 0 top-level funcs; golden `13 passed, 2 skipped`; verified each move's new home | provider adapters (extract OpenAI/Anthropic/Gemini exec + JSON-fallback/recovery from grade_assignment) |
+| Gemini (advisory) | 9.5 | scored on verified facts | unify LLM provider routing (polymorphic adapter) |
+| **Reconciled** | **9.4 → 9.5** | | **provider-adapter interface** |
+
+## Verdict: Code Quality 9.4 → 9.5. Overall ~8.4 → ~8.5. **First 9.5 in the program.**
+
+**Unanimous — the named blocker is closed.** The 9.4 re-score held the full step back *specifically* on the outstanding CLI/email split; it is now complete (PRs #577 pt.1, #578 pt.2a, #579 pt.2b).
+
+**Verified progress (all three, file:line):**
+- **`assignment_grader.py`: 658 → 332 LOC with ZERO top-level function definitions** — a pure re-export-shim layer (41 `# noqa: F401` shims) + the `__main__` CLI entry + user config + docstrings. The grading "god-file" anti-pattern is fully eliminated.
+- `run_grading` (206 LOC) + its 3 CLI path constants → new `backend/services/grader_cli.py` (247 LOC), **AST byte-identical verbatim** move (prints kept; T20-exempt CLI; one-way service imports, no cycle).
+- `save_emails_to_folder` + `create_outlook_drafts` → `grader_export.py`; `log_pii_sanitization` → `grader_text_prep.py`; `ASSIGNMENT_NAME` → `grading_models.py`. All re-exported from the facade so `backend/grading/pipeline.py` + the test route-callbacks keep resolving. Each move AST byte-identical (verbatim, or modulo the mechanical print→`_logger.info`).
+- Verified: shim identity holds (`g.fn is service.fn`); `ruff check backend/` clean; 2285 grading/routes/email/export tests pass; golden + prompt-snapshot nets unchanged.
+
+**Why 9.5 and not 10 (unanimous grounds):** concentration remains inside `grading_pipeline.py` (2,233 LOC): `grade_assignment` ~406 LOC and `grade_multipass` ~363 LOC each still own provider-specific execution (OpenAI/Anthropic/Gemini call + structured/text parse + JSON-fallback + error recovery). That is acceptable for 9.5 after the facade/CLI split, but not 10-level modularity.
+
+## Path beyond 9.5 → 10 (unanimous next lever)
+**Provider adapters behind one interface.** Extract the per-provider execution + response normalization (the OpenAI/Anthropic/Gemini switch-blocks + JSON-fallback/recovery) out of `grade_assignment`/`grade_per_question` into provider-specific grading adapters, so those functions become orchestration + policy/post-processing only. Then (from prior notes): typed request/result objects instead of wide dicts, retire the re-export shims (migrate internal callers to `backend.services.*`), and add live/contract SDK smoke tests behind markers.
+
+## Honest note
+A genuine, earned full step to the program's first 9.5. The CLI/email split took the grading facade from a 658-LOC god-file to a 332-LOC pure-shim layer with **zero inline logic**, completing the exact named co-requisite the 9.4 re-score recorded as the sole remaining blocker — `run_grading` moved AST byte-identical verbatim, the rest byte-identical modulo mechanical print→logger, all behind the green golden + prompt-snapshot nets. Two independent models (Claude first-hand, Codex via shell) verified the live state; Gemini corroborated. Reconciled 9.5 with unanimous agreement and the same next lever (provider adapters). Overall ~8.4 → ~8.5. This dated section closes the Wave-8 path-to-9.5 (PRs #568–#579).
