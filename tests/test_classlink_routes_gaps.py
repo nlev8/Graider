@@ -3,19 +3,15 @@
 Audit MAJOR #4 sprint follow-up to PR #294. Companion to existing
 test_classlink_oidc.py + test_classlink_sso.py + test_classlink_sso_
 contract.py which cover the OIDC discovery, login URL, callback
-happy/error paths, session, and logout. Targets the remaining 37
-uncovered LOC (82% baseline → ~100%):
+happy/error paths, session, and logout. Targets uncovered LOC:
 
-* _link_classlink_account — already-linked early return, no-sb/no-email
-  early return, single-match link path, multi-match warn skip,
-  outer except swallow + sentry capture
-* _resolve_classlink_user_id — exception fallback to classlink:{id}
 * _trigger_roster_sync._bg_sync — no OneRoster config skip; happy
   path that drives the inner asyncio loop + roster normalize +
   sync_roster_to_db; outer except swallow
 * Callback gaps: no access_token, token-exchange exception, iat
   in the future, iat >24h stale, userinfo non-200, userinfo
   exception
+* _classlink_guid + _extract_person_id helpers
 """
 from __future__ import annotations
 
@@ -66,163 +62,6 @@ def _mock_oidc_config():
     }
 
 
-# ──────────────────────────────────────────────────────────────────
-# _link_classlink_account
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestLinkClasslinkAccount:
-    def test_already_linked_returns_early(self):
-        # links dict already has classlink_id → no-op
-        existing_links = {"cl-123": "teacher-uuid-1"}
-        with patch(
-            "backend.storage.load",
-            return_value=existing_links,
-        ) as load_mock, patch(
-            "backend.storage.save",
-        ) as save_mock:
-            from backend.routes.classlink_routes import _link_classlink_account
-            _link_classlink_account("cl-123", "u@x.com")
-        # Save NOT called because we returned early
-        save_mock.assert_not_called()
-
-    def test_no_supabase_returns_early(self):
-        with patch(
-            "backend.storage.load", return_value={},
-        ), patch(
-            "backend.storage.save",
-        ) as save_mock, patch(
-            "backend.supabase_client.get_supabase",
-            return_value=None,
-        ):
-            from backend.routes.classlink_routes import _link_classlink_account
-            _link_classlink_account("cl-new", "u@x.com")
-        save_mock.assert_not_called()
-
-    def test_no_email_returns_early(self):
-        sb = MagicMock()
-        with patch(
-            "backend.storage.load", return_value={},
-        ), patch(
-            "backend.storage.save",
-        ) as save_mock, patch(
-            "backend.supabase_client.get_supabase",
-            return_value=sb,
-        ):
-            from backend.routes.classlink_routes import _link_classlink_account
-            _link_classlink_account("cl-new", "")
-        save_mock.assert_not_called()
-
-    def test_single_match_creates_link(self):
-        sb = MagicMock()
-        sb.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[{"teacher_id": "teacher-A"}],
-        )
-        save_mock = MagicMock()
-
-        # storage.load: first call for classlink_links → empty dict;
-        # subsequent calls for `settings` → return matching email config.
-        load_count = {"n": 0}
-
-        def load_side_effect(key, tid):
-            load_count["n"] += 1
-            if key == "classlink_links":
-                return {}
-            if key == "settings":
-                return {"email": "match@x.com"}
-            return None
-
-        with patch(
-            "backend.storage.load", side_effect=load_side_effect,
-        ), patch(
-            "backend.storage.save", save_mock,
-        ), patch(
-            "backend.supabase_client.get_supabase", return_value=sb,
-        ):
-            from backend.routes.classlink_routes import _link_classlink_account
-            _link_classlink_account("cl-newest", "MATCH@x.com")
-        # storage.save called with the link dict
-        save_mock.assert_called_once()
-        args = save_mock.call_args.args
-        assert args[0] == "classlink_links"
-        assert args[1] == {"cl-newest": "teacher-A"}
-        assert args[2] == "system"
-
-    def test_multi_match_logs_warning_no_link(self):
-        sb = MagicMock()
-        sb.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[
-                {"teacher_id": "teacher-A"},
-                {"teacher_id": "teacher-B"},
-            ],
-        )
-        save_mock = MagicMock()
-
-        def load_side_effect(key, tid):
-            if key == "classlink_links":
-                return {}
-            if key == "settings":
-                return {"email": "ambiguous@x.com"}
-            return None
-
-        with patch(
-            "backend.storage.load", side_effect=load_side_effect,
-        ), patch(
-            "backend.storage.save", save_mock,
-        ), patch(
-            "backend.supabase_client.get_supabase", return_value=sb,
-        ):
-            from backend.routes.classlink_routes import _link_classlink_account
-            _link_classlink_account("cl-amb", "ambiguous@x.com")
-        # No link saved (ambiguous → skip)
-        save_mock.assert_not_called()
-
-    def test_outer_exception_swallowed_with_sentry(self):
-        # Force `from backend.storage import load as storage_load` ImportError-
-        # adjacent failure by making load raise. The outer try/except logs +
-        # sentry-captures.
-        with patch(
-            "backend.storage.load",
-            side_effect=RuntimeError("storage down"),
-        ), patch(
-            "backend.routes.classlink_routes.sentry_sdk.capture_exception",
-        ) as sentry_mock:
-            from backend.routes.classlink_routes import _link_classlink_account
-            # Must not raise
-            _link_classlink_account("cl-x", "u@x.com")
-        assert sentry_mock.called
-
-
-# ──────────────────────────────────────────────────────────────────
-# _resolve_classlink_user_id
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestResolveClasslinkUserId:
-    def test_linked_returns_supabase_uuid(self):
-        with patch(
-            "backend.storage.load",
-            return_value={"cl-123": "teacher-uuid-1"},
-        ):
-            from backend.routes.classlink_routes import _resolve_classlink_user_id
-            assert _resolve_classlink_user_id("cl-123") == "teacher-uuid-1"
-
-    def test_unlinked_returns_classlink_prefix(self):
-        with patch(
-            "backend.storage.load",
-            return_value={},
-        ):
-            from backend.routes.classlink_routes import _resolve_classlink_user_id
-            assert _resolve_classlink_user_id("cl-X") == "classlink:cl-X"
-
-    def test_storage_exception_falls_back_to_prefix(self):
-        with patch(
-            "backend.storage.load",
-            side_effect=RuntimeError("storage down"),
-        ):
-            from backend.routes.classlink_routes import _resolve_classlink_user_id
-            # Falls back to classlink:{id} on exception
-            assert _resolve_classlink_user_id("cl-fallback") == "classlink:cl-fallback"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -559,3 +398,64 @@ class TestCallbackEdgeCases:
                 )
         assert resp.status_code == 302
         assert "classlink_error=userinfo_error" in resp.location
+
+
+# ──────────────────────────────────────────────────────────────────
+# _classlink_guid
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestClasslinkGuid:
+    def test_assembles_prefixed_composite(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        assert _classlink_guid("2284", "abc") == "classlink:2284:abc"
+
+    def test_encodes_colon_in_components_to_prevent_collision(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        # ("a:b","c") and ("a","b:c") must NOT collide
+        assert _classlink_guid("a:b", "c") == "classlink:a%3Ab:c"
+        assert _classlink_guid("a", "b:c") == "classlink:a:b%3Ac"
+        assert _classlink_guid("a:b", "c") != _classlink_guid("a", "b:c")
+
+    def test_returns_none_on_empty_component(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        assert _classlink_guid("", "abc") is None
+        assert _classlink_guid("2284", "") is None
+        assert _classlink_guid("  ", "abc") is None
+
+    def test_returns_none_on_none_component(self):
+        from backend.routes.classlink_routes import _classlink_guid
+        assert _classlink_guid(None, "abc") is None
+        assert _classlink_guid("2284", None) is None
+
+
+# ──────────────────────────────────────────────────────────────────
+# _extract_person_id
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestExtractPersonId:
+    def test_prefers_sourcedid(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"SourcedId": "s1", "UserId": "u1"}) == "s1"
+
+    def test_accepts_lowercase_sourcedid(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"sourcedId": "s2"}) == "s2"
+
+    def test_uppercase_sourcedid_wins_over_lowercase(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"SourcedId": "s1", "sourcedId": "s-lower"}) == "s1"
+
+    def test_falls_back_to_userid_and_warns(self, caplog):
+        import logging
+        from backend.routes.classlink_routes import _extract_person_id
+        with caplog.at_level(logging.WARNING, logger="backend.routes.classlink_routes"):
+            result = _extract_person_id({"UserId": "u1"})
+        assert result == "u1"
+        # The UserId fallback must NOT be silent (documented contract).
+        assert "UserId" in caplog.text
+
+    def test_none_when_no_person_field(self):
+        from backend.routes.classlink_routes import _extract_person_id
+        assert _extract_person_id({"Email": "x@y.z"}) is None

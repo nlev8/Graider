@@ -51,6 +51,102 @@ def _mock_oidc_config():
     }
 
 
+def _run_callback(client, priv, pub, userinfo, sub="cl-sub", nonce=None):
+    """Drive a LaunchPad-permissive callback (no initiated_by_us marker) with a
+    given userinfo body. Returns the Flask response."""
+    id_token = make_id_token(
+        priv, aud="test-client-id", sub=sub, nonce=nonce,
+        email=userinfo.get("Email", ""), given_name=userinfo.get("FirstName", ""),
+        family_name=userinfo.get("LastName", ""), role=userinfo.get("Role", "teacher"),
+    )
+    mock_token_resp = MagicMock(); mock_token_resp.status_code = 200
+    mock_token_resp.json.return_value = {"access_token": "tok", "id_token": id_token}
+    mock_user_resp = MagicMock(); mock_user_resp.status_code = 200
+    mock_user_resp.json.return_value = userinfo
+    with client.session_transaction() as sess:
+        sess['classlink_oauth_state'] = 'valid-state'
+    with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
+         patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
+         patch('backend.routes.classlink_routes.get_classlink_oidc_config', return_value=_mock_oidc_config()), \
+         patch('backend.routes.classlink_routes.get_classlink_jwks_client', return_value=_mock_jwks_client(pub)), \
+         patch('backend.routes.classlink_routes._trigger_roster_sync'):
+        return client.get('/api/classlink/callback?code=c&state=valid-state')
+
+
+class TestClassLinkTenantScopedIdentity:
+    BASE = {"FirstName": "A", "LastName": "B", "Email": "a@school.edu", "Role": "teacher"}
+
+    def test_teacher_guid_is_tenant_scoped(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = _run_callback(client, priv, pub,
+                                 {**self.BASE, "SourcedId": "p1", "TenantId": "dist-A"})
+            assert 'classlink_login=success' in resp.location
+            with client.session_transaction() as sess:
+                assert sess['classlink_user']['user_id'] == "classlink:dist-A:p1"
+
+    def test_same_person_different_tenants_distinct_guids(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as c1:
+            _run_callback(c1, priv, pub, {**self.BASE, "SourcedId": "same", "TenantId": "dist-A"})
+            with c1.session_transaction() as s1:
+                guid_a = s1['classlink_user']['user_id']
+        with app.test_client() as c2:
+            _run_callback(c2, priv, pub, {**self.BASE, "SourcedId": "same", "TenantId": "dist-B"})
+            with c2.session_transaction() as s2:
+                guid_b = s2['classlink_user']['user_id']
+        assert guid_a == "classlink:dist-A:same"
+        assert guid_b == "classlink:dist-B:same"
+        assert guid_a != guid_b
+
+    def test_missing_tenant_rejected_fail_closed(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = _run_callback(client, priv, pub, {**self.BASE, "SourcedId": "p1"})  # no TenantId
+            assert 'classlink_error=missing_tenant' in resp.location
+            with client.session_transaction() as sess:
+                assert 'classlink_user' not in sess
+
+    def test_missing_person_id_rejected_fail_closed(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = _run_callback(client, priv, pub, {**self.BASE, "TenantId": "dist-A"})  # no SourcedId/UserId
+            assert 'classlink_error=missing_identity' in resp.location
+            with client.session_transaction() as sess:
+                assert 'classlink_user' not in sess
+
+    def test_userinfo_sub_mismatch_rejected(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            # id_token sub = "cl-sub"; userinfo carries a conflicting sub
+            resp = _run_callback(client, priv, pub,
+                                 {**self.BASE, "SourcedId": "p1", "TenantId": "dist-A", "sub": "OTHER"})
+            assert 'classlink_error=identity_mismatch' in resp.location
+
+    def test_role_as_list_resolves_student(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = _run_callback(client, priv, pub,
+                                 {**self.BASE, "Role": ["student"], "SourcedId": "p1", "TenantId": "dist-A"})
+            assert '/student?classlink_login=success' in resp.location
+
+    def test_role_as_csv_string_takes_first(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = _run_callback(client, priv, pub,
+                                 {**self.BASE, "Role": "student,teacher", "SourcedId": "p1", "TenantId": "dist-A"})
+            # First role wins → student path
+            assert '/student?classlink_login=success' in resp.location
+
+    def test_student_path_gets_tenant_scoped_guid(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            _run_callback(client, priv, pub,
+                          {**self.BASE, "Role": "student", "SourcedId": "stu1", "TenantId": "dist-A"})
+            with client.session_transaction() as sess:
+                assert sess['classlink_student']['user_id'] == "classlink:dist-A:stu1"
+
+
 class TestClassLinkLoginURL:
     def test_returns_authorization_url(self):
         """Should return ClassLink OAuth authorization URL with state."""
@@ -114,6 +210,7 @@ class TestClassLinkCallback:
         mock_user_resp.status_code = 200
         mock_user_resp.json.return_value = {
             "UserId": "cl-user-123",
+            "SourcedId": "cl-user-123",
             "FirstName": "Jane",
             "LastName": "Smith",
             "Email": "jane.smith@school.edu",
@@ -131,7 +228,6 @@ class TestClassLinkCallback:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 resp = client.get('/api/classlink/callback?code=auth-code-123&state=valid-state')
 
@@ -224,7 +320,6 @@ class TestClassLinkCallback:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 resp = client.get('/api/classlink/callback?code=auth-code-123')
 
@@ -415,7 +510,6 @@ class TestClassLinkIdTokenValidation:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 resp = client.get('/api/classlink/callback?code=abc')
 
@@ -460,7 +554,6 @@ class TestClassLinkIdTokenValidation:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 resp = client.get('/api/classlink/callback?code=abc&state=xyz')
 
@@ -656,7 +749,6 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 resp = client.get("/api/classlink/callback?code=abc")
         assert resp.status_code == 302
@@ -709,7 +801,6 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
         assert resp.status_code == 302
@@ -775,7 +866,6 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 resp = client.get("/api/classlink/callback?code=abc&state=different-state")
         # Flow proceeds (LaunchPad permissive)
@@ -838,7 +928,6 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 second = client.get("/api/classlink/callback?code=real-code")
         assert "classlink_error=state_mismatch" in second.location
@@ -882,7 +971,6 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 retry = client.get("/api/classlink/callback?code=abc&state=expected-state")
         assert "classlink_login=success" in retry.location
@@ -996,9 +1084,61 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._link_classlink_account'), \
                  patch('backend.routes.classlink_routes._trigger_roster_sync'):
                 fresh_callback = client.get(
                     f"/api/classlink/callback?code=def&state={second_state}"
                 )
         assert "classlink_login=success" in fresh_callback.location
+
+
+class TestClassLinkSessionEndpoint:
+    def test_session_returns_canonical_user_id(self):
+        app = _make_app()
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['classlink_user'] = {
+                    'user_id': 'classlink:dist-A:p1',
+                    'classlink_id': 'p1',
+                    'email': 'a@school.edu',
+                    'name': {'first': 'A', 'last': 'B'},
+                    'type': 'teacher',
+                    'tenant_id': 'dist-A',
+                }
+            data = client.get('/api/classlink/session').get_json()
+        assert data['authenticated'] is True
+        assert data['user_id'] == 'classlink:dist-A:p1'
+
+
+class TestClassLinkAuthResolution:
+    def test_teacher_id_resolved_from_session_user_id(self):
+        import os as _os
+        from flask import Flask, g, jsonify
+        from backend.auth import init_auth
+        app = Flask(__name__)
+        app.config['TESTING'] = True
+        app.config['SECRET_KEY'] = 'test-secret'
+        init_auth(app)
+
+        @app.route('/api/_whoami')
+        def _whoami():
+            return jsonify({
+                "teacher_id": getattr(g, 'teacher_id', None),
+                "user_id": getattr(g, 'user_id', None),
+                "auth_source": getattr(g, 'auth_source', None),
+                "district_id": getattr(g, 'district_id', None),
+            })
+
+        with patch.dict(_os.environ, {'FLASK_ENV': 'production'}):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess['classlink_user'] = {
+                        'user_id': 'classlink:dist-A:p1',
+                        'classlink_id': 'p1',
+                        'email': 'a@school.edu',
+                        'tenant_id': 'dist-A',
+                    }
+                data = client.get('/api/_whoami').get_json()
+        assert data['teacher_id'] == 'classlink:dist-A:p1'
+        assert data['user_id'] == 'classlink:dist-A:p1'
+        assert data['auth_source'] == 'classlink'
+        assert data['district_id'] == 'dist-A'
