@@ -337,14 +337,14 @@ function App() {
         .then(function(data) {
           if (data.authenticated) {
             _setUser({
-              id: 'classlink:' + data.classlink_id,
+              id: data.user_id,
               email: data.email,
               user_metadata: {
                 name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || ''),
                 approved: true,
               },
             });
-            window.__graiderUser = { id: 'classlink:' + data.classlink_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || '') };
+            window.__graiderUser = { id: data.user_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || '') };
             setAuthLoading(false);
           }
         })

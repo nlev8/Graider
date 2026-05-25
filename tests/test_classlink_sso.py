@@ -1091,6 +1091,24 @@ class TestClassLinkStateNonceHardening:
         assert "classlink_login=success" in fresh_callback.location
 
 
+class TestClassLinkSessionEndpoint:
+    def test_session_returns_canonical_user_id(self):
+        app = _make_app()
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['classlink_user'] = {
+                    'user_id': 'classlink:dist-A:p1',
+                    'classlink_id': 'p1',
+                    'email': 'a@school.edu',
+                    'name': {'first': 'A', 'last': 'B'},
+                    'type': 'teacher',
+                    'tenant_id': 'dist-A',
+                }
+            data = client.get('/api/classlink/session').get_json()
+        assert data['authenticated'] is True
+        assert data['user_id'] == 'classlink:dist-A:p1'
+
+
 class TestClassLinkAuthResolution:
     def test_teacher_id_resolved_from_session_user_id(self):
         import os as _os

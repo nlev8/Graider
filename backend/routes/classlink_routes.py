@@ -431,6 +431,7 @@ def classlink_session():
 
     return jsonify({
         "authenticated": True,
+        "user_id": cl_user.get('user_id'),
         "classlink_id": cl_user.get('classlink_id'),
         "email": cl_user.get('email'),
         "name": cl_user.get('name'),
