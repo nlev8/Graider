@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from backend.services.grading_pipeline import (
     _COMPLETENESS_CAPS,
+    _analyze_submission_writing_style,
     _apply_single_pass_post_processing,
     _completeness_cap_table,
     _detect_blank_submission,
@@ -113,3 +114,19 @@ def test_detect_blank_submission_filled_blanks_returns_none():
     # Two+ filled-in blanks → not blank.
     content = "The capital is ___Paris___ and the year was ___1789___ in this lesson."
     assert _detect_blank_submission(content) is None
+
+
+# ── _analyze_submission_writing_style (Wave 8 slice: extracted from grade_assignment) ─────────
+# Returns (writing_style_context, current_writing_style, style_comparison). Context + comparison
+# stay empty/None without a historical profile; non-text submissions short-circuit entirely.
+
+def test_analyze_writing_style_non_text_returns_empty_tuple():
+    assert _analyze_submission_writing_style("irrelevant", {"type": "image"}, None) == ('', None, None)
+
+
+def test_analyze_writing_style_no_history_yields_no_context_or_comparison():
+    content = ("This is a reasonably long student paragraph with several sentences. "
+               "It explains the causes and effects of the event in the student's own words.")
+    ctx, _style, comparison = _analyze_submission_writing_style(content, {"type": "text"}, None)
+    assert ctx == ''          # no deviation prompt fragment without a historical baseline
+    assert comparison is None  # no comparison without >= 2 prior samples

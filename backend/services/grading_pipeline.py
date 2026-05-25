@@ -790,6 +790,50 @@ def _detect_blank_submission(content: str) -> dict | None:
     return None
 
 
+def _analyze_submission_writing_style(content, assignment_data, student_id):
+    """Analyze the current submission's writing style vs the student's historical profile for
+    AI-use detection. Returns (writing_style_context, current_writing_style, style_comparison):
+    a prompt fragment (empty unless a deviation is flagged) plus the raw style dict and the
+    comparison dict (both used downstream for profile update + result metadata). Extracted
+    verbatim from grade_assignment (Wave 8)."""
+    # Analyze current submission's writing style for AI detection
+    writing_style_context = ''
+    current_writing_style = None
+    style_comparison = None
+    if assignment_data.get("type") == "text" and content:
+        current_writing_style = analyze_writing_style(content)
+        if current_writing_style:
+            # Get student's historical writing profile
+            historical_profile = get_writing_profile(student_id) if student_id and student_id != "UNKNOWN" else None
+
+            if historical_profile and historical_profile.get("sample_count", 0) >= 2:
+                # Compare current vs historical style
+                style_comparison = compare_writing_styles(current_writing_style, historical_profile)
+
+                if style_comparison.get("ai_likelihood") in ["likely", "possible"]:
+                    _logger.info(f"  ⚠️  Writing style deviation detected: {style_comparison.get('deviation')}")
+                    writing_style_context = f"""
+---
+WRITING STYLE ANALYSIS (COMPARE TO STUDENT'S HISTORY):
+This student's historical writing profile (based on {historical_profile.get('sample_count', 0)} previous assignments):
+- Average complexity score: {historical_profile.get('avg_complexity_score', 'N/A')}/10
+- Average sentence length: {historical_profile.get('avg_sentence_length', 'N/A')} words
+- Average word length: {historical_profile.get('avg_word_length', 'N/A')} characters
+- Typical academic vocabulary: {historical_profile.get('avg_academic_words', 0):.1f} words per submission
+
+Current submission analysis:
+- Complexity score: {current_writing_style.get('complexity_score', 'N/A')}/10
+- Sentence length: {current_writing_style.get('avg_sentence_length', 'N/A')} words
+- Word length: {current_writing_style.get('avg_word_length', 'N/A')} characters
+- Academic vocabulary count: {current_writing_style.get('academic_word_count', 0)}
+
+DEVIATION ALERT: {'; '.join(style_comparison.get('deviations', []))}
+This suggests possible AI use - be extra vigilant in your authenticity check!
+---
+"""
+    return writing_style_context, current_writing_style, style_comparison
+
+
 def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
@@ -976,40 +1020,8 @@ Do NOT penalize for AI/plagiarism - these are factual answers.
                     }
 
     # Analyze current submission's writing style for AI detection
-    writing_style_context = ''
-    current_writing_style = None
-    style_comparison = None
-    if assignment_data.get("type") == "text" and content:
-        current_writing_style = analyze_writing_style(content)
-        if current_writing_style:
-            # Get student's historical writing profile
-            historical_profile = get_writing_profile(student_id) if student_id and student_id != "UNKNOWN" else None
-
-            if historical_profile and historical_profile.get("sample_count", 0) >= 2:
-                # Compare current vs historical style
-                style_comparison = compare_writing_styles(current_writing_style, historical_profile)
-
-                if style_comparison.get("ai_likelihood") in ["likely", "possible"]:
-                    _logger.info(f"  ⚠️  Writing style deviation detected: {style_comparison.get('deviation')}")
-                    writing_style_context = f"""
----
-WRITING STYLE ANALYSIS (COMPARE TO STUDENT'S HISTORY):
-This student's historical writing profile (based on {historical_profile.get('sample_count', 0)} previous assignments):
-- Average complexity score: {historical_profile.get('avg_complexity_score', 'N/A')}/10
-- Average sentence length: {historical_profile.get('avg_sentence_length', 'N/A')} words
-- Average word length: {historical_profile.get('avg_word_length', 'N/A')} characters
-- Typical academic vocabulary: {historical_profile.get('avg_academic_words', 0):.1f} words per submission
-
-Current submission analysis:
-- Complexity score: {current_writing_style.get('complexity_score', 'N/A')}/10
-- Sentence length: {current_writing_style.get('avg_sentence_length', 'N/A')} words
-- Word length: {current_writing_style.get('avg_word_length', 'N/A')} characters
-- Academic vocabulary count: {current_writing_style.get('academic_word_count', 0)}
-
-DEVIATION ALERT: {'; '.join(style_comparison.get('deviations', []))}
-This suggests possible AI use - be extra vigilant in your authenticity check!
----
-"""
+    writing_style_context, current_writing_style, style_comparison = _analyze_submission_writing_style(
+        content, assignment_data, student_id)
 
     # Map grade level to age range for context
     grade_age_map = {
