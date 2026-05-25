@@ -135,19 +135,30 @@ caps, rubric weighting, ELL translation, writing-profile updates, audit, error r
   sites. A TRANSFORMATION (not byte-identical), validated by the 3-provider goldens (#553) +
   prompt-snapshot net + F821 + broad sweep (991 passed). **grade_assignment now 1,030 LOC**
   (from 1,138 at Wave 8 start; Slices 3+5).
-- **REMAINING phases (the HARD, sprawling/coupled ones — do FRESH, sub-phase them):**
-  - **prompt-assembly (~now 643–1050):** NOT a clean self-contained block — it's a series of
-    section-builds (extracted-responses ~643, template ~652, rubric ~664, grading-style ~703,
-    authenticity/FITB ~732) culminating in the big `prompt_text = f"""..."""` (~894) AND the
-    text/image `messages` construction (~1054), interleaved with writing-style analysis + FITB
-    detection. ~20+ threaded locals. Recommend SUB-PHASING (e.g., extract each section-builder
-    first, then the f-string) rather than one 400-line helper. MUST stay behind the Slice-2
-    prompt-snapshot net (golden net does NOT pin prompt text); F821 catches any missed local.
-  - **parse phase (~1090–1210):** interleaved with the per-provider call — openai does call+parse
-    inline (structured `.parsed` → text fallback), claude/gemini set `response_text` then a shared
-    markdown-strip + json.loads + `_try_parse_json_fallback`. Extract the SHARED text-parse first
-    (`_parse_grading_response(response_text)`), then consider separating call from parse. Golden-net
-    covered (all 3 providers, #553).
+- **Slice 6 SHIPPED (#558):** parse-phase dedup — `_strip_markdown_fences(text)` (the ``` -fence
+  strip duplicated in the OpenAI text-fallback + Claude/Gemini parse). Both paths golden-covered.
+- **Slice 7 SHIPPED (#559):** prompt section-builders `_grading_style_instructions(grading_style)`
+  + `_extraction_mode_instructions(extraction_mode)`. Snapshot-verified byte-identical.
+- **Slice 8 SHIPPED (#560):** `_authenticity_section(is_fitb, custom_markers, age_range,
+  grade_level)` (~130 lines: FITB exemption vs full AI/plagiarism detection). Snapshot-verified.
+  **grade_assignment now 830 LOC** (from 1,138 at Wave 8 start, −27%).
+- **REMAINING (the HARD parts — do FRESH; the first needs a DESIGN decision):**
+  - **prompt_text f-string (~924–1100, ~175 lines) — DESIGN DECISION NEEDED.** It interpolates
+    **18 names**: simple (`age_range`, `grade_level`, `grading_style`, `subject`, module-const
+    `ASSIGNMENT_INSTRUCTIONS`) + 13 section-strings (`accommodation_context`,
+    `assignment_template_section`, `custom_section`, `effective_rubric`, `ell_instruction`,
+    `extracted_responses_section`, `extraction_instructions`, `fitb_authenticity_section`,
+    `grading_style_instructions`, `history_context`, `section_rubric`, `teacher_override_section`,
+    `writing_style_context`). A mechanical `_build_grading_prompt(...)` would be a ~17-param helper
+    — a CODE SMELL, not a clean phase. RECOMMEND a context object (dataclass/dict bundling the
+    section-strings) — consider a quick 3-model consult on the cleanest shape. MUST stay behind the
+    prompt-snapshot net (sha256 c5ab6a530c4306a1); F821 catches missed locals.
+  - **parse phase (~1110–1210):** interleaved with the per-provider call — the SHARED markdown-strip
+    is already extracted (#558); remaining is the per-branch `json.loads`/`_try_parse_json_fallback`
+    (openai tries json.loads-first; claude/gemini use the fallback directly). Lower value; golden-
+    covered (all 3 providers).
+  - **context-build + pre-extract phases** (custom-instr/history/accommodation; writing-style +
+    FITB detection + pre-extraction) — extractable but interleaved.
   - Then: **CLI/email facade split** — move `run_grading`/`save_emails_to_folder`/
     `create_outlook_drafts` out of assignment_grader.py (658-LOC facade) into `grader_cli.py` /
     `grader_email_export.py`.
