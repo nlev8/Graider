@@ -18,6 +18,7 @@ from backend.services.grading_pipeline import (
     _detect_blank_submission,
     _detect_fitb_assignment,
     _letter_grade,
+    _pre_extract_responses,
 )
 
 
@@ -151,3 +152,30 @@ def test_detect_fitb_by_timestamps_and_filled_underscores():
 
 def test_detect_fitb_false_for_normal_assignment():
     assert _detect_fitb_assignment("Explain the causes of the war in a paragraph.", "") is False
+
+
+# ── _pre_extract_responses (Wave 8 slice: extracted from grade_assignment; 3-AI-agreed 4-tuple) ─
+# Returns (is_fitb, extraction_result, extracted_responses_text, early_result). early_result is
+# None unless no responses were extracted (then it's the 0-score INCOMPLETE dict to return).
+
+def test_pre_extract_fitb_packages_full_content():
+    is_fitb, er, text, early = _pre_extract_responses(
+        True, {"type": "text"}, "The capital is ___Paris___ and the year ___1789___",
+        None, None, None, None, "structured")
+    assert is_fitb is True and early is None
+    assert er["answered_questions"] == 1 and er["extracted_responses"][0]["type"] == "fitb_full"
+    assert "FILL-IN-THE-BLANK SUBMISSION" in text and "Paris" in text
+
+
+def test_pre_extract_markers_override_fitb_flag():
+    # custom markers present → FITB is overridden to False (markers take priority). type=image
+    # short-circuits the extraction body so only the is_fitb-resolution runs.
+    is_fitb, er, text, early = _pre_extract_responses(
+        True, {"type": "image"}, "anything", [{"start": "X"}], None, None, None, "structured")
+    assert is_fitb is False
+    assert (er, text, early) == (None, '', None)
+
+
+def test_pre_extract_non_text_returns_empty_continue_values():
+    assert _pre_extract_responses(
+        False, {"type": "image"}, "", None, None, None, None, "structured") == (False, None, '', None)
