@@ -1002,3 +1002,36 @@ The re-export shims create dual import paths + mock-patch ambiguity → mitigate
 
 ## Honest note
 This is a genuine, earned uplift on the program's hardest target: the grading "final boss" — 5,344 LOC, deliberately gated until this session — decomposed −88% behind a faithful golden net that runs the real functions, not merely "files moved." The two external models independently landed on the same number and the same next lever (`grade_assignment`), so the reconciled 9.2 is conservative and verified. Overall ticks ~8.2 → ~8.3. The honest ceiling note stands: 9.5 needs the intra-function decomposition of `grade_assignment` + the CLI/email split; 10 needs the provider-adapter/typed-result re-architecture. This dated section closes Wave 7 (the `2026-05-24-wave7-phaseb-grader-golden-net` spec + the #520–#547 PR series).
+
+---
+
+# 2026-05-25 Post-Wave-8 (`grade_assignment` + `grade_multipass` intra-function decomposition) 3-Model Reconciled Re-Score — **Code Quality 9.2 → 9.4**
+
+The deferred judgment step for **Wave 8** — splitting the two remaining grading god-*functions* inside `backend/services/grading_pipeline.py` into named pipeline-phase helpers. This is lever (1) of the unanimous Post-Wave-7 path to 9.5. Codex 5.5 (high) and Claude verified the live code independently with their own shell commands; Gemini scored advisory (tool-less under `--skip-trust` — the no-`--yolo` safe mode; it could not run shell, so its vote rests on the facts verified first-hand by Claude and independently by Codex). Conservative-floor reconciliation.
+
+| Model | Code Quality | Verification | Highest-leverage next step |
+|-------|--------------|--------------|----------------------------|
+| Claude (first-hand) | 9.4 | LOC + golden/snapshot/helpers green; AST byte-identity per slice | CLI/email split → `grader_cli.py` |
+| Codex 5.5 (high) | 9.4 | ran golden/helpers `41 passed, 2 skipped` + snapshots `2 passed`; verified 405/361 LOC + 18 helpers | extract CLI/email layer |
+| Gemini (advisory) | 9.4 | scored on verified facts (tool-less) | extract `run_grading`/email → `grader_cli.py` |
+| **Reconciled** | **9.2 → 9.4** | | **extract the CLI/email layer from `assignment_grader.py`** |
+
+## Verdict: Code Quality 9.2 → 9.4. Overall ~8.3 → ~8.4.
+
+**Unanimous 9.4 — a half-step, not the full step to 9.5, on conservative grounds.** Wave 8 delivered the *primary* path-to-9.5 lever (the `grade_assignment` god-function split) but not all of the named co-requisites.
+
+**Verified progress (all three, file:line):**
+- **`grade_assignment`: 1,138 (Wave-7 baseline) → 405 LOC** at `grading_pipeline.py:1075` — cumulatively −64%; this session took it 711 → 405 via 6 behavior-preserving slices (`_detect_blank_submission`, `_analyze_submission_writing_style`, `_detect_fitb_assignment`, `_pre_extract_responses`, `_load_ell_language`, `_finalize_grading_result`).
+- **`grade_multipass`: 432 → 361 LOC** at `grading_pipeline.py:1572` via `_apply_vocab_leniency` + `_multipass_perform_extraction`.
+- **18 single-responsibility `_helpers`** now in `grading_pipeline.py`; helper unit tests in `tests/test_grading_pipeline_helpers.py` (28 tests). golden + snapshot + helpers = 43 passed, 2 skipped (Codex independently: 41+2).
+- **Behavior preservation mechanically enforced per slice:** each extracted helper's statements **AST byte-identical** to its origin block (early-return helpers verified as wrap-only diffs with the dict literals preserved); golden + prompt-snapshot nets unchanged throughout; +unit tests for each now-testable helper. PRs #568–#575 (8 slices). 3 of the slices' contracts were chosen by full 3-AI consult (`_pre_extract_responses`, `_finalize_grading_result`, `_multipass_perform_extraction`).
+
+**Why Code Quality is 9.4, not 9.5 (unanimous grounds):**
+- The Post-Wave-7 path to 9.5 had three named items: (1) split `grade_assignment` into pipeline phases — **DONE**; (2) extract the CLI/email layer out of the facade — **NOT done**: `assignment_grader.py` is still 658 LOC with `run_grading` (~206), `save_emails_to_folder` (75), `create_outlook_drafts` (35); (3) lint hygiene — done in the Wave-7 closeout.
+- `grade_multipass` (361 LOC) still bundles dense filtering + PASS-2 parallel grading + the AGGREGATE-SCORES/PASS-3/result-assembly tail (~150 LOC) in one flow.
+
+## Path beyond 9.4 (unanimous next step)
+**Extract the CLI/email layer from `assignment_grader.py`** into dedicated module(s) (e.g. `grader_cli.py` / `grader_email_export.py`), leaving the facade as compatibility re-exports + thin orchestration — this completes the one explicit Wave-7 path item still missing and makes 9.5 defensible. Secondary: finish `grade_multipass` (the AGGREGATE/PASS-3 tail → a kwargs `_finalize_multipass_result`, the PASS-2 block, a filtering-dedup with `_pre_extract_responses`). **To 10** (unchanged): provider adapters behind one interface, typed request/result objects instead of wide dicts, retire the re-export shims, live/contract SDK smoke tests.
+
+## Honest note
+A genuine, earned half-step on the program's hardest target. Wave 8 took the `grade_assignment` god-function from 1,138 → 405 LOC (cumulative −64%) behind the SDK-fake golden net + a prompt-snapshot net, with **every slice AST-verified byte-identical** to its origin block — not "files moved," but behavior frozen and mechanically proven. Two independent models (Claude first-hand, Codex via shell) verified the live code and the green nets; Gemini corroborated on those facts. The reconciled 9.4 is conservative: the primary 9.5 lever is delivered, but the unanimous discipline does not credit the full 9.5 while a named co-requisite (the CLI/email split) is outstanding and `grade_multipass`'s tail is still concentrated. Overall ticks ~8.3 → ~8.4. This dated section records Wave 8 (PRs #568–#575).
