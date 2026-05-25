@@ -112,6 +112,8 @@ class TestClassLinkTenantScopedIdentity:
         with app.test_client() as client:
             resp = _run_callback(client, priv, pub, {**self.BASE, "TenantId": "dist-A"})  # no SourcedId/UserId
             assert 'classlink_error=missing_identity' in resp.location
+            with client.session_transaction() as sess:
+                assert 'classlink_user' not in sess
 
     def test_userinfo_sub_mismatch_rejected(self):
         app = _make_app(); priv, pub = _make_rsa_keypair()
@@ -126,6 +128,14 @@ class TestClassLinkTenantScopedIdentity:
         with app.test_client() as client:
             resp = _run_callback(client, priv, pub,
                                  {**self.BASE, "Role": ["student"], "SourcedId": "p1", "TenantId": "dist-A"})
+            assert '/student?classlink_login=success' in resp.location
+
+    def test_role_as_csv_string_takes_first(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = _run_callback(client, priv, pub,
+                                 {**self.BASE, "Role": "student,teacher", "SourcedId": "p1", "TenantId": "dist-A"})
+            # First role wins → student path
             assert '/student?classlink_login=success' in resp.location
 
     def test_student_path_gets_tenant_scoped_guid(self):

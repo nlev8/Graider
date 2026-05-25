@@ -55,7 +55,6 @@ def _get_classlink_config():
     return client_id, client_secret, redirect_uri
 
 
-
 def _classlink_guid(tenant_id, person_id):
     """Build the tenant-scoped ClassLink identity GUID.
 
