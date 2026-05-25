@@ -13,6 +13,8 @@ from pathlib import Path
 
 _logger = logging.getLogger(__name__)
 
+from backend.services.grading_models import ASSIGNMENT_NAME
+
 
 def generate_email_content(student_info: dict, grade_result: dict, assignment_name: str) -> tuple:
     """
@@ -398,3 +400,40 @@ def save_emails_to_folder(grades: list, output_folder: str, teacher_name: str = 
         email_count += 1
     
     _logger.info(f"📧 Saved {email_count} email files to: {email_folder}")
+
+
+def create_outlook_drafts(grades: list):
+    """
+    Create draft emails in Outlook desktop app (Windows only).
+    This lets you review each email before sending.
+    """
+    try:
+        import win32com.client
+    except ImportError:
+        _logger.info("⚠️  pywin32 not installed. Run: pip install pywin32")
+        _logger.info("   Falling back to saving emails as files.")
+        return False
+    
+    try:
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        count = 0
+        
+        for grade in grades:
+            if not grade.get('email'):
+                continue
+                
+            subject, body = generate_email_content(grade, grade, ASSIGNMENT_NAME)
+            
+            mail = outlook.CreateItem(0)  # 0 = mail item
+            mail.To = grade['email']
+            mail.Subject = subject
+            mail.Body = body
+            mail.Save()  # Save as draft
+            count += 1
+        
+        _logger.info(f"📧 Created {count} draft emails in Outlook")
+        return True
+        
+    except Exception as e:
+        _logger.info(f"⚠️  Outlook error: {e}")
+        return False
