@@ -321,3 +321,80 @@ def save_to_master_csv(grades: list, output_folder: str):
             ])
     
     _logger.info("Updated master grades file: %s", master_file)
+
+
+def save_emails_to_folder(grades: list, output_folder: str, teacher_name: str = '', subject: str = '', school_name: str = ''):
+    """
+    Save emails as individual text files - ONE EMAIL PER STUDENT
+    with feedback for ALL their assignments combined.
+    """
+    email_folder = Path(output_folder) / "emails"
+    email_folder.mkdir(parents=True, exist_ok=True)
+    
+    # Group grades by student
+    students = {}
+    for grade in grades:
+        student_name = grade.get('student_name', 'Unknown')
+        if student_name not in students:
+            # Get only first name (no middle initial)
+            full_first = grade.get('first_name', student_name.split()[0])
+            first_only = full_first.split()[0] if full_first else student_name.split()[0]
+            students[student_name] = {
+                'email': grade.get('email', ''),
+                'first_name': first_only,
+                'assignments': []
+            }
+        students[student_name]['assignments'].append(grade)
+    
+    email_count = 0
+    for student_name, data in students.items():
+        if not data['email']:
+            continue
+        
+        # Build combined email
+        assignments = data['assignments']
+        first_name = data['first_name']
+        
+        # Email subject line
+        if len(assignments) == 1:
+            email_subject = f"Grade for {assignments[0].get('assignment', 'Assignment')}: {assignments[0]['letter_grade']}"
+        else:
+            email_subject = f"Grades for {len(assignments)} Assignments"
+        
+        # Body
+        body = f"Hi {first_name},\n\n"
+        
+        if len(assignments) == 1:
+            a = assignments[0]
+            body += f"Here is your grade and feedback for {a.get('assignment', 'your assignment')}:\n\n"
+            body += f"GRADE: {a['score']}/100 ({a['letter_grade']})\n\n"
+            body += f"FEEDBACK:\n{a.get('feedback', 'No feedback available.')}\n"
+        else:
+            body += "Here are your grades and feedback:\n\n"
+            for a in assignments:
+                assignment_name = a.get('assignment', 'Assignment')
+                body += f"{'='*50}\n"
+                body += f"📝 {assignment_name}\n"
+                body += f"{'='*50}\n"
+                body += f"GRADE: {a['score']}/100 ({a['letter_grade']})\n\n"
+                body += f"FEEDBACK:\n{a.get('feedback', 'No feedback available.')}\n\n"
+        
+        body += "\nIf you have any questions about your grades, please see me during class.\n\n"
+        signature = teacher_name if teacher_name else "Your Teacher"
+        if subject:
+            signature += f" {subject}"
+        body += f"- {signature}\n"
+        
+        # Save file
+        safe_name = re.sub(r'[^\w\s-]', '', student_name).replace(' ', '_')
+        filepath = email_folder / f"{safe_name}_email.txt"
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(f"TO: {data['email']}\n")
+            f.write(f"SUBJECT: {email_subject}\n")
+            f.write(f"{'='*50}\n\n")
+            f.write(body)
+        
+        email_count += 1
+    
+    _logger.info(f"📧 Saved {email_count} email files to: {email_folder}")

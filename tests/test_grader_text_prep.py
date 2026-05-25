@@ -58,10 +58,14 @@ def test_preprocess_for_ai_detection_golden():
         "farmers more land to grow crops on.")
 
 
-def test_log_pii_sanitization_runs(capsys):
-    # print-only audit helper; only prints when something was removed
-    log_pii_sanitization("Maria", 100, 80, {"emails": 1, "phones": 0})
-    out = capsys.readouterr().out
-    assert "PII sanitized" in out
-    log_pii_sanitization("Maria", 100, 100, {"emails": 0, "phones": 0})
-    assert capsys.readouterr().out == ""  # nothing removed -> no log
+def test_log_pii_sanitization_runs(caplog):
+    # audit helper; only logs when something was removed (print→_logger.info on extraction
+    # into grader_text_prep.py — services/ is ruff-T20 scanned, so it logs rather than prints).
+    import logging
+    with caplog.at_level(logging.INFO, logger="backend.services.grader_text_prep"):
+        log_pii_sanitization("Maria", 100, 80, {"emails": 1, "phones": 0})
+    assert any("PII sanitized" in r.message for r in caplog.records)
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="backend.services.grader_text_prep"):
+        log_pii_sanitization("Maria", 100, 100, {"emails": 0, "phones": 0})
+    assert not caplog.records  # nothing removed -> no log
