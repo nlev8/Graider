@@ -94,7 +94,6 @@ def _extract_person_id(user_data):
     return None
 
 
-
 def _trigger_roster_sync(teacher_id, tenant_id):
     """Trigger background OneRoster roster sync after ClassLink login.
 
