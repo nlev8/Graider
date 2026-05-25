@@ -61,8 +61,9 @@ missing `student_name`) for defense-in-depth + consistency with the multipass pa
 
 ### 2b. Content-preserving sanitizer (Codex + Claude; the Q2 crux — Gemini missed it)
 Add `sanitize_grading_prompt_for_ai(student_name, text) -> str` in `grader_text_prep.py`. It:
-- **Always redacts:** student-name parts (len>2, word-boundary, case-insensitive) → `[STUDENT]`; emails; phones; SSNs (`XXX-XX-XXXX`); street addresses.
-- **Redacts only when context-labeled** (so legitimate answers survive): IDs/DOB/zip preceded by a label, e.g. `Student ID: 1234567`, `DOB: 02/15/2025`, `Zip: 33101`.
+- **Always redacts:** non-common-word student-name parts (len>2, word-boundary, case-insensitive) → `[STUDENT]`; emails; phones; SSNs (`XXX-XX-XXXX` literal + labeled bare-9-digit); street addresses.
+- **Common-word names** (Grace/May/Mark/Hope/Will/Rose/… — names that are also ordinary English words) are redacted **only in Capitalized/ALL-CAPS form**, so their lowercase use as words in an answer survives ("founded in may", "grace under pressure"). Code-review C1: case-insensitive redaction of these corrupts grading.
+- **Redacts only when context-labeled** (so legitimate answers survive): IDs (any length)/DOB/zip/SSN preceded by a label and `:`/`#`/`-` separator, e.g. `Student ID: 1234567`, `DOB - 02/15/2025`, `Zip: 33101`, `SSN: 123456789`.
 - **Preserves** naked numeric/date answers: `8280000`, `828,000`, `1803`, `2/15/1861`, math, etc.
 
 `sanitize_pii_for_ai` stays as-is (still used by its tests + the audit-diff); the new function is

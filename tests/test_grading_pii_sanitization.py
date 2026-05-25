@@ -48,6 +48,44 @@ def test_redacts_labeled_id_dob_zip():
     assert "33101" not in out and "[ZIP-REMOVED]" in out
 
 
+def test_common_word_name_preserves_lowercase_answer():
+    """C1 regression: a common-word name (Grace May) must NOT redact the ordinary lowercase
+    words in a student answer — only the Capitalized identity reference."""
+    answer = "The colony was founded in may, and grace under pressure mattered."
+    out = sanitize_grading_prompt_for_ai("Grace May", answer)
+    assert "may" in out and "grace" in out, "lowercase common words wrongly redacted"
+    assert "[STUDENT]" not in out
+    # but the capitalized identity reference IS redacted
+    out2 = sanitize_grading_prompt_for_ai("Grace May", "My name is Grace May and I wrote this.")
+    assert "Grace" not in out2 and "May" not in out2 and "[STUDENT]" in out2
+
+
+def test_normal_name_still_redacted_case_insensitive():
+    """Non-common names keep strong case-insensitive redaction (only common words are relaxed)."""
+    out = sanitize_grading_prompt_for_ai("Maria Garcia", "maria and GARCIA and Garcia")
+    assert "maria" not in out.lower() and "garcia" not in out.lower()
+
+
+def test_labeled_id_no_length_ceiling():
+    """I1: label-gated IDs of any length are redacted (no \\d{4,10} ceiling)."""
+    out = sanitize_grading_prompt_for_ai("", "Student ID: 12345678901")
+    assert "12345678901" not in out and "[ID-REMOVED]" in out
+
+
+def test_labeled_pii_with_dash_separator():
+    """I2: form-style 'Label - value' is caught (dash separator)."""
+    out = sanitize_grading_prompt_for_ai("", "Date of Birth - 02/15/2009")
+    assert "02/15/2009" not in out and "[DOB-REMOVED]" in out
+
+
+def test_labeled_bare_ssn_redacted():
+    """I3: labeled 9-digit SSN without dashes is redacted; naked 9-digit answer is preserved."""
+    out = sanitize_grading_prompt_for_ai("", "SSN: 123456789")
+    assert "123456789" not in out and "[SSN-REMOVED]" in out
+    naked = sanitize_grading_prompt_for_ai("", "The factory produced 123456789 widgets.")
+    assert "123456789" in naked  # naked numeric answer survives
+
+
 # ── Unit: what it PRESERVES (grading correctness) ─────────────────────────────
 
 def test_preserves_naked_numeric_and_date_answers():
