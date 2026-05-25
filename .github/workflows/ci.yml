@@ -82,6 +82,13 @@ jobs:
       - name: Build
         run: cd frontend && npm run build
 
+      - name: Assert backend/static is not committed
+        run: |
+          if [ -n "$(git ls-files backend/static)" ]; then
+            echo "::error::backend/static/ is tracked in git. It is built at deploy now and must stay gitignored — run 'git rm -r --cached backend/static' and commit."
+            exit 1
+          fi
+
   frontend-e2e-smoke:
     # Closes audit MAJOR #5 Phase 1 of GH issue #217 (Codex full-codebase
     # audit 2026-05-06): runs the Playwright health-check spec against a

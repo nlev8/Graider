@@ -17,9 +17,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   // visible failure for a misconfigured prod deploy, not silent or
   // crashing.
   //
-  // Production (Railway) has VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-  // set, so this branch is never reached there. CI's frontend build
-  // step doesn't set them, hence the dummy fallback.
+  // The frontend is built at deploy (Railway/NIXPACKS), so VITE_SUPABASE_URL
+  // + VITE_SUPABASE_ANON_KEY MUST be set as Railway build-time variables —
+  // otherwise the deployed bundle falls through to the dummy values below and
+  // auth breaks. CI's frontend build doesn't set them, hence the dummy
+  // fallback there is expected.
   console.error(
     'Missing Supabase configuration — using dummy values. ' +
     'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for real auth. ' +

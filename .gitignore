@@ -305,3 +305,6 @@ test_results/
 .worktrees/
 .superpowers/
 test-results/
+
+# Frontend bundle — built at deploy (Railway/NIXPACKS), not committed
+/backend/static/
