@@ -105,7 +105,7 @@ classlink:{quote(tenant_id)}:{quote(person_id)}
 1. **`classlink_routes.py` — identity helpers**
    - New `_classlink_guid(tenant_id, person_id) -> str` (encode + assemble; raises/returns sentinel
      on empty component).
-   - New `_extract_person_id(id_claims, user_data) -> str | None` implementing the
+   - New `_extract_person_id(user_data) -> str | None` implementing the
      SourcedId → UserId → None precedence (A1).
    - **Delete `_link_classlink_account`** and its call site (D3).
    - With auto-linking gone there is no link lookup left, so `_resolve_classlink_user_id`
