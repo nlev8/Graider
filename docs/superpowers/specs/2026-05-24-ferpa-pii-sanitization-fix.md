@@ -50,6 +50,15 @@ would corrupt extraction + grading state and still miss `portal_grading`). Send 
 - `portal_grading.grade_written_questions` → take `student_name` (from `student_info`) → forward to both leaf calls.
 - `grade_assignment` already has `student_name`.
 
+**Boundary #6 — discovered during implementation (call-site audit, not in original consult):**
+`backend/routes/assignment_player_routes.py` grades per-question via `grade_per_question`
+(imported as `ai_grade_per_question`) through `grade_assignment(local) → _grade_with_ai →
+ai_grade_per_question`. Without threading, the `student_name=""` default still strips structured
+PII (email/SSN/phone/labeled-ID/address) but **not the student's name**. Closed by threading
+`student_name` (already present in the `submit_assignment` route handler) through all three.
+Also hardened the single-pass `grade_assignment::_translate_feedback` call (was the one leaf call
+missing `student_name`) for defense-in-depth + consistency with the multipass path.
+
 ### 2b. Content-preserving sanitizer (Codex + Claude; the Q2 crux — Gemini missed it)
 Add `sanitize_grading_prompt_for_ai(student_name, text) -> str` in `grader_text_prep.py`. It:
 - **Always redacts:** student-name parts (len>2, word-boundary, case-insensitive) → `[STUDENT]`; emails; phones; SSNs (`XXX-XX-XXXX`); street addresses.
@@ -86,6 +95,11 @@ New `tests/test_grading_pii_sanitization.py` (or extend the snapshot test), asse
   sanitization cannot remove handwritten PII; needs a separate image-redaction policy.
 - **`anon_id` wiring** — currently computed + unused; a separate PR if product wants stable
   anonymous identifiers in audit metadata.
+- **Pre-existing F821 `questions` at `portal_grading.py:594`** (in `grade_portal_submission_sync`,
+  a function untouched by this PR; present on `origin/main`). It's a swallowed NameError inside a
+  `try/except Exception` that silently disables correction-context building in that path. Fix needs
+  tracing the submission-context data flow to determine the correct `questions` source — separate
+  focused PR. Repro: `ruff check --select F821 backend/services/portal_grading.py`.
 
 ## 6. References
 - 3-model consult: `/tmp/pii_fix_consult.md` (prompt); Codex/Gemini/Claude legs reconciled above.

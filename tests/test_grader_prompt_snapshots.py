@@ -45,7 +45,7 @@ def cfg():
 def test_grade_assignment_prompt_snapshot(ss, cfg):
     with patched_llm() as book:
         g.grade_assignment(
-            student_name="T", assignment_data={"type": "text", "content": ss},
+            student_name="Maria Garcia", assignment_data={"type": "text", "content": ss},
             custom_ai_instructions=cfg["gradingNotes"], grade_level="6", subject="Social Studies",
             ai_model="gpt-4o-mini", marker_config=cfg["customMarkers"], effort_points=15,
             grading_style="standard",
@@ -66,7 +66,7 @@ def test_grade_assignment_prompt_snapshot(ss, cfg):
 def test_multipass_per_question_prompt_snapshot(ss, cfg):
     with patched_llm() as book:
         g.grade_multipass(
-            student_name="T", assignment_data={"type": "text", "content": ss},
+            student_name="Maria Garcia", assignment_data={"type": "text", "content": ss},
             custom_ai_instructions=cfg["gradingNotes"], grade_level="6", subject="Social Studies",
             ai_model="gpt-4o-mini", marker_config=cfg["customMarkers"], effort_points=15,
             grading_style="standard",

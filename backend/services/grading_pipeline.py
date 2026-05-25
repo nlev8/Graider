@@ -19,7 +19,7 @@ import re
 from backend.api_keys import get_api_key as _get_api_key
 from backend.retry import with_retry
 from backend.services.grader_json import _try_parse_json_fallback
-from backend.services.grader_text_prep import preprocess_for_ai_detection, sanitize_pii_for_ai
+from backend.services.grader_text_prep import preprocess_for_ai_detection, sanitize_grading_prompt_for_ai, sanitize_pii_for_ai
 from backend.services.grading_leaves import (
     _translate_feedback,
     detect_ai_plagiarism,
@@ -1096,6 +1096,11 @@ in your scoring or feedback. The teacher knows their students better than any ru
         writing_style_context=writing_style_context,
     )
 
+    # FERPA: strip student PII from the assembled prompt before any external LLM call. Covers the
+    # image-path message construction (which uses prompt_text directly); the text path's full_prompt
+    # is sanitized again below after the extracted responses are appended.
+    prompt_text = sanitize_grading_prompt_for_ai(student_name, prompt_text)
+
     _logger.info(f"  🤖 Grading with AI...")
 
     try:
@@ -1114,6 +1119,8 @@ in your scoring or feedback. The teacher knows their students better than any ru
                 # Send only the pre-extracted verified responses
                 _logger.info(f"  ✅ Using ONLY pre-extracted responses (hallucination prevention)")
                 full_prompt = prompt_text + f"\n\nSTUDENT'S VERIFIED RESPONSES (extracted from document):\n{extracted_responses_text}"
+                # FERPA: the appended extracted responses are raw — re-sanitize the full prompt.
+                full_prompt = sanitize_grading_prompt_for_ai(student_name, full_prompt)
             else:
                 # Extraction failed or found nothing - REQUIRES MANUAL REVIEW
                 _logger.info(f"  ⚠️  HARD BLOCK: No responses extracted - flagging for manual review")
@@ -1286,7 +1293,7 @@ in your scoring or feedback. The teacher knows their students better than any ru
         # Two-pass bilingual feedback: translate via separate dedicated API call
         if ell_language and result.get("feedback"):
             _logger.info(f"  🌐 Translating feedback to {ell_language}...")
-            translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
+            translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker, student_name=student_name)
             if translated:
                 result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 _logger.info(f"  ✅ Bilingual feedback added ({ell_language})")
@@ -1580,7 +1587,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 response_type=resp_type,
                 section_name=meta['section_name'],
                 section_type=meta['section_type'],
-                token_tracker=tracker
+                token_tracker=tracker,
+                student_name=student_name
             )
             future_to_idx[f] = i
 
@@ -1742,7 +1750,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         missing_sections=missing_sections,
         token_tracker=tracker,
         student_history=student_history,
-        grading_style=grading_style
+        grading_style=grading_style,
+        student_name=student_name
     )
 
     # === BUILD RESULT ===
@@ -1884,7 +1893,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
     # Run detection and grading in parallel using ThreadPoolExecutor
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         # Submit both tasks
-        detection_future = executor.submit(detect_ai_plagiarism, detection_text, grade_level, token_tracker=tracker)
+        detection_future = executor.submit(detect_ai_plagiarism, detection_text, grade_level, token_tracker=tracker, student_name=student_name)
 
         if use_multipass:
             grading_future = executor.submit(grade_multipass, student_name, assignment_data,

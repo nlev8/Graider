@@ -16,6 +16,7 @@ import logging
 from backend.api_keys import get_api_key as _get_api_key
 from backend.retry import with_retry
 from backend.services.grader_json import _try_parse_json_fallback
+from backend.services.grader_text_prep import sanitize_grading_prompt_for_ai
 from backend.services.grading_models import DetectionResponse, FeedbackResponse, PerQuestionResponse, TokenTracker
 from backend.services.grading_prep import _is_math_subject
 
@@ -29,7 +30,8 @@ def grade_per_question(question: str, student_answer: str, expected_answer: str,
                        ai_provider: str = 'openai',
                        response_type: str = 'marker_response',
                        section_name: str = '', section_type: str = 'written',
-                       token_tracker: 'TokenTracker' = None) -> dict:
+                       token_tracker: 'TokenTracker' = None,
+                       student_name: str = '') -> dict:
     """Grade a single question/response pair with full section-aware context.
 
     Args:
@@ -162,6 +164,9 @@ Read these FIRST, then score accordingly:
     "improvement_note": "<suggestion if not full credit, else empty string>"
 }'''
 
+    # FERPA: strip student PII from the prompt before any external LLM call (preserves answers).
+    prompt = sanitize_grading_prompt_for_ai(student_name, prompt)
+
     try:
         if ai_provider == "anthropic":
             import anthropic
@@ -248,7 +253,7 @@ Read these FIRST, then score accordingly:
     }
 
 
-def detect_ai_plagiarism(student_responses: str, grade_level: str = '6', token_tracker: 'TokenTracker' = None) -> dict:
+def detect_ai_plagiarism(student_responses: str, grade_level: str = '6', token_tracker: 'TokenTracker' = None, student_name: str = '') -> dict:
     """
     Dedicated AI/Plagiarism detection using GPT-4o-mini.
     Runs in parallel with grading for speed.
@@ -325,6 +330,9 @@ Respond ONLY with this JSON (no other text):
     }}
 }}"""
 
+    # FERPA: strip student PII from the prompt before any external LLM call (preserves answers).
+    detection_prompt = sanitize_grading_prompt_for_ai(student_name, detection_prompt)
+
     try:
         # Use structured output for guaranteed schema
         try:
@@ -369,7 +377,7 @@ Respond ONLY with this JSON (no other text):
         }
 
 
-def _translate_feedback(feedback: str, target_language: str, ai_model: str = 'gpt-4o-mini', token_tracker: 'TokenTracker' = None) -> str:
+def _translate_feedback(feedback: str, target_language: str, ai_model: str = 'gpt-4o-mini', token_tracker: 'TokenTracker' = None, student_name: str = '') -> str:
     """
     Translate grading feedback into the target language using a dedicated API call.
     This is a separate, focused call that produces consistent results because
@@ -386,6 +394,9 @@ Do not include any English text in your response — only the {target_language} 
 
 FEEDBACK TO TRANSLATE:
 {feedback}"""
+
+    # FERPA: strip any student PII from the prompt before this external LLM call.
+    prompt = sanitize_grading_prompt_for_ai(student_name, prompt)
 
     try:
         if ai_model.startswith("claude"):
@@ -449,7 +460,8 @@ def generate_feedback(question_results: list, total_score: int, total_possible: 
                       missing_sections: list = None,
                       token_tracker: 'TokenTracker' = None,
                       student_history: str = '',
-                      grading_style: str = 'standard') -> dict:
+                      grading_style: str = 'standard',
+                      student_name: str = '') -> dict:
     """Generate encouraging, improvement-focused teacher feedback from per-question grades.
 
     Args:
@@ -622,6 +634,9 @@ Also identify:
     }
 }'''
 
+    # FERPA: strip student PII from the prompt before any external LLM call (preserves answers).
+    prompt = sanitize_grading_prompt_for_ai(student_name, prompt)
+
     try:
         if ai_provider == "anthropic":
             import anthropic
@@ -646,7 +661,7 @@ Also identify:
                 if "skills_demonstrated" not in result or not isinstance(result["skills_demonstrated"], dict):
                     result["skills_demonstrated"] = {"strengths": [], "developing": []}
                 if ell_language and result.get("feedback"):
-                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker, student_name=student_name)
                     if translated:
                         result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 return result
@@ -670,7 +685,7 @@ Also identify:
                 if "skills_demonstrated" not in result or not isinstance(result["skills_demonstrated"], dict):
                     result["skills_demonstrated"] = {"strengths": [], "developing": []}
                 if ell_language and result.get("feedback"):
-                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker, student_name=student_name)
                     if translated:
                         result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 return result
@@ -695,7 +710,7 @@ Also identify:
             if parsed:
                 result = parsed.model_dump()
                 if ell_language and result.get("feedback"):
-                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker)
+                    translated = _translate_feedback(result["feedback"], ell_language, ai_model, token_tracker=token_tracker, student_name=student_name)
                     if translated:
                         result["feedback"] = result["feedback"] + "\n\n---\n\n" + translated
                 return result

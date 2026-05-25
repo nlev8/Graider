@@ -48,7 +48,7 @@ def ss_config():
 def test_multipass_social_studies_golden(social_studies, ss_config):
     with patched_llm() as book:
         r = g.grade_multipass(
-            student_name="Test Student",
+            student_name="Maria Garcia",
             assignment_data={"type": "text", "content": social_studies},
             custom_ai_instructions=ss_config["gradingNotes"],
             grade_level="6", subject="Social Studies", ai_model="gpt-4o-mini",
@@ -100,7 +100,7 @@ def test_multipass_blank_short_circuits_before_any_llm_call(ss_config):
 def test_parallel_detection_golden(social_studies, ss_config):
     with patched_llm() as book:
         r = g.grade_with_parallel_detection(
-            student_name="Test Student",
+            student_name="Maria Garcia",
             assignment_data={"type": "text", "content": social_studies},
             custom_ai_instructions=ss_config["gradingNotes"],
             grade_level="6", subject="Social Studies", ai_model="gpt-4o-mini",
@@ -124,7 +124,7 @@ def test_parallel_detection_golden(social_studies, ss_config):
 def test_grade_assignment_openai_golden(social_studies, ss_config):
     with patched_llm() as book:
         r = g.grade_assignment(
-            student_name="Test Student",
+            student_name="Maria Garcia",
             assignment_data={"type": "text", "content": social_studies},
             custom_ai_instructions=ss_config["gradingNotes"],
             grade_level="6", subject="Social Studies", ai_model="gpt-4o-mini",
@@ -147,7 +147,7 @@ def test_grade_assignment_recovers_via_text_when_parsed_is_none(social_studies, 
     # (it RECOVERS — unlike grade_per_question which falls through to an error score).
     with patched_llm(force_text=True):
         r = g.grade_assignment(
-            student_name="T", assignment_data={"type": "text", "content": social_studies},
+            student_name="Maria Garcia", assignment_data={"type": "text", "content": social_studies},
             custom_ai_instructions=ss_config["gradingNotes"], grade_level="6",
             subject="Social Studies", ai_model="gpt-4o-mini",
             marker_config=ss_config["customMarkers"], effort_points=15,
@@ -265,7 +265,7 @@ def test_translate_feedback_openai():
 def test_grade_assignment_anthropic_branch_golden(social_studies, ss_config):
     with patched_llm() as book:
         r = g.grade_assignment(
-            student_name="T", assignment_data={"type": "text", "content": social_studies},
+            student_name="Maria Garcia", assignment_data={"type": "text", "content": social_studies},
             custom_ai_instructions=ss_config["gradingNotes"], grade_level="6",
             subject="Social Studies", ai_model="claude-haiku",
             marker_config=ss_config["customMarkers"], effort_points=15, grading_style="standard",
@@ -284,7 +284,7 @@ def test_grade_assignment_anthropic_branch_golden(social_studies, ss_config):
 def test_grade_assignment_gemini_branch_golden(social_studies, ss_config):
     with patched_llm() as book:
         r = g.grade_assignment(
-            student_name="T", assignment_data={"type": "text", "content": social_studies},
+            student_name="Maria Garcia", assignment_data={"type": "text", "content": social_studies},
             custom_ai_instructions=ss_config["gradingNotes"], grade_level="6",
             subject="Social Studies", ai_model="gemini-flash",
             marker_config=ss_config["customMarkers"], effort_points=15, grading_style="standard",
