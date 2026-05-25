@@ -14,6 +14,7 @@ from backend.services.grading_pipeline import (
     _COMPLETENESS_CAPS,
     _analyze_submission_writing_style,
     _apply_single_pass_post_processing,
+    _apply_vocab_leniency,
     _completeness_cap_table,
     _detect_blank_submission,
     _detect_fitb_assignment,
@@ -220,6 +221,32 @@ def test_finalize_grading_result_core_path():
     assert out["_audit"] == {"ai_input": "Q1: answer", "ai_response": '{"score":85}'}
     assert "writing_style_deviation" not in out  # no style_comparison ⇒ not annotated
     assert "token_usage" not in out            # token_tracker None ⇒ no usage block
+
+
+# ── _apply_vocab_leniency (Wave 8 slice: extracted from grade_multipass) ───────────────────────
+
+def test_apply_vocab_leniency_floors_low_vocab_scores():
+    responses = [{"type": "vocab_term", "question": "Photosynthesis", "answer": "plants make food"}]
+    qr = [{"grade": {"score": 3, "possible": 9, "quality": "poor", "reasoning": "too basic"}}]
+    _apply_vocab_leniency("Please be lenient with vocab definitions", responses, qr)
+    g = qr[0]["grade"]
+    assert g["score"] == int(9 * 0.65)        # floored to 65%
+    assert g["quality"] == "adequate"
+    assert "general understanding" in g["reasoning"]
+
+
+def test_apply_vocab_leniency_noop_without_keywords():
+    responses = [{"type": "vocab_term", "question": "X", "answer": "a"}]
+    qr = [{"grade": {"score": 2, "possible": 9, "quality": "poor", "reasoning": "too basic"}}]
+    _apply_vocab_leniency("Grade these normally", responses, qr)  # no leniency keyword
+    assert qr[0]["grade"]["score"] == 2       # unchanged
+
+
+def test_apply_vocab_leniency_only_affects_vocab_terms():
+    responses = [{"type": "written", "question": "Essay", "answer": "long answer"}]
+    qr = [{"grade": {"score": 1, "possible": 10, "quality": "poor", "reasoning": "weak"}}]
+    _apply_vocab_leniency("be lenient on vocabulary terms", responses, qr)
+    assert qr[0]["grade"]["score"] == 1       # non-vocab response untouched
 
 
 def test_finalize_grading_result_annotates_style_deviation():

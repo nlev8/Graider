@@ -1479,6 +1479,39 @@ in your scoring or feedback. The teacher knows their students better than any ru
         }
 
 
+def _apply_vocab_leniency(effective_instructions, responses, question_results):
+    """If the teacher requested leniency for vocab/definitions/terms, apply score floors in
+    code (more reliable than prompt engineering — the AI scores normally, then we adjust):
+    any non-blank vocab_term answer is floored to 65% with clean reasoning. Mutates
+    question_results in place. Extracted verbatim from grade_multipass (Wave 8)."""
+    _ei_lower = (effective_instructions or '').lower()
+    _has_vocab_leniency = any(phrase in _ei_lower for phrase in [
+        'lenient', 'accept general', 'accept basic', 'go easy', 'be generous',
+        'not strict', 'relaxed', 'don\'t be harsh', 'accept simple'
+    ]) and any(w in _ei_lower for w in ['vocab', 'definition', 'terms'])
+
+    if _has_vocab_leniency:
+        adjusted_count = 0
+        for i, resp in enumerate(responses):
+            if resp.get("type") == "vocab_term" and resp.get("answer", "").strip():
+                qr = question_results[i]
+                if qr:
+                    grade = qr.get("grade", {})
+                    pts = grade.get("possible", 9)
+                    current_score = grade.get("score", 0)
+                    min_score = int(pts * 0.65)  # At least 65% for any non-blank vocab answer
+                    if current_score < min_score:
+                        grade["score"] = min_score
+                        grade["quality"] = "adequate"
+                        # REPLACE reasoning entirely — the old reasoning says "too basic"
+                        # and the feedback generator echoes it. Clean reasoning = clean feedback.
+                        term = resp.get("question", "this term")
+                        grade["reasoning"] = f"Student provided a basic definition for {term} that shows general understanding. Teacher accepts general/dictionary-level definitions for vocabulary on this assignment."
+                        adjusted_count += 1
+        if adjusted_count > 0:
+            _logger.info(f"  📌 Vocab leniency: adjusted {adjusted_count} vocab scores to minimum 65%")
+
+
 def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
                     grade_level: str = '6', subject: str = 'Social Studies',
                     ai_model: str = 'gpt-4o-mini', student_id: str = None,
@@ -1700,35 +1733,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 }
 
     # === TEACHER LENIENCY POST-PROCESSING ===
-    # If the teacher requested leniency for specific section types, apply score floors in code.
-    # This is more reliable than prompt engineering — the AI scores normally, then we adjust.
-    _ei_lower = (effective_instructions or '').lower()
-    _has_vocab_leniency = any(phrase in _ei_lower for phrase in [
-        'lenient', 'accept general', 'accept basic', 'go easy', 'be generous',
-        'not strict', 'relaxed', 'don\'t be harsh', 'accept simple'
-    ]) and any(w in _ei_lower for w in ['vocab', 'definition', 'terms'])
-
-    if _has_vocab_leniency:
-        adjusted_count = 0
-        for i, resp in enumerate(responses):
-            if resp.get("type") == "vocab_term" and resp.get("answer", "").strip():
-                qr = question_results[i]
-                if qr:
-                    grade = qr.get("grade", {})
-                    pts = grade.get("possible", 9)
-                    current_score = grade.get("score", 0)
-                    min_score = int(pts * 0.65)  # At least 65% for any non-blank vocab answer
-                    if current_score < min_score:
-                        grade["score"] = min_score
-                        grade["quality"] = "adequate"
-                        # REPLACE reasoning entirely — the old reasoning says "too basic"
-                        # and the feedback generator echoes it. Clean reasoning = clean feedback.
-                        term = resp.get("question", "this term")
-                        grade["reasoning"] = f"Student provided a basic definition for {term} that shows general understanding. Teacher accepts general/dictionary-level definitions for vocabulary on this assignment."
-                        adjusted_count += 1
-        if adjusted_count > 0:
-            _logger.info(f"  📌 Vocab leniency: adjusted {adjusted_count} vocab scores to minimum 65%")
-
+    _apply_vocab_leniency(effective_instructions, responses, question_results)
     # === AGGREGATE SCORES ===
     total_earned = sum(qr.get("grade", {}).get("score", 0) for qr in question_results if qr)
     total_possible = sum(qr.get("grade", {}).get("possible", 10) for qr in question_results if qr)
