@@ -121,8 +121,10 @@ def test_delete_data_calls_roster_delete_for_classlink_teacher(app_client, monke
 
 def test_delete_data_rejects_non_classlink_teacher(app_client, monkeypatch):
     monkeypatch.setenv("FLASK_ENV", "development")
-    r = app_client.post(
-        "/api/classlink/delete-data",
-        headers={"X-Test-Teacher-Id": "clever:abc", "Content-Type": "application/json"},
-    )
-    assert r.status_code == 403
+    with patch("backend.roster_sync.delete_roster_data") as mock_del:
+        r = app_client.post(
+            "/api/classlink/delete-data",
+            headers={"X-Test-Teacher-Id": "clever:abc", "Content-Type": "application/json"},
+        )
+        assert r.status_code == 403
+        mock_del.assert_not_called()
