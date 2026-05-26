@@ -1096,6 +1096,13 @@ def export_generated_assignment():
                 q_type = q.get('question_type', section_type)
                 q_visual = q.get('visual_type', None)  # number_line, coordinate_plane, etc.
 
+                # Inject True/False options if missing (safety net for older
+                # assignments generated before the hydrator inject landed; new
+                # assignments get options populated in
+                # assignment_post_processing._hydrate_question).
+                if not q_options and q_type in ('true_false', 'tf'):
+                    q_options = ['True', 'False']
+
                 # Question text — detect and render inline markdown tables
                 pts_text = f" ({q_points} pts)" if q_points else ""
                 table_parts = _split_markdown_table(q_text)

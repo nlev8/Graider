@@ -506,6 +506,16 @@ def _hydrate_question(q):
         _hydrate_inline_dropdown(q)
     elif qt == 'matching':
         _hydrate_matching(q)
+    elif qt in ('true_false', 'tf'):
+        # TF renders as a 2-option MC in both DOCX and PDF exports. If the AI
+        # didn't include options (common — the prompt doesn't emphasize it),
+        # inject the canonical ["True", "False"] so the render path treats
+        # TF as MC-with-bubbles. Without this, TF falls through to the
+        # short-answer branch (blank lines). Consumers: planner_routes.py
+        # _export_assignment_docx_graider + the PDF export in
+        # export_generated_assignment.
+        if not q.get('options'):
+            q['options'] = ['True', 'False']
 
 
 def _hydrate_matching(q):
