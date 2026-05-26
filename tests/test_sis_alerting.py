@@ -112,9 +112,17 @@ SIS_CAPTURES = [
     # auto-linking) was DELETED for tenant-scoped identity, so its pin is
     # removed (no catch left to protect). The surviving `_trigger_roster_sync`
     # `_bg_sync` capture shifted 165 -> 143 as the file shrank (~52 lines).
-    # 2026-05-25: shifted 143 -> 223 by the ClassLink Roster Server cert-parity branch
-    # (Task 3 extracted _run_classlink_roster_sync; Task 5 added student-session helpers
-    # before the _bg_sync wrapper). _bg_sync's sentry_sdk.capture_exception is now at 225.
+    # 2026-05-25: shifted 143 -> 295 by the ClassLink Roster Server cert-parity branch.
+    # Task 3 extracted _run_classlink_roster_sync; Task 5 then inserted
+    # _classlink_roster_external_id, the auth-code/selection stores,
+    # _mint_classlink_student_session, and _create_classlink_student_session ABOVE
+    # _trigger_roster_sync. The _bg_sync sentry_sdk.capture_exception (the original
+    # meaning of this pin) is now at line 297.
+    ("backend/routes/classlink_routes.py", 295),
+    # 2026-05-25: NEW pin added by the same branch. Task 5's
+    # _create_classlink_student_session has its own try/except that captures via
+    # sentry_sdk.capture_exception at line 225. Pinning it explicitly so any future
+    # refactor that drops the capture is caught by this SIS regression test.
     ("backend/routes/classlink_routes.py", 223),
     ("backend/routes/oneroster_routes.py", 157),
     ("backend/routes/oneroster_routes.py", 204),
