@@ -112,7 +112,10 @@ SIS_CAPTURES = [
     # auto-linking) was DELETED for tenant-scoped identity, so its pin is
     # removed (no catch left to protect). The surviving `_trigger_roster_sync`
     # `_bg_sync` capture shifted 165 -> 143 as the file shrank (~52 lines).
-    ("backend/routes/classlink_routes.py", 143),
+    # 2026-05-25: shifted 143 -> 223 by the ClassLink Roster Server cert-parity branch
+    # (Task 3 extracted _run_classlink_roster_sync; Task 5 added student-session helpers
+    # before the _bg_sync wrapper). _bg_sync's sentry_sdk.capture_exception is now at 225.
+    ("backend/routes/classlink_routes.py", 223),
     ("backend/routes/oneroster_routes.py", 157),
     ("backend/routes/oneroster_routes.py", 204),
     ("backend/routes/oneroster_routes.py", 218),
@@ -123,8 +126,13 @@ SIS_CAPTURES = [
     ("backend/roster_sync.py", 105),
     ("backend/roster_sync.py", 165),
     ("backend/roster_sync.py", 199),
-    ("backend/roster_sync.py", 302),
-    ("backend/roster_sync.py", 321),
+    # 2026-05-25: shifted 302 -> 299 by the ClassLink Roster Server cert-parity branch
+    # (Task 4 restructured delete_roster_data to always delete orphan students). The
+    # Supabase block's except + capture are now at 299/301.
+    ("backend/roster_sync.py", 299),
+    # 2026-05-25: shifted 321 -> 318 by the same Task 4 restructure. The OSError except
+    # for the local-file cleanup is now at 318 (capture at 320).
+    ("backend/roster_sync.py", 318),
     # 2026-05-02: shifted 145 -> 159 by the schema-audit fix that added a
     # two-step query in _discover_teachers (~14 lines). Pin tracks the
     # _save_cursor try-block.
