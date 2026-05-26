@@ -87,3 +87,42 @@ def test_roster_sync_writes_tenant_scoped_keys():
     assert captured["provider"] == "classlink"
     assert captured["students"][0]["external_id"] == "classlink:dist-A:s1"
     assert captured["enrollments"][0] == ("classlink:dist-A:c1", "classlink:dist-A:s1")
+
+
+import pytest
+
+
+@pytest.fixture
+def app_client():
+    from backend.app import app
+    from backend.extensions import limiter
+    try:
+        limiter.reset()
+    except Exception:
+        pass
+    with app.test_client() as c:
+        yield c
+
+
+def test_delete_data_calls_roster_delete_for_classlink_teacher(app_client, monkeypatch):
+    monkeypatch.setenv("FLASK_ENV", "development")
+    with patch("backend.roster_sync.delete_roster_data",
+               return_value={"classes": 1, "students": 2, "enrollments": 1}) as mock_del, \
+         patch("backend.storage.save") as mock_save:
+        r = app_client.post(
+            "/api/classlink/delete-data",
+            headers={"X-Test-Teacher-Id": "classlink:dist-A:teach1", "Content-Type": "application/json"},
+        )
+        assert r.status_code == 200
+        assert r.get_json()["counts"]["students"] == 2
+        mock_del.assert_called_once_with("classlink:dist-A:teach1")
+        mock_save.assert_called_once_with("oneroster_config", None, "classlink:dist-A:teach1")
+
+
+def test_delete_data_rejects_non_classlink_teacher(app_client, monkeypatch):
+    monkeypatch.setenv("FLASK_ENV", "development")
+    r = app_client.post(
+        "/api/classlink/delete-data",
+        headers={"X-Test-Teacher-Id": "clever:abc", "Content-Type": "application/json"},
+    )
+    assert r.status_code == 403

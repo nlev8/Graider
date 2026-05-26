@@ -26,6 +26,8 @@ from urllib.parse import urlencode
 
 from backend.supabase_client import get_supabase
 from backend.utils.audit import audit_log
+from backend.utils.auth_decorators import require_teacher
+from backend.utils.errors import handle_route_errors
 from backend.utils.redaction import redact_email
 
 from backend.services.classlink_oidc import (
@@ -608,6 +610,31 @@ def classlink_logout():
     session.pop('classlink_user', None)
     session.pop('classlink_student', None)
     return jsonify({"status": "logged_out"})
+
+
+# ── POST /api/classlink/delete-data ──────────────────────────────────
+
+@classlink_bp.route("/api/classlink/delete-data", methods=["POST"])
+@require_teacher
+@handle_route_errors
+def classlink_delete_data():
+    """Delete all ClassLink-sourced roster data for the current teacher and
+    clear stored roster config (FERPA right-to-delete). teacher_id-scoped."""
+    from backend.roster_sync import delete_roster_data
+    from backend.storage import save as _storage_save
+
+    teacher_id = g.teacher_id
+    if not teacher_id.startswith("classlink:"):
+        return jsonify({"error": "Not a ClassLink user"}), 403
+
+    deleted = delete_roster_data(teacher_id)
+    _storage_save("oneroster_config", None, teacher_id)
+    audit_log(
+        "CLASSLINK_DATA_DELETED",
+        f"Deleted {deleted.get('classes', 0)} classes, {deleted.get('students', 0)} students",
+        teacher_id=teacher_id,
+    )
+    return jsonify({"status": "deleted", "counts": deleted})
 
 
 # ── POST /api/classlink/student-token ─────────────────────────────────
