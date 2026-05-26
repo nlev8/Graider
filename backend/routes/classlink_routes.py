@@ -76,6 +76,20 @@ def _classlink_guid(tenant_id, person_id):
     )
 
 
+def _classlink_roster_external_id(tenant_id, sourced_id):
+    """Tenant-scoped roster external_id for ClassLink rows.
+
+    Format: ``classlink:{quote(tenant)}:{quote(sourced_id)}`` — same encoding as
+    ``_classlink_guid`` so a ':' inside a component cannot create a colliding key.
+    Used on BOTH sides: the roster write (via normalize_roster builder) and the
+    student-SSO lookup. Always returns a string (tolerant of empty components,
+    matching normalize_roster).
+    """
+    tenant = urllib.parse.quote(str(tenant_id or "").strip(), safe="")
+    sid = urllib.parse.quote(str(sourced_id or "").strip(), safe="")
+    return f"classlink:{tenant}:{sid}"
+
+
 def _extract_person_id(user_data):
     """Resolve the person component of the GUID from the ClassLink userinfo body.
 

@@ -27,6 +27,7 @@ _PROVIDER_PREFIXES = {
     "clever": "",
     "oneroster": "oneroster:",
     "manual": "manual-",
+    "classlink": "classlink:",
 }
 
 
