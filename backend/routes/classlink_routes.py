@@ -608,7 +608,6 @@ def classlink_session():
 def classlink_logout():
     """Clear ClassLink session."""
     session.pop('classlink_user', None)
-    session.pop('classlink_student', None)
     return jsonify({"status": "logged_out"})
 
 
