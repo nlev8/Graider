@@ -119,6 +119,19 @@ def test_delete_data_calls_roster_delete_for_classlink_teacher(app_client, monke
         mock_save.assert_called_once_with("oneroster_config", None, "classlink:dist-A:teach1")
 
 
+def test_oneroster_sync_does_not_deactivate_classlink_rows():
+    from backend import roster_sync
+    rows = [
+        {"id": "row-cl", "student_id_number": "classlink:dist-A:s1"},   # protected
+        {"id": "row-or", "student_id_number": "oneroster:abc"},          # oneroster, eligible
+    ]
+    captured = []
+    with patch.object(roster_sync, "_get_supabase", return_value=_deactivate_sb(rows, captured)):
+        roster_sync.deactivate_missing_students("t1", set(), provider="oneroster")
+    assert "row-cl" not in captured        # classlink row NOT deactivated by oneroster sync
+    assert "row-or" in captured             # oneroster row IS deactivated
+
+
 def test_delete_data_rejects_non_classlink_teacher(app_client, monkeypatch):
     monkeypatch.setenv("FLASK_ENV", "development")
     with patch("backend.roster_sync.delete_roster_data") as mock_del:
