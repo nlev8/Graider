@@ -1,111 +1,198 @@
-# Handoff: 2026-05-25 — Wave 8 (grade_assignment + grade_multipass decomposition) + FERPA fix
+# Handoff: 2026-05-25 — ClassLink Roster Server Certification Parity SHIPPED + Workflow Rulebook
 
 ## 1. Goal
-Continue Wave 8: decompose the two large grader functions in
-`backend/services/grading_pipeline.py` into small pure module-level `_helper`s under STRICT
-behavior-preservation (golden + prompt-snapshot + AST-byte-identity nets). Overarching mandate:
-"sprint, do not stop; as close to 10/10 as possible; you decide and execute; use the 3 AIs
-(Claude superpowers + Codex 5.5-high + Gemini, advisory) at genuine design forks."
 
-## 2. TL;DR — shipped this session (all merged to main)
-- **FERPA PII fix (#565 + review follow-up #566):** new content-preserving
-  `sanitize_grading_prompt_for_ai()` applied at ALL 6 LLM send boundaries (4 leaves +
-  pipeline paths + portal + assignment_player route). Preserves naked numbers/dates (answers).
-  Common-word-name over-redaction (Grace/May/Mark…) fixed in #566.
-- **Principle #13 added to CLAUDE.md (#567):** "Review Gates Before Auto-Merge" — class A
-  (behavior-preserving refactor, nets gate, auto-merge OK) vs class B (net-new / compliance /
-  security → code review is a HARD pre-gate; no `--auto` with a review in flight).
-- **Wave 8 — 7 grade_assignment/grade_multipass slices (#568–#574):**
-  | # | helper | fn | LOC |
-  |---|--------|-----|-----|
-  | 568 | `_detect_blank_submission` | grade_assignment | 711->605 |
-  | 569 | `_analyze_submission_writing_style` (3-tuple) | grade_assignment | 605->573 |
-  | 570 | `_detect_fitb_assignment` | grade_assignment | 573->559 |
-  | 571 | `_pre_extract_responses` (4-tuple, **3-AI consult**) | grade_assignment | 559->450 |
-  | 572 | `_load_ell_language` | grade_assignment | 450->438 |
-  | 573 | `_finalize_grading_result` (kwargs, **3-AI consult**) | grade_assignment | 438->405 |
-  | 574 | `_apply_vocab_leniency` (in-place) | grade_multipass | 432->404 |
-  | 575 | `_multipass_perform_extraction` (2-tuple, **3-AI consult**) | grade_multipass | 404->361 |
-  - **grade_assignment: 711 -> 405 LOC (-43%).** grade_multipass: 432 -> 361 (-16%).
-  - Every slice: AST byte-identical to origin block, golden + prompt-snapshot nets unchanged,
-    +unit tests in `tests/test_grading_pipeline_helpers.py` (now ~25 helper tests). Broad
-    sweeps green throughout.
+Build **ClassLink Roster Server certification parity** (cert-minimum scope) so a rostered
+ClassLink **teacher and student** both land in their provisioned accounts and the integration can
+be certified for rostering. This was the deferred fast-follow from the SSO-certification session
+documented in the previous handoff.
 
-## 3. Current state
-- main HEAD = #575. GitNexus index fresh. No open PRs.
-- No open PRs. Working tree clean except always-uncommitted AGENTS.md/CLAUDE.md + local noise
-  (.claude/scheduled_tasks.lock, flask_session/, tests/reports/).
+It does NOT block ClassLink **SSO** certification (already done in PR #582). It DOES gate the
+Roster Server cert call once #588 merges.
 
-## 4. grade_assignment is at its SAFE FLOOR (405 LOC) — do NOT extract further
-Remaining blocks are the irreducible dispatch core, confirmed unsafe by the 3-AI consult:
-- **provider dispatch** sets `response_text`, which the `except json.JSONDecodeError` handler
-  needs (preview + debug temp-file + regex recovery) — extracting it forces restructuring the
-  handler = behavior risk.
-- **message-building** has a conditional-`full_prompt` coupling (only set on the text path,
-  rebuilt in the image-dispatch path) — subtle undefined-var risk if naively moved.
+## 2. TL;DR
 
-## 5. Next Wave 8 targets (grade_multipass, 361 LOC) — each a design fork, CONSULT FIRST
-DONE: vocab leniency (#574), EXTRACTION block (#575). Remaining:
-1. **AGGREGATE SCORES / PASS-3 / result tail** (~150 lines, biggest win -> ~270 LOC): effort calc
-   + completeness cap + final_score/letter_grade + breakdown + custom rubric weights, feeding the
-   PASS-3 `generate_feedback` call + result assembly. Many interwoven outputs -> CONSULT on the
-   split; likely a kwargs `_finalize_multipass_result(...)` mirroring `_finalize_grading_result`.
-2. **PASS-2 parallel per-question grading** (~80 lines): ThreadPoolExecutor + the 3 question-index
-   matching strategies + sympy pre-check. Complex/coupled to question_results collection.
-3. **Filtering-dedup**: the filter-question-text block in grade_multipass (~18 lines) is
-   near-identical to one already inside `_pre_extract_responses`. DRY opportunity — but it's a
-   cross-cutting change (2 call sites); verify the blocks are truly identical first.
-## 5b. CLI/email facade split — ✅ COMPLETE (Code Quality 9.5 reached)
-SHIPPED (PRs #577 pt.1, #578 pt.2a, #579 pt.2b): `save_emails_to_folder`+`create_outlook_drafts`→
-`grader_export.py`, `log_pii_sanitization`→`grader_text_prep.py`, `ASSIGNMENT_NAME`→`grading_models.py`,
-`run_grading`+3 CLI path constants→new `grader_cli.py` (verbatim, T20-exempt, no cycle). **`assignment_grader.py`
-658→332 LOC with ZERO top-level functions** — a pure re-export-shim layer + `__main__`. 3-model unanimous
-re-score: **Code Quality 9.4→9.5 (first 9.5, #580)**. `run_grading` is the CLI `__main__` + test route-callback
-(`conftest_routes`/`test_grading_routes`) — kept importable via shim; `backend/grading/pipeline.py` imports
-of save_emails/ASSIGNMENT_NAME preserved via re-exports.
+- **PR #588 — ClassLink Roster Server cert-parity (Class B): OPEN + CLEAN, all 9 CI checks green
+  on the first run.** Awaiting human code review per Class B discipline (no auto-merge with a
+  review in flight). 17 commits on `feature/classlink-roster-cert-parity`.
+- **PR #589 — `.claude/rules/workflow.md` (Class A docs): OPEN, mergeable.** Codifies the
+  per-task discipline lessons surfaced during PR #588 (specifically the SIS_CAPTURES
+  misclassification near-miss). Includes a CLAUDE.md pointer for discoverability.
+- **The design fork** in the previous handoff (`oneroster:` vs `classlink:` namespace) was
+  resolved via a Codex `gpt-5.5`-high + Gemini consult. Both AIs independently converged on
+  **tenant-scoped Approach 2**: `classlink:{quote(tenant)}:{quote(sourcedId)}` produced by one
+  shared helper (`_classlink_roster_external_id`) used on **both** the roster-write side and the
+  student-SSO read side. This closes the cross-tenant student-lookup FERPA hole (#1 risk) that
+  bare `classlink:{sourcedId}` would have left open.
+- **No email fallback** in `_create_classlink_student_session` (Codex's stricter call, chosen over
+  Gemini's prefix-validated-fallback). Fail-closed audit log uses a hashed person_id, no PII.
+- **`backend/routes/clever_routes.py` was NOT in the diff** — Class B blast-radius discipline.
+  The student-session mint is duplicated (not shared) to keep the certified Clever path
+  byte-identical.
+- **Shared `delete_roster_data` orphan-students bug fixed** as part of this work (was leaving
+  orphan student rows when a teacher had no class rows — incomplete FERPA right-to-delete).
+  Strictly more-complete deletion for all three providers (OneRoster + Clever + ClassLink), still
+  teacher_id-scoped.
+- **Frontend** generalized via provider-parameterized handlers in `StudentApp.jsx`. Clever path
+  provably unchanged — existing `StudentApp.cleverSelect.test.jsx` is the regression net and
+  passed unmodified.
 
-## 5c. Path 9.5 → 10 (unanimous next lever): PROVIDER ADAPTERS
-Both Codex + Gemini named the same step. Extract the per-provider execution + response normalization
-(the OpenAI/Anthropic/Gemini switch-blocks + structured/text parse + JSON-fallback + error recovery)
-out of `grade_assignment` (~406 LOC) and `grade_per_question` into provider-specific grading adapters
-behind ONE interface, so those functions become orchestration + policy/post-processing only. This is
-the dispatch core the Wave-8 consult deliberately left in place (the response_text→except coupling) —
-the adapter interface is the clean way to finally extract it. Then: typed request/result objects instead
-of wide dicts; retire the re-export shims (migrate internal callers to `backend.services.*`); live/contract
-SDK smoke tests behind markers. Also still open: grade_multipass AGGREGATE/PASS-3 tail + PASS-2 block;
-per-branch parse.
+## 3. Current state (what SHIPPED + what's open)
 
-## 6. The proven slice protocol (FOLLOW exactly)
-1. Locate block by content markers (Python, not fragile line numbers).
-2. Move verbatim into a module-level `_helper` (Python line-range edit handles emoji/regex/f-strings
-   safely; the Edit tool mangles unicode escapes — use Python for those).
-3. Caller: replace block with the helper call (early-return helpers return dict-or-None or a tuple
-   with an `early_result` slot; in-place mutators return None like `_apply_single_pass_post_processing`).
-4. **Verify (all must pass):** `python -c "import ast; ast.parse(...)"`; `ruff --select F821,F401,F841`;
-   AST byte-identity of helper body vs `git show HEAD:...` origin block; then
-   `pytest tests/test_grading_pipeline_helpers.py tests/test_grader_golden.py
-   tests/test_grader_prompt_snapshots.py`; then a broad `-k` grading sweep.
-5. Add unit tests for the now-testable helper.
-6. **Sequential discipline (same file):** ONE PR in flight at a time. Prep next slice locally on
-   the current branch, commit, record SHA; when the open PR merges, `git checkout -b ... origin/main`
-   + `git cherry-pick <SHA>` (squash-merge makes plain rebase messy — cherry-pick onto fresh main).
-7. PR -> `gh pr merge N --squash --auto`; branch protection is **strict** (must be up-to-date) so the
-   watcher must `gh pr update-branch N` when BEHIND. 9 required checks; Backend Tests is the ~4min pole.
+### Spec + plan (committed to PR #588)
+- `docs/superpowers/specs/2026-05-25-classlink-roster-certification-parity-design.md` (`3d7a667`)
+- `docs/superpowers/plans/2026-05-25-classlink-roster-certification-parity.md` (`903eec9`)
 
-## 7. 3-AI consult mechanics
-- Codex: `codex exec -c model_reasoning_effort="high" "$(cat /tmp/prompt.md)" < /dev/null`
-  (the `< /dev/null` avoids the stdin hang).
-- Gemini (ADVISORY ONLY): `gemini -p "$(cat /tmp/prompt.md)" --skip-trust` — `--skip-trust` runs
-  untrusted (NO file tools) = safe. NEVER `--yolo` (it auto-approved edits and clobbered 4 files
-  earlier; reverted). Inline the code block in the prompt so Gemini needs no file access.
-- Reconcile on the conservative floor (lowest behavior-preservation risk wins).
+### Code + tests (PR #588, branch `feature/classlink-roster-cert-parity`)
+17 commits total: 2 docs + 8 TDD implementation tasks (each: red test → green → commit) + 4
+cleanups from per-task reviews + 2 SIS pin updates from the final whole-branch review. HEAD =
+`2f14b73`. Key code commits:
 
-## 8. Path to 9.5 (Wave 8 goal) — re-score pending
-Caps/weights dedup (`_letter_grade`/`_completeness_cap_table`) shipped earlier (#549). After the
-grade_multipass forks land, run the 3-model Code Quality re-score (was 9.2 after Wave 7) to measure
-9.5. Canonical scorecard: `docs/superpowers/specs/2026-03-20-comprehensive-hardening-assessment.md`.
+- `fbe089f` T1: `normalize_roster` builder param (default-preserving)
+- `3602a3a` T2: tenant-scoped key helper + `_PROVIDER_PREFIXES["classlink"]`
+- `14b9482` T3: tenant-scoped roster-sync wiring (extracted `_run_classlink_roster_sync`)
+- `490395e` T4: `delete_roster_data` orphan-students fix (shared)
+- `1a7543a` T5: student-session core — lookup, mint, picker, fail-closed
+- `8bddbd6` T6: student SSO endpoints + fail-closed callback hand-off
+- `f36102a` + `48dfca7` T7: `/api/classlink/delete-data` (+ guard regression test hardening)
+- `405fad7` T8: frontend provider generalization
 
-## 9. References
-- PRs: #565-#574. Spec: `docs/superpowers/specs/2026-05-24-ferpa-pii-sanitization-fix.md`.
-- Golden net: `tests/grading_fakes.py` + `tests/test_grader_golden.py`; prompt snapshots:
-  `tests/test_grader_prompt_snapshots.py`; helper units: `tests/test_grading_pipeline_helpers.py`.
+### Workflow rulebook (PR #589, branch `docs/workflow-discipline-rules`)
+- `cd7d4df` `.claude/rules/workflow.md` + CLAUDE.md pointer.
+- This handoff lives here too (appended via a follow-up commit on this branch).
+
+### PR status (as of session end)
+- **#588 — OPEN, MERGEABLE, mergeStateStatus: CLEAN.** 9/9 status checks SUCCESS on first run.
+  0 unresolved review threads, 0 issue comments. Awaiting human Class B review.
+- **#589 — OPEN, MERGEABLE.** Docs only; standard CI.
+
+### Working-tree noise (predates session — never committed)
+`AGENTS.md`, `handoff.md` (being rewritten on #589), `.claude/scheduled_tasks.lock`,
+`flask_session/`, `tests/reports/`. None are part of any commit in this session.
+
+## 4. Local repro / verification
+
+```bash
+cd /Users/alexc/Downloads/Graider
+source venv/bin/activate
+
+# Backend gate (mirrors CI)
+pytest -q --ignore=tests/load                     # expect: 5469 passed, 16 skipped
+ruff check backend/ tests/                        # 117 pre-existing repo-wide; 0 on changed files
+bandit -q -r backend/routes/classlink_routes.py backend/roster_sync.py backend/oneroster.py
+                                                  # 1 pre-existing Low/Med (CLASSLINK_TOKEN_URL false-positive)
+
+# Frontend gate
+cd frontend && npx vitest run                     # 237 passed, 48 files
+cd frontend && npm run build                      # success
+
+# Spot-check the design-critical properties
+grep -n "_classlink_roster_external_id" backend/routes/classlink_routes.py
+                                                  # one helper, two call sites (write + read)
+grep -n "email" backend/routes/classlink_routes.py | grep -i fallback
+                                                  # zero hits — confirms no email fallback
+grep -nE "@classlink_bp\.route" backend/routes/classlink_routes.py
+                                                  # 6 routes (login-url, callback, session, logout,
+                                                  # student-token, select-class, delete-data)
+
+# PR status
+gh pr view 588 --json mergeable,mergeStateStatus,statusCheckRollup --jq '.'
+```
+
+## 5. Concrete next steps (in priority order)
+
+1. **Human code review on PR #588 (Class B gate).** Recommended review focus, in order:
+   (a) `_create_classlink_student_session` (`backend/routes/classlink_routes.py:171-224`) — confirm
+   no email fallback path. (b) `_classlink_roster_external_id` (`:79-91`) used identically on both
+   write and read sides. (c) `delete_roster_data` restructure (`backend/roster_sync.py:254-303`)
+   — every `.delete()` is teacher_id/class_id/student_id-scoped. (d) The callback's fail-closed
+   branch + PII-free audit log.
+2. **Merge PR #588 manually after review returns clean.** Do NOT arm `gh pr merge --auto`
+   (Class B Hard Rule #7 in `.claude/rules/workflow.md`).
+3. **Merge PR #589** at your convenience (docs-only, low risk).
+4. **Pre-cert live dependency to verify** (carries over from PR #582 / SSO spec):
+   confirm that the ClassLink userinfo `SourcedId` used as `person_id` equals the OneRoster Roster
+   Server `sourcedId` for the same person in the live ClassLink test tenant. The design
+   fails-closed if they diverge (T5 `test_no_row_fails_closed`, T6
+   `test_unprovisioned_student_fails_closed`), but the happy path needs the contract to hold.
+5. **Schedule the ClassLink Roster Server cert call** once #588 is merged + deployed.
+
+## 6. Known follow-ups (filed in the PR body, not blocking)
+
+1. **End-to-end tenant-isolation direct test** — seed `students` with
+   `student_id_number = "classlink:dist-B:s1"`, call
+   `_create_classlink_student_session("dist-A", "s1")`, assert None. The shared-helper byte-identity
+   argument is convincing by construction; an explicit assertion would close the door on a future
+   refactor that diverges the two call sites.
+2. **Per-process in-memory auth-code + selection-token stores** — parity with Clever; would need
+   Redis/DB backing for multi-worker production. One fix benefits both providers.
+3. **`_classlink_roster_external_id` docstring** could note the deliberate divergence from
+   `_classlink_guid` (string-tolerant of empty components vs None-returning) to satisfy
+   `normalize_roster` upstream's always-a-string semantics.
+
+## 7. Lessons captured this session
+
+The session shipped **17 implementation commits across 9 TDD tasks under subagent-driven review**
+plus a **whole-branch opus final review** — but a cross-cutting test failure
+(`test_sis_alerting.py`, pinning `(file, line)` tuples in files Tasks 3 and 4 shifted) slipped past
+**five** review passes and a cleanup-subagent nearly misclassified it as "pre-existing on main."
+
+Root causes — and the rules they produced in `.claude/rules/workflow.md`:
+
+- **Per-task verification was scoped to "named test files."** Cross-cutting consumers were
+  invisible to scoped review. → **Per-task checklist** now requires
+  `pytest -q --ignore=tests/load` (full suite) and
+  `grep -rln '<modified file>' tests/` (cross-cutting test grep).
+- **"Pre-existing failure" was accepted on instinct, not evidence.** → **Hard Rule #1**: such
+  claims require `git checkout <base> -- <files>; pytest <test>` proof; 10 seconds of work that
+  saves a red CI round-trip.
+- **Line-shifting refactors require pin-test grep.** → **Hard Rule #3**, codified.
+- **Full-suite gate was deferred to T9.** → **Hard Rule #2**: `pytest -q` is the floor, not the
+  ceiling, of per-task verification.
+
+The "Lessons From Incidents" appendix in `workflow.md` records the SIS_CAPTURES near-miss as the
+founding case study. Future incidents go above that entry (newest first).
+
+## 8. References
+
+### PRs from this session
+- **#588** — ClassLink Roster Server cert-parity (Class B) — open + clean.
+- **#589** — workflow discipline rulebook (Class A docs) — open.
+- **#582 / #583 / #585 / #586 / #587** (previous session) — ClassLink SSO + deploy work, all merged
+  and live on `app.graider.live`.
+
+### Key files
+- `backend/oneroster.py:298-397` — `normalize_roster(raw, external_id_for=…)` (T1).
+- `backend/routes/classlink_routes.py:58-91` — `_classlink_guid` + `_classlink_roster_external_id`.
+- `backend/routes/classlink_routes.py:120-167` — auth-code + selection stores + mint.
+- `backend/routes/classlink_routes.py:171-224` — `_create_classlink_student_session`
+  (the read side of the tenant-scoped key).
+- `backend/routes/classlink_routes.py:294-310` — `_trigger_roster_sync` + `_run_classlink_roster_sync`
+  (the write side).
+- `backend/routes/classlink_routes.py:` — student-token endpoint, select-class endpoint,
+  delete-data endpoint.
+- `backend/roster_sync.py:26-31` — `_PROVIDER_PREFIXES` with the new classlink entry.
+- `backend/roster_sync.py:254-303` — `delete_roster_data` with the orphan fix.
+- `frontend/src/components/StudentApp.jsx` — provider-generalized SSO handlers.
+
+### Specs + plans
+- `docs/superpowers/specs/2026-05-25-classlink-roster-certification-parity-design.md`
+- `docs/superpowers/plans/2026-05-25-classlink-roster-certification-parity.md`
+- `docs/superpowers/specs/2026-05-25-classlink-sso-certification-readiness-design.md`
+  (prior session, foundation for this work)
+
+### Consult artifacts
+- `/tmp/classlink_roster_consult.md` — the 3-AI consult prompt.
+- Codex + Gemini outputs were captured in-session at `/tmp/codex_roster_out.md` +
+  `/tmp/gemini_roster_out.md`. Both AIs independently converged on tenant-scoped Approach 2.
+
+### Workflow rulebook
+- `.claude/rules/workflow.md` — the codified per-task discipline.
+- `CLAUDE.md` (top) — pointer section pointing readers to the rulebook.
+
+---
+
+*Status: clean ship. No open investigations, no failed attempts, no debug threads. Two PRs await
+human action; nothing autonomous needed. Next agent: read `.claude/rules/workflow.md` first
+(per the CLAUDE.md pointer) — it codifies what you already know but spells out the verification
+gates that catch silent failures.*
