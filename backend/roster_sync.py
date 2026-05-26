@@ -235,9 +235,6 @@ def deactivate_missing_students(teacher_id, current_student_external_ids, provid
             if any(sid.startswith(op) for op in other_prefixes):
                 continue
 
-            if provider == "clever" and any(sid.startswith(op) for op in ['oneroster:', 'manual-']):
-                continue
-
             if sid not in current_student_external_ids:
                 sb.table('students').update({'is_active': False}).eq('id', student['id']).execute()
                 deactivated += 1
