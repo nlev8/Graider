@@ -295,15 +295,25 @@ class OneRosterClient:
             return data.get("result", data)
 
 
-def normalize_roster(raw):
+def normalize_roster(raw, external_id_for=None):
     """Convert raw OneRoster API data to Graider's normalized format.
 
     Args:
         raw: dict with keys classes, students, enrollments, demographics
+        external_id_for: optional callable ``(sourcedId: str) -> str`` that
+            builds the external_id string for a given sourcedId.  Applied to
+            all five external_id sites (class, student, enrollment.class,
+            enrollment.student, accommodation.student).  Defaults to
+            ``lambda sid: f"oneroster:{sid}"`` so OneRoster and Clever callers
+            remain byte-identical without passing this argument.
 
     Returns:
         tuple: (classes, students, enrollments, accommodations)
     """
+    if external_id_for is None:
+        def external_id_for(sid):
+            return f"oneroster:{sid}"
+
     # Build demographics lookup by sourcedId
     demo_by_id = {}
     for d in raw.get("demographics", []):
@@ -319,7 +329,7 @@ def normalize_roster(raw):
         subjects = c.get("subjects", [])
         grades = c.get("grades", [])
         classes.append({
-            "external_id": f"oneroster:{c.get('sourcedId', '')}",
+            "external_id": external_id_for(c.get('sourcedId', '')),
             "name": c.get("title", ""),
             "subject": subjects[0] if subjects else None,
             "grade_level": grades[0] if grades else None,
@@ -336,7 +346,7 @@ def normalize_roster(raw):
             continue
         seen_student_ids.add(sid)
         students.append({
-            "external_id": f"oneroster:{sid}",
+            "external_id": external_id_for(sid),
             "first_name": s.get("givenName", ""),
             "last_name": s.get("familyName", ""),
             "email": s.get("email", ""),
@@ -363,8 +373,8 @@ def normalize_roster(raw):
             user_id = str(user_ref) if user_ref else ""
 
         enrollments.append({
-            "class_external_id": f"oneroster:{class_id}",
-            "student_external_id": f"oneroster:{user_id}",
+            "class_external_id": external_id_for(class_id),
+            "student_external_id": external_id_for(user_id),
         })
 
     # Extract accommodations from demographics
@@ -384,7 +394,7 @@ def normalize_roster(raw):
 
         if iep_status or ell_status:
             acc = {
-                "student_external_id": f"oneroster:{sid}",
+                "student_external_id": external_id_for(sid),
             }
             if iep_status:
                 acc["iep_status"] = iep_status

@@ -11,36 +11,34 @@ export default function StudentApp() {
 
   useEffect(() => {
     var params = new URLSearchParams(window.location.search);
-    var cleverFlag = params.get("clever");
-    var cleverCode = params.get("code");
-    var cleverSelect = params.get("clever_select");
+    // SSO callbacks: clever|classlink single-enrollment (code) or multi (select).
+    var ssoProvider = params.get("clever") === "1" ? "clever"
+                    : params.get("classlink") === "1" ? "classlink" : null;
+    var ssoCode = params.get("code");
+    var selectProvider = params.get("clever_select") === "1" ? "clever"
+                       : params.get("classlink_select") === "1" ? "classlink" : null;
     var selToken = params.get("sel");
 
-    if (cleverSelect === "1" && selToken) {
-      // Multi-enrolled Clever student (Task A): fetch the candidate
-      // classes and show a picker instead of silently choosing.
+    if (selectProvider && selToken) {
       window.history.replaceState({}, document.title, "/student");
-      fetch("/api/clever/select-class?selection_token=" + encodeURIComponent(selToken))
+      fetch("/api/" + selectProvider + "/select-class?selection_token=" + encodeURIComponent(selToken))
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (data && data.classes && data.classes.length) {
-            setClassPicker({ selectionToken: selToken, classes: data.classes });
+            setClassPicker({ provider: selectProvider, selectionToken: selToken, classes: data.classes });
           }
         })
-        .catch(function(err) { console.error("Clever class options failed:", err); })
+        .catch(function(err) { console.error("SSO class options failed:", err); })
         .finally(function() { setChecking(false); });
       return;
     }
 
-    if (cleverFlag === "1" && cleverCode) {
-      // Clean the URL to remove the auth code from browser bar
+    if (ssoProvider && ssoCode) {
       window.history.replaceState({}, document.title, "/student");
-
-      // Exchange auth code for session token
-      fetch("/api/clever/student-token", {
+      fetch("/api/" + ssoProvider + "/student-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: cleverCode }),
+        body: JSON.stringify({ code: ssoCode }),
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -68,7 +66,7 @@ export default function StudentApp() {
             });
         })
         .catch(function(err) {
-          console.error("Clever student auth failed:", err);
+          console.error("SSO student auth failed:", err);
           localStorage.removeItem("student_token");
         })
         .finally(function() { setChecking(false); });
@@ -116,9 +114,9 @@ export default function StudentApp() {
     );
   }
 
-  function chooseCleverClass(classId) {
+  function chooseClass(classId) {
     setChecking(true);
-    fetch("/api/clever/select-class", {
+    fetch("/api/" + classPicker.provider + "/select-class", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ selection_token: classPicker.selectionToken, class_id: classId }),
@@ -144,7 +142,7 @@ export default function StudentApp() {
           });
       })
       .catch(function(err) {
-        console.error("Clever class selection failed:", err);
+        console.error("SSO class selection failed:", err);
         localStorage.removeItem("student_token");
       })
       .finally(function() { setChecking(false); });
@@ -158,7 +156,7 @@ export default function StudentApp() {
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%", maxWidth: "360px" }}>
           {classPicker.classes.map(function(c) {
             return (
-              <button key={c.class_id} onClick={function() { chooseCleverClass(c.class_id); }} style={{ padding: "14px 18px", borderRadius: "10px", border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: "1rem", textAlign: "left", cursor: "pointer" }}>
+              <button key={c.class_id} onClick={function() { chooseClass(c.class_id); }} style={{ padding: "14px 18px", borderRadius: "10px", border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: "1rem", textAlign: "left", cursor: "pointer" }}>
                 <span style={{ fontWeight: 600 }}>{c.name}</span>
                 {c.subject ? <span style={{ color: "#64748b", marginLeft: "8px", fontSize: "0.85rem" }}>{c.subject}</span> : null}
               </button>
