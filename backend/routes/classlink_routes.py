@@ -108,52 +108,54 @@ def _extract_person_id(user_data):
     return None
 
 
-def _trigger_roster_sync(teacher_id, tenant_id):
-    """Trigger background OneRoster roster sync after ClassLink login.
+def _run_classlink_roster_sync(teacher_id, tenant_id):
+    """Synchronous ClassLink roster sync (OneRoster 1.1 endpoints).
 
-    Uses existing OneRoster sync infrastructure — ClassLink's Roster Server
-    exposes OneRoster 1.1 endpoints.
+    Writes tenant-scoped external_ids so ClassLink roster rows never collide
+    with OneRoster rows or across tenants. Extracted from _trigger_roster_sync
+    so it is unit-testable without a thread.
     """
+    from backend.oneroster import OneRosterClient, normalize_roster, get_oneroster_config
+    from backend.roster_sync import sync_roster_to_db
+    import asyncio
+
+    config = get_oneroster_config(teacher_id)
+    if not config.get('base_url'):
+        logger.info("No OneRoster config for %s, skipping post-login roster sync", teacher_id)
+        return
+
+    client = OneRosterClient(
+        base_url=config['base_url'],
+        client_id=config['client_id'],
+        client_secret=config['client_secret'],
+        token_url=config.get('token_url'),
+    )
+    loop = asyncio.new_event_loop()
+    try:
+        raw = loop.run_until_complete(client.fetch_roster(
+            school_id=config.get('school_id'),
+            teacher_sourced_id=config.get('teacher_sourced_id'),
+        ))
+    finally:
+        loop.close()
+
+    classes, students_norm, enrollments, _accommodations = normalize_roster(
+        raw, external_id_for=lambda sid: _classlink_roster_external_id(tenant_id, sid)
+    )
+    enrollment_tuples = [
+        (e["class_external_id"], e["student_external_id"]) for e in enrollments
+    ]
+    sync_roster_to_db(classes, students_norm, enrollment_tuples, teacher_id, provider="classlink")
+    logger.info("Post-login ClassLink roster sync complete for %s", teacher_id)
+
+
+def _trigger_roster_sync(teacher_id, tenant_id):
+    """Trigger background ClassLink roster sync after login (OneRoster 1.1)."""
     import threading
 
     def _bg_sync():
         try:
-            from backend.oneroster import OneRosterClient, normalize_roster, get_oneroster_config
-            from backend.roster_sync import sync_roster_to_db
-
-            config = get_oneroster_config(teacher_id)
-            if not config.get('base_url'):
-                logger.info("No OneRoster config for %s, skipping post-login roster sync", teacher_id)
-                return
-
-            import asyncio
-            client = OneRosterClient(
-                base_url=config['base_url'],
-                client_id=config['client_id'],
-                client_secret=config['client_secret'],
-                token_url=config.get('token_url'),
-            )
-            loop = asyncio.new_event_loop()
-            try:
-                raw = loop.run_until_complete(client.fetch_roster(
-                    school_id=config.get('school_id'),
-                    teacher_sourced_id=config.get('teacher_sourced_id'),
-                ))
-            finally:
-                loop.close()
-
-            classes, students_norm, enrollments, _accommodations = normalize_roster(raw)
-
-            # sync_roster_to_db expects enrollment tuples, not dicts
-            enrollment_tuples = [
-                (e["class_external_id"], e["student_external_id"])
-                for e in enrollments
-            ]
-
-            sync_roster_to_db(
-                classes, students_norm, enrollment_tuples, teacher_id, provider="classlink"
-            )
-            logger.info("Post-login ClassLink roster sync complete for %s", teacher_id)
+            _run_classlink_roster_sync(teacher_id, tenant_id)
         except Exception as e:
             logger.warning("Post-login ClassLink roster sync failed for %s: %s", teacher_id, e)
             sentry_sdk.capture_exception(e)
