@@ -533,20 +533,30 @@ def classlink_callback():
     if not guid:
         return redirect("/?classlink_error=missing_identity")
 
-    # Student login → redirect to student portal
+    # Student login → resolve provisioned record, hand off to the student portal.
     if role == 'student':
         # Clear OAuth-flow markers (single-use enforcement on success).
         session.pop('classlink_oauth_state', None)
         session.pop('classlink_oauth_nonce', None)
         session.pop('classlink_oauth_initiated_by_us', None)
-        session['classlink_student'] = {
-            'classlink_id': person_id,
-            'user_id': guid,
-            'name': f"{first_name} {last_name}",
-            'email': email,
-            'tenant_id': tenant_id,
-        }
-        return redirect("/student?classlink_login=success")
+
+        student_session = _create_classlink_student_session(tenant_id, person_id)
+        if student_session and student_session.get("status") == "needs_class_selection":
+            params = urlencode({"classlink_select": "1", "sel": student_session["selection_token"]})
+            return redirect("/student?" + params)
+        if student_session:
+            auth_code = _create_classlink_student_auth_code(student_session["token"])
+            params = urlencode({"classlink": "1", "code": auth_code})
+            return redirect("/student?" + params)
+
+        # Fail closed — no provisioned row for this tenant-scoped identity.
+        audit_log(
+            "CLASSLINK_STUDENT_NOT_PROVISIONED",
+            "ClassLink student has no provisioned roster row: "
+            f"tenant={tenant_id} person_hash={hashlib.sha256(person_id.encode()).hexdigest()[:8]}",
+            user="anonymous", teacher_id="",
+        )
+        return redirect("/student?classlink_error=not_provisioned")
 
     # Teacher/admin login
     session.clear()
@@ -598,3 +608,54 @@ def classlink_logout():
     session.pop('classlink_user', None)
     session.pop('classlink_student', None)
     return jsonify({"status": "logged_out"})
+
+
+# ── POST /api/classlink/student-token ─────────────────────────────────
+
+@classlink_bp.route("/api/classlink/student-token", methods=["POST"])
+def classlink_exchange_student_auth_code():
+    """Exchange a short-lived auth code for a student session token."""
+    data = request.json or {}
+    code = data.get("code", "")
+    if not code or code not in _pending_classlink_student_auth_codes:
+        return jsonify({"error": "Invalid or expired code"}), 401
+    entry = _pending_classlink_student_auth_codes.pop(code)
+    if time.time() > entry["expires"]:
+        return jsonify({"error": "Code expired"}), 401
+    return jsonify({"token": entry["token"]})
+
+
+# ── GET,POST /api/classlink/select-class ──────────────────────────────
+
+@classlink_bp.route("/api/classlink/select-class", methods=["GET", "POST"])
+def classlink_select_class():
+    """Multi-enrollment finalize. GET lists candidates (does not consume the
+    token); POST mints the scoped session (single-use on success only)."""
+    if request.method == "GET":
+        token = request.args.get("selection_token", "")
+    else:
+        data = request.json or {}
+        token = data.get("selection_token", "")
+        class_id = data.get("class_id", "")
+
+    entry = _pending_classlink_class_selections.get(token)
+    if not entry:
+        return jsonify({"error": "Invalid or expired selection"}), 401
+    if time.time() > entry["expires"]:
+        _pending_classlink_class_selections.pop(token, None)
+        return jsonify({"error": "Selection expired"}), 401
+
+    if request.method == "GET":
+        return jsonify({"classes": _public_classlink_candidates(entry["candidates"])})
+
+    chosen = next((c for c in entry["candidates"] if c["class_id"] == class_id), None)
+    if chosen is None:
+        return jsonify({"error": "Class not among offered choices"}), 400
+
+    sb = get_supabase()
+    if sb is None:
+        return jsonify({"error": "Supabase not configured"}), 503
+
+    session_info = _mint_classlink_student_session(sb, chosen["_student_row"], chosen)
+    _pending_classlink_class_selections.pop(token, None)  # single-use, success only
+    return jsonify({"token": session_info["token"]})

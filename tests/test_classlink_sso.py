@@ -126,25 +126,37 @@ class TestClassLinkTenantScopedIdentity:
     def test_role_as_list_resolves_student(self):
         app = _make_app(); priv, pub = _make_rsa_keypair()
         with app.test_client() as client:
-            resp = _run_callback(client, priv, pub,
-                                 {**self.BASE, "Role": ["student"], "SourcedId": "p1", "TenantId": "dist-A"})
-            assert '/student?classlink_login=success' in resp.location
+            with patch('backend.routes.classlink_routes._create_classlink_student_session',
+                       return_value={"token": "t-abc"}):
+                resp = _run_callback(client, priv, pub,
+                                     {**self.BASE, "Role": ["student"], "SourcedId": "p1", "TenantId": "dist-A"})
+            # Role resolved to student path → redirected to student portal with auth code
+            assert '/student' in resp.location
+            assert 'classlink=1' in resp.location
 
     def test_role_as_csv_string_takes_first(self):
         app = _make_app(); priv, pub = _make_rsa_keypair()
         with app.test_client() as client:
-            resp = _run_callback(client, priv, pub,
-                                 {**self.BASE, "Role": "student,teacher", "SourcedId": "p1", "TenantId": "dist-A"})
+            with patch('backend.routes.classlink_routes._create_classlink_student_session',
+                       return_value={"token": "t-abc"}):
+                resp = _run_callback(client, priv, pub,
+                                     {**self.BASE, "Role": "student,teacher", "SourcedId": "p1", "TenantId": "dist-A"})
             # First role wins → student path
-            assert '/student?classlink_login=success' in resp.location
+            assert '/student' in resp.location
+            assert 'classlink=1' in resp.location
 
     def test_student_path_gets_tenant_scoped_guid(self):
+        """Student callback calls _create_classlink_student_session with the
+        tenant-scoped person_id (SourcedId) — verifies the GUID is tenant-scoped
+        by checking the call args of the mocked session creator."""
         app = _make_app(); priv, pub = _make_rsa_keypair()
         with app.test_client() as client:
-            _run_callback(client, priv, pub,
-                          {**self.BASE, "Role": "student", "SourcedId": "stu1", "TenantId": "dist-A"})
-            with client.session_transaction() as sess:
-                assert sess['classlink_student']['user_id'] == "classlink:dist-A:stu1"
+            with patch('backend.routes.classlink_routes._create_classlink_student_session',
+                       return_value={"token": "t-abc"}) as mock_sess:
+                _run_callback(client, priv, pub,
+                              {**self.BASE, "Role": "student", "SourcedId": "stu1", "TenantId": "dist-A"})
+            # Must be called with the exact tenant_id and person_id (SourcedId)
+            mock_sess.assert_called_once_with("dist-A", "stu1")
 
 
 class TestClassLinkLoginURL:
@@ -982,7 +994,7 @@ class TestClassLinkStateNonceHardening:
         needs the explicit pops added in the fix.)"""
         app = _make_app()
         priv, pub = _make_rsa_keypair()
-        id_token = make_id_token(priv, aud="test-client-id", nonce="expected-nonce")
+        id_token = make_id_token(priv, aud="test-client-id", nonce="expected-nonce", role="student")
         mock_token_resp = MagicMock()
         mock_token_resp.status_code = 200
         mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
@@ -1001,9 +1013,13 @@ class TestClassLinkStateNonceHardening:
                  patch('backend.routes.classlink_routes.get_classlink_oidc_config',
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
-                       return_value=_mock_jwks_client(pub)):
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._create_classlink_student_session',
+                       return_value={"token": "t-abc"}):
                 resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
-            assert "classlink_login=success" in resp.location
+            # Student success → redirected to portal with auth code (not the old classlink_login=success)
+            assert "/student" in resp.location
+            assert "classlink=1" in resp.location
             # Markers cleared on success.
             with client.session_transaction() as sess:
                 assert "classlink_oauth_state" not in sess
@@ -1142,3 +1158,42 @@ class TestClassLinkAuthResolution:
         assert data['user_id'] == 'classlink:dist-A:p1'
         assert data['auth_source'] == 'classlink'
         assert data['district_id'] == 'dist-A'
+
+
+class TestClassLinkStudentCallback:
+    STU = {"FirstName": "S", "LastName": "T", "Email": "s@school.edu", "Role": "student"}
+
+    def _run_student(self, client, priv, pub, session_result):
+        id_token = make_id_token(priv, aud="test-client-id", sub="stu",
+                                 email="s@school.edu", role="student")
+        tok = MagicMock(); tok.status_code = 200
+        tok.json.return_value = {"access_token": "tok", "id_token": id_token}
+        usr = MagicMock(); usr.status_code = 200
+        usr.json.return_value = {**self.STU, "SourcedId": "s1", "TenantId": "dist-A"}
+        with client.session_transaction() as sess:
+            sess['classlink_oauth_state'] = 'valid-state'
+        with patch('backend.routes.classlink_routes.requests.post', return_value=tok), \
+             patch('backend.routes.classlink_routes.requests.get', return_value=usr), \
+             patch('backend.routes.classlink_routes.get_classlink_oidc_config', return_value=_mock_oidc_config()), \
+             patch('backend.routes.classlink_routes.get_classlink_jwks_client', return_value=_mock_jwks_client(pub)), \
+             patch('backend.routes.classlink_routes._create_classlink_student_session', return_value=session_result):
+            return client.get('/api/classlink/callback?code=c&state=valid-state')
+
+    def test_single_enrollment_redirects_with_auth_code(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = self._run_student(client, priv, pub, {"token": "t-abc"})
+            assert "classlink=1" in resp.location and "code=" in resp.location
+
+    def test_multi_enrollment_redirects_to_picker(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = self._run_student(client, priv, pub,
+                                     {"status": "needs_class_selection", "selection_token": "seltok"})
+            assert "classlink_select=1" in resp.location and "sel=seltok" in resp.location
+
+    def test_unprovisioned_student_fails_closed(self):
+        app = _make_app(); priv, pub = _make_rsa_keypair()
+        with app.test_client() as client:
+            resp = self._run_student(client, priv, pub, None)
+            assert "classlink_error=not_provisioned" in resp.location

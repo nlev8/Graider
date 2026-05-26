@@ -75,3 +75,50 @@ def test_no_row_fails_closed_no_email_fallback():
                return_value=_make_sb([], [])):
         result = _create_classlink_student_session("dist-A", "s1")
     assert result is None
+
+
+from flask import Flask
+
+
+def _make_app():
+    from backend.routes.classlink_routes import classlink_bp
+    app = Flask(__name__)
+    app.secret_key = "test-secret-key"
+    app.register_blueprint(classlink_bp)
+    return app
+
+
+def test_student_token_exchange_roundtrip():
+    from backend.routes import classlink_routes
+    code = classlink_routes._create_classlink_student_auth_code("real-token-xyz")
+    app = _make_app()
+    with app.test_client() as c:
+        r = c.post("/api/classlink/student-token", json={"code": code})
+        assert r.status_code == 200
+        assert r.get_json()["token"] == "real-token-xyz"
+        # single-use: a second exchange fails
+        r2 = c.post("/api/classlink/student-token", json={"code": code})
+        assert r2.status_code == 401
+
+
+def test_select_class_get_lists_then_post_mints():
+    from backend.routes import classlink_routes
+    candidates = [
+        {"class_id": "cls1", "name": "Math", "subject": "math",
+         "_student_row": {"id": "row1", "student_id_number": KEY}},
+        {"class_id": "cls2", "name": "Sci", "subject": "sci",
+         "_student_row": {"id": "row1", "student_id_number": KEY}},
+    ]
+    token = classlink_routes._create_classlink_class_selection(candidates)
+    app = _make_app()
+    capture = {}
+    with app.test_client() as c:
+        g = c.get(f"/api/classlink/select-class?selection_token={token}")
+        names = [x["name"] for x in g.get_json()["classes"]]
+        assert names == ["Math", "Sci"]
+        with patch("backend.routes.classlink_routes.get_supabase",
+                   return_value=_make_sb([{"id": "row1", "student_id_number": KEY}], [], capture)):
+            p = c.post("/api/classlink/select-class",
+                       json={"selection_token": token, "class_id": "cls2"})
+        assert p.status_code == 200 and p.get_json()["token"]
+        assert capture["inserted"]["class_id"] == "cls2"
