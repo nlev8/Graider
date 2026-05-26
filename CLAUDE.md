@@ -15,6 +15,19 @@ Always use this venv for running Python commands, installing packages, and start
 - Backend entry point: `backend/app.py` (serves the Vite-built frontend from `backend/static/`)
 - Frontend source: `frontend/src/App.jsx` and `frontend/src/` directory
 
+## Workflow Discipline
+
+**Before any multi-task subagent-driven execution, read `.claude/rules/workflow.md`.** It
+codifies the per-task checklist (full-suite pytest, cross-cutting test grep, line-shift pin
+scan), hard rules (e.g., "pre-existing failure" claims require `git checkout <base>` proof),
+anti-patterns, the four-layer verification loop, and the universal definition of done
+(per-task + per-branch). The "Lessons From Incidents" appendix records what each rule is
+there to prevent — read it once so the rules read as protection, not bureaucracy.
+
+CI is the **final** safety net (the nine status checks below). The workflow file is the
+**first** safety net — local guardrails that catch issues seconds-fast instead of
+red-PR-slow. The two are complementary; running both is the standard.
+
 ## Deployment
 
 - **Backend (app.graider.live)**: Railway — auto-deploys when PRs merge to `main`. Direct pushes to main are blocked by branch protection.
