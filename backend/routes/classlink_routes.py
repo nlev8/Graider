@@ -10,6 +10,7 @@ Endpoints:
   POST /api/classlink/logout     — Clear ClassLink session
 """
 
+import hashlib
 import hmac
 import os
 import time
@@ -23,6 +24,7 @@ from flask import Blueprint, request, redirect, jsonify, session, g
 import urllib.parse
 from urllib.parse import urlencode
 
+from backend.supabase_client import get_supabase
 from backend.utils.audit import audit_log
 from backend.utils.redaction import redact_email
 
@@ -88,6 +90,138 @@ def _classlink_roster_external_id(tenant_id, sourced_id):
     tenant = urllib.parse.quote(str(tenant_id or "").strip(), safe="")
     sid = urllib.parse.quote(str(sourced_id or "").strip(), safe="")
     return f"classlink:{tenant}:{sid}"
+
+
+# Short-lived auth codes for student ClassLink SSO (code -> {token, expires})
+_pending_classlink_student_auth_codes = {}
+_CLASSLINK_AUTH_CODE_TTL = 60  # seconds
+
+
+def _create_classlink_student_auth_code(raw_token):
+    """Mint a short-lived code the SPA exchanges for the real session token."""
+    code = secrets.token_urlsafe(32)
+    _pending_classlink_student_auth_codes[code] = {
+        "token": raw_token, "expires": time.time() + _CLASSLINK_AUTH_CODE_TTL,
+    }
+    now = time.time()
+    for k in [k for k, v in _pending_classlink_student_auth_codes.items() if v["expires"] < now]:
+        del _pending_classlink_student_auth_codes[k]
+    return code
+
+
+# Short-lived selection tokens for the multi-enrollment picker.
+_pending_classlink_class_selections = {}
+_CLASSLINK_CLASS_SELECTION_TTL = 120  # seconds
+
+
+def _public_classlink_candidates(candidates):
+    """Browser-safe projection — strips the server-only `_student_row` (PII)."""
+    return [
+        {"class_id": c["class_id"], "name": c.get("name", ""), "subject": c.get("subject", "")}
+        for c in candidates
+    ]
+
+
+def _create_classlink_class_selection(candidates):
+    """Mint a short-lived token the student exchanges (with a chosen class_id)."""
+    code = secrets.token_urlsafe(32)
+    _pending_classlink_class_selections[code] = {
+        "candidates": candidates, "expires": time.time() + _CLASSLINK_CLASS_SELECTION_TTL,
+    }
+    now = time.time()
+    for k in [k for k, v in _pending_classlink_class_selections.items() if v["expires"] < now]:
+        del _pending_classlink_class_selections[k]
+    return code
+
+
+def _mint_classlink_student_session(sb, student_row, chosen):
+    """Insert a hashed student_sessions row and return {token, student, class}.
+
+    Mirrors the Clever mint; duplicated (not shared) to keep the certified
+    Clever path byte-identical (Class B blast-radius discipline)."""
+    from datetime import datetime, timezone, timedelta
+
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires = datetime.now(tz=timezone.utc) + timedelta(hours=8)
+
+    sb.table("student_sessions").insert({
+        "student_id": student_row["id"],
+        "class_id": chosen["class_id"],
+        "session_token": token_hash,
+        "expires_at": expires.isoformat(),
+    }).execute()
+
+    return {
+        "token": raw_token,
+        "student": {
+            "first_name": student_row.get("first_name", ""),
+            "last_name": student_row.get("last_name", ""),
+            "email": student_row.get("email", ""),
+            "student_id": student_row.get("student_id_number", ""),
+            "period": student_row.get("period", ""),
+        },
+        "class": {"name": chosen.get("name", ""), "subject": chosen.get("subject", "")},
+    }
+
+
+def _create_classlink_student_session(tenant_id, person_id):
+    """Resolve a rostered ClassLink student to their provisioned record and
+    mint a session, tenant-scoped and FAIL-CLOSED.
+
+    Returns {token,...} for a single enrollment, a needs_class_selection payload
+    for multiple, or None when no provisioned row matches the tenant-scoped key
+    (NO email fallback — that would risk a cross-tenant match)."""
+    sb = get_supabase()
+    if sb is None:
+        logger.debug("Supabase not configured — cannot create ClassLink student session")
+        return None
+
+    try:
+        key = _classlink_roster_external_id(tenant_id, person_id)
+        res = sb.table("students").select("*").eq("student_id_number", key).execute()
+        student_rows = list(res.data) if res and res.data else []
+        if not student_rows:
+            return None  # fail closed — no email fallback
+
+        candidates = []
+        seen = set()
+        for srow in student_rows:
+            srow_id = srow.get("id")
+            if not srow_id:
+                continue
+            enroll = (
+                sb.table("class_students")
+                .select("class_id, classes(id, name, subject)")
+                .eq("student_id", srow_id)
+                .execute()
+            )
+            for er in (enroll.data if enroll and enroll.data else []):
+                ci = er.get("classes") or {}
+                cid = ci.get("id") or er.get("class_id")
+                if not cid or cid in seen:
+                    continue
+                seen.add(cid)
+                candidates.append({
+                    "class_id": cid, "name": ci.get("name", ""),
+                    "subject": ci.get("subject", ""), "_student_row": srow,
+                })
+
+        if not candidates:
+            return None
+        if len(candidates) > 1:
+            selection_token = _create_classlink_class_selection(candidates)
+            return {
+                "status": "needs_class_selection",
+                "classes": _public_classlink_candidates(candidates),
+                "selection_token": selection_token,
+            }
+        chosen = candidates[0]
+        return _mint_classlink_student_session(sb, chosen["_student_row"], chosen)
+    except Exception as e:
+        logger.warning("Failed to create ClassLink student session: %s", str(e))
+        sentry_sdk.capture_exception(e)
+        return None
 
 
 def _extract_person_id(user_data):
