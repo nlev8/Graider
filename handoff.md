@@ -1,74 +1,75 @@
-# Handoff: 2026-05-25 — ClassLink Roster Server Certification Parity SHIPPED + Workflow Rulebook
+# Handoff: 2026-05-26 — ClassLink Roster Server cert-parity SHIPPED, awaiting one live verification
+
+> **Note on triggering context:** This handoff is being written at the **end** of a clean-ship session, not in a context-fatigue dead-end. All three PRs from this session are merged to `main`; the only open work is a **live external action** (run a diagnostic against the ClassLink test tenant). A fresh agent does NOT need `/clear` — they can pick up here directly. But if you `/clear` for any reason, **read this file first.**
+
+---
 
 ## 1. Goal
 
-Build **ClassLink Roster Server certification parity** (cert-minimum scope) so a rostered
-ClassLink **teacher and student** both land in their provisioned accounts and the integration can
-be certified for rostering. This was the deferred fast-follow from the SSO-certification session
-documented in the previous handoff.
+Ship **ClassLink Roster Server certification parity ("Option A2", cert-minimum scope)**, then verify the **live SourcedId contract** in the ClassLink test tenant before scheduling the Roster Server certification call.
 
-It does NOT block ClassLink **SSO** certification (already done in PR #582). It DOES gate the
-Roster Server cert call once #588 merges.
+This was the fast-follow deferred from the prior session's ClassLink SSO certification work (PRs #582 / #585 / #586 / #587 — all merged + live before this session started).
 
 ## 2. TL;DR
 
-- **PR #588 — ClassLink Roster Server cert-parity (Class B): OPEN + CLEAN, all 9 CI checks green
-  on the first run.** Awaiting human code review per Class B discipline (no auto-merge with a
-  review in flight). 17 commits on `feature/classlink-roster-cert-parity`.
-- **PR #589 — `.claude/rules/workflow.md` (Class A docs): OPEN, mergeable.** Codifies the
-  per-task discipline lessons surfaced during PR #588 (specifically the SIS_CAPTURES
-  misclassification near-miss). Includes a CLAUDE.md pointer for discoverability.
-- **The design fork** in the previous handoff (`oneroster:` vs `classlink:` namespace) was
-  resolved via a Codex `gpt-5.5`-high + Gemini consult. Both AIs independently converged on
-  **tenant-scoped Approach 2**: `classlink:{quote(tenant)}:{quote(sourcedId)}` produced by one
-  shared helper (`_classlink_roster_external_id`) used on **both** the roster-write side and the
-  student-SSO read side. This closes the cross-tenant student-lookup FERPA hole (#1 risk) that
-  bare `classlink:{sourcedId}` would have left open.
-- **No email fallback** in `_create_classlink_student_session` (Codex's stricter call, chosen over
-  Gemini's prefix-validated-fallback). Fail-closed audit log uses a hashed person_id, no PII.
-- **`backend/routes/clever_routes.py` was NOT in the diff** — Class B blast-radius discipline.
-  The student-session mint is duplicated (not shared) to keep the certified Clever path
-  byte-identical.
-- **Shared `delete_roster_data` orphan-students bug fixed** as part of this work (was leaving
-  orphan student rows when a teacher had no class rows — incomplete FERPA right-to-delete).
-  Strictly more-complete deletion for all three providers (OneRoster + Clever + ClassLink), still
-  teacher_id-scoped.
-- **Frontend** generalized via provider-parameterized handlers in `StudentApp.jsx`. Clever path
-  provably unchanged — existing `StudentApp.cleverSelect.test.jsx` is the regression net and
-  passed unmodified.
+- **All three of this session's PRs are SHIPPED + MERGED to `main`.** Don't redo any of it.
+  - **#588** (Class B — auth/identity/FERPA) — ClassLink Roster Server cert-parity. Squash commit `2b1390a`. Railway auto-deployed to `app.graider.live`.
+  - **#589** (Class A — docs) — `.claude/rules/workflow.md` workflow rulebook + a CLAUDE.md pointer + a prior-handoff rewrite. Squash commit `6520119`.
+  - **#590** (Class A — tooling) — `scripts/verify_classlink_sourcedid_contract.py` diagnostic CLI. Squash commit `7a28a27`.
+- **`main` HEAD is `7a28a27`.** All three branches deleted on origin.
+- **The single open action is LIVE:** run the diagnostic script (or do a manual SSO test) against the ClassLink test tenant with a known-rostered student. Exit 0 → schedule cert call. Exit 1 → escalate to ClassLink with the printed diff.
+- **Workflow rulebook is now canonical** at `.claude/rules/workflow.md`, auto-discoverable via a top-of-file pointer in `CLAUDE.md`. It codifies per-task checklist + 7 hard rules + anti-patterns + 4-layer verification loop + universal DoD. Read it before any future multi-task subagent execution.
+- **One near-miss caught this session — the SIS_CAPTURES misclassification** (see §5). It's the founding entry in the rulebook's "Lessons From Incidents" appendix. Not a regression — caught + corrected before push — but the lesson cost us a debug detour that the rulebook's Hard Rule #1 ("pre-existing failure" claims require git-checkout proof) now prevents from recurring.
 
-## 3. Current state (what SHIPPED + what's open)
+## 3. Current state
 
-### Spec + plan (committed to PR #588)
-- `docs/superpowers/specs/2026-05-25-classlink-roster-certification-parity-design.md` (`3d7a667`)
-- `docs/superpowers/plans/2026-05-25-classlink-roster-certification-parity.md` (`903eec9`)
+### `main` HEAD and recent commits
+```
+7a28a27  scripts: classlink SourcedId contract diagnostic CLI (#590)
+6520119  docs(workflow): codify per-task discipline in .claude/rules/workflow.md (#589)
+2b1390a  feat(classlink): Roster Server certification parity — tenant-scoped identity + student SSO + delete (Class B) (#588)
+111caef  build(deploy): pin NIXPACKS build to Node 20 (#587)    ← session start was here
+```
 
-### Code + tests (PR #588, branch `feature/classlink-roster-cert-parity`)
-17 commits total: 2 docs + 8 TDD implementation tasks (each: red test → green → commit) + 4
-cleanups from per-task reviews + 2 SIS pin updates from the final whole-branch review. HEAD =
-`2f14b73`. Key code commits:
+### Files added or modified by this session (now on main)
 
-- `fbe089f` T1: `normalize_roster` builder param (default-preserving)
-- `3602a3a` T2: tenant-scoped key helper + `_PROVIDER_PREFIXES["classlink"]`
-- `14b9482` T3: tenant-scoped roster-sync wiring (extracted `_run_classlink_roster_sync`)
-- `490395e` T4: `delete_roster_data` orphan-students fix (shared)
-- `1a7543a` T5: student-session core — lookup, mint, picker, fail-closed
-- `8bddbd6` T6: student SSO endpoints + fail-closed callback hand-off
-- `f36102a` + `48dfca7` T7: `/api/classlink/delete-data` (+ guard regression test hardening)
-- `405fad7` T8: frontend provider generalization
+**Production code:**
+- `backend/oneroster.py` — `normalize_roster(raw, external_id_for=None)` default-preserving builder. All 5 external_id sites use the builder. Default lambda keeps OneRoster + Clever byte-identical.
+- `backend/roster_sync.py` —
+  - Added `_PROVIDER_PREFIXES["classlink"] = "classlink:"` (protects classlink rows from Clever/OneRoster deactivation by default).
+  - Removed the now-redundant hardcoded Clever guard (subsumed by the general `other_prefixes` check).
+  - Restructured `delete_roster_data` so student-row + `student_sessions` deletion is **always run** (no longer gated on `if class_ids:`) — fixes FERPA-incomplete deletion of orphan students. Still teacher_id-scoped; benefits OneRoster + Clever + ClassLink equally.
+- `backend/routes/classlink_routes.py` — +337 lines:
+  - `_classlink_roster_external_id(tenant_id, sourced_id)` — the shared key helper used on BOTH the roster-write side (`_run_classlink_roster_sync`) AND the SSO read side (`_create_classlink_student_session`). Same `urllib.parse.quote(..., safe="")` encoding as `_classlink_guid`.
+  - In-memory `_pending_classlink_student_auth_codes` (60s TTL) + `_pending_classlink_class_selections` (120s TTL), each with inline cleanup. Same pattern as Clever.
+  - `_mint_classlink_student_session(sb, student_row, chosen)` — duplicated from Clever (not shared) for Class B blast-radius discipline.
+  - `_create_classlink_student_session(tenant_id, person_id)` — tenant-scoped lookup, fail-closed (NO email fallback), multi-enrollment picker.
+  - Extracted `_run_classlink_roster_sync` from `_trigger_roster_sync` (makes it unit-testable; thread wrapper unchanged).
+  - Rewrote the `role == 'student'` branch of `classlink_callback` — redirects with `?classlink=1&code=…` (single) or `?classlink_select=1&sel=…` (multi), or fail-closed `?classlink_error=not_provisioned` with a PII-free audit log (`tenant + sha256(person_id)[:8]`).
+  - Removed the now-dead `session['classlink_student']` write (and the harmless `pop` in `classlink_logout`).
+  - New routes: `POST /api/classlink/student-token`, `GET/POST /api/classlink/select-class`, `POST /api/classlink/delete-data`.
+- `frontend/src/components/StudentApp.jsx` — generalized the Clever-specific URL handlers to a provider param (`"clever"|"classlink"|null`), so one code path serves both. Clever path provably unchanged — `frontend/src/__tests__/StudentApp.cleverSelect.test.jsx` runs unmodified and passes.
 
-### Workflow rulebook (PR #589, branch `docs/workflow-discipline-rules`)
-- `cd7d4df` `.claude/rules/workflow.md` + CLAUDE.md pointer.
-- This handoff lives here too (appended via a follow-up commit on this branch).
+**Tests:**
+- New: `tests/test_normalize_roster_builder.py`, `tests/test_classlink_roster.py`, `tests/test_classlink_student_sso.py`, `tests/test_roster_sync_delete_orphan.py`, `frontend/src/__tests__/StudentApp.classlink.test.jsx`.
+- Extended: `tests/test_classlink_sso.py` (added `TestClassLinkStudentCallback`), `tests/test_sis_alerting.py` (re-pinned shifted captures + added new pin for the Task-5 capture).
 
-### PR status (as of session end)
-- **#588 — OPEN, MERGEABLE, mergeStateStatus: CLEAN.** 9/9 status checks SUCCESS on first run.
-  0 unresolved review threads, 0 issue comments. Awaiting human Class B review.
-- **#589 — OPEN, MERGEABLE.** Docs only; standard CI.
+**Docs and tooling:**
+- `docs/superpowers/specs/2026-05-25-classlink-roster-certification-parity-design.md` — the design spec.
+- `docs/superpowers/plans/2026-05-25-classlink-roster-certification-parity.md` — the 9-task TDD plan.
+- `.claude/rules/workflow.md` — the canonical workflow rulebook (per-task checklist + 7 hard rules + anti-patterns + verification loop + DoD + incident log).
+- `CLAUDE.md` — added a "Workflow Discipline" pointer section near the top.
+- `scripts/verify_classlink_sourcedid_contract.py` — the live SourcedId-contract diagnostic CLI (see §7).
 
-### Working-tree noise (predates session — never committed)
-`AGENTS.md`, `handoff.md` (being rewritten on #589), `.claude/scheduled_tasks.lock`,
-`flask_session/`, `tests/reports/`. None are part of any commit in this session.
+### Open / closed PRs
+- **Open from prior sessions** (not touched here, may need triage someday): #367, #115, #103, #90, #42, #40.
+- **No open PRs from this session.** All three merged.
+
+### Working-tree noise (predates this session, NEVER committed)
+`AGENTS.md` (modified), `handoff.md` (being overwritten by this file), `.claude/scheduled_tasks.lock`, `flask_session/` (untracked dir), `tests/reports/` (untracked dir). These have been visible the entire session and are intentionally outside every commit's scope per the rulebook's "commit scope clean" rule.
+
+### GitNexus index
+Stale by 1 commit at the moment this handoff was written (last indexed `ee5bf18`; main is `7a28a27`). Refresh with `npx gitnexus analyze --embeddings` — there's a PostToolUse hook that nudges after each commit; trivial to run before any code work begins.
 
 ## 4. Local repro / verification
 
@@ -76,123 +77,162 @@ cleanups from per-task reviews + 2 SIS pin updates from the final whole-branch r
 cd /Users/alexc/Downloads/Graider
 source venv/bin/activate
 
-# Backend gate (mirrors CI)
-pytest -q --ignore=tests/load                     # expect: 5469 passed, 16 skipped
-ruff check backend/ tests/                        # 117 pre-existing repo-wide; 0 on changed files
+# Pull main + confirm we're at the post-merge state
+git checkout main && git pull --ff-only
+git log --oneline -3
+#   expected: 7a28a27 (#590), 6520119 (#589), 2b1390a (#588)
+
+# Local CI mirror — all gates should be green on main
+pytest -q --ignore=tests/load               # expect: ~5469 passed, ~16 skipped
+ruff check backend/                         # CI scope; expect: clean (scripts/ is out of scope by design)
 bandit -q -r backend/routes/classlink_routes.py backend/roster_sync.py backend/oneroster.py
-                                                  # 1 pre-existing Low/Med (CLASSLINK_TOKEN_URL false-positive)
+                                            # expect: 1 pre-existing Low/Med on CLASSLINK_TOKEN_URL (false positive)
+cd frontend && npx vitest run               # expect: 237 passed across 48 files
+cd frontend && npm run build                # expect: success
+cd ..
 
-# Frontend gate
-cd frontend && npx vitest run                     # 237 passed, 48 files
-cd frontend && npm run build                      # success
-
-# Spot-check the design-critical properties
+# Spot-check the design-critical properties (sanity-grep)
 grep -n "_classlink_roster_external_id" backend/routes/classlink_routes.py
-                                                  # one helper, two call sites (write + read)
-grep -n "email" backend/routes/classlink_routes.py | grep -i fallback
-                                                  # zero hits — confirms no email fallback
-grep -nE "@classlink_bp\.route" backend/routes/classlink_routes.py
-                                                  # 6 routes (login-url, callback, session, logout,
-                                                  # student-token, select-class, delete-data)
+#   expected: 1 def + 2 call sites (read in _create_classlink_student_session, write in _run_classlink_roster_sync)
+grep -nE "\.eq\(\"email\"" backend/routes/classlink_routes.py
+#   expected: NO matches in _create_classlink_student_session — confirms fail-closed-no-email-fallback
 
-# PR status
-gh pr view 588 --json mergeable,mergeStateStatus,statusCheckRollup --jq '.'
+# Open PRs from this session — all should be closed/merged
+gh pr list --state merged --search "merged:>=2026-05-25"
+
+# Production smoke (deployed via Railway after #588 merged)
+curl -fsS https://app.graider.live/healthz
+curl -fsS https://app.graider.live/api/classlink/login-url | jq .
+#   expected: {"url": "https://launchpad.classlink.com/oauth2/v2/auth?..."} with non-empty url
 ```
 
-## 5. Concrete next steps (in priority order)
+### The live verification (the one open action)
 
-1. **Human code review on PR #588 (Class B gate).** Recommended review focus, in order:
-   (a) `_create_classlink_student_session` (`backend/routes/classlink_routes.py:171-224`) — confirm
-   no email fallback path. (b) `_classlink_roster_external_id` (`:79-91`) used identically on both
-   write and read sides. (c) `delete_roster_data` restructure (`backend/roster_sync.py:254-303`)
-   — every `.delete()` is teacher_id/class_id/student_id-scoped. (d) The callback's fail-closed
-   branch + PII-free audit log.
-2. **Merge PR #588 manually after review returns clean.** Do NOT arm `gh pr merge --auto`
-   (Class B Hard Rule #7 in `.claude/rules/workflow.md`).
-3. **Merge PR #589** at your convenience (docs-only, low risk).
-4. **Pre-cert live dependency to verify** (carries over from PR #582 / SSO spec):
-   confirm that the ClassLink userinfo `SourcedId` used as `person_id` equals the OneRoster Roster
-   Server `sourcedId` for the same person in the live ClassLink test tenant. The design
-   fails-closed if they diverge (T5 `test_no_row_fails_closed`, T6
-   `test_unprovisioned_student_fails_closed`), but the happy path needs the contract to hold.
-5. **Schedule the ClassLink Roster Server cert call** once #588 is merged + deployed.
+```bash
+# 1. Obtain the test user's userinfo SourcedId.
+#    EITHER: have a test student log in via ClassLink SSO and read the
+#    CLASSLINK_LOGIN audit event from Sentry/Railway logs (or, on failure,
+#    the CLASSLINK_STUDENT_NOT_PROVISIONED event's person_hash — which is
+#    SHA-256-truncated and non-reversible; for raw value you'd need a
+#    one-shot debug log added temporarily to _create_classlink_student_session).
+#    OR: hit https://nodeapi.classlink.com/v2/my/info directly with the
+#    user's ClassLink access token and read the "SourcedId" field.
 
-## 6. Known follow-ups (filed in the PR body, not blocking)
+# 2. Get the test tenant's OneRoster Roster Server credentials from the
+#    ClassLink developer portal.
 
-1. **End-to-end tenant-isolation direct test** — seed `students` with
-   `student_id_number = "classlink:dist-B:s1"`, call
-   `_create_classlink_student_session("dist-A", "s1")`, assert None. The shared-helper byte-identity
-   argument is convincing by construction; an explicit assertion would close the door on a future
-   refactor that diverges the two call sites.
-2. **Per-process in-memory auth-code + selection-token stores** — parity with Clever; would need
-   Redis/DB backing for multi-worker production. One fix benefits both providers.
-3. **`_classlink_roster_external_id` docstring** could note the deliberate divergence from
-   `_classlink_guid` (string-tolerant of empty components vs None-returning) to satisfy
-   `normalize_roster` upstream's always-a-string semantics.
+# 3. Run the diagnostic:
+python scripts/verify_classlink_sourcedid_contract.py \
+    --base-url https://<tenant>.classlink-os.com/ims/oneroster/v1p1 \
+    --client-id "$OR_CLIENT_ID" --client-secret "$OR_CLIENT_SECRET" \
+    --userinfo-sourced-id "<SourcedId from step 1>" \
+    --lookup-email <test student's email>
 
-## 7. Lessons captured this session
+# Exit 0 → contract holds, green-light the Roster Server cert call.
+# Exit 1 → contract broken, escalate to ClassLink with the printed diff.
+# Exit 2 → operational (auth/network) error, fix the inputs.
+```
 
-The session shipped **17 implementation commits across 9 TDD tasks under subagent-driven review**
-plus a **whole-branch opus final review** — but a cross-cutting test failure
-(`test_sis_alerting.py`, pinning `(file, line)` tuples in files Tasks 3 and 4 shifted) slipped past
-**five** review passes and a cleanup-subagent nearly misclassified it as "pre-existing on main."
+## 5. Disproved hypotheses (do NOT re-try)
 
-Root causes — and the rules they produced in `.claude/rules/workflow.md`:
+- **Bare `classlink:{sourcedId}` namespace (the original handoff's recommended Approach 2).** REJECTED by the 3-AI consult: both Codex `gpt-5.5`-high and Gemini independently flagged this as a cross-tenant FERPA hole — the Clever-style student-SSO lookup queries `student_id_number` globally, and two tenants sharing a sourcedId would surface each other's classes in the picker. **Replaced with tenant-scoped Approach 2:** `classlink:{quote(tenant)}:{quote(sourcedId)}` produced by a single shared helper used on both write and read sides. (See `docs/superpowers/specs/2026-05-25-classlink-roster-certification-parity-design.md` §3 for the consult outcome.)
 
-- **Per-task verification was scoped to "named test files."** Cross-cutting consumers were
-  invisible to scoped review. → **Per-task checklist** now requires
-  `pytest -q --ignore=tests/load` (full suite) and
-  `grep -rln '<modified file>' tests/` (cross-cutting test grep).
-- **"Pre-existing failure" was accepted on instinct, not evidence.** → **Hard Rule #1**: such
-  claims require `git checkout <base> -- <files>; pytest <test>` proof; 10 seconds of work that
-  saves a red CI round-trip.
-- **Line-shifting refactors require pin-test grep.** → **Hard Rule #3**, codified.
-- **Full-suite gate was deferred to T9.** → **Hard Rule #2**: `pytest -q` is the floor, not the
-  ceiling, of per-task verification.
+- **Approach 1 (ClassLink lives in the `oneroster:` namespace, do nothing to `normalize_roster`).** REJECTED for the same reason: ClassLink SSO lookup with `oneroster:{sourcedId}` could collide with real OneRoster rows on the global lookup.
 
-The "Lessons From Incidents" appendix in `workflow.md` records the SIS_CAPTURES near-miss as the
-founding case study. Future incidents go above that entry (newest first).
+- **Gemini's email fallback (prefix-validated).** REJECTED in favor of Codex's stricter no-email-fallback. For a Class B FERPA path, a global email lookup is exactly the cross-tenant match we're eliminating. Decision is documented inline in `_create_classlink_student_session` (`backend/routes/classlink_routes.py:171-227`).
+
+- **Sharing `_mint_*_student_session` between Clever and ClassLink.** REJECTED. The mint is duplicated, not extracted to a shared helper, deliberately — Class B blast-radius discipline keeps the certified Clever path byte-identical. The duplicated docstring documents this.
+
+- **"SIS_CAPTURES test failure is pre-existing on main" (claim made by the T9 cleanup subagent).** DISPROVED via `git checkout 111caef -- <files>; pytest tests/test_sis_alerting -q` against main's versions of the changed files — main was green, our branch was red. The Tasks 3+4 line shifts moved captures outside the test's `window=8` search range. **Fixed in commit `3ac5aba` (re-pinned) + commit `2f14b73` (corrected a meaning-drift in the re-pin).** This near-miss is the founding case study in `.claude/rules/workflow.md`'s "Lessons From Incidents" appendix.
+
+- **SIS pin re-target: pointing pin to `classlink_routes.py:223` for the `_bg_sync` capture.** DISPROVED by the final whole-branch reviewer. Line 223 actually covers the `_create_classlink_student_session` except block (new in Task 5), NOT `_bg_sync` (whose capture moved to line 295/297 because Task 5 inserted helpers above `_trigger_roster_sync`). **Final fix in commit `2f14b73`:** the `_bg_sync` pin moved to line 295; a NEW pin was added at line 223 for the Task-5 capture. Paranoia-checked: removing either capture independently fails the test with the correct pin in the failure list.
+
+- **Per-task verification scoped to "named test files only" (the pattern that hid the SIS regression).** DISPROVED as sufficient. The workflow rulebook (Hard Rule #2) now mandates `pytest -q --ignore=tests/load` as the floor for per-task verification; cross-cutting tests like `test_sis_alerting.py` that pin `(file, line)` tuples are invisible to scoped review.
+
+- **Trusting subagent reports without spot-checks.** Specifically the cleanup subagent's misclassification. DISPROVED — the workflow rulebook's Hard Rule #5 now requires evidence-bearing subagent reports (test counts, lint output tails — actual stdout, not vibes), and Hard Rule #1 specifically requires the `git checkout <base>` proof protocol for "pre-existing failure" claims.
+
+## 6. Most likely remaining causes / open risks (ranked)
+
+These are the live risks that could still bite — none are debug-thread open. Ranked by likelihood and impact.
+
+1. **(highest) The live ClassLink SourcedId contract may be broken in the test tenant.** This is the WHOLE reason the diagnostic script exists. If userinfo `SourcedId` ≠ Roster Server `sourcedId` for the same person in the cert-test tenant, every ClassLink student in that tenant hits `/student?classlink_error=not_provisioned`. Production behavior is fail-closed (no security incident), but the cert call can't proceed. **Mitigation:** run the diagnostic (§4 last block) before scheduling.
+2. **(medium) `_extract_person_id` may fall back to `UserId` for the test user.** If userinfo lacks `SourcedId` entirely, we use `UserId` (with a warning logged). `UserId` is not guaranteed to equal the OneRoster `sourcedId`, so SSO would fail closed. **Mitigation:** watch Sentry for the `"ClassLink userinfo has no SourcedId; using UserId as person id"` warning during the live test.
+3. **(low) In-memory auth-code + selection-token stores are not multi-worker safe.** A student whose auth code was minted on worker A but exchanged on worker B gets 401. Same parity-bound limitation Clever has shipped with. Filed as a follow-up in PR #588's body — Redis-backed shared store would fix both providers in one shot.
+4. **(low) Duplicated `_mint_classlink_student_session` could drift from `_mint_clever_student_session` over time.** Intentional duplication, but no parity test enforcing field-shape equivalence. Filed as follow-up.
+5. **(low) `delete_roster_data` orphan fix changes delete ordering for OneRoster + Clever paths.** Children before parents, FK-safe per the opus reviewer's check against `backend/database/migration_2026_03_20_fk_constraints.sql`, and all per-teacher tests stayed green. Risk is low but if a downstream consumer relies on the old ordering, it would surface here. Mitigation: 5469 passed including all OneRoster/Clever roster-deletion tests.
+
+## 7. Concrete next step
+
+**Run the diagnostic script in the live ClassLink test tenant.** This is the only blocker before scheduling the Roster Server cert call.
+
+Sketch:
+
+```bash
+git checkout main && git pull --ff-only
+source venv/bin/activate
+
+# Assume you have the test tenant's Roster Server OAuth2 creds + a test
+# student's userinfo SourcedId from a prior SSO log or a userinfo API call.
+python scripts/verify_classlink_sourcedid_contract.py \
+    --base-url https://<tenant>.classlink-os.com/ims/oneroster/v1p1 \
+    --client-id "$OR_CLIENT_ID" --client-secret "$OR_CLIENT_SECRET" \
+    --userinfo-sourced-id "$USERINFO_SID" \
+    --lookup-email "$TEST_STUDENT_EMAIL"
+```
+
+Then either:
+- **Exit 0**: schedule the ClassLink Roster Server cert call.
+- **Exit 1 + same person found with different sourcedId**: escalate to ClassLink support with both values + the person's email/name. The diagnostic prints both clearly.
+- **Exit 1 + user not found**: confirm you have the right tenant + base URL + that the test user is actually provisioned in this Roster Server.
+
+If the diagnostic itself can't be run (no Roster Server creds at hand), an alternative is the **observable-behavior test**: have the rostered test student log in via ClassLink SSO at `app.graider.live`. Landing at the portal = contract holds; landing at `/student?classlink_error=not_provisioned` = broken. Then pull Sentry for the `CLASSLINK_STUDENT_NOT_PROVISIONED` audit event.
+
+**Follow-ups worth filing eventually** (in priority order):
+1. End-to-end tenant-isolation direct test (see PR #588 body — strengthens the byte-identity argument with an explicit assertion).
+2. Redis-backed shared auth-code + selection stores (benefits both Clever and ClassLink).
+3. Mint-parity test asserting `_mint_classlink_student_session` and `_mint_clever_student_session` field shapes match.
 
 ## 8. References
 
-### PRs from this session
-- **#588** — ClassLink Roster Server cert-parity (Class B) — open + clean.
-- **#589** — workflow discipline rulebook (Class A docs) — open.
-- **#582 / #583 / #585 / #586 / #587** (previous session) — ClassLink SSO + deploy work, all merged
-  and live on `app.graider.live`.
+### PRs from this session (all merged to `main`)
+- **#588** — `feat(classlink): Roster Server certification parity — tenant-scoped identity + student SSO + delete (Class B)` — squash `2b1390a`, 17 commits + 9 TDD tasks + 4 cleanups + 2 SIS pin updates.
+- **#589** — `docs(workflow): codify per-task discipline in .claude/rules/workflow.md` — squash `6520119`, includes the rulebook + CLAUDE.md pointer + the prior handoff rewrite.
+- **#590** — `scripts: classlink SourcedId contract diagnostic CLI` — squash `7a28a27`.
 
-### Key files
-- `backend/oneroster.py:298-397` — `normalize_roster(raw, external_id_for=…)` (T1).
-- `backend/routes/classlink_routes.py:58-91` — `_classlink_guid` + `_classlink_roster_external_id`.
-- `backend/routes/classlink_routes.py:120-167` — auth-code + selection stores + mint.
-- `backend/routes/classlink_routes.py:171-224` — `_create_classlink_student_session`
-  (the read side of the tenant-scoped key).
-- `backend/routes/classlink_routes.py:294-310` — `_trigger_roster_sync` + `_run_classlink_roster_sync`
-  (the write side).
-- `backend/routes/classlink_routes.py:` — student-token endpoint, select-class endpoint,
-  delete-data endpoint.
-- `backend/roster_sync.py:26-31` — `_PROVIDER_PREFIXES` with the new classlink entry.
-- `backend/roster_sync.py:254-303` — `delete_roster_data` with the orphan fix.
-- `frontend/src/components/StudentApp.jsx` — provider-generalized SSO handlers.
+### PRs from prior session (already merged + live)
+- **#582** `feat(classlink): SSO certification-readiness — tenant-scoped fail-closed identity` (the predecessor that made ClassLink SSO cert-ready).
+- **#583** interim bundle rebuild (superseded by #585).
+- **#585** `build(deploy): build frontend at deploy` (Railway/NIXPACKS frontend build).
+- **#586** `build(deploy): fail-loud guard for VITE_ Supabase vars`.
+- **#587** `build(deploy): pin NIXPACKS build to Node 20`.
 
 ### Specs + plans
-- `docs/superpowers/specs/2026-05-25-classlink-roster-certification-parity-design.md`
-- `docs/superpowers/plans/2026-05-25-classlink-roster-certification-parity.md`
-- `docs/superpowers/specs/2026-05-25-classlink-sso-certification-readiness-design.md`
-  (prior session, foundation for this work)
+- `docs/superpowers/specs/2026-05-25-classlink-roster-certification-parity-design.md` — design spec (this session).
+- `docs/superpowers/plans/2026-05-25-classlink-roster-certification-parity.md` — 9-task TDD plan (this session).
+- `docs/superpowers/specs/2026-05-25-classlink-sso-certification-readiness-design.md` — SSO spec (prior session, foundation for this work).
 
-### Consult artifacts
-- `/tmp/classlink_roster_consult.md` — the 3-AI consult prompt.
-- Codex + Gemini outputs were captured in-session at `/tmp/codex_roster_out.md` +
-  `/tmp/gemini_roster_out.md`. Both AIs independently converged on tenant-scoped Approach 2.
+### Key code locations (on `main` HEAD `7a28a27`)
+- `backend/routes/classlink_routes.py:83-93` — `_classlink_roster_external_id` (shared key helper).
+- `backend/routes/classlink_routes.py:97-167` — auth-code + selection stores + mint.
+- `backend/routes/classlink_routes.py:171-227` — `_create_classlink_student_session` (SSO read side, fail-closed, no email fallback).
+- `backend/routes/classlink_routes.py:248-296` — `_run_classlink_roster_sync` + `_trigger_roster_sync` (roster write side, builder closure at line 279).
+- `backend/routes/classlink_routes.py:535-561` — rewritten callback student branch (fail-closed audit + redirect).
+- `backend/routes/classlink_routes.py:611-687` — three new endpoints (delete-data, student-token, select-class).
+- `backend/oneroster.py:298-397` — `normalize_roster(raw, external_id_for=None)` with default-preserving lambda.
+- `backend/roster_sync.py:26-31` — `_PROVIDER_PREFIXES` with classlink entry.
+- `backend/roster_sync.py:254-303` — `delete_roster_data` with orphan fix.
+- `frontend/src/components/StudentApp.jsx` — provider-generalized handlers.
+- `scripts/verify_classlink_sourcedid_contract.py` — the diagnostic CLI.
 
 ### Workflow rulebook
-- `.claude/rules/workflow.md` — the codified per-task discipline.
-- `CLAUDE.md` (top) — pointer section pointing readers to the rulebook.
+- `.claude/rules/workflow.md` — per-task checklist + 7 hard rules + anti-patterns + verification loop + DoD + incident log.
+- `CLAUDE.md` — "Workflow Discipline" pointer section near the top makes it auto-discoverable on every session.
+- **Read this before any future multi-task subagent execution.** Hard Rule #1 ("pre-existing failure" claims require git-checkout proof) is the rule that would have prevented the SIS misclassification cleanly the first time.
+
+### Consult artifacts (may be ephemeral)
+- `/tmp/classlink_roster_consult.md` — the 3-AI consult prompt.
+- `/tmp/codex_roster_out.md` + `/tmp/gemini_roster_out.md` — Codex and Gemini outputs. Both AIs independently converged on tenant-scoped Approach 2.
 
 ---
 
-*Status: clean ship. No open investigations, no failed attempts, no debug threads. Two PRs await
-human action; nothing autonomous needed. Next agent: read `.claude/rules/workflow.md` first
-(per the CLAUDE.md pointer) — it codifies what you already know but spells out the verification
-gates that catch silent failures.*
+*Status: clean ship. No open investigations, no debug threads, no failed attempts. One LIVE external action open (§7); the design fails closed if that contract breaks, so even an "exit 1" outcome is not a security incident — it's a "schedule the support escalation, not the cert call" outcome.*
