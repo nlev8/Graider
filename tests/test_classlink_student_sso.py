@@ -122,3 +122,53 @@ def test_select_class_get_lists_then_post_mints():
                        json={"selection_token": token, "class_id": "cls2"})
         assert p.status_code == 200 and p.get_json()["token"]
         assert capture["inserted"]["class_id"] == "cls2"
+
+
+def test_select_class_post_rejects_unknown_class_id_without_consuming_token():
+    """Retry safety: a bad class_id must 400 and NOT consume the selection token."""
+    from backend.routes import classlink_routes
+    candidates = [
+        {"class_id": "cls1", "name": "Math", "subject": "math",
+         "_student_row": {"id": "row1", "student_id_number": KEY}},
+    ]
+    token = classlink_routes._create_classlink_class_selection(candidates)
+    app = _make_app()
+    with app.test_client() as c:
+        bad = c.post("/api/classlink/select-class",
+                     json={"selection_token": token, "class_id": "not-a-real-class"})
+        assert bad.status_code == 400
+        # Token must NOT have been consumed — a follow-up GET still lists candidates.
+        ok = c.get(f"/api/classlink/select-class?selection_token={token}")
+        assert ok.status_code == 200
+        assert ok.get_json()["classes"][0]["class_id"] == "cls1"
+
+
+def test_select_class_post_returns_503_when_supabase_unavailable():
+    """No supabase → 503 (token also not consumed so the student can retry later)."""
+    from backend.routes import classlink_routes
+    candidates = [
+        {"class_id": "cls1", "name": "Math", "subject": "math",
+         "_student_row": {"id": "row1", "student_id_number": KEY}},
+    ]
+    token = classlink_routes._create_classlink_class_selection(candidates)
+    app = _make_app()
+    with app.test_client() as c, \
+         patch("backend.routes.classlink_routes.get_supabase", return_value=None):
+        r = c.post("/api/classlink/select-class",
+                   json={"selection_token": token, "class_id": "cls1"})
+        assert r.status_code == 503
+
+
+def test_select_class_get_with_expired_token_returns_401_and_clears_it():
+    """An expired selection token GETs 401 and is removed from the in-memory store."""
+    from backend.routes import classlink_routes
+    # Inject an already-expired entry directly to avoid sleeping in the test.
+    expired_token = "expired-test-token"
+    classlink_routes._pending_classlink_class_selections[expired_token] = {
+        "candidates": [], "expires": 0,  # epoch — long expired
+    }
+    app = _make_app()
+    with app.test_client() as c:
+        r = c.get(f"/api/classlink/select-class?selection_token={expired_token}")
+        assert r.status_code == 401
+        assert expired_token not in classlink_routes._pending_classlink_class_selections
