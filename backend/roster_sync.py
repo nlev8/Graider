@@ -273,28 +273,27 @@ def delete_roster_data(teacher_id):
             classes_res = sb.table("classes").select("id").eq("teacher_id", teacher_id).execute()
             class_ids = [c["id"] for c in (classes_res.data or [])]
 
-            student_ids = []
             if class_ids:
-                # Delete student_submissions for published content in these classes
+                # Class-scoped deletes (content, submissions, enrollments, classes)
                 content_res = sb.table("published_content").select("id").in_("class_id", class_ids).execute()
                 content_ids = [c["id"] for c in (content_res.data or [])]
                 if content_ids:
                     sb.table("student_submissions").delete().in_("content_id", content_ids).execute()
                     sb.table("published_content").delete().in_("id", content_ids).execute()
-
-                # Delete enrollments
                 for cid in class_ids:
                     sb.table("class_students").delete().eq("class_id", cid).execute()
 
-                # Get and delete students
-                students_res = sb.table("students").select("id").eq("teacher_id", teacher_id).execute()
-                student_ids = [s["id"] for s in (students_res.data or [])]
-                if student_ids:
-                    for sid in student_ids:
-                        sb.table("student_sessions").delete().eq("student_id", sid).execute()
-                    sb.table("students").delete().eq("teacher_id", teacher_id).execute()
+            # Always delete this teacher's students + their sessions — including
+            # orphan students with no class rows (FERPA right-to-delete must be
+            # complete). Still teacher_id-scoped: never another teacher's rows.
+            students_res = sb.table("students").select("id").eq("teacher_id", teacher_id).execute()
+            student_ids = [s["id"] for s in (students_res.data or [])]
+            if student_ids:
+                for sid in student_ids:
+                    sb.table("student_sessions").delete().eq("student_id", sid).execute()
+                sb.table("students").delete().eq("teacher_id", teacher_id).execute()
 
-                # Delete classes
+            if class_ids:
                 sb.table("classes").delete().eq("teacher_id", teacher_id).execute()
 
             deleted["classes"] = len(class_ids)
