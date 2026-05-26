@@ -173,6 +173,42 @@ Class B. Moving code verbatim ⇒ Class A.
 
 Each entry: date, one-sentence summary, root cause, rule(s) the entry produced.
 
+### 2026-05-26 — PR opened with auto-merge armed never triggered CI
+
+**What happened.** Opened PR #591 (Class A docs — handoff rewrite) targeting `main`,
+armed `gh pr merge --auto --squash` immediately. CI never started. The PR sat at
+`mergeStateStatus: BLOCKED` for 9+ minutes with zero workflow runs in the GitHub
+Actions API for the head SHA. Tried an empty-commit retrigger
+(`git commit --allow-empty`); the new SHA *also* got zero runs after another wait.
+Other workflow events on the repo (scheduled periodic-sync, nightly E2E) ran fine
+in the same window — so it wasn't a repo-wide Actions outage. Eventually closed +
+reopened the PR via `gh pr close 591 && gh pr reopen 591`; this fired the
+`pull_request` event freshly and CI immediately picked up the same SHA. Auto-merge
+had to be re-armed (closing clears it). PR landed at `f418f82`.
+
+**Cause (GitHub side, not our discipline).** The combination of *(opening a PR)* and
+*(arming auto-merge moments later, before GitHub had finished initial CI dispatch
+for the PR)* appears to leave the PR in a state where the `pull_request` workflow
+trigger is dropped silently. The workflow file's `on: pull_request: branches: [main]`
+config is correct; the workflow file is unchanged from PRs that ran normally. The
+only thing visibly different was the timing of the auto-merge arming.
+
+**Runbook (this entry itself — the workflow rulebook's Anti-Patterns table is
+for red-flag *thoughts*, not operational GitHub-edge-case fixes):**
+- If a PR is `BLOCKED` with **zero** runs in `gh api .../actions/runs?head_sha=…`
+  after 2-3 minutes despite a valid `pull_request` trigger:
+  1. **First try:** `gh pr close <n> && gh pr reopen <n>`. Re-arm auto-merge after
+     reopen (closing clears it).
+  2. **Do NOT bother** with `git commit --allow-empty && git push` to retrigger —
+     it didn't help here. (Documented so the next agent skips that step.)
+  3. **Last resort** for genuinely-stuck Class A docs PRs: `gh pr merge --admin`.
+     Never for Class B.
+
+**Outcome.** Lesson costs ~30 seconds to apply next time it surfaces. Cost of NOT
+having this codified: 15 minutes of speculative debugging during the next agent's
+session, since the symptom (CI never fired) is easy to misattribute to repo
+configuration or workflow-file bugs.
+
 ### 2026-05-25 — SIS_CAPTURES pin misclassification
 
 **What happened.** Tasks 3 and 4 of the ClassLink Roster Server cert-parity
