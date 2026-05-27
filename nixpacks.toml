@@ -17,13 +17,21 @@ providers = ["python", "node"]
 #   4. grep the built JS for the REAL url → fail if it didn't inline (the
 #      'https://dummy.supabase.co' fallback literal is ALWAYS present, so we
 #      grep for the configured url, not against dummy).
+#
+# Per-service opt-out: set `SKIP_FRONTEND_BUILD=true` on Railway services that
+# don't serve the SPA (worker, Celery beat, etc.). Those services share the
+# repo (and thus this nixpacks.toml) but should not pay the frontend-build
+# cost AND should not require VITE_* env vars to be set. The guard prefix on
+# each cmd makes the cmd a no-op when the flag is true — Docker RUN exits 0
+# and the build proceeds to the next phase (start). Default (unset) preserves
+# the current build for the web service.
 [phases.build]
 dependsOn = ["install"]
 cmds = [
-  "test -n \"$VITE_SUPABASE_URL\" && test -n \"$VITE_SUPABASE_ANON_KEY\"",
-  "cd frontend && npm ci && VITE_SUPABASE_URL=\"$VITE_SUPABASE_URL\" VITE_SUPABASE_ANON_KEY=\"$VITE_SUPABASE_ANON_KEY\" npm run build",
-  "test -s backend/static/index.html",
-  "grep -Rq -- \"$VITE_SUPABASE_URL\" backend/static/assets/ || { echo 'FATAL: VITE_SUPABASE_URL not baked into bundle'; exit 1; }",
+  "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-frontend-build]'; exit 0; }; test -n \"$VITE_SUPABASE_URL\" && test -n \"$VITE_SUPABASE_ANON_KEY\"",
+  "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-frontend-build]'; exit 0; }; cd frontend && npm ci && VITE_SUPABASE_URL=\"$VITE_SUPABASE_URL\" VITE_SUPABASE_ANON_KEY=\"$VITE_SUPABASE_ANON_KEY\" npm run build",
+  "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-frontend-build]'; exit 0; }; test -s backend/static/index.html",
+  "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-frontend-build]'; exit 0; }; grep -Rq -- \"$VITE_SUPABASE_URL\" backend/static/assets/ || { echo 'FATAL: VITE_SUPABASE_URL not baked into bundle'; exit 1; }",
 ]
 
 [start]

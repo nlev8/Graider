@@ -33,6 +33,7 @@ red-PR-slow. The two are complementary; running both is the standard.
 - **Backend (app.graider.live)**: Railway — auto-deploys when PRs merge to `main`. Direct pushes to main are blocked by branch protection.
 - **Landing page (graider.live)**: Vercel — deploy with `cd landing && npx vercel --prod`. Separate Vercel project.
 - **Frontend**: Built **at deploy** by Railway/NIXPACKS (`nixpacks.toml` `[phases.build]` runs `cd frontend && npm run build` → `backend/static/`). `backend/static/` is **gitignored** (no longer committed). Requires `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` set as Railway build variables. For local dev, run `cd frontend && npm run build` to populate `backend/static/`, or use `npm run dev` (Vite dev server, port 5180, proxies `/api`).
+- **Non-web Railway services** (worker, Celery beat, etc.) share this `nixpacks.toml` but don't serve the SPA. Set `SKIP_FRONTEND_BUILD=true` on those services — the build-phase guard makes each cmd a no-op (Docker RUN exits 0). Without that flag the frontend build runs uniformly, wastes time, and *requires* the `VITE_*` env vars to be set on every service. See `nixpacks.toml` header comment for details.
 
 ### CI/CD Pipeline
 
@@ -715,7 +716,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **Graider** (19219 symbols, 48216 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Graider** (19463 symbols, 48682 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
