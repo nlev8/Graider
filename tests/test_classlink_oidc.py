@@ -4,6 +4,8 @@ Tests for backend.services.classlink_oidc — OIDC discovery + JWKS client cache
 TDD baseline for Task 1 of the SIS compliance hardening sprint
 (docs/superpowers/specs/2026-05-05-sis-compliance-hardening-design.md).
 """
+import ssl
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -77,5 +79,12 @@ def test_jwks_client_uses_discovered_uri():
         mock_get.return_value = MagicMock(status_code=200, json=lambda: fake_config)
         with patch("backend.services.classlink_oidc.PyJWKClient") as mock_jwks:
             client = get_classlink_jwks_client()
-            mock_jwks.assert_called_once_with("https://example.com/jwks")
+            # PyJWKClient is now constructed with a certifi-backed SSL context
+            # (hotfix for PyJWKClientConnectionError in the Railway nixpacks
+            # image — the OS CA bundle was missing intermediates for ClassLink's
+            # JWKS endpoint, while httpx-via-certifi worked for the same host).
+            mock_jwks.assert_called_once()
+            args, kwargs = mock_jwks.call_args
+            assert args == ("https://example.com/jwks",)
+            assert isinstance(kwargs.get("ssl_context"), ssl.SSLContext)
         assert client is mock_jwks.return_value

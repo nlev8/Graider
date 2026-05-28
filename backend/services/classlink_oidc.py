@@ -11,13 +11,25 @@ deduplication is load-bearing (token exchange, gradebook writes) — use a
 `threading.Lock` for those.
 """
 import logging
+import ssl
 import time
 from typing import Any, Optional
 
+import certifi
 import httpx
 from jwt import PyJWKClient
 
 logger = logging.getLogger(__name__)
+
+# Pre-built SSL context using certifi's CA bundle (the same bundle httpx
+# uses by default). pyjwt's `PyJWKClient` internally calls
+# `urllib.request.urlopen` which would otherwise fall back to the OS CA
+# bundle — and the Railway nixpacks image's OS bundle does NOT include all
+# of the intermediates that ClassLink's JWKS endpoint serves. The result
+# was `PyJWKClientConnectionError` despite the JWKS host being reachable
+# (the OIDC discovery doc on the SAME host fetched fine via httpx ~17ms
+# earlier). Reusing certifi here eliminates the bundle mismatch.
+_CERTIFI_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 class ClassLinkOIDCError(RuntimeError):
@@ -77,6 +89,10 @@ def _invalidate_jwks_client() -> None:
 def get_classlink_jwks_client() -> PyJWKClient:
     """Return PyJWKClient pointed at the discovered jwks_uri.
 
+    Uses a certifi-backed SSL context so the internal urllib fetch matches
+    httpx's behavior (see module-level `_CERTIFI_SSL_CONTEXT` comment for the
+    `PyJWKClientConnectionError` incident this guards against).
+
     Raises ClassLinkOIDCError if the OIDC config is missing jwks_uri.
     """
     global _cached_jwks_client
@@ -86,5 +102,5 @@ def get_classlink_jwks_client() -> PyJWKClient:
     jwks_uri = cfg.get("jwks_uri")
     if not jwks_uri:
         raise ClassLinkOIDCError("ClassLink OIDC config missing jwks_uri")
-    _cached_jwks_client = PyJWKClient(jwks_uri)
+    _cached_jwks_client = PyJWKClient(jwks_uri, ssl_context=_CERTIFI_SSL_CONTEXT)
     return _cached_jwks_client
