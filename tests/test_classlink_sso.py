@@ -635,12 +635,59 @@ class TestClassLinkIdTokenValidation:
             f"Expected 302 redirect, got {resp.status_code}: {resp.data!r}"
         )
         location = resp.headers["Location"]
-        # The test's primary contract: no nbf in the id_token MUST NOT cause
-        # oidc_invalid. Any other landing place is acceptable here — the
-        # downstream session-shape assertion is covered by the existing
-        # `test_callback_uses_id_token_claims_session_contents`.
+        # Primary contract: no-nbf MUST NOT cause oidc_invalid.
         assert "classlink_error=oidc_invalid" not in location, (
             f"id_token without nbf was rejected; landed at: {location}"
+        )
+        # Positive marker (defense against future drift where the redirect
+        # silently changes to a different non-oidc_invalid error mode that
+        # the `not in` check above would still pass). The sibling test
+        # `test_callback_uses_id_token_claims_for_identity` uses the same
+        # positive marker.
+        assert "classlink_login=success" in location, (
+            f"Expected `classlink_login=success`, got: {location}"
+        )
+
+    # ── test 3c: id_token WITH nbf in the future → still rejected ─────────────
+    #
+    # The security argument for dropping `nbf` from the `require` list rests
+    # on pyjwt's `verify_nbf` default being True — i.e., even though we no
+    # longer DEMAND `nbf`, when it IS present we still REJECT a token whose
+    # `nbf` is in the future. This test pins that property so the central
+    # security claim of PR #596 cannot regress silently.
+
+    def test_callback_rejects_immature_nbf(self):
+        """nbf present + in the future (past pyjwt leeway=10) → oidc_invalid.
+
+        Pins that pyjwt's `verify_nbf=True` default still enforces nbf when
+        the claim is present in the token, even though it's no longer in
+        the `require` list.
+        """
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        # nbf 5 minutes in the future — well past pyjwt's leeway=10.
+        id_token = make_id_token(
+            priv,
+            aud="test-client-id",
+            sub="cl-immature-nbf",
+            include_nbf=False,  # suppress factory's now-nbf so extra_claims wins
+            extra_claims={"nbf": int(time.time()) + 300},
+        )
+
+        with app.test_client() as client:
+            with patch('backend.routes.classlink_routes.requests.post',
+                       return_value=self._make_token_response(id_token)), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)):
+                resp = client.get('/api/classlink/callback?code=abc&state=xyz')
+
+        assert resp.status_code == 302
+        # pyjwt raises ImmatureSignatureError (a PyJWTError subclass), which
+        # the callback catches and redirects with classlink_error=oidc_invalid.
+        assert "classlink_error=oidc_invalid" in resp.headers["Location"], (
+            f"Expected oidc_invalid for future-nbf token; landed at: {resp.headers['Location']}"
         )
 
     # ── test 4: expired id_token → oidc_expired ───────────────────────────────

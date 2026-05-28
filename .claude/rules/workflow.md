@@ -73,6 +73,23 @@ because each item exists because *something burned us before*.
    network-layer error before patching. (See `Lessons From Incidents`
    2026-05-28 for the cost of skipping this — a clean-CI, clean-review fix
    that didn't fix anything.)
+10. **OIDC `require` lists cite the spec.** Any entry in a `pyjwt.decode(...
+    options={"require": [...]})` (or equivalent in another JWT library) MUST
+    be either:
+    (a) an OIDC Core §2 *REQUIRED* id_token claim — `iss`, `sub`, `aud`,
+        `exp`, `iat`, plus `nonce` when the relying party sent one — OR
+    (b) accompanied by an inline comment citing the spec section / RFC
+        clause that justifies the additional requirement (e.g., a tenant
+        contract that mandates a non-standard claim).
+    Anything else is over-strict and will reject standards-compliant tokens
+    from any IdP that follows the spec literally. (See `Lessons From
+    Incidents` 2026-05-28 follow-up — `MissingRequiredClaimError: Token is
+    missing the "nbf" claim` blocked 100 % of ClassLink SSO because we
+    over-required `nbf`, which is optional per OIDC Core §2.) The
+    distinction between "require to be PRESENT" (`options["require"]`) and
+    "verify when PRESENT" (`options["verify_*"]`) is load-bearing: most JWT
+    libraries verify-when-present by default; demanding presence is a
+    separate, stricter choice that needs its own justification.
 
 ---
 
@@ -91,6 +108,7 @@ These thoughts mean STOP and re-check:
 | "Mock makes the test pass" | Did the mock prove behavior or just suppress the error? |
 | "It's a `*ConnectionError`, so it's a network/TLS issue" | The class is generic. Read the wrapped `err:` payload — HTTP 401 wraps the same way. |
 | "Green CI proves the fix works in prod" | CI proves the *code* matches your test imagination. Prod against a live external tenant proves nothing about CI. Re-test the original user flow against the deploy. |
+| "Adding a claim to `require` is harmless defense-in-depth" | `require` is "must be PRESENT", not "verify when present". Anything beyond OIDC Core §2's required set rejects spec-compliant tokens. Use `verify_*` for verification; cite the spec for any extra `require` entry. |
 | "Code-quality reviewer ran — done" | Spec compliance review must come FIRST. |
 | "I'll just commit the noise this once" | The gitnexus stats / lock files / flask_session noise is NEVER part of a feature commit. |
 | "CI will catch it" | CI is the *final* safety net. Catching it locally is ~100x faster + cheaper. |
@@ -191,6 +209,70 @@ Class B. Moving code verbatim ⇒ Class A.
 ## Lessons From Incidents (the changelog of pain)
 
 Each entry: date, one-sentence summary, root cause, rule(s) the entry produced.
+
+### 2026-05-28 (follow-up) — Over-strict `require` list rejected standards-compliant id_tokens
+
+**What happened.** PR #595 deployed `7917bb3` to prod at `05:23 UTC`. Operator
+ran the live ClassLink SSO test against the deployed image (Hard Rule #8 — the
+very rule we'd just added). SSO still failed with the same surface symptom
+`oidc_invalid`. **But** within minutes Better Stack surfaced the wrapped
+payload from the new Sentry capture commit `8c3cd25` added (Recommendation #1
+from the opus reviewer on #595):
+
+```
+MissingRequiredClaimError: Token is missing the "nbf" claim
+```
+
+Rule #9 working as designed — the wrapped payload, not the umbrella class name,
+was the diagnostic.
+
+**Root cause.** `classlink_callback` called `pyjwt.decode(...)` with
+`options={"require": ["iat", "nbf", "exp", "iss", "aud", "sub"], ...}`. The
+`require` list is "must be PRESENT to accept", not "verify when present".
+Real ClassLink id_tokens omit `nbf`. [OIDC Core §2](https://openid.net/specs/openid-connect-core-1_0.html#IDToken)
+lists the REQUIRED id_token claims as `iss, sub, aud, exp, iat` (+ `nonce`
+when the RP sent one); `nbf` is OPTIONAL. We were over-requiring `nbf` as
+defense-in-depth without checking the spec — that over-strictness blocked
+100 % of ClassLink tokens.
+
+**The distinction the previous fix missed.** pyjwt has TWO separate concepts:
+- `options["require"]` — claims that MUST be PRESENT (else
+  `MissingRequiredClaimError`).
+- `options["verify_*"]` (e.g., `verify_nbf`, `verify_exp`) — claims that, when
+  present, MUST be VALID (else `ImmatureSignatureError`, `ExpiredSignatureError`,
+  etc.).
+
+The two are not interchangeable. `verify_nbf` defaults to `True`, so removing
+`nbf` from `require` is a PRESENCE relaxation only — tokens that include `nbf`
+still get rejected if their `nbf` is in the future. The new test
+`test_callback_rejects_immature_nbf` (`tests/test_classlink_sso.py`) pins
+that property so the security argument cannot regress silently.
+
+**Why this was the second `oidc_invalid` fix in 24 hours.** PR #594
+misdiagnosed (Rule #9: wrapper class read as load-bearing). PR #595 fixed
+the JWKS-fetch leg correctly (real WAF UA filter) and added Rule #9 itself.
+But the operator-validation step on #595 surfaced a SECOND, independent
+failure mode (Rule #8: green CI ≠ green deploy) because we'd never run a
+real ClassLink id_token through our `pyjwt.decode` call. The two-PR loop
+isn't a process failure — it's exactly the loop Rules #8 + #9 prescribe.
+The cost was ~30 minutes of one operator's evening to drive the live tests.
+
+**Rule produced.** Added to the Hard Rules section above as **Rule #10**:
+> OIDC `require` lists cite the spec. Anything beyond `iss/sub/aud/exp/iat`
+> (+ `nonce` when sent) MUST come with an inline comment citing the RFC /
+> spec section that justifies the extra requirement.
+
+**Operational follow-up.** Hotfix PR (the one this entry ships in) drops
+`"nbf"` from the `require` list. Filed follow-up issue (link TBD) for a
+broader OIDC-conformance audit of the other JWT-decoding paths in the
+codebase (Clever, LTI 1.3) — diff sketch included in the issue body per
+CLAUDE.md Principle #11.
+
+**Outcome / lesson cost.** Two ClassLink SSO PRs (#595 and #596) shipped
+in ~6 hours total, both clean-CI + clean-review at merge. The operator
+validation step caught the residual failure both times. Rules #8 + #9 +
+the new #10 should make the next `oidc_invalid` debug session a single PR
+with no surprise residual.
 
 ### 2026-05-28 — Generic-wrapper-exception misdiagnosis (#594 didn't fix ClassLink SSO)
 
