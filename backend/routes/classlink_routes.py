@@ -446,7 +446,16 @@ def classlink_callback():
             issuer=oidc_cfg.get("issuer"),
             leeway=10,
             options={
-                "require": ["iat", "nbf", "exp", "iss", "aud", "sub"],
+                # OIDC Core §2 lists the REQUIRED id_token claims as
+                # iss/sub/aud/exp/iat (+ nonce when sent). `nbf` is NOT
+                # required — real ClassLink id_tokens omit it. Requiring
+                # it here caused `MissingRequiredClaimError` on every
+                # ClassLink token (2026-05-28 incident, surfaced via
+                # Better Stack: `Token is missing the "nbf" claim`).
+                # pyjwt's `verify_nbf` default is True, so if a future
+                # ClassLink build starts sending `nbf` it will still be
+                # enforced — we just stop demanding it be present.
+                "require": ["iat", "exp", "iss", "aud", "sub"],
                 "verify_iat": True,
             },
         )

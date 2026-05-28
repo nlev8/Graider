@@ -579,6 +579,117 @@ class TestClassLinkIdTokenValidation:
                 # email comes from id_token claim
                 assert sess['classlink_user']['email'] == 'claims@school.edu'
 
+    # ── test 3b: id_token WITHOUT nbf claim is accepted ───────────────────────
+    #
+    # OIDC Core §2 lists the required id_token claims as iss/sub/aud/exp/iat
+    # (+ nonce when sent). `nbf` is NOT required. Real ClassLink id_tokens
+    # omit `nbf` entirely; this test pins that the callback accepts that
+    # standards-compliant shape.
+    #
+    # Regression: 2026-05-28 prod incident — pyjwt.decode was called with
+    # `options={"require": ["iat", "nbf", "exp", "iss", "aud", "sub"], ...}`,
+    # which over-strictly required `nbf` and caused every ClassLink id_token
+    # to raise `MissingRequiredClaimError`, surfaced via Better Stack as
+    # `Token is missing the "nbf" claim`. See `.claude/rules/workflow.md`
+    # § Lessons From Incidents (2026-05-28 follow-up).
+
+    def test_callback_accepts_id_token_without_nbf(self):
+        """OIDC Core §2 does not require nbf in id_tokens; ClassLink omits it."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(
+            priv,
+            aud="test-client-id",
+            sub="cl-no-nbf-user",
+            email="nobf@school.edu",
+            given_name="NoNbf",
+            family_name="Tester",
+            role="teacher",
+            include_nbf=False,  # the realistic ClassLink shape
+        )
+
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "cl-no-nbf-user",
+            "FirstName": "NoNbf",
+            "LastName": "Tester",
+            "Email": "nobf@school.edu",
+            "Role": "teacher",
+            "TenantId": "t-no-nbf",
+        }
+
+        with app.test_client() as client:
+            with patch('backend.routes.classlink_routes.requests.post',
+                       return_value=self._make_token_response(id_token)), \
+                 patch('backend.routes.classlink_routes.requests.get',
+                       return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                resp = client.get('/api/classlink/callback?code=abc&state=xyz')
+
+        assert resp.status_code == 302, (
+            f"Expected 302 redirect, got {resp.status_code}: {resp.data!r}"
+        )
+        location = resp.headers["Location"]
+        # Primary contract: no-nbf MUST NOT cause oidc_invalid.
+        assert "classlink_error=oidc_invalid" not in location, (
+            f"id_token without nbf was rejected; landed at: {location}"
+        )
+        # Positive marker (defense against future drift where the redirect
+        # silently changes to a different non-oidc_invalid error mode that
+        # the `not in` check above would still pass). The sibling test
+        # `test_callback_uses_id_token_claims_for_identity` uses the same
+        # positive marker.
+        assert "classlink_login=success" in location, (
+            f"Expected `classlink_login=success`, got: {location}"
+        )
+
+    # ── test 3c: id_token WITH nbf in the future → still rejected ─────────────
+    #
+    # The security argument for dropping `nbf` from the `require` list rests
+    # on pyjwt's `verify_nbf` default being True — i.e., even though we no
+    # longer DEMAND `nbf`, when it IS present we still REJECT a token whose
+    # `nbf` is in the future. This test pins that property so the central
+    # security claim of PR #596 cannot regress silently.
+
+    def test_callback_rejects_immature_nbf(self):
+        """nbf present + in the future (past pyjwt leeway=10) → oidc_invalid.
+
+        Pins that pyjwt's `verify_nbf=True` default still enforces nbf when
+        the claim is present in the token, even though it's no longer in
+        the `require` list.
+        """
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        # nbf 5 minutes in the future — well past pyjwt's leeway=10.
+        id_token = make_id_token(
+            priv,
+            aud="test-client-id",
+            sub="cl-immature-nbf",
+            include_nbf=False,  # suppress factory's now-nbf so extra_claims wins
+            extra_claims={"nbf": int(time.time()) + 300},
+        )
+
+        with app.test_client() as client:
+            with patch('backend.routes.classlink_routes.requests.post',
+                       return_value=self._make_token_response(id_token)), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)):
+                resp = client.get('/api/classlink/callback?code=abc&state=xyz')
+
+        assert resp.status_code == 302
+        # pyjwt raises ImmatureSignatureError (a PyJWTError subclass), which
+        # the callback catches and redirects with classlink_error=oidc_invalid.
+        assert "classlink_error=oidc_invalid" in resp.headers["Location"], (
+            f"Expected oidc_invalid for future-nbf token; landed at: {resp.headers['Location']}"
+        )
+
     # ── test 4: expired id_token → oidc_expired ───────────────────────────────
 
     def test_callback_rejects_expired_id_token(self):
