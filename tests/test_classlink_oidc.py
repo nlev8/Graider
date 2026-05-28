@@ -79,12 +79,45 @@ def test_jwks_client_uses_discovered_uri():
         mock_get.return_value = MagicMock(status_code=200, json=lambda: fake_config)
         with patch("backend.services.classlink_oidc.PyJWKClient") as mock_jwks:
             client = get_classlink_jwks_client()
-            # PyJWKClient is now constructed with a certifi-backed SSL context
-            # (hotfix for PyJWKClientConnectionError in the Railway nixpacks
-            # image — the OS CA bundle was missing intermediates for ClassLink's
-            # JWKS endpoint, while httpx-via-certifi worked for the same host).
+            # PyJWKClient is constructed with a certifi-backed SSL context
+            # (defensive — kept from PR #594; pyjwt's urllib fallback uses
+            # the OS CA bundle which may be missing intermediates on some
+            # deploy images). The actual `oidc_invalid` root cause was a
+            # WAF User-Agent filter — asserted in the next test.
             mock_jwks.assert_called_once()
             args, kwargs = mock_jwks.call_args
             assert args == ("https://example.com/jwks",)
             assert isinstance(kwargs.get("ssl_context"), ssl.SSLContext)
         assert client is mock_jwks.return_value
+
+
+def test_jwks_client_sets_non_python_urllib_user_agent():
+    """ClassLink's JWKS endpoint at /oauth2/v2/jwks returns HTTP 401 when
+    fetched with a User-Agent matching `Python-urllib/X.Y` (urllib's default
+    UA). PyJWKClient uses urllib internally, so we must pass a custom UA via
+    the `headers` kwarg.
+
+    The original `oidc_invalid` failure in prod was misdiagnosed in PR #594
+    as a CA-bundle mismatch — the `PyJWKClientConnectionError` is in fact the
+    pyjwt wrapper for HTTPError (HTTP 401), not a TLS error. The certifi
+    context shipped in #594 is harmless but did not address the UA filter.
+
+    See `.claude/rules/workflow.md` § Lessons From Incidents (2026-05-28).
+    """
+    fake_config = {"issuer": "iss", "jwks_uri": "https://example.com/jwks"}
+    with patch("backend.services.classlink_oidc.httpx.get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: fake_config)
+        with patch("backend.services.classlink_oidc.PyJWKClient") as mock_jwks:
+            get_classlink_jwks_client()
+            _args, kwargs = mock_jwks.call_args
+    headers = kwargs.get("headers")
+    assert headers is not None, (
+        "PyJWKClient must receive an explicit headers kwarg so urllib "
+        "does not fall back to the default 'Python-urllib/X.Y' User-Agent."
+    )
+    ua = headers.get("User-Agent", "")
+    assert ua, "headers must include a non-empty User-Agent"
+    assert not ua.startswith("Python-urllib"), (
+        f"User-Agent must not match urllib's default 'Python-urllib/X.Y' "
+        f"(ClassLink's JWKS endpoint returns 401 on that UA); got: {ua!r}"
+    )

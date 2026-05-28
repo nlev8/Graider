@@ -56,6 +56,23 @@ because each item exists because *something burned us before*.
 7. **No `gh pr merge --auto` with a review in flight on a Class B PR.** Per
    CLAUDE.md Principle #13: for Class B, merge manually AFTER the review returns
    clean.
+8. **Pre-deploy verification ≠ deploy verification.** A green CI run + a green
+   reviewer says "the code in this branch is correct against the cases we
+   imagined." It does NOT say "the deployed system works against the live
+   third-party tenant." For any change to an external-IO path (SIS / SSO /
+   payment / LMS), the per-branch DoD is not met until an *operator* has
+   re-executed the originally-failing user flow against the deployed image
+   and reported the observable outcome. CI + reviewers cannot do this for you.
+9. **Generic wrapper-exception classes are not root-cause evidence.** When
+   the failing exception is `*ConnectionError`, `*WrapperError`, `*Error`,
+   or any class the library uses as an umbrella for multiple underlying
+   failure modes, you MUST read the wrapped `err:` / `__cause__` payload
+   before designing the fix. Class names alone are vibes, not evidence.
+   Reproduce locally with the smallest possible client (raw `urllib`, raw
+   `httpx`, `curl`) and inspect the actual HTTP status / exception args /
+   network-layer error before patching. (See `Lessons From Incidents`
+   2026-05-28 for the cost of skipping this — a clean-CI, clean-review fix
+   that didn't fix anything.)
 
 ---
 
@@ -72,6 +89,8 @@ These thoughts mean STOP and re-check:
 | "Refactor was behavior-preserving" | Line numbers are part of behavior to tests that pin them. |
 | "Small follow-up — I'll file an issue" | If it's <15 min in this PR's scope, fix it now. Otherwise file WITH a fix sketch. |
 | "Mock makes the test pass" | Did the mock prove behavior or just suppress the error? |
+| "It's a `*ConnectionError`, so it's a network/TLS issue" | The class is generic. Read the wrapped `err:` payload — HTTP 401 wraps the same way. |
+| "Green CI proves the fix works in prod" | CI proves the *code* matches your test imagination. Prod against a live external tenant proves nothing about CI. Re-test the original user flow against the deploy. |
 | "Code-quality reviewer ran — done" | Spec compliance review must come FIRST. |
 | "I'll just commit the noise this once" | The gitnexus stats / lock files / flask_session noise is NEVER part of a feature commit. |
 | "CI will catch it" | CI is the *final* safety net. Catching it locally is ~100x faster + cheaper. |
@@ -172,6 +191,70 @@ Class B. Moving code verbatim ⇒ Class A.
 ## Lessons From Incidents (the changelog of pain)
 
 Each entry: date, one-sentence summary, root cause, rule(s) the entry produced.
+
+### 2026-05-28 — Generic-wrapper-exception misdiagnosis (#594 didn't fix ClassLink SSO)
+
+**What happened.** Production ClassLink SSO failed with `oidc_invalid`. Railway
+logs showed:
+```
+backend.routes.classlink_routes WARNING: ClassLink id_token validation failed: PyJWKClientConnectionError
+```
+PR #594 inferred from the class name `PyJWKClientConnectionError` plus the
+fact that the discovery doc fetched OK via httpx (~17ms before the JWKS fetch
+failed via urllib) that the root cause was a CA-bundle mismatch — httpx uses
+certifi by default, urllib uses the OS bundle, and the Railway nixpacks image's
+OS bundle was assumed to be missing intermediates. Fix shipped: pass an explicit
+certifi-backed `ssl_context` to `PyJWKClient`. CI green, deploy succeeded, SSO
+**still failed identically**.
+
+The actual root cause: ClassLink's WAF returns **HTTP 401** specifically when
+the request's `User-Agent` header matches `Python-urllib/X.Y` (urllib's default).
+Every other UA — empty, `Mozilla/5.0`, `curl/8.0`, any custom string, the
+implicit `python-httpx/<ver>` httpx sets — returns 200. PyJWKClient uses
+urllib internally (not httpx), so its requests got rejected, and pyjwt wrapped
+the resulting `HTTPError(401)` in `PyJWKClientConnectionError` — the **same
+class** it would use for a TLS error, a DNS error, a connection reset, anything.
+The wrapped `err:` payload in the Railway log would have read
+`"HTTP Error 401: Unauthorized"` — and that single string would have ruled out
+the CA-bundle hypothesis instantly.
+
+**Root cause of the misdiagnosis.** Reading the exception **class name** as
+load-bearing signal when the class is in fact a generic wrapper. `PyJWKClientConnectionError`
+is to pyjwt what `requests.exceptions.RequestException` is to requests —
+a catch-all umbrella. Inferring root cause from the umbrella, without reading
+the wrapped `err:` payload, is how you ship a "fix" that doesn't fix anything.
+
+The certifi context isn't harmful (it's a legitimate defensive belt for image
+CA-bundle drift) — but it wasn't the load-bearing change. Kept in the
+follow-up fix; documented as "defensive, not load-bearing" both in code
+comments and in the test docstrings, so the next person reading
+`backend/services/classlink_oidc.py` sees the actual history.
+
+**Rule produced.** Added to the Hard Rules section above:
+
+> **9. Generic wrapper-exception classes are not root-cause evidence.** When
+> the failing exception is `*ConnectionError`, `*WrapperError`, `*Error`, or
+> any class that the library uses as a catch-all for multiple underlying
+> failure modes, you MUST read the wrapped `err:` / `__cause__` payload
+> before designing the fix. Class names alone are vibes, not evidence.
+> Reproduce locally with the smallest possible client (raw `urllib`, raw
+> `httpx`, `curl`) and inspect the actual HTTP status, exception args, or
+> network-layer error before patching.
+
+**Operational follow-up.** Hotfix PR (the one this entry ships in)
+adds an explicit `headers={"User-Agent": "Graider/1.0 ..."}` kwarg to
+`PyJWKClient(...)`. New test
+`test_jwks_client_sets_non_python_urllib_user_agent` asserts the kwarg
+is present AND the UA does not start with `Python-urllib`. Operator
+validation post-merge: rostered ClassLink student logs into test tenant
+LaunchPad and clicks the Graider tile; should land at `/student` (or
+`/student?classlink_select=…`) instead of `/?classlink_error=oidc_invalid`.
+
+**Outcome / lesson cost.** Cost of misdiagnosis: PR #594 shipped (clean
+CI, clean review), Railway deployed, SSO stayed broken in production
+overnight. Cost of applying the rule next time: ~30 seconds to read the
+wrapped err payload from logs. The asymmetry is the whole point of
+codifying the rule.
 
 ### 2026-05-26 — PR opened with auto-merge armed never triggered CI
 
