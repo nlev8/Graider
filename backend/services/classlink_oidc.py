@@ -21,15 +21,29 @@ from jwt import PyJWKClient
 
 logger = logging.getLogger(__name__)
 
-# Pre-built SSL context using certifi's CA bundle (the same bundle httpx
-# uses by default). pyjwt's `PyJWKClient` internally calls
-# `urllib.request.urlopen` which would otherwise fall back to the OS CA
-# bundle — and the Railway nixpacks image's OS bundle does NOT include all
-# of the intermediates that ClassLink's JWKS endpoint serves. The result
-# was `PyJWKClientConnectionError` despite the JWKS host being reachable
-# (the OIDC discovery doc on the SAME host fetched fine via httpx ~17ms
-# earlier). Reusing certifi here eliminates the bundle mismatch.
+# Pre-built SSL context using certifi's CA bundle. Defensive — pyjwt's
+# `PyJWKClient` calls `urllib.request.urlopen` internally, which would
+# otherwise fall back to the OS CA bundle (which on some images may not
+# include every intermediate ClassLink serves). PR #594 added this in the
+# belief it was the fix for `PyJWKClientConnectionError`; see the
+# `_CLASSLINK_JWKS_HEADERS` comment below for what was actually wrong.
 _CERTIFI_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+
+# ClassLink's JWKS endpoint at /oauth2/v2/jwks returns HTTP 401 specifically
+# when the request's User-Agent header matches `Python-urllib/X.Y` (urllib's
+# default). Every other UA — empty, "Mozilla", "curl/8.0", any custom string,
+# the implicit User-Agent that httpx sets — returns HTTP 200. PyJWKClient
+# uses urllib internally (not httpx), so unless we set the `headers` kwarg
+# its requests get rejected at ClassLink's WAF and pyjwt wraps the resulting
+# `HTTPError(401)` in `PyJWKClientConnectionError` — a generic class that
+# also covers TLS failures, which is what led PR #594 to misdiagnose this
+# as a CA-bundle problem. The wrapped `err:` payload in the original Railway
+# log would have read `"HTTP Error 401: Unauthorized"` — read those payloads
+# before inferring root cause from class names alone (see
+# `.claude/rules/workflow.md` § Lessons From Incidents 2026-05-28).
+_CLASSLINK_JWKS_HEADERS = {
+    "User-Agent": "Graider/1.0 (+https://app.graider.live)",
+}
 
 
 class ClassLinkOIDCError(RuntimeError):
@@ -89,9 +103,11 @@ def _invalidate_jwks_client() -> None:
 def get_classlink_jwks_client() -> PyJWKClient:
     """Return PyJWKClient pointed at the discovered jwks_uri.
 
-    Uses a certifi-backed SSL context so the internal urllib fetch matches
-    httpx's behavior (see module-level `_CERTIFI_SSL_CONTEXT` comment for the
-    `PyJWKClientConnectionError` incident this guards against).
+    Passes an explicit `headers` kwarg with a non-`Python-urllib` User-Agent
+    so ClassLink's WAF does not 401 the JWKS fetch — that 401 was the actual
+    root cause of the `oidc_invalid` SSO failure mis-attributed to a CA
+    bundle in PR #594. Also passes a certifi-backed `ssl_context` defensively;
+    see the `_CERTIFI_SSL_CONTEXT` and `_CLASSLINK_JWKS_HEADERS` comments.
 
     Raises ClassLinkOIDCError if the OIDC config is missing jwks_uri.
     """
@@ -102,5 +118,9 @@ def get_classlink_jwks_client() -> PyJWKClient:
     jwks_uri = cfg.get("jwks_uri")
     if not jwks_uri:
         raise ClassLinkOIDCError("ClassLink OIDC config missing jwks_uri")
-    _cached_jwks_client = PyJWKClient(jwks_uri, ssl_context=_CERTIFI_SSL_CONTEXT)
+    _cached_jwks_client = PyJWKClient(
+        jwks_uri,
+        ssl_context=_CERTIFI_SSL_CONTEXT,
+        headers=_CLASSLINK_JWKS_HEADERS,
+    )
     return _cached_jwks_client

@@ -457,7 +457,19 @@ def classlink_callback():
         logger.warning("ClassLink id_token claim mismatch: %s", e.__class__.__name__)
         return redirect("/?classlink_error=oidc_claim_mismatch")
     except (pyjwt.PyJWTError, ClassLinkOIDCError) as e:
-        logger.warning("ClassLink id_token validation failed: %s", e.__class__.__name__)
+        # Log BOTH the class name AND the wrapped payload (`%s` on `e` invokes
+        # str(e)). pyjwt wraps several underlying failure modes (HTTP errors
+        # from the JWKS fetch, TLS errors, signature errors, missing-key
+        # errors) in a single `PyJWKClientConnectionError` / `PyJWTError`
+        # surface — the wrapped payload is what distinguishes them. The 2026-05-28
+        # incident in .claude/rules/workflow.md is exactly the case where the
+        # wrapper class name was treated as load-bearing signal and the
+        # wrapped `"HTTP Error 401: Unauthorized"` payload was lost.
+        logger.warning(
+            "ClassLink id_token validation failed: %s: %s",
+            e.__class__.__name__, e,
+        )
+        sentry_sdk.capture_exception(e)
         return redirect("/?classlink_error=oidc_invalid")
 
     # iat sanity window: reject tokens minted >5 min in the future or >1 day stale.
