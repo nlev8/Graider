@@ -579,6 +579,70 @@ class TestClassLinkIdTokenValidation:
                 # email comes from id_token claim
                 assert sess['classlink_user']['email'] == 'claims@school.edu'
 
+    # ── test 3b: id_token WITHOUT nbf claim is accepted ───────────────────────
+    #
+    # OIDC Core §2 lists the required id_token claims as iss/sub/aud/exp/iat
+    # (+ nonce when sent). `nbf` is NOT required. Real ClassLink id_tokens
+    # omit `nbf` entirely; this test pins that the callback accepts that
+    # standards-compliant shape.
+    #
+    # Regression: 2026-05-28 prod incident — pyjwt.decode was called with
+    # `options={"require": ["iat", "nbf", "exp", "iss", "aud", "sub"], ...}`,
+    # which over-strictly required `nbf` and caused every ClassLink id_token
+    # to raise `MissingRequiredClaimError`, surfaced via Better Stack as
+    # `Token is missing the "nbf" claim`. See `.claude/rules/workflow.md`
+    # § Lessons From Incidents (2026-05-28 follow-up).
+
+    def test_callback_accepts_id_token_without_nbf(self):
+        """OIDC Core §2 does not require nbf in id_tokens; ClassLink omits it."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        id_token = make_id_token(
+            priv,
+            aud="test-client-id",
+            sub="cl-no-nbf-user",
+            email="nobf@school.edu",
+            given_name="NoNbf",
+            family_name="Tester",
+            role="teacher",
+            include_nbf=False,  # the realistic ClassLink shape
+        )
+
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = {
+            "UserId": "cl-no-nbf-user",
+            "FirstName": "NoNbf",
+            "LastName": "Tester",
+            "Email": "nobf@school.edu",
+            "Role": "teacher",
+            "TenantId": "t-no-nbf",
+        }
+
+        with app.test_client() as client:
+            with patch('backend.routes.classlink_routes.requests.post',
+                       return_value=self._make_token_response(id_token)), \
+                 patch('backend.routes.classlink_routes.requests.get',
+                       return_value=mock_user_resp), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._trigger_roster_sync'):
+                resp = client.get('/api/classlink/callback?code=abc&state=xyz')
+
+        assert resp.status_code == 302, (
+            f"Expected 302 redirect, got {resp.status_code}: {resp.data!r}"
+        )
+        location = resp.headers["Location"]
+        # The test's primary contract: no nbf in the id_token MUST NOT cause
+        # oidc_invalid. Any other landing place is acceptable here — the
+        # downstream session-shape assertion is covered by the existing
+        # `test_callback_uses_id_token_claims_session_contents`.
+        assert "classlink_error=oidc_invalid" not in location, (
+            f"id_token without nbf was rejected; landed at: {location}"
+        )
+
     # ── test 4: expired id_token → oidc_expired ───────────────────────────────
 
     def test_callback_rejects_expired_id_token(self):

@@ -51,6 +51,7 @@ def make_id_token(
     exp_offset=3600,
     kid="test-kid",
     nonce=None,
+    include_nbf=True,
     extra_claims=None,
 ):
     """Build and sign a ClassLink-style id_token (RS256).
@@ -59,6 +60,9 @@ def make_id_token(
         private_key: cryptography RSAPrivateKey
         exp_offset: seconds from now for exp claim (negative = expired)
         nonce: optional nonce claim (omitted from token when None)
+        include_nbf: if False, omit the `nbf` claim entirely. Real ClassLink
+            id_tokens do not include `nbf` (it's optional per OIDC Core §2),
+            so this flag lets tests exercise the standards-compliant shape.
         extra_claims: dict merged on top of defaults
     """
     now = int(time.time())
@@ -67,13 +71,14 @@ def make_id_token(
         "aud": aud,
         "exp": now + exp_offset,
         "iat": now,
-        "nbf": now,
         "sub": sub,
         "email": email,
         "given_name": given_name,
         "family_name": family_name,
         "Role": role,
     }
+    if include_nbf:
+        claims["nbf"] = now
     if nonce is not None:
         claims["nonce"] = nonce
     if extra_claims:
