@@ -1388,6 +1388,10 @@ class TestClassLinkStudentCallback:
             f"Teacher unexpectedly routed to /join (the student-only bounce path); "
             f"got: {resp.location}"
         )
+        # Defense-in-depth: catches an accidental revert of PR #600's deletion
+        # of the #598 banner machinery (the legacy `?classlink_status=use_student_portal`
+        # URL no longer exists in production code; this assertion fires only
+        # if a future refactor resurrects it).
         assert "classlink_status=use_student_portal" not in resp.location, (
             f"Teacher unexpectedly received the legacy student-portal status param; "
             f"got: {resp.location}"
