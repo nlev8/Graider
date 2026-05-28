@@ -1098,11 +1098,18 @@ class TestClassLinkStateNonceHardening:
                 retry = client.get("/api/classlink/callback?code=abc&state=expected-state")
         assert "classlink_login=success" in retry.location
 
-    def test_self_initiated_student_success_clears_markers(self):
-        """Single-use enforcement: successful self-initiated student login
-        clears all OAuth markers so subsequent flows in the same browser
-        session start fresh. (Teacher path uses session.clear(); student path
-        needs the explicit pops added in the fix.)"""
+    def test_self_initiated_student_bounce_clears_markers(self):
+        """Single-use enforcement: self-initiated student SSO bounces back to
+        the homepage with `classlink_status=use_student_portal` (per the UX
+        carve-out — the homepage's "Log in with ClassLink" button is intended
+        for teachers; students use the "I'm a student" link). The bounce path
+        still MUST clear all OAuth markers so subsequent flows in the same
+        browser session start fresh — the historical marker-clearing invariant
+        is preserved across the design change.
+
+        See `TestClassLinkStudentCallback.test_self_initiated_student_redirects_to_homepage_with_status`
+        for the redirect-target contract; this test specifically pins the
+        nonce-hardening / marker-clearing invariant in the new flow."""
         app = _make_app()
         priv, pub = _make_rsa_keypair()
         id_token = make_id_token(priv, aud="test-client-id", nonce="expected-nonce", role="student")
@@ -1125,13 +1132,16 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._create_classlink_student_session',
-                       return_value={"token": "t-abc"}):
+                 patch('backend.routes.classlink_routes._create_classlink_student_session') as mock_session:
                 resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
-            # Student success → redirected to portal with auth code (not the old classlink_login=success)
-            assert "/student" in resp.location
-            assert "classlink=1" in resp.location
-            # Markers cleared on success.
+            # Self-initiated student SSO bounces to homepage with friendly status.
+            assert resp.location == "/?classlink_status=use_student_portal"
+            # Bounce fires BEFORE the provisioning lookup — confirm the lookup
+            # was skipped. (Pre-PR this test mocked a return_value that's now
+            # dead code; per opus reviewer M1 on PR #598, switched to a not-
+            # called assertion so the test pins the new invariant.)
+            mock_session.assert_not_called()
+            # Markers cleared on bounce (single-use enforcement preserved).
             with client.session_transaction() as sess:
                 assert "classlink_oauth_state" not in sess
                 assert "classlink_oauth_initiated_by_us" not in sess
@@ -1308,3 +1318,67 @@ class TestClassLinkStudentCallback:
         with app.test_client() as client:
             resp = self._run_student(client, priv, pub, None)
             assert "classlink_error=not_provisioned" in resp.location
+
+    # ── Self-initiated student SSO (clicked the homepage button) ──────────────
+    #
+    # The Graider login screen has separate paths for teachers (email/password,
+    # Google, Microsoft, "Log in with ClassLink", "Log in with Clever") and
+    # students ("I'm a student — go to Student Portal" link at the bottom).
+    # If a student clicks "Log in with ClassLink" from the homepage (i.e.
+    # `initiated_by_us=True` because we called /api/classlink/login-url to
+    # start the flow), they reached the SSO via a teacher-flavored entry point
+    # and the right UX is to bounce them back to the homepage with a friendly
+    # banner pointing at the student-portal link — NOT to drive them through
+    # the provisioning lookup that's appropriate for LaunchPad-tile students.
+    #
+    # LaunchPad-tile students (initiated_by_us=False) are NOT affected by this
+    # branch — they still go through the provisioning lookup unchanged.
+
+    def test_self_initiated_student_redirects_to_homepage_with_status(self):
+        """initiated_by_us=True + role=student → /?classlink_status=use_student_portal."""
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        # Set BOTH initiated_by_us=True AND a matching nonce (initiated_by_us
+        # flow requires nonce match per the OAuth-state-nonce hardening in #373).
+        nonce = "test-nonce-abc"
+        id_token = make_id_token(
+            priv, aud="test-client-id", sub="stu-homepage",
+            email="homepage-student@school.edu", role="student",
+            nonce=nonce,
+        )
+        tok = MagicMock(); tok.status_code = 200
+        tok.json.return_value = {"access_token": "tok", "id_token": id_token}
+        usr = MagicMock(); usr.status_code = 200
+        usr.json.return_value = {
+            "FirstName": "S", "LastName": "T",
+            "Email": "homepage-student@school.edu", "Role": "student",
+            "SourcedId": "stu-homepage", "TenantId": "dist-A",
+        }
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['classlink_oauth_state'] = 'valid-state'
+                sess['classlink_oauth_nonce'] = nonce
+                sess['classlink_oauth_initiated_by_us'] = True
+            with patch('backend.routes.classlink_routes.requests.post', return_value=tok), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=usr), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)), \
+                 patch('backend.routes.classlink_routes._create_classlink_student_session') as mock_session:
+                resp = client.get('/api/classlink/callback?code=c&state=valid-state')
+
+        assert resp.status_code == 302
+        # MUST redirect to homepage with friendly status, NOT to /student?classlink_error=not_provisioned.
+        assert resp.location == "/?classlink_status=use_student_portal", (
+            f"Expected homepage redirect with use_student_portal status; got: {resp.location}"
+        )
+        # Provisioning lookup MUST be skipped — this user shouldn't trigger
+        # a Supabase query for a student row we already know is wrong-path.
+        mock_session.assert_not_called()
+        # OAuth-flow markers MUST be cleared (single-use enforcement, same as
+        # the success branch above) so a follow-up callback can't replay them.
+        with client.session_transaction() as sess:
+            assert 'classlink_oauth_state' not in sess
+            assert 'classlink_oauth_nonce' not in sess
+            assert 'classlink_oauth_initiated_by_us' not in sess

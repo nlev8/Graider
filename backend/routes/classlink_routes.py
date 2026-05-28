@@ -563,6 +563,29 @@ def classlink_callback():
         session.pop('classlink_oauth_nonce', None)
         session.pop('classlink_oauth_initiated_by_us', None)
 
+        # Homepage-button SSO carve-out.
+        #
+        # The Graider login screen has separate paths for teachers
+        # (email/password, Google, Microsoft, "Log in with ClassLink",
+        # "Log in with Clever") and students ("I'm a student — go to Student
+        # Portal" link at the bottom). When `initiated_by_us=True`, the SSO
+        # flow was kicked off by the homepage button — a teacher entry point.
+        # A `role=student` arriving via that entry point clicked the wrong
+        # button; the right UX is to bounce them back to the homepage with a
+        # friendly status banner pointing at the student-portal link, NOT to
+        # run the provisioning lookup that's appropriate for LaunchPad-tile
+        # students.
+        #
+        # LaunchPad-tile students arrive with `initiated_by_us=False` (we
+        # never called login-url) and continue to the unchanged provisioning
+        # path below. Production-realistic student SSO is unaffected.
+        if initiated_by_us:
+            logger.info(
+                "ClassLink self-initiated student SSO bounced to homepage: "
+                "tenant=%s", tenant_id,
+            )
+            return redirect("/?classlink_status=use_student_portal")
+
         student_session = _create_classlink_student_session(tenant_id, person_id)
         if student_session and student_session.get("status") == "needs_class_selection":
             params = urlencode({"classlink_select": "1", "sel": student_session["selection_token"]})

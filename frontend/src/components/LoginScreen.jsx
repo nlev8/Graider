@@ -8,6 +8,11 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(window.__cleverLoginError || '')
+  // Info-toned status (e.g., "Students should use the student-portal link")
+  // — set by App.jsx when the ClassLink callback bounces a homepage-button
+  // student SSO back to the login screen. Separate from `error` because the
+  // user authenticated successfully; they just used the wrong entry point.
+  const [status, setStatus] = useState(window.__cleverLoginStatus || '')
   const [showForgot, setShowForgot] = useState(false)
   const [forgotSent, setForgotSent] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -137,6 +142,18 @@ export default function LoginScreen({ onLogin, theme, toggleTheme }) {
             color: '#f87171',
             fontSize: '0.9rem',
           }}>{error}</div>
+        )}
+
+        {status && !error && (
+          <div style={{
+            background: 'rgba(96,165,250,0.15)',
+            border: '1px solid rgba(96,165,250,0.3)',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '20px',
+            color: '#93c5fd',
+            fontSize: '0.9rem',
+          }}>{status}</div>
         )}
 
         {showForgot ? (
