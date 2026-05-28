@@ -374,7 +374,7 @@ function App() {
     // button. See backend/routes/classlink_routes.py classlink_callback.
     if (classlinkStatus) {
       var classlinkStatusMessages = {
-        'use_student_portal': 'Students: please use the "I’m a student — go to Student Portal" link below.',
+        'use_student_portal': "Students: please use the \"I'm a student — go to Student Portal\" link below.",
       };
       var classlinkStatusMsg = classlinkStatusMessages[classlinkStatus] || null;
       if (classlinkStatusMsg) {

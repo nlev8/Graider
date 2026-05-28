@@ -1132,11 +1132,15 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_oidc_config()), \
                  patch('backend.routes.classlink_routes.get_classlink_jwks_client',
                        return_value=_mock_jwks_client(pub)), \
-                 patch('backend.routes.classlink_routes._create_classlink_student_session',
-                       return_value={"token": "t-abc"}):
+                 patch('backend.routes.classlink_routes._create_classlink_student_session') as mock_session:
                 resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
             # Self-initiated student SSO bounces to homepage with friendly status.
             assert resp.location == "/?classlink_status=use_student_portal"
+            # Bounce fires BEFORE the provisioning lookup — confirm the lookup
+            # was skipped. (Pre-PR this test mocked a return_value that's now
+            # dead code; per opus reviewer M1 on PR #598, switched to a not-
+            # called assertion so the test pins the new invariant.)
+            mock_session.assert_not_called()
             # Markers cleared on bounce (single-use enforcement preserved).
             with client.session_transaction() as sess:
                 assert "classlink_oauth_state" not in sess
