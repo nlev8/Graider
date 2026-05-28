@@ -571,20 +571,24 @@ def classlink_callback():
         # Portal" link at the bottom). When `initiated_by_us=True`, the SSO
         # flow was kicked off by the homepage button — a teacher entry point.
         # A `role=student` arriving via that entry point clicked the wrong
-        # button; the right UX is to bounce them back to the homepage with a
-        # friendly status banner pointing at the student-portal link, NOT to
-        # run the provisioning lookup that's appropriate for LaunchPad-tile
-        # students.
+        # button; the right UX is to land them DIRECTLY at /join (the
+        # anonymous join-code portal), where the entire UI is a single
+        # join-code input. No banner, no detour through the homepage's heavy
+        # supabase auth bootstrap (which introduced a visible flicker per
+        # operator validation on #598), no second login screen. Original
+        # #598 bounced to "/?classlink_status=use_student_portal" with a blue
+        # info banner; that worked but required the student to read +
+        # navigate to a small link. /join is the actionable destination.
         #
         # LaunchPad-tile students arrive with `initiated_by_us=False` (we
         # never called login-url) and continue to the unchanged provisioning
         # path below. Production-realistic student SSO is unaffected.
         if initiated_by_us:
             logger.info(
-                "ClassLink self-initiated student SSO bounced to homepage: "
+                "ClassLink self-initiated student SSO routed to /join: "
                 "tenant=%s", tenant_id,
             )
-            return redirect("/?classlink_status=use_student_portal")
+            return redirect("/join")
 
         student_session = _create_classlink_student_session(tenant_id, person_id)
         if student_session and student_session.get("status") == "needs_class_selection":

@@ -1099,15 +1099,15 @@ class TestClassLinkStateNonceHardening:
         assert "classlink_login=success" in retry.location
 
     def test_self_initiated_student_bounce_clears_markers(self):
-        """Single-use enforcement: self-initiated student SSO bounces back to
-        the homepage with `classlink_status=use_student_portal` (per the UX
-        carve-out — the homepage's "Log in with ClassLink" button is intended
-        for teachers; students use the "I'm a student" link). The bounce path
-        still MUST clear all OAuth markers so subsequent flows in the same
-        browser session start fresh — the historical marker-clearing invariant
-        is preserved across the design change.
+        """Single-use enforcement: self-initiated student SSO is routed to
+        `/join` (per the UX carve-out — the homepage's "Log in with ClassLink"
+        button is intended for teachers; students get the anonymous join-code
+        portal directly). The routed path MUST clear all OAuth markers so
+        subsequent flows in the same browser session start fresh — the
+        historical marker-clearing invariant is preserved across design
+        changes (#598 → /?classlink_status=use_student_portal → this PR /join).
 
-        See `TestClassLinkStudentCallback.test_self_initiated_student_redirects_to_homepage_with_status`
+        See `TestClassLinkStudentCallback.test_self_initiated_student_redirects_to_join`
         for the redirect-target contract; this test specifically pins the
         nonce-hardening / marker-clearing invariant in the new flow."""
         app = _make_app()
@@ -1134,8 +1134,11 @@ class TestClassLinkStateNonceHardening:
                        return_value=_mock_jwks_client(pub)), \
                  patch('backend.routes.classlink_routes._create_classlink_student_session') as mock_session:
                 resp = client.get("/api/classlink/callback?code=abc&state=expected-state")
-            # Self-initiated student SSO bounces to homepage with friendly status.
-            assert resp.location == "/?classlink_status=use_student_portal"
+            # Self-initiated student SSO bounces to /join (the anonymous
+            # join-code portal). Supersedes #598's homepage banner: /join puts
+            # the student directly at the join-code input with no flicker and
+            # no detour through the homepage's heavy supabase auth bootstrap.
+            assert resp.location == "/join"
             # Bounce fires BEFORE the provisioning lookup — confirm the lookup
             # was skipped. (Pre-PR this test mocked a return_value that's now
             # dead code; per opus reviewer M1 on PR #598, switched to a not-
@@ -1334,8 +1337,69 @@ class TestClassLinkStudentCallback:
     # LaunchPad-tile students (initiated_by_us=False) are NOT affected by this
     # branch — they still go through the provisioning lookup unchanged.
 
-    def test_self_initiated_student_redirects_to_homepage_with_status(self):
-        """initiated_by_us=True + role=student → /?classlink_status=use_student_portal."""
+    def test_self_initiated_teacher_does_not_bounce_to_join(self):
+        """Regression guard: the /join bounce is gated by `role == 'student'`.
+
+        A self-initiated SSO with `role != 'student'` MUST NOT touch the
+        student-portal redirect at all — teachers go through the existing
+        teacher branch and end up at `?classlink_login=success`. This test
+        pins that guarantee so a future refactor of the role-routing logic
+        cannot accidentally route teachers to `/join`.
+
+        Mirrors `test_self_initiated_student_redirects_to_join`
+        with role flipped to teacher.
+        """
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        nonce = "test-nonce-teacher"
+        id_token = make_id_token(
+            priv, aud="test-client-id", sub="tch-homepage",
+            email="homepage-teacher@school.edu", role="teacher",
+            nonce=nonce,
+        )
+        tok = MagicMock(); tok.status_code = 200
+        tok.json.return_value = {"access_token": "tok", "id_token": id_token}
+        usr = MagicMock(); usr.status_code = 200
+        usr.json.return_value = {
+            "FirstName": "T", "LastName": "X",
+            "Email": "homepage-teacher@school.edu", "Role": "teacher",
+            "SourcedId": "tch-homepage", "TenantId": "dist-A",
+        }
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess['classlink_oauth_state'] = 'valid-state'
+                sess['classlink_oauth_nonce'] = nonce
+                sess['classlink_oauth_initiated_by_us'] = True
+            with patch('backend.routes.classlink_routes.requests.post', return_value=tok), \
+                 patch('backend.routes.classlink_routes.requests.get', return_value=usr), \
+                 patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                       return_value=_mock_oidc_config()), \
+                 patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                       return_value=_mock_jwks_client(pub)):
+                resp = client.get('/api/classlink/callback?code=abc&state=valid-state')
+
+        assert resp.status_code == 302
+        # Teacher branch MUST land at classlink_login=success.
+        assert "classlink_login=success" in resp.location, (
+            f"Expected teacher success redirect; got: {resp.location}"
+        )
+        # Teacher branch MUST NOT touch the student-portal bounce.
+        assert "/join" not in resp.location, (
+            f"Teacher unexpectedly routed to /join (the student-only bounce path); "
+            f"got: {resp.location}"
+        )
+        assert "classlink_status=use_student_portal" not in resp.location, (
+            f"Teacher unexpectedly received the legacy student-portal status param; "
+            f"got: {resp.location}"
+        )
+
+    def test_self_initiated_student_redirects_to_join(self):
+        """initiated_by_us=True + role=student → /join (the anonymous code-entry portal).
+
+        Supersedes #598's homepage banner. Homepage-button student SSO is
+        routed directly to the join-code input — zero clicks of friction,
+        no flicker through the homepage's auth-bootstrap loading state.
+        """
         app = _make_app()
         priv, pub = _make_rsa_keypair()
         # Set BOTH initiated_by_us=True AND a matching nonce (initiated_by_us
@@ -1369,9 +1433,12 @@ class TestClassLinkStudentCallback:
                 resp = client.get('/api/classlink/callback?code=c&state=valid-state')
 
         assert resp.status_code == 302
-        # MUST redirect to homepage with friendly status, NOT to /student?classlink_error=not_provisioned.
-        assert resp.location == "/?classlink_status=use_student_portal", (
-            f"Expected homepage redirect with use_student_portal status; got: {resp.location}"
+        # MUST redirect to /join (the anonymous join-code portal), NOT to
+        # /student?classlink_error=not_provisioned and NOT to the homepage
+        # with an explanatory banner. /join puts the student directly at
+        # the join-code input — zero extra clicks, no flicker, no banner.
+        assert resp.location == "/join", (
+            f"Expected /join redirect; got: {resp.location}"
         )
         # Provisioning lookup MUST be skipped — this user shouldn't trigger
         # a Supabase query for a student row we already know is wrong-path.
