@@ -330,7 +330,6 @@ function App() {
     // Check for ClassLink login redirect
     var classlinkLogin = urlParams.get('classlink_login');
     var classlinkError = urlParams.get('classlink_error');
-    var classlinkStatus = urlParams.get('classlink_status');
 
     if (classlinkLogin === 'success') {
       fetch('/api/classlink/session')
@@ -366,20 +365,6 @@ function App() {
       };
       var classlinkFriendlyMsg = classlinkErrorMessages[classlinkError] || ('ClassLink login failed: ' + classlinkError);
       window.__cleverLoginError = classlinkFriendlyMsg;
-      window.history.replaceState({}, '', '/');
-    }
-    // Info-toned status (not an error): a homepage-button ClassLink SSO whose
-    // role came back as `student` is bounced here by the callback, because
-    // students should use the "I'm a student" link instead of the teacher SSO
-    // button. See backend/routes/classlink_routes.py classlink_callback.
-    if (classlinkStatus) {
-      var classlinkStatusMessages = {
-        'use_student_portal': "Students: please use the \"I'm a student — go to Student Portal\" link below.",
-      };
-      var classlinkStatusMsg = classlinkStatusMessages[classlinkStatus] || null;
-      if (classlinkStatusMsg) {
-        window.__cleverLoginStatus = classlinkStatusMsg;
-      }
       window.history.replaceState({}, '', '/');
     }
 
