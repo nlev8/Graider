@@ -131,6 +131,14 @@ class TestEnsureToken:
         assert kwargs["data"]["client_id"] == "my-id"
         assert kwargs["data"]["client_secret"] == "my-secret"
 
+        # Source-equality pin (opus I-2 on PR #603): both channels MUST derive
+        # from the same instance attributes. A future refactor that pulled
+        # Basic from env while body used self.client_id would slip past the
+        # literal-value assertions above; this pin trips that scenario.
+        assert kwargs["auth"] == (
+            kwargs["data"]["client_id"], kwargs["data"]["client_secret"]
+        ), "Basic auth and body credentials must come from the same source"
+
     def test_default_expires_in_when_omitted(self):
         from backend.oneroster import OneRosterClient
         post_resp = MagicMock()
