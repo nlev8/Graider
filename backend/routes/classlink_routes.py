@@ -606,17 +606,6 @@ def classlink_callback():
             f"tenant={tenant_id} person_hash={hashlib.sha256(person_id.encode()).hexdigest()[:8]}",
             user="anonymous", teacher_id="",
         )
-        # TODO(REVERT): temporary diagnostic probe for handoff §7 Action B
-        # (SourcedId contract verification). The audit_log above hashes the
-        # person_id for FERPA compliance; this line prints it raw to Sentry +
-        # Better Stack so the operator can feed it into
-        # `scripts/verify_classlink_sourcedid_contract.py`. REVERT in a
-        # follow-up PR once the diagnostic value is captured.
-        logger.warning(
-            "DEBUG_SOURCEDID_PROBE tenant=%s person_id=%s "
-            "(temporary — revert after handoff §7 Action B)",
-            tenant_id, person_id,
-        )
         return redirect("/student?classlink_error=not_provisioned")
 
     # Teacher/admin login
