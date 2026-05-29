@@ -55,6 +55,21 @@
 #                             direct lookup returns 404. Already known from the
 #                             LaunchPad profile screenshot:
 #                                  S4957-0002@4957.demo
+#
+#   ONEROSTER_TOKEN_URL       OPTIONAL but REQUIRED for ClassLink Roster Server
+#                             tenants. ClassLink hosts its OAuth2 token endpoint
+#                             at HOST ROOT (`/token`), NOT at the standard
+#                             OneRoster 1.1 path (`{base_url}/oauth/token`).
+#                             Without this override the OneRosterClient default
+#                             constructs `<base_url>/oauth/token` → 404.
+#                             For ClassLink, set:
+#                               export ONEROSTER_TOKEN_URL="https://<host>/token"
+#                             where `<host>` is the host portion of the
+#                             endpoint_url from the Partner Portal (e.g.,
+#                             `https://classlinkcertification3-vn-v2.rosterserver.com`).
+#                             For OneRoster-1.1-spec-compliant vendors that
+#                             serve `/oauth/token` at the resource root, leave
+#                             this unset and the client uses the default.
 
 set -euo pipefail
 
@@ -64,6 +79,8 @@ ONEROSTER_CLIENT_ID="${ONEROSTER_CLIENT_ID:-}"
 ONEROSTER_CLIENT_SECRET="${ONEROSTER_CLIENT_SECRET:-}"
 USERINFO_SOURCED_ID="${USERINFO_SOURCED_ID:-}"
 LOOKUP_EMAIL="${LOOKUP_EMAIL:-S4957-0002@4957.demo}"
+# Optional token URL override (REQUIRED for ClassLink — see header comment).
+ONEROSTER_TOKEN_URL="${ONEROSTER_TOKEN_URL:-}"
 
 # ── Validation ─────────────────────────────────────────────────────────────────
 missing=()
@@ -104,14 +121,24 @@ echo "== diag_classlink_sourcedid.sh =="
 echo "  base_url:           $ONEROSTER_BASE_URL"
 echo "  userinfo SourcedId: $USERINFO_SOURCED_ID"
 echo "  fallback email:     $LOOKUP_EMAIL"
+if [ -n "$ONEROSTER_TOKEN_URL" ]; then
+    echo "  token_url (override): $ONEROSTER_TOKEN_URL"
+fi
 echo ""
 
-python scripts/verify_classlink_sourcedid_contract.py \
-    --base-url "$ONEROSTER_BASE_URL" \
-    --client-id "$ONEROSTER_CLIENT_ID" \
-    --client-secret "$ONEROSTER_CLIENT_SECRET" \
-    --userinfo-sourced-id "$USERINFO_SOURCED_ID" \
+# Build argv with the optional --token-url flag only when overridden.
+PYARGS=(
+    --base-url "$ONEROSTER_BASE_URL"
+    --client-id "$ONEROSTER_CLIENT_ID"
+    --client-secret "$ONEROSTER_CLIENT_SECRET"
+    --userinfo-sourced-id "$USERINFO_SOURCED_ID"
     --lookup-email "$LOOKUP_EMAIL"
+)
+if [ -n "$ONEROSTER_TOKEN_URL" ]; then
+    PYARGS+=(--token-url "$ONEROSTER_TOKEN_URL")
+fi
+
+python scripts/verify_classlink_sourcedid_contract.py "${PYARGS[@]}"
 
 rc=$?
 echo ""

@@ -78,6 +78,67 @@ class TestEnsureToken:
         client_mock.post.assert_not_called()
         assert cli._token == "cached-tok"
 
+    def test_sends_basic_auth_header_alongside_body_credentials(self):
+        """OAuth client_credentials grant per RFC 6749 §2.3.1 allows credentials
+        in EITHER the request body OR an HTTP Basic Authorization header. The
+        spec recommends Basic for any client capable of it. Some OneRoster
+        vendors (notably ClassLink's Roster Server) REQUIRE Basic and reject
+        body-only credentials with `401 UNAUTHORIZED`. Other vendors only
+        accept body credentials.
+
+        This test pins that _ensure_token sends BOTH credential channels
+        (Basic header via httpx's `auth=` kwarg AND body fields) so the
+        client works against the union of all vendor implementations.
+
+        Regression: 2026-05-29 cert-tenant diagnostic against the ClassLink
+        Test District (tenant 2284) — production code sent credentials in
+        the body only and got `401 UNAUTHORIZED` from ClassLink's `/token`
+        endpoint. Direct curl with `-u client_id:secret` (Basic) succeeded
+        with HTTP 200. The diagnostic script (which uses the same
+        OneRosterClient) reproduced the failure. Adding Basic auth alongside
+        body credentials makes the client work for both vendor styles.
+        """
+        from backend.oneroster import OneRosterClient
+
+        post_resp = MagicMock()
+        post_resp.raise_for_status = MagicMock()
+        post_resp.json.return_value = {"access_token": "tok-basic", "expires_in": 3600}
+        client_mock = MagicMock()
+        client_mock.post = AsyncMock(return_value=post_resp)
+
+        cli = OneRosterClient(
+            base_url="https://x.example",
+            client_id="my-id",
+            client_secret="my-secret",
+            token_url="https://x.example/token",
+        )
+        asyncio.run(cli._ensure_token(client_mock))
+
+        # Token obtained
+        assert cli._token == "tok-basic"
+
+        # Basic auth via httpx's auth= kwarg (the new invariant this PR pins)
+        client_mock.post.assert_called_once()
+        kwargs = client_mock.post.call_args.kwargs
+        assert kwargs.get("auth") == ("my-id", "my-secret"), (
+            "OAuth client_credentials grant MUST send HTTP Basic auth header. "
+            f"Got auth kwarg: {kwargs.get('auth')!r}"
+        )
+
+        # Body credentials still sent (maximal compatibility — some vendors
+        # only accept body, opposite of ClassLink which only accepts Basic).
+        assert kwargs["data"]["grant_type"] == "client_credentials"
+        assert kwargs["data"]["client_id"] == "my-id"
+        assert kwargs["data"]["client_secret"] == "my-secret"
+
+        # Source-equality pin (opus I-2 on PR #603): both channels MUST derive
+        # from the same instance attributes. A future refactor that pulled
+        # Basic from env while body used self.client_id would slip past the
+        # literal-value assertions above; this pin trips that scenario.
+        assert kwargs["auth"] == (
+            kwargs["data"]["client_id"], kwargs["data"]["client_secret"]
+        ), "Basic auth and body credentials must come from the same source"
+
     def test_default_expires_in_when_omitted(self):
         from backend.oneroster import OneRosterClient
         post_resp = MagicMock()
