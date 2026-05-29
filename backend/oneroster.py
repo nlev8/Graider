@@ -29,7 +29,16 @@ class OneRosterClient:
         self._token_expires = 0
 
     async def _ensure_token(self, client):
-        """Obtain or refresh OAuth bearer token via client_credentials grant."""
+        """Obtain or refresh OAuth bearer token via client_credentials grant.
+
+        Sends credentials via BOTH HTTP Basic auth header AND form-body fields.
+        Per RFC 6749 §2.3.1, the spec allows either channel and recommends
+        Basic for clients that can support it; in practice OneRoster vendors
+        disagree on which they accept. ClassLink's Roster Server rejects
+        body-only credentials with `401 UNAUTHORIZED – the Request requires
+        authorization`; other vendors only accept body. Sending both makes
+        the client work against the union of vendor implementations.
+        """
         if self._token and time.time() < self._token_expires - 30:
             return
 
@@ -42,6 +51,7 @@ class OneRosterClient:
                 "client_secret": self.client_secret,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
+            auth=(self.client_id, self.client_secret),
         )
         resp.raise_for_status()
         data = resp.json()
