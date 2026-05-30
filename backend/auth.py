@@ -6,6 +6,7 @@ Supports both ES256 (JWKS) and HS256 (legacy secret) verification.
 import json
 import os
 import logging
+import secrets
 import jwt
 from jwt import PyJWKClient
 from flask import request, jsonify, g, session
@@ -60,6 +61,34 @@ def resolve_clever_user_id(clever_id):
     """Resolve a clever_id to a linked Supabase user_id, or return clever:{id}."""
     links = load_clever_links()
     return links.get(clever_id, f"clever:{clever_id}")
+
+
+# ClassLink → Supabase account linking (uses storage.py for Supabase persistence)
+def load_classlink_links():
+    """Load all classlink_guid → supabase_user_id mappings."""
+    try:
+        from backend.storage import list_keys, load
+        keys = list_keys('classlink_link:', 'system')
+        links = {}
+        for key in keys:
+            data = load(key, 'system')
+            if data and isinstance(data, dict):
+                guid = key[len('classlink_link:'):]
+                links[guid] = data.get('supabase_user_id', '')
+        return links
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        return {}
+
+
+def save_classlink_link(guid, supabase_user_id):
+    """Persist a classlink_guid → supabase_user_id link."""
+    try:
+        from backend.storage import save
+        save(f'classlink_link:{guid}', {'supabase_user_id': supabase_user_id}, 'system')
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+    logger.info("Linked ClassLink GUID to Supabase user %s", supabase_user_id)
 
 
 # Routes that don't require authentication
