@@ -2,7 +2,15 @@
 
 **Date:** 2026-05-30
 **Class:** B (auth / identity — net-new behavior)
-**Status:** Approved (brainstorming) → ready for implementation plan
+**Status:** Approved (brainstorming) → revised v2 after three-way design review (Claude/Codex/Gemini) → ready for implementation plan
+
+> **v2 revision note.** Codex's design review surfaced three blocking issues the
+> first pass missed: (1) the frontend Bearer-header suppression keys off an `id`
+> prefix that becomes a UUID after this change (stale-Bearer bypass risk),
+> (2) email-matched *pending* users stay frontend-blocked, (3)
+> `/api/classlink/delete-data` gates on a `classlink:` prefix that no longer
+> matches. Gemini added the `storage.py` file-backend prefix handler. All are
+> incorporated below (§3.4–§3.7) and were verified against the live code.
 
 ---
 
@@ -76,6 +84,8 @@ the student SSO path.
 Mirrors `resolve_clever_user_id` + Clever's email-merge logic (`clever_routes.py:503-534`),
 with create-if-missing:
 
+0. **Missing email?** If `email` is empty/blank → log + return `None` (fail closed;
+   create-or-merge must not proceed without a stable email — Codex review).
 1. **Linked?** Read link table `classlink_link:{guid}` (system scope). If a
    `supabase_user_id` is stored, return it.
 2. **Email match?** `list_all_users(sb)` (`backend/utils/supabase_users.py`), filter by
@@ -85,6 +95,16 @@ with create-if-missing:
 3. **No match** → `sb.auth.admin.create_user({email, email_confirm: True,
    password: <secrets.token_urlsafe(32)>, user_metadata: {approved: True,
    first_name, last_name, auth_source: 'classlink'}})`. Save link. Return new `user.id`.
+   **Concurrency recovery:** if `create_user` raises a duplicate/email-exists error
+   (two concurrent first-logins both reached step 3), re-run `list_all_users`, require
+   exactly one email match, `save_classlink_link`, and return that UUID. Only fall to
+   `None` if the re-check is still ambiguous. (Re-check the link immediately before
+   create as a cheap optimization.)
+
+**Trust boundary (documented):** auto-creating a Supabase Auth user from the SSO email is
+acceptable *because* ClassLink is the district identity provider and the callback already
+verifies the id_token signature/audience/issuer (`classlink_routes.py:437-461`) and checks
+userinfo `sub` consistency (`:525-530`). The email claim is therefore trusted.
 
 `approved: True` is consistent with the existing "Clever/ClassLink users are
 district-approved by definition" gate skip (`backend/auth.py:247-248`); without it,
@@ -137,6 +157,65 @@ The added `client_id`/`client_secret` checks prevent constructing a broken
 `OneRosterClient` from a partial district config (`oneroster.py:457-465` returns a dict
 without validating those fields).
 
+### 3.4 Frontend Bearer-header suppression (BLOCKER #1 — `frontend/src/services/api.js`)
+
+`getAuthHeaders()` (`api.js:15-26`) currently skips the Supabase Bearer header only when
+`window.__graiderUser.id` starts with `clever:` / `classlink:`. After this change a
+ClassLink user's `id` is a **UUID**, so the prefix test fails, `supabase.auth.getSession()`
+runs, and a *stale* browser Bearer token would be attached. Backend `auth.py:210` only
+honors the ClassLink cookie `if ... not has_bearer`, so the stale Bearer would silently
+**bypass the ClassLink identity** and resolve to the wrong (or rejected) user.
+
+Fix: stop keying off the `id` prefix. Set an explicit
+`window.__graiderUser.auth_source = 'classlink'` in the ClassLink session handler
+(`App.jsx:339-347`) — and `'clever'` in the Clever handler, since linked-Clever users
+already have this latent bug — and change `getAuthHeaders()` to:
+
+```js
+if (currentUser && (currentUser.auth_source === 'classlink' || currentUser.auth_source === 'clever'
+      || (currentUser.id && (currentUser.id.startsWith('clever:') || currentUser.id.startsWith('classlink:'))))) {
+  return {}   // SSO cookie path — never send a (possibly stale) Bearer
+}
+```
+
+The prefix checks remain as a fallback for unlinked-Clever (`clever:{id}`) sessions.
+
+### 3.5 Approval-status SSO short-circuit (BLOCKER #2 — `backend/routes/auth_routes.py`)
+
+The 1-email-match branch links but does not touch metadata, so a matched *pending* Supabase
+user is backend-allowed (cookie) yet frontend-blocked: `/api/auth/approval-status`
+(`auth_routes.py:122-128`) reads `user_metadata.approved`. Fix at the source, consistent
+with the middleware's existing "SSO = district-approved" rule (`auth.py:247-248`): in
+`approval_status`, short-circuit before the `get_user_by_id` lookup —
+
+```python
+if getattr(g, 'auth_source', None) in ('clever', 'classlink'):
+    return jsonify({"approved": True, "email": getattr(g, 'user_email', '')})
+```
+
+This covers both auto-created (`approved=True`) and email-matched-pending users in one
+place. `approved=True` on the created user is retained for metadata correctness.
+
+### 3.6 `/api/classlink/delete-data` gate (BLOCKER #3 — `classlink_routes.py:673-675`)
+
+The handler rejects non-ClassLink callers via `g.teacher_id.startswith("classlink:")`.
+After the fix `g.teacher_id` is a UUID → every fixed ClassLink teacher gets a spurious 403,
+breaking FERPA right-to-delete. Fix the gate to use the auth source:
+
+```python
+if getattr(g, 'auth_source', None) != 'classlink':
+    return jsonify({"error": "Not a ClassLink user"}), 403
+```
+
+`delete_roster_data(teacher_id)` and the `oneroster_config` clear then operate on the
+**UUID-scoped** data, which is exactly where the rows now live — correct behavior.
+
+### 3.7 Storage file-backend prefix handler (`backend/storage.py`)
+
+`_key_to_filepath` has a `clever_link:` branch (`storage.py:143-145`) so the file backend
+(local-dev / Supabase-disabled) can persist links. Add a parallel `classlink_link:` branch
+writing under a `classlink_links/` dir, so `load/save_classlink_link` work without Supabase.
+
 ---
 
 ## 4. Data flow
@@ -162,10 +241,13 @@ ClassLink callback (role == teacher)
 
 ## 5. Error handling
 
+- Missing/blank email → `None` → `account_conflict` (no create without a stable email).
 - Resolver Supabase failures → log + Sentry capture → return `None` → callback fails closed
   with `account_conflict` (no crash, no half-provisioned state).
 - Ambiguous (>1) email match → `None` → `account_conflict` (never silently merge).
-- `admin.create_user` failure → caught in resolver → `None` → `account_conflict`.
+- `admin.create_user` duplicate/email-exists (concurrency) → re-run `list_all_users`;
+  exactly-1 match → link + return UUID (deterministic recovery); still ambiguous → `None`.
+- `admin.create_user` other failure → caught in resolver → `None` → `account_conflict`.
 - Bug A: `None`/partial config → clean `return` (skip sync), no exception.
 
 ---
@@ -176,29 +258,43 @@ ClassLink callback (role == teacher)
 - linked hit returns stored UUID, no create call.
 - single email match → links + returns that UUID.
 - multiple matches → returns `None`, no create, no link.
+- **missing/blank email → returns `None`, no create, no list lookup.**
 - no match → calls `admin.create_user` with `approved=True` + `auth_source='classlink'`, links, returns new UUID.
+- **duplicate-create race → on email-exists, re-resolves via `list_all_users` to the now-existing UUID + links.**
 - Supabase failure → returns `None`.
 
 Callback:
 - success stores UUID (not GUID) in `session['classlink_user']['user_id']` and passes UUID to `_trigger_roster_sync`.
 - `None` resolver → `account_conflict` redirect.
 
+Approval-status (§3.5):
+- ClassLink/Clever `g.auth_source` → `approved: True` without calling `get_user_by_id`.
+
+delete-data (§3.6):
+- ClassLink-session (UUID `g.teacher_id`, `auth_source='classlink'`) → deletes UUID-scoped data (no 403); non-ClassLink → 403.
+
+Frontend (§3.4):
+- `getAuthHeaders()` returns `{}` (no Bearer) when `auth_source` is `classlink`/`clever`, even with a UUID id and a stale Supabase session present.
+
 Bug A (`_run_classlink_roster_sync`):
 - `config is None` → returns without raising.
 - partial config (missing `client_id`/`client_secret`) → returns without constructing client.
 
-Gates: full `pytest -q --ignore=tests/load`; `grep -rln` on every modified file; line-shift
-pin scan on `classlink_routes.py` / `auth.py`; spec reviewer ✅ then opus code-quality
-reviewer ✅.
+Gates: full `pytest -q --ignore=tests/load`; `cd frontend && npx vitest run` (for §3.4);
+`grep -rln` on every modified file; line-shift pin scan on `classlink_routes.py` /
+`auth.py` / `auth_routes.py`; spec reviewer ✅ then opus code-quality reviewer ✅.
 
 ---
 
 ## 7. Files touched
 
 - `backend/auth.py` — `resolve_classlink_user_id`, `load_classlink_links`, `save_classlink_link`.
-- `backend/routes/classlink_routes.py` — teacher-branch wiring, Bug A guard.
-- `frontend/src/App.jsx` — `account_conflict` handled by existing `classlink_error` path (verify; likely no change needed if generic).
-- Tests: `tests/test_classlink_sso.py`, `tests/test_auth*.py` (or a new `tests/test_classlink_identity.py`).
+- `backend/routes/classlink_routes.py` — teacher-branch wiring, Bug A guard, delete-data gate (§3.6).
+- `backend/routes/auth_routes.py` — approval-status SSO short-circuit (§3.5).
+- `backend/storage.py` — `classlink_link:` file-backend prefix handler (§3.7).
+- `frontend/src/services/api.js` — `getAuthHeaders()` keys off `auth_source` not `id` prefix (§3.4).
+- `frontend/src/App.jsx` — set `auth_source` on `window.__graiderUser` in the ClassLink (and Clever) session handlers; add `account_conflict` to the error-message map.
+- Tests: new `tests/test_classlink_identity.py` (resolver), `tests/test_classlink_sso.py` (callback, delete-data), `tests/test_auth*.py` (approval-status), `frontend` vitest for `getAuthHeaders`.
 
 ---
 
@@ -210,7 +306,11 @@ reviewer ✅.
   it changes a live integration's behavior and deserves its own review.
 - **Pre-existing GUID-keyed `teacher_data`**: none expected on the cert tenant; no migration
   in this change. If a real tenant accumulated GUID-keyed data before this fix, a one-time
-  re-key migration would be needed — track if it ever applies.
+  re-key migration would be needed — track if it ever applies. Concretely:
+  `get_oneroster_config(teacher_id)` now reads **UUID-scoped** config (`oneroster.py:430-442`),
+  so any `oneroster_config` previously stored under the GUID is neither found nor cleared by
+  delete-data. Acceptable for the cert tenant (no prior config); flagged so it's a conscious
+  scope decision, not an oversight.
 
 ---
 
