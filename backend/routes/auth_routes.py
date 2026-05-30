@@ -120,7 +120,8 @@ def approval_status():
             return jsonify({"approved": True})
 
         # Clever/ClassLink sessions are district-approved by definition
-        # (mirrors the middleware gate skip in backend/auth.py:247-248).
+        # (mirrors the middleware gate skip in backend/auth.py check_auth,
+        # the `auth_source in ('clever','classlink')` gate-skip branch).
         if getattr(g, 'auth_source', None) in ('clever', 'classlink'):
             return jsonify({"approved": True, "email": getattr(g, 'user_email', '')})
 
