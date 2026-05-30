@@ -126,3 +126,49 @@ def test_resolve_no_supabase_fails_closed(monkeypatch):
     _patch_links(monkeypatch)
     monkeypatch.setattr(auth, "_get_supabase", lambda: None)
     assert auth.resolve_classlink_user_id("classlink:2284:x", "a@b.com") is None
+
+
+def test_resolve_create_race_recheck_ambiguous_fails_closed(monkeypatch):
+    """If create fails and the email recheck now finds >1 user, fail closed (None)."""
+    _patch_links(monkeypatch)
+
+    class _Admin:
+        def create_user(self, attrs):
+            raise Exception("boom")
+
+    class _Auth:
+        admin = _Admin()
+
+    class _SB:
+        auth = _Auth()
+
+    monkeypatch.setattr(auth, "_get_supabase", lambda: _SB())
+    # First scan: no match (drives create). After create fails, recheck returns 2 → ambiguous.
+    calls = {"n": 0}
+    def _users(_sb):
+        calls["n"] += 1
+        return [] if calls["n"] == 1 else [_FakeUser("u1", "a@b.com"), _FakeUser("u2", "a@b.com")]
+    monkeypatch.setattr(auth, "list_all_users", _users)
+    assert auth.resolve_classlink_user_id("classlink:2284:x", "a@b.com") is None
+
+
+def test_resolve_create_failure_log_does_not_leak_email(monkeypatch, caplog):
+    """The create-failure log line must not contain the raw email (FERPA)."""
+    import logging
+    _patch_links(monkeypatch)
+
+    class _Admin:
+        def create_user(self, attrs):
+            raise Exception("User with email secret-leak@district.org already registered")
+
+    class _Auth:
+        admin = _Admin()
+
+    class _SB:
+        auth = _Auth()
+
+    monkeypatch.setattr(auth, "_get_supabase", lambda: _SB())
+    monkeypatch.setattr(auth, "list_all_users", lambda _sb: [])  # no match, no recovery
+    with caplog.at_level(logging.WARNING):
+        auth.resolve_classlink_user_id("classlink:2284:x", "secret-leak@district.org")
+    assert "secret-leak@district.org" not in caplog.text

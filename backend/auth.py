@@ -149,14 +149,14 @@ def resolve_classlink_user_id(guid, email, name=None):
             return new_id
         except Exception as create_err:
             # Concurrency: a parallel first-login may have created the user already.
-            logger.warning("ClassLink resolve: create_user failed (%s); re-resolving by email", create_err)
+            logger.warning("ClassLink resolve: create_user failed (%s); re-resolving by email", type(create_err).__name__)
             recheck = _email_matches()
             if len(recheck) == 1:
                 save_classlink_link(guid, recheck[0].id)
                 return recheck[0].id
             return None
     except Exception as e:
-        logger.warning("ClassLink resolve failed (non-fatal): %s", e)
+        logger.warning("ClassLink resolve failed (non-fatal): %s", type(e).__name__)
         sentry_sdk.capture_exception(e)
         return None
 
