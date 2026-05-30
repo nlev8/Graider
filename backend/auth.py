@@ -14,6 +14,7 @@ from flask import request, jsonify, g, session
 logger = logging.getLogger(__name__)
 
 from backend.supabase_client import get_supabase as _get_supabase
+from backend.utils.supabase_users import list_all_users
 import sentry_sdk
 
 # Clever → Supabase account linking (uses storage.py for Supabase persistence)
@@ -89,6 +90,75 @@ def save_classlink_link(guid, supabase_user_id):
     except Exception as e:
         sentry_sdk.capture_exception(e)
     logger.info("Linked ClassLink GUID to Supabase user %s", supabase_user_id)
+
+
+def resolve_classlink_user_id(guid, email, name=None):
+    """Resolve a ClassLink tenant-scoped GUID to a real Supabase Auth user UUID.
+
+    Link-or-create. Returns:
+      - a previously linked UUID, or
+      - the UUID of the single Supabase user whose email matches (and links it), or
+      - a freshly created Supabase user's UUID (approved, auth_source=classlink), or
+      - None (fail closed) on missing email, ambiguous (>1) email match, no Supabase
+        client, or create failure that cannot be deterministically recovered.
+    """
+    email = (email or "").strip()
+    if not email:
+        logger.warning("ClassLink resolve: missing email; failing closed")
+        return None
+
+    linked = load_classlink_links().get(guid)
+    if linked:
+        return linked
+
+    name = name or {}
+    try:
+        sb = _get_supabase()
+        if not sb:
+            logger.warning("ClassLink resolve: no Supabase client; failing closed")
+            return None
+
+        def _email_matches():
+            return [
+                u for u in list_all_users(sb)
+                if getattr(u, 'email', None) and u.email.lower() == email.lower()
+            ]
+
+        matches = _email_matches()
+        if len(matches) == 1:
+            save_classlink_link(guid, matches[0].id)
+            return matches[0].id
+        if len(matches) > 1:
+            logger.warning("ClassLink resolve: %d users match email — failing closed", len(matches))
+            return None
+
+        try:
+            res = sb.auth.admin.create_user({
+                "email": email,
+                "email_confirm": True,
+                "password": secrets.token_urlsafe(32),
+                "user_metadata": {
+                    "approved": True,
+                    "first_name": name.get('first', ''),
+                    "last_name": name.get('last', ''),
+                    "auth_source": "classlink",
+                },
+            })
+            new_id = res.user.id
+            save_classlink_link(guid, new_id)
+            return new_id
+        except Exception as create_err:
+            # Concurrency: a parallel first-login may have created the user already.
+            logger.warning("ClassLink resolve: create_user failed (%s); re-resolving by email", create_err)
+            recheck = _email_matches()
+            if len(recheck) == 1:
+                save_classlink_link(guid, recheck[0].id)
+                return recheck[0].id
+            return None
+    except Exception as e:
+        logger.warning("ClassLink resolve failed (non-fatal): %s", e)
+        sentry_sdk.capture_exception(e)
+        return None
 
 
 # Routes that don't require authentication
