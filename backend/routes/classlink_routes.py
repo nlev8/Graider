@@ -680,7 +680,7 @@ def classlink_delete_data():
     from backend.storage import save as _storage_save
 
     teacher_id = g.teacher_id
-    if not teacher_id.startswith("classlink:"):
+    if getattr(g, 'auth_source', None) != 'classlink':
         return jsonify({"error": "Not a ClassLink user"}), 403
 
     deleted = delete_roster_data(teacher_id)

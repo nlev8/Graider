@@ -105,18 +105,32 @@ def app_client():
 
 
 def test_delete_data_calls_roster_delete_for_classlink_teacher(app_client, monkeypatch):
-    monkeypatch.setenv("FLASK_ENV", "development")
-    with patch("backend.roster_sync.delete_roster_data",
+    # Updated for Task 6: gate now checks g.auth_source (set by middleware when
+    # session['classlink_user'] is present) instead of a GUID prefix.  Dev-mode
+    # (X-Test-Teacher-Id) never sets g.auth_source, so we use a real session in
+    # production mode — matching the post-Task-4 world where user_id is a UUID.
+    import os as _os
+    uuid_teacher = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    with patch.dict(_os.environ, {"FLASK_ENV": "production"}), \
+         patch("backend.roster_sync.delete_roster_data",
                return_value={"classes": 1, "students": 2, "enrollments": 1}) as mock_del, \
          patch("backend.storage.save") as mock_save:
+        with app_client.session_transaction() as sess:
+            sess["classlink_user"] = {
+                "user_id": uuid_teacher,
+                "classlink_id": "cl-teach1",
+                "email": "teach1@dist-A.edu",
+                "type": "teacher",
+                "tenant_id": "dist-A",
+            }
         r = app_client.post(
             "/api/classlink/delete-data",
-            headers={"X-Test-Teacher-Id": "classlink:dist-A:teach1", "Content-Type": "application/json"},
+            content_type="application/json",
         )
         assert r.status_code == 200
         assert r.get_json()["counts"]["students"] == 2
-        mock_del.assert_called_once_with("classlink:dist-A:teach1")
-        mock_save.assert_called_once_with("oneroster_config", None, "classlink:dist-A:teach1")
+        mock_del.assert_called_once_with(uuid_teacher)
+        mock_save.assert_called_once_with("oneroster_config", None, uuid_teacher)
 
 
 def test_oneroster_sync_does_not_deactivate_classlink_rows():
@@ -141,3 +155,42 @@ def test_delete_data_rejects_non_classlink_teacher(app_client, monkeypatch):
         )
         assert r.status_code == 403
         mock_del.assert_not_called()
+
+
+def test_delete_data_allows_uuid_classlink_teacher(app_client, monkeypatch):
+    """Gate keys off g.auth_source='classlink', not a GUID prefix.
+
+    After Task 4 the session stores a real Supabase UUID in user_id, so
+    teacher_id.startswith("classlink:") would always return 403.  This test
+    pins the new behaviour: a ClassLink session whose user_id is a pure UUID
+    must receive 200, not 403.
+
+    The middleware (check_auth in backend/auth.py) sets g.auth_source='classlink'
+    when session['classlink_user'] is present and no Bearer token is provided.
+    We must NOT be in FLASK_ENV=development (dev mode short-circuits to
+    X-Test-Teacher-Id and never reads the session), so we patch to production.
+    """
+    import os as _os
+    uuid_teacher = "11111111-1111-1111-1111-111111111111"
+    with patch.dict(_os.environ, {"FLASK_ENV": "production"}), \
+         patch("backend.roster_sync.delete_roster_data",
+               return_value={"classes": 1, "students": 2}) as mock_del, \
+         patch("backend.storage.save") as mock_save:
+        with app_client.session_transaction() as sess:
+            sess["classlink_user"] = {
+                "user_id": uuid_teacher,
+                "classlink_id": "cl-guid-abc",
+                "email": "teacher@school.edu",
+                "name": {"first": "T", "last": "Eacher"},
+                "type": "teacher",
+                "tenant_id": "dist-A",
+            }
+        r = app_client.post(
+            "/api/classlink/delete-data",
+            content_type="application/json",
+        )
+        assert r.status_code == 200, r.get_json()
+        data = r.get_json()
+        assert data["counts"]["students"] == 2
+        mock_del.assert_called_once_with(uuid_teacher)
+        mock_save.assert_called_once_with("oneroster_config", None, uuid_teacher)
