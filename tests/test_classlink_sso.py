@@ -11,6 +11,21 @@ from flask import Flask, session
 from tests.conftest_classlink import make_id_token
 
 
+@pytest.fixture(autouse=True)
+def _default_classlink_resolver():
+    """Patch resolve_classlink_user_id to a deterministic UUID for every test in
+    this module so callback tests are hermetic (no live Supabase required).
+
+    Tests that exercise the fail-closed / account_conflict path
+    (e.g. test_teacher_callback_account_conflict_when_resolver_none) patch the
+    resolver to None themselves via their own ``patch(...)`` context managers,
+    which overrides this fixture for their duration (inner patch wins).
+    """
+    with patch('backend.routes.classlink_routes.resolve_classlink_user_id',
+               return_value='resolved-uuid-fixture'):
+        yield
+
+
 def _make_app():
     """Create a minimal Flask app with ClassLink routes."""
     app = Flask(__name__)
