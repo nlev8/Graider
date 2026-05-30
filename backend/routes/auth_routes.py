@@ -119,6 +119,11 @@ def approval_status():
         if g.user_id == 'local-dev' or getattr(g, 'is_dev_shim', False):
             return jsonify({"approved": True})
 
+        # Clever/ClassLink sessions are district-approved by definition
+        # (mirrors the middleware gate skip in backend/auth.py:247-248).
+        if getattr(g, 'auth_source', None) in ('clever', 'classlink'):
+            return jsonify({"approved": True, "email": getattr(g, 'user_email', '')})
+
         sb = _get_supabase()
         res = sb.auth.admin.get_user_by_id(g.user_id)
         meta = res.user.user_metadata or {}
