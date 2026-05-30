@@ -303,8 +303,10 @@ def init_auth(app):
             g.district_id = clever_user.get('district', '')
             return None
 
-        # ClassLink SSO session — identity GUID was formed (tenant-scoped) at
-        # the OAuth callback and stored as `user_id`; read it verbatim.
+        # ClassLink SSO session — `user_id` is the resolved Supabase Auth UUID
+        # (set at the OAuth callback by resolve_classlink_user_id); the
+        # tenant-scoped GUID is kept separately in `guid`. Read user_id
+        # verbatim into g.user_id/g.teacher_id.
         classlink_user = session.get('classlink_user') if hasattr(session, 'get') else None
         if classlink_user and not has_bearer:
             g.user_id = classlink_user.get('user_id', '')

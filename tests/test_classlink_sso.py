@@ -1574,25 +1574,8 @@ class TestTeacherCallbackUUIDWiring:
                 resolver_return="uuid-teacher",
                 roster_sync_calls=roster_calls,
             )
-
-        assert resp.status_code == 302
-        assert "classlink_login=success" in resp.location
-
-        with app.test_client() as client2:
-            # Re-drive to read the session from the same client context.
-            pass
-
-        # Read session directly from the client used in the drive call.
-        # We need to read the session before the client context closes —
-        # re-run the drive inside a persistent client and check session inline.
-        roster_calls2 = []
-        with app.test_client() as client:
-            resp = self._drive_teacher_callback(
-                client, priv, pub, userinfo,
-                resolver_return="uuid-teacher",
-                roster_sync_calls=roster_calls2,
-            )
             assert resp.status_code == 302
+            assert "classlink_login=success" in resp.location
             with client.session_transaction() as sess:
                 cl_user = sess.get('classlink_user', {})
 
@@ -1605,11 +1588,11 @@ class TestTeacherCallbackUUIDWiring:
             "classlink_id must be set (external identity retention)"
         )
         # Roster sync must use the UUID.
-        assert len(roster_calls2) == 1, (
-            f"_trigger_roster_sync should be called once; got {roster_calls2}"
+        assert len(roster_calls) == 1, (
+            f"_trigger_roster_sync should be called once; got {roster_calls}"
         )
-        assert roster_calls2[0][0] == "uuid-teacher", (
-            f"_trigger_roster_sync first arg must be UUID; got {roster_calls2[0][0]!r}"
+        assert roster_calls[0][0] == "uuid-teacher", (
+            f"_trigger_roster_sync first arg must be UUID; got {roster_calls[0][0]!r}"
         )
 
     # ── test 2: resolver returns None → account_conflict redirect ────────────
@@ -1640,6 +1623,10 @@ class TestTeacherCallbackUUIDWiring:
         assert "account_conflict" in resp.location, (
             f"Expected account_conflict in Location; got {resp.location!r}"
         )
+        # Fail-closed: no session created and no roster sync triggered.
+        assert roster_calls == []
+        with client.session_transaction() as sess:
+            assert 'classlink_user' not in sess
 
 
 def test_roster_sync_skips_when_partial_config(monkeypatch):
