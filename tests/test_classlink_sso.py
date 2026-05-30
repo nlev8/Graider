@@ -51,9 +51,17 @@ def _mock_oidc_config():
     }
 
 
-def _run_callback(client, priv, pub, userinfo, sub="cl-sub", nonce=None):
+def _run_callback(client, priv, pub, userinfo, sub="cl-sub", nonce=None,
+                  resolved_uuid="test-uuid-resolved"):
     """Drive a LaunchPad-permissive callback (no initiated_by_us marker) with a
-    given userinfo body. Returns the Flask response."""
+    given userinfo body. Returns the Flask response.
+
+    *resolved_uuid* is the value returned by the monkeypatched
+    ``resolve_classlink_user_id`` (Task 4).  Pass ``None`` to simulate the
+    account-conflict fail-closed path.  Defaults to a sentinel UUID so all
+    existing teacher-path tests remain green without changing their assertions
+    (they assert on session fields that don't depend on the UUID value).
+    """
     id_token = make_id_token(
         priv, aud="test-client-id", sub=sub, nonce=nonce,
         email=userinfo.get("Email", ""), given_name=userinfo.get("FirstName", ""),
@@ -69,6 +77,7 @@ def _run_callback(client, priv, pub, userinfo, sub="cl-sub", nonce=None):
          patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
          patch('backend.routes.classlink_routes.get_classlink_oidc_config', return_value=_mock_oidc_config()), \
          patch('backend.routes.classlink_routes.get_classlink_jwks_client', return_value=_mock_jwks_client(pub)), \
+         patch('backend.routes.classlink_routes.resolve_classlink_user_id', return_value=resolved_uuid), \
          patch('backend.routes.classlink_routes._trigger_roster_sync'):
         return client.get('/api/classlink/callback?code=c&state=valid-state')
 
@@ -77,24 +86,28 @@ class TestClassLinkTenantScopedIdentity:
     BASE = {"FirstName": "A", "LastName": "B", "Email": "a@school.edu", "Role": "teacher"}
 
     def test_teacher_guid_is_tenant_scoped(self):
+        # Task 4: the GUID is now stored in the 'guid' audit field, not 'user_id'.
+        # user_id holds the resolved Supabase UUID.  The GUID construction
+        # (classlink:{tenant}:{person}) is still what matters here.
         app = _make_app(); priv, pub = _make_rsa_keypair()
         with app.test_client() as client:
             resp = _run_callback(client, priv, pub,
                                  {**self.BASE, "SourcedId": "p1", "TenantId": "dist-A"})
             assert 'classlink_login=success' in resp.location
             with client.session_transaction() as sess:
-                assert sess['classlink_user']['user_id'] == "classlink:dist-A:p1"
+                assert sess['classlink_user']['guid'] == "classlink:dist-A:p1"
 
     def test_same_person_different_tenants_distinct_guids(self):
+        # Task 4: the GUID is now stored in the 'guid' audit field, not 'user_id'.
         app = _make_app(); priv, pub = _make_rsa_keypair()
         with app.test_client() as c1:
             _run_callback(c1, priv, pub, {**self.BASE, "SourcedId": "same", "TenantId": "dist-A"})
             with c1.session_transaction() as s1:
-                guid_a = s1['classlink_user']['user_id']
+                guid_a = s1['classlink_user']['guid']
         with app.test_client() as c2:
             _run_callback(c2, priv, pub, {**self.BASE, "SourcedId": "same", "TenantId": "dist-B"})
             with c2.session_transaction() as s2:
-                guid_b = s2['classlink_user']['user_id']
+                guid_b = s2['classlink_user']['guid']
         assert guid_a == "classlink:dist-A:same"
         assert guid_b == "classlink:dist-B:same"
         assert guid_a != guid_b
@@ -1465,6 +1478,168 @@ def test_roster_sync_skips_when_no_oneroster_config(monkeypatch):
     monkeypatch.setattr("backend.oneroster.get_oneroster_config", lambda tid: None)
     # Must return cleanly (no AttributeError), and never construct a client.
     clr._run_classlink_roster_sync("11111111-1111-1111-1111-111111111111", "2284")
+
+
+# ── Task 4: Callback wiring — UUID stored, account_conflict redirect ─────────
+#
+# These two tests drive the teacher branch of /api/classlink/callback and assert
+# the NEW behavior: the raw GUID is resolved to a real Supabase UUID via
+# resolve_classlink_user_id, which is then stored as session user_id (not the
+# GUID).  A None return from the resolver redirects to account_conflict.
+#
+# Template: test_successful_teacher_login (same harness, same patches).  The
+# only difference is that resolve_classlink_user_id is additionally monkeypatched
+# into the routes module namespace (where the callback calls it after import).
+
+class TestTeacherCallbackUUIDWiring:
+    """Task 4: teacher callback stores resolved UUID, not raw GUID."""
+
+    # ── shared setup helpers ──────────────────────────────────────────────────
+
+    def _make_teacher_userinfo(self):
+        return {
+            "UserId": "cl-user-123",
+            "SourcedId": "cl-user-123",
+            "FirstName": "Jane",
+            "LastName": "Smith",
+            "Email": "jane.smith@school.edu",
+            "Role": "teacher",
+            "TenantId": "district-456",
+        }
+
+    def _drive_teacher_callback(self, client, priv, pub, userinfo,
+                                resolver_return, roster_sync_calls):
+        """Drive a LaunchPad-permissive (no state in session) teacher callback.
+
+        Monkeypatches ``resolve_classlink_user_id`` in the routes module to
+        return *resolver_return* and captures ``_trigger_roster_sync`` args
+        into *roster_sync_calls* (a list appended to on each call).
+        """
+        id_token = make_id_token(
+            priv,
+            aud="test-client-id",
+            sub=userinfo.get("SourcedId", "cl-user-123"),
+            email=userinfo.get("Email", "jane.smith@school.edu"),
+            given_name=userinfo.get("FirstName", "Jane"),
+            family_name=userinfo.get("LastName", "Smith"),
+            role=userinfo.get("Role", "teacher"),
+        )
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 200
+        mock_token_resp.json.return_value = {
+            "access_token": "test-token",
+            "id_token": id_token,
+        }
+        mock_user_resp = MagicMock()
+        mock_user_resp.status_code = 200
+        mock_user_resp.json.return_value = userinfo
+
+        def _fake_roster_sync(teacher_id, tenant_id):
+            roster_sync_calls.append((teacher_id, tenant_id))
+
+        with patch('backend.routes.classlink_routes.requests.post',
+                   return_value=mock_token_resp), \
+             patch('backend.routes.classlink_routes.requests.get',
+                   return_value=mock_user_resp), \
+             patch('backend.routes.classlink_routes.get_classlink_oidc_config',
+                   return_value=_mock_oidc_config()), \
+             patch('backend.routes.classlink_routes.get_classlink_jwks_client',
+                   return_value=_mock_jwks_client(pub)), \
+             patch('backend.routes.classlink_routes.resolve_classlink_user_id',
+                   return_value=resolver_return), \
+             patch('backend.routes.classlink_routes._trigger_roster_sync',
+                   side_effect=_fake_roster_sync):
+            return client.get('/api/classlink/callback?code=auth-code-123')
+
+    # ── test 1: UUID stored, GUID kept as audit field ─────────────────────────
+
+    def test_teacher_callback_stores_uuid_not_guid(self):
+        """Resolver returns a UUID → session stores UUID as user_id, GUID as guid.
+
+        After Task 4 wiring:
+        - session['classlink_user']['user_id'] MUST equal the resolved UUID
+          (not the raw classlink:tenant:person composite).
+        - session['classlink_user']['classlink_id'] MUST be set (external
+          identity preserved for audit/debug).
+        - _trigger_roster_sync MUST be called with the UUID, not the GUID.
+        """
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        userinfo = self._make_teacher_userinfo()
+        roster_calls = []
+
+        with app.test_client() as client:
+            resp = self._drive_teacher_callback(
+                client, priv, pub, userinfo,
+                resolver_return="uuid-teacher",
+                roster_sync_calls=roster_calls,
+            )
+
+        assert resp.status_code == 302
+        assert "classlink_login=success" in resp.location
+
+        with app.test_client() as client2:
+            # Re-drive to read the session from the same client context.
+            pass
+
+        # Read session directly from the client used in the drive call.
+        # We need to read the session before the client context closes —
+        # re-run the drive inside a persistent client and check session inline.
+        roster_calls2 = []
+        with app.test_client() as client:
+            resp = self._drive_teacher_callback(
+                client, priv, pub, userinfo,
+                resolver_return="uuid-teacher",
+                roster_sync_calls=roster_calls2,
+            )
+            assert resp.status_code == 302
+            with client.session_transaction() as sess:
+                cl_user = sess.get('classlink_user', {})
+
+        # UUID must be the resolved value, not the raw GUID.
+        assert cl_user.get('user_id') == "uuid-teacher", (
+            f"Expected user_id='uuid-teacher'; got {cl_user.get('user_id')!r}"
+        )
+        # External identity must be retained.
+        assert cl_user.get('classlink_id'), (
+            "classlink_id must be set (external identity retention)"
+        )
+        # Roster sync must use the UUID.
+        assert len(roster_calls2) == 1, (
+            f"_trigger_roster_sync should be called once; got {roster_calls2}"
+        )
+        assert roster_calls2[0][0] == "uuid-teacher", (
+            f"_trigger_roster_sync first arg must be UUID; got {roster_calls2[0][0]!r}"
+        )
+
+    # ── test 2: resolver returns None → account_conflict redirect ────────────
+
+    def test_teacher_callback_account_conflict_when_resolver_none(self):
+        """Resolver returns None → redirect to /?classlink_error=account_conflict.
+
+        This covers the fail-closed path: if resolve_classlink_user_id cannot
+        find or create a Supabase user (e.g., email collision across tenants),
+        the callback must not create a session and must redirect to
+        account_conflict so the frontend can surface a useful message.
+        """
+        app = _make_app()
+        priv, pub = _make_rsa_keypair()
+        userinfo = self._make_teacher_userinfo()
+        roster_calls = []
+
+        with app.test_client() as client:
+            resp = self._drive_teacher_callback(
+                client, priv, pub, userinfo,
+                resolver_return=None,
+                roster_sync_calls=roster_calls,
+            )
+
+        assert resp.status_code in (301, 302), (
+            f"Expected redirect; got {resp.status_code}"
+        )
+        assert "account_conflict" in resp.location, (
+            f"Expected account_conflict in Location; got {resp.location!r}"
+        )
 
 
 def test_roster_sync_skips_when_partial_config(monkeypatch):
