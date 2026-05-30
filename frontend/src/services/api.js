@@ -9,17 +9,25 @@ import { track } from './posthog'
 const API_BASE = ''  // Empty for same-origin, Vite proxies /api to Flask
 
 /**
+ * Returns true for any SSO user (Clever or ClassLink), false for normal Supabase users.
+ * Detection uses auth_source when present (set by the backend for UUID-id SSO users)
+ * and falls back to id prefix for legacy/unlinked sessions.
+ */
+export function isSsoUser(currentUser) {
+  return !!(currentUser && (
+    currentUser.auth_source === 'classlink' || currentUser.auth_source === 'clever' ||
+    (currentUser.id && (currentUser.id.startsWith('clever:') || currentUser.id.startsWith('classlink:')))
+  ));
+}
+
+/**
  * Get authorization headers with current session token
  */
 export async function getAuthHeaders() {
   // Clever/ClassLink users don't have Supabase sessions — skip entirely
   // (the browser sends the session cookie automatically)
   const currentUser = window.__graiderUser;
-  const isSso = currentUser && (
-    currentUser.auth_source === 'classlink' || currentUser.auth_source === 'clever' ||
-    (currentUser.id && (currentUser.id.startsWith('clever:') || currentUser.id.startsWith('classlink:')))
-  );
-  if (isSso) {
+  if (isSsoUser(currentUser)) {
     return {}
   }
   const { data: { session } } = await supabase.auth.getSession()
@@ -67,9 +75,10 @@ async function fetchApi(endpoint, options = {}) {
         }
       }
       // Still no valid session after waiting — truly expired
-      // Don't fire for Clever users (they don't use Supabase sessions)
+      // Don't fire for SSO users (Clever or ClassLink) — they use server-side
+      // session cookies, not Supabase tokens, so a missing token is expected.
       var currentUser = window.__graiderUser;
-      if (!(currentUser && currentUser.id && currentUser.id.startsWith('clever:'))) {
+      if (!isSsoUser(currentUser)) {
         window.dispatchEvent(new Event('auth-expired'))
       }
       throw new Error('Session expired. Please log in again.')
