@@ -15,7 +15,11 @@ export async function getAuthHeaders() {
   // Clever/ClassLink users don't have Supabase sessions — skip entirely
   // (the browser sends the session cookie automatically)
   const currentUser = window.__graiderUser;
-  if (currentUser && currentUser.id && (currentUser.id.startsWith('clever:') || currentUser.id.startsWith('classlink:'))) {
+  const isSso = currentUser && (
+    currentUser.auth_source === 'classlink' || currentUser.auth_source === 'clever' ||
+    (currentUser.id && (currentUser.id.startsWith('clever:') || currentUser.id.startsWith('classlink:')))
+  );
+  if (isSso) {
     return {}
   }
   const { data: { session } } = await supabase.auth.getSession()
