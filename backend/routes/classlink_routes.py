@@ -256,8 +256,8 @@ def _run_classlink_roster_sync(teacher_id, tenant_id):
     import asyncio
 
     config = get_oneroster_config(teacher_id)
-    if not config.get('base_url'):
-        logger.info("No OneRoster config for %s, skipping post-login roster sync", teacher_id)
+    if not config or not config.get('base_url') or not config.get('client_id') or not config.get('client_secret'):
+        logger.info("No usable OneRoster config for %s, skipping post-login roster sync", teacher_id)
         return
 
     client = OneRosterClient(

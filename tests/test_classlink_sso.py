@@ -1453,3 +1453,26 @@ class TestClassLinkStudentCallback:
             assert 'classlink_oauth_state' not in sess
             assert 'classlink_oauth_nonce' not in sess
             assert 'classlink_oauth_initiated_by_us' not in sess
+
+
+# ── Bug A: _run_classlink_roster_sync None/partial config guard ──────────────
+
+def test_roster_sync_skips_when_no_oneroster_config(monkeypatch):
+    """Bug A: get_oneroster_config returning None must not crash the sync."""
+    import backend.routes.classlink_routes as clr
+    # _run_classlink_roster_sync imports these locally at call time, so patching
+    # the SOURCE module reaches the function without hoisting any imports.
+    monkeypatch.setattr("backend.oneroster.get_oneroster_config", lambda tid: None)
+    # Must return cleanly (no AttributeError), and never construct a client.
+    clr._run_classlink_roster_sync("11111111-1111-1111-1111-111111111111", "2284")
+
+
+def test_roster_sync_skips_when_partial_config(monkeypatch):
+    """Bug A: a district config missing client_id/secret must be skipped."""
+    import backend.routes.classlink_routes as clr
+    monkeypatch.setattr("backend.oneroster.get_oneroster_config",
+                        lambda tid: {"base_url": "https://x", "client_id": "", "client_secret": ""})
+    def _boom(*a, **k):
+        raise AssertionError("OneRosterClient should not be constructed")
+    monkeypatch.setattr("backend.oneroster.OneRosterClient", _boom)
+    clr._run_classlink_roster_sync("11111111-1111-1111-1111-111111111111", "2284")
