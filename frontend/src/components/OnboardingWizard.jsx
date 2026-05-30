@@ -144,10 +144,14 @@ export default function OnboardingWizard({
   // "preset" = use matched B.E.S.T./standard preset, "standard" = use standard, "custom" = skip (customize later)
   const [rubricChoice, setRubricChoice] = useState("preset");
 
-  // Detect SSO login from user prop (reliable) or window fallback
+  // Detect SSO login from user prop (reliable) or window fallback.
+  // auth_source is the canonical signal (UUID-id ClassLink teachers won't have
+  // a 'classlink:' prefix); id-prefix is kept as fallback for legacy sessions.
   var _userId = (user && user.id) || (window.__graiderUser && window.__graiderUser.id) || '';
-  const isCleverUser = _userId.startsWith('clever:');
-  const isClassLinkUser = _userId.startsWith('classlink:');
+  var _gu = (typeof window !== 'undefined' && window.__graiderUser) || {};
+  var _authSource = (user && user.auth_source) || _gu.auth_source || '';
+  const isCleverUser = _authSource === 'clever' || _userId.startsWith('clever:');
+  const isClassLinkUser = _authSource === 'classlink' || _userId.startsWith('classlink:');
   const isSSOUser = isCleverUser || isClassLinkUser;
 
   // Pre-populate from existing config and Clever session on mount

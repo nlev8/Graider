@@ -144,6 +144,11 @@ def _key_to_filepath(data_key, teacher_id='local-dev'):
         clever_id = data_key[len('clever_link:'):]
         clever_dir = os.path.join(graider_data, "clever_links")
         return os.path.join(clever_dir, f"{clever_id}.json")
+    elif data_key.startswith('classlink_link:'):
+        guid = data_key[len('classlink_link:'):]
+        classlink_dir = os.path.join(graider_data, "classlink_links")
+        safe = guid.replace('/', '_').replace(':', '_')
+        return os.path.join(classlink_dir, f"{safe}.json")
     return None
 
 

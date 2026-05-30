@@ -302,7 +302,7 @@ function App() {
                 approved: true,
               },
             });
-            window.__graiderUser = { id: 'clever:' + data.clever_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || '') };
+            window.__graiderUser = { id: 'clever:' + data.clever_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || ''), auth_source: 'clever' };
             setAuthLoading(false);
           }
         })
@@ -344,7 +344,7 @@ function App() {
                 approved: true,
               },
             });
-            window.__graiderUser = { id: data.user_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || '') };
+            window.__graiderUser = { id: data.user_id, email: data.email, name: ((data.name || {}).first || '') + ' ' + ((data.name || {}).last || ''), auth_source: 'classlink' };
             setAuthLoading(false);
           }
         })
@@ -362,6 +362,7 @@ function App() {
         'token_error': 'Could not complete login with ClassLink. Please try again.',
         'userinfo_failed': 'Could not retrieve your account information from ClassLink.',
         'userinfo_error': 'Could not retrieve your account information from ClassLink.',
+        'account_conflict': 'We could not match your ClassLink account to a Graider account. Please contact your administrator.',
       };
       var classlinkFriendlyMsg = classlinkErrorMessages[classlinkError] || ('ClassLink login failed: ' + classlinkError);
       window.__cleverLoginError = classlinkFriendlyMsg;

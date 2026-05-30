@@ -24,6 +24,7 @@ from flask import Blueprint, request, redirect, jsonify, session, g
 import urllib.parse
 from urllib.parse import urlencode
 
+from backend.auth import resolve_classlink_user_id
 from backend.supabase_client import get_supabase
 from backend.utils.audit import audit_log
 from backend.utils.auth_decorators import require_teacher
@@ -256,8 +257,8 @@ def _run_classlink_roster_sync(teacher_id, tenant_id):
     import asyncio
 
     config = get_oneroster_config(teacher_id)
-    if not config.get('base_url'):
-        logger.info("No OneRoster config for %s, skipping post-login roster sync", teacher_id)
+    if not config or not config.get('base_url') or not config.get('client_id') or not config.get('client_secret'):
+        logger.info("No usable OneRoster config for %s, skipping post-login roster sync", teacher_id)
         return
 
     client = OneRosterClient(
@@ -612,20 +613,28 @@ def classlink_callback():
     session.clear()
     session.permanent = True
 
+    # Resolve the tenant-scoped GUID to a real Supabase Auth UUID (link-or-create).
+    graider_uuid = resolve_classlink_user_id(
+        guid, email, {'first': first_name, 'last': last_name}
+    )
+    if not graider_uuid:
+        return redirect("/?classlink_error=account_conflict")
+
     session['classlink_user'] = {
-        'classlink_id': person_id,
-        'user_id': guid,
+        'classlink_id': person_id,   # external identity (unchanged)
+        'guid': guid,                # tenant-scoped GUID, kept for audit/debug
+        'user_id': graider_uuid,     # real Supabase UUID → g.user_id / g.teacher_id
         'email': email,
         'name': {'first': first_name, 'last': last_name},
         'type': role or 'teacher',
         'tenant_id': tenant_id,
     }
 
-    # Background roster sync (if OneRoster configured) — keyed by the GUID.
-    _trigger_roster_sync(guid, tenant_id)
+    # Background roster sync (if OneRoster configured) — keyed by the UUID.
+    _trigger_roster_sync(graider_uuid, tenant_id)
 
     audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {redact_email(email)}",
-              user="teacher", teacher_id=guid)
+              user="teacher", teacher_id=graider_uuid)
 
     return redirect("/?classlink_login=success")
 
@@ -671,7 +680,7 @@ def classlink_delete_data():
     from backend.storage import save as _storage_save
 
     teacher_id = g.teacher_id
-    if not teacher_id.startswith("classlink:"):
+    if getattr(g, 'auth_source', None) != 'classlink':
         return jsonify({"error": "Not a ClassLink user"}), 403
 
     deleted = delete_roster_data(teacher_id)
