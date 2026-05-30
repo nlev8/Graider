@@ -157,6 +157,25 @@ def test_delete_data_rejects_non_classlink_teacher(app_client, monkeypatch):
         mock_del.assert_not_called()
 
 
+def test_delete_data_rejects_real_clever_session(app_client):
+    """A Clever SSO session (auth_source='clever') must 403 on the ClassLink
+    delete-data gate.  Clever has its own /api/clever/delete-data; a Clever
+    teacher must never be able to trigger the ClassLink deleter."""
+    import os as _os
+    with patch.dict(_os.environ, {"FLASK_ENV": "production"}), \
+         patch("backend.auth.resolve_clever_user_id", return_value="clever-uuid-1"), \
+         patch("backend.roster_sync.delete_roster_data") as mock_del:
+        with app_client.session_transaction() as sess:
+            sess["clever_user"] = {
+                "clever_id": "cl-1",
+                "email": "t@d.edu",
+                "district": "dist-A",
+            }
+        r = app_client.post("/api/classlink/delete-data", content_type="application/json")
+        assert r.status_code == 403, r.get_json()
+        mock_del.assert_not_called()
+
+
 def test_delete_data_allows_uuid_classlink_teacher(app_client, monkeypatch):
     """Gate keys off g.auth_source='classlink', not a GUID prefix.
 
