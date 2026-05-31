@@ -16,6 +16,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from backend.storage import save as storage_save, load as storage_load, list_keys
 from backend.utils.audit import audit_log
 from backend.utils.errors import handle_route_errors
+from backend.utils.redaction import redact_email
 import sentry_sdk
 
 logger = logging.getLogger(__name__)
@@ -578,7 +579,8 @@ def district_add_sso_admin():
         },
         "system",
     )
-    audit_log("DISTRICT_SSO_ADMIN_DESIGNATED", f"tier={tier} school={school or '-'}",
+    audit_log("DISTRICT_SSO_ADMIN_DESIGNATED",
+              f"email={redact_email(email)} tier={tier} school={school or '-'}",
               user="district_admin", teacher_id="system")
     return jsonify({"status": "saved", "email": email, "tier": tier})
 
@@ -595,7 +597,7 @@ def district_delete_sso_admin():
     from backend.storage import delete as storage_delete
     storage_delete(f"sso_admin_designation:{email}", "system")
     _revoke_designated_admin_by_email(email)
-    audit_log("DISTRICT_SSO_ADMIN_REMOVED", "designation removed",
+    audit_log("DISTRICT_SSO_ADMIN_REMOVED", f"email={redact_email(email)}",
               user="district_admin", teacher_id="system")
     return jsonify({"status": "removed", "email": email})
 
