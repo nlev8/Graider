@@ -353,6 +353,158 @@ function LoginGate(props) {
   );
 }
 
+export function SsoAdminSection(props) {
+  var isDark = props.isDark !== false;
+
+  var adminsState = useState([]);
+  var admins = adminsState[0];
+  var setAdmins = adminsState[1];
+
+  var emailState = useState("");
+  var email = emailState[0];
+  var setEmail = emailState[1];
+
+  var tierState = useState("district");
+  var tier = tierState[0];
+  var setTier = tierState[1];
+
+  var schoolState = useState("");
+  var school = schoolState[0];
+  var setSchool = schoolState[1];
+
+  var savingState = useState(false);
+  var saving = savingState[0];
+  var setSaving = savingState[1];
+
+  var errorState = useState("");
+  var error = errorState[0];
+  var setError = errorState[1];
+
+  function refresh() {
+    api.listSsoAdmins().then(function(res) {
+      if (res && res.admins) {
+        setAdmins(res.admins);
+      }
+    }).catch(function() {});
+  }
+
+  useEffect(function() {
+    refresh();
+  }, []);
+
+  function handleAdd() {
+    var em = email.trim();
+    if (!em) {
+      setError("Email is required");
+      return;
+    }
+    if (tier === "school" && !school.trim()) {
+      setError("School is required for a School Admin designation");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    api.addSsoAdmin(em, tier, tier === "school" ? school.trim() : undefined).then(function(res) {
+      setSaving(false);
+      if (res && res.error) {
+        setError(res.error);
+        return;
+      }
+      setEmail("");
+      setSchool("");
+      refresh();
+    }).catch(function() {
+      setSaving(false);
+      setError("Failed to save designation");
+    });
+  }
+
+  function handleRemove(targetEmail) {
+    api.removeSsoAdmin(targetEmail).then(function(res) {
+      if (res && res.error) {
+        setError(res.error);
+        return;
+      }
+      refresh();
+    }).catch(function() {
+      setError("Failed to remove designation");
+    });
+  }
+
+  var labelStyle = isDark ? styles.label : Object.assign({}, styles.label, { color: "#555" });
+  var inputStyle = isDark ? styles.input : Object.assign({}, styles.input, { background: "#f9f9f9", border: "1px solid #ddd", color: "#333" });
+
+  return React.createElement(React.Fragment, null,
+    React.createElement("div", { style: styles.sectionHeading }, "SSO Admin Access"),
+    React.createElement("div", { style: styles.helperText }, "Grant district- or school-level admin access to users who sign in through Graider-managed SSO (matched by email at login)"),
+
+    // Current designations list
+    admins.length > 0 ? React.createElement("div", { style: { marginTop: "12px" } },
+      admins.map(function(a) {
+        return React.createElement("div", {
+          key: a.email,
+          style: Object.assign({}, styles.summaryItem, { alignItems: "center" }),
+        },
+          React.createElement("span", { style: { color: TEXT } },
+            a.email,
+            " — ",
+            a.tier === "district" ? "District Admin" : "School Admin",
+            a.school ? (" — " + a.school) : ""
+          ),
+          React.createElement("button", {
+            type: "button",
+            style: Object.assign({}, styles.btnDanger, { marginTop: 0, padding: "4px 10px", fontSize: "12px" }),
+            onClick: function() { handleRemove(a.email); },
+          }, "Remove")
+        );
+      })
+    ) : React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "No SSO admin designations yet"),
+
+    // Add designation form
+    React.createElement("div", { style: { marginTop: "20px", padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "10px", border: "1px solid " + BORDER } },
+      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: TEXT, marginBottom: "12px" } }, "Add Designation"),
+
+      React.createElement("label", { style: labelStyle }, "Email"),
+      React.createElement("input", {
+        style: inputStyle,
+        type: "email",
+        value: email,
+        onChange: function(e) { setEmail(e.target.value); },
+        placeholder: "teacher@district.org email",
+      }),
+
+      React.createElement("label", { style: Object.assign({}, labelStyle, { marginTop: "12px" }) }, "Access Level"),
+      React.createElement("select", {
+        style: inputStyle,
+        value: tier,
+        onChange: function(e) { setTier(e.target.value); },
+      },
+        React.createElement("option", { value: "district" }, "District Admin"),
+        React.createElement("option", { value: "school" }, "School Admin")
+      ),
+
+      tier === "school" ? React.createElement(React.Fragment, null,
+        React.createElement("label", { style: Object.assign({}, labelStyle, { marginTop: "12px" }) }, "School"),
+        React.createElement("input", {
+          style: inputStyle,
+          value: school,
+          onChange: function(e) { setSchool(e.target.value); },
+          placeholder: "Lincoln Middle School",
+        })
+      ) : null,
+
+      React.createElement("button", {
+        type: "button",
+        style: Object.assign({}, styles.btnSmall, { marginTop: "14px" }, saving ? { opacity: 0.6 } : {}),
+        disabled: saving,
+        onClick: handleAdd,
+      }, saving ? "Saving..." : "Add"),
+
+      error ? React.createElement("div", { style: styles.error }, error) : null
+    )
+  );
+}
+
 function ConfigForm(props) {
   var isDark = props.isDark !== false;
   var onLogout = props.onLogout;
@@ -1035,6 +1187,9 @@ function ConfigForm(props) {
           )
         ) : null
       ),
+
+      // Section 3b: SSO Admin Access (Graider-managed SSO designations)
+      React.createElement(SsoAdminSection, { isDark: isDark }),
 
       // Section 4: Configuration Summary + Logout
       React.createElement("div", { style: styles.sectionHeading }, "Configuration Summary"),
