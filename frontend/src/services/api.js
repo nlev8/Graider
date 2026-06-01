@@ -1471,6 +1471,10 @@ export async function removeSsoAdmin(email) {
   })
 }
 
+export async function getDistrictAnalytics() {
+  return fetchApi('/api/district/analytics')
+}
+
 export default {
   getStatus,
   stopGrading,
@@ -1672,6 +1676,7 @@ export default {
   listSsoAdmins,
   addSsoAdmin,
   removeSsoAdmin,
+  getDistrictAnalytics,
 }
 
 export async function saveDraft(contentId, answers, markedForReview, questionTimes, studentToken) {
