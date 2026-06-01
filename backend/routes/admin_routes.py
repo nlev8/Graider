@@ -410,9 +410,25 @@ def _chunked_in_rows(sb, table, column, values, select_cols,
     Callers needing a global cap MUST truncate the merged result
     themselves (see audit_log usage in `_enrich_teachers`).
     """
+    rows, _ = _chunked_in_rows_capped(
+        sb, table, column, values, select_cols, order, limit,
+    )
+    return rows
+
+
+def _chunked_in_rows_capped(sb, table, column, values, select_cols,
+                             order=None, limit=None):
+    """Same as `_chunked_in_rows` but ALSO reports whether any chunk hit the
+    per-chunk `_HARD_CAP` (i.e. paginated up to `target` without ever seeing a
+    short page → the result for that chunk is truncated). Returns
+    `(rows, capped)`. The `rows` returned here are byte-identical to what the
+    pre-split `_chunked_in_rows` returned — the `capped` flag is the only
+    addition.
+    """
     if not values:
-        return []
+        return [], False
     out: list = []
+    capped = False
     target = limit if limit is not None else _HARD_CAP
     for i in range(0, len(values), _IN_CHUNK_SIZE):
         chunk = values[i:i + _IN_CHUNK_SIZE]
@@ -429,7 +445,11 @@ def _chunked_in_rows(sb, table, column, values, select_cols,
             if len(rows) < page_size:
                 break  # end of result set for this chunk
             offset += page_size
-    return out
+        else:
+            # while-loop exhausted `target` without a short-page break → the
+            # chunk's result was truncated at the hard cap.
+            capped = True
+    return out, capped
 
 
 def _enrich_teachers(teachers):
@@ -555,50 +575,56 @@ def _enrich_teachers(teachers):
 
 # ── GET /api/admin/overview ───────────────────────────────────────────────
 
-@admin_bp.route("/api/admin/overview", methods=["GET"])
-@require_admin
-@handle_route_errors
-def admin_overview():
-    """Aggregate metrics across admin's teachers."""
-    teachers = _discover_teachers(g.admin_role)
-    teacher_ids = [t["user_id"] for t in teachers if t.get("user_id")]
+def compute_overview(teacher_ids):
+    """Aggregate score/count metrics across the given teacher ids.
 
-    overview = {
-        "total_teachers": len(teachers),
+    Returns `{total_students, total_assessments, average_score,
+    grade_distribution: {A..F}, scored_count, hit_hard_cap}`. Does NOT return
+    `total_teachers` — callers own it. `[]` / no-supabase → zeros dict.
+
+    This is a verbatim lift of `admin_overview`'s former steps 1-6 (the school
+    overview aggregation). It uses `_chunked_in_rows_capped` so it can OR the
+    six per-pull cap flags into `hit_hard_cap`.
+
+    Round-2 Codex HIGH fold (preserved): this aggregation was N+1+M across
+    teachers/assessments/classes/contents. For 50 teachers with ~5 assessments
+    + 3 classes × 5 published content each, that was ~1,300 queries per
+    dashboard load. It is batched into ≤6 chunked queries total
+    (`_chunked_in_rows_capped` chunks at _IN_CHUNK_SIZE to stay under PostgREST
+    URL limits) regardless of teacher count.
+    """
+    metrics = {
         "total_students": 0,
         "total_assessments": 0,
         "average_score": None,
         "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0},
+        "scored_count": 0,
+        "hit_hard_cap": False,
     }
 
     sb = _get_supabase()
     if not sb or not teacher_ids:
-        audit_log("ADMIN_VIEW_OVERVIEW", "Viewed overview (no data)",
-                  user="admin", teacher_id=g.teacher_id)
-        return jsonify(overview)
+        return metrics
 
     all_scores: list = []
+    capped = False
 
-    # Round-2 Codex HIGH fold: this route was N+1+M across teachers/
-    # assessments/classes/contents. For 50 teachers with ~5 assessments
-    # + 3 classes × 5 published content each, that was ~1,300 queries
-    # per dashboard load. Now batched into ≤6 chunked queries total
-    # (`_chunked_in_rows` chunks at _IN_CHUNK_SIZE to stay under
-    # PostgREST URL limits) regardless of teacher count.
     try:
         # 1. published_assessments (join-code path) for these teachers
-        pa_rows = _chunked_in_rows(
+        pa_rows, c1 = _chunked_in_rows_capped(
             sb, "published_assessments", "teacher_id", teacher_ids,
             "join_code, teacher_id",
         )
+        capped = capped or c1
         join_codes = [r["join_code"] for r in pa_rows if r.get("join_code")]
-        overview["total_assessments"] += len(join_codes)
+        metrics["total_assessments"] += len(join_codes)
 
         # 2. submissions for those join_codes (chunked)
         if join_codes:
-            sub_rows = _chunked_in_rows(
+            sub_rows, c2 = _chunked_in_rows_capped(
                 sb, "submissions", "join_code", join_codes, "score",
             )
+            capped = capped or c2
             for s in sub_rows:
                 score = s.get("score")
                 if score is not None:
@@ -608,9 +634,10 @@ def admin_overview():
                         pass
 
         # 3. classes (class-based path) for these teachers
-        classes_rows = _chunked_in_rows(
+        classes_rows, c3 = _chunked_in_rows_capped(
             sb, "classes", "teacher_id", teacher_ids, "id, teacher_id",
         )
+        capped = capped or c3
         class_ids = [c["id"] for c in classes_rows if c.get("id")]
 
         # 4. class_students count for total_students. Pre-fix used
@@ -618,27 +645,30 @@ def admin_overview():
         # client-side to preserve the row-count semantic and avoid the
         # extra HEAD requests. Bounded by total enrollments in scope.
         if class_ids:
-            cs_rows = _chunked_in_rows(
+            cs_rows, c4 = _chunked_in_rows_capped(
                 sb, "class_students", "class_id", class_ids,
                 "class_id, student_id",
             )
-            overview["total_students"] = len(cs_rows)
+            capped = capped or c4
+            metrics["total_students"] = len(cs_rows)
 
             # 5. published_content for those class_ids (chunked)
-            pc_rows = _chunked_in_rows(
+            pc_rows, c5 = _chunked_in_rows_capped(
                 sb, "published_content", "class_id", class_ids,
                 "id, class_id",
             )
-            overview["total_assessments"] += len(pc_rows)
+            capped = capped or c5
+            metrics["total_assessments"] += len(pc_rows)
 
             content_ids = [c["id"] for c in pc_rows if c.get("id")]
 
             # 6. student_submissions for those content_ids (chunked)
             if content_ids:
-                ss_rows = _chunked_in_rows(
+                ss_rows, c6 = _chunked_in_rows_capped(
                     sb, "student_submissions", "content_id", content_ids,
                     "score",
                 )
+                capped = capped or c6
                 for s in ss_rows:
                     score = s.get("score")
                     if score is not None:
@@ -651,24 +681,60 @@ def admin_overview():
         logger.warning("Overview aggregation error (batched): %s", e)
         sentry_sdk.capture_exception(e)
 
+    metrics["hit_hard_cap"] = capped
+    metrics["scored_count"] = len(all_scores)
+
     # Compute average and distribution
     if all_scores:
-        overview["average_score"] = round(sum(all_scores) / len(all_scores), 1)
+        metrics["average_score"] = round(sum(all_scores) / len(all_scores), 1)
         for score in all_scores:
             if score >= 90:
-                overview["grade_distribution"]["A"] += 1
+                metrics["grade_distribution"]["A"] += 1
             elif score >= 80:
-                overview["grade_distribution"]["B"] += 1
+                metrics["grade_distribution"]["B"] += 1
             elif score >= 70:
-                overview["grade_distribution"]["C"] += 1
+                metrics["grade_distribution"]["C"] += 1
             elif score >= 60:
-                overview["grade_distribution"]["D"] += 1
+                metrics["grade_distribution"]["D"] += 1
             else:
-                overview["grade_distribution"]["F"] += 1
+                metrics["grade_distribution"]["F"] += 1
 
-    audit_log("ADMIN_VIEW_OVERVIEW", f"Viewed overview: {len(teachers)} teachers, {len(all_scores)} scores",
+    return metrics
+
+
+@admin_bp.route("/api/admin/overview", methods=["GET"])
+@require_admin
+@handle_route_errors
+def admin_overview():
+    """Aggregate metrics across admin's teachers."""
+    teachers = _discover_teachers(g.admin_role)
+    teacher_ids = [t["user_id"] for t in teachers if t.get("user_id")]
+
+    sb = _get_supabase()
+    if not sb or not teacher_ids:
+        audit_log("ADMIN_VIEW_OVERVIEW", "Viewed overview (no data)",
+                  user="admin", teacher_id=g.teacher_id)
+        return jsonify({
+            "total_teachers": len(teachers),
+            "total_students": 0,
+            "total_assessments": 0,
+            "average_score": None,
+            "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0},
+        })
+
+    m = compute_overview(teacher_ids)
+    audit_log("ADMIN_VIEW_OVERVIEW",
+              f"Viewed overview: {len(teachers)} teachers, {m['scored_count']} scores",
               user="admin", teacher_id=g.teacher_id)
-    return jsonify(overview)
+    # Explicit public keys only — never spread the internal dict
+    # (scored_count / hit_hard_cap must not leak to the school overview API).
+    return jsonify({
+        "total_teachers": len(teachers),
+        "total_students": m["total_students"],
+        "total_assessments": m["total_assessments"],
+        "average_score": m["average_score"],
+        "grade_distribution": m["grade_distribution"],
+    })
 
 
 # ── GET /api/admin/teacher/<teacher_id>/summary ───────────────────────────

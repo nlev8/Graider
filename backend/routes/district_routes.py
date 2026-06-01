@@ -8,12 +8,14 @@ import logging
 import os
 import functools
 import secrets
+import time
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from backend.storage import save as storage_save, load as storage_load, list_keys
+from backend.supabase_client import get_supabase as _get_supabase
 from backend.utils.audit import audit_log
 from backend.utils.errors import handle_route_errors
 from backend.utils.redaction import redact_email
@@ -30,6 +32,75 @@ _KEY_AI_KEYS = "district:ai_keys"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _district_teacher_ids(sb):
+    """Distinct teacher_id across the teacher-owner tables (classes,
+    published_content, published_assessments). Provider-agnostic: includes
+    UUID teachers AND clever:{id}/legacy owners; excludes admin/staff-only
+    accounts that never owned data. Paginates each table by _PAGE rows."""
+    if not sb:
+        return set()
+    ids: set = set()
+    _PAGE = 1000
+    for table in ("classes", "published_content", "published_assessments"):
+        offset = 0
+        while True:
+            rows = sb.table(table).select("teacher_id").range(offset, offset + _PAGE - 1).execute().data or []
+            for r in rows:
+                tid = r.get("teacher_id")
+                if tid:
+                    ids.add(str(tid))
+            if len(rows) < _PAGE:
+                break
+            offset += _PAGE
+    return ids
+
+
+_ANALYTICS_TTL = 300  # seconds (single-tenant — see spec section 3.5)
+_analytics_cache = {"at": 0.0, "data": None}
+
+
+def _district_analytics_cache_clear():
+    _analytics_cache["at"] = 0.0
+    _analytics_cache["data"] = None
+
+
+def _district_teacher_rows(ids, sb):
+    """Per-teacher rows: name/email (best-effort from auth users) + counts via
+    _enrich_teachers. ids = data-owner teacher_id set."""
+    from backend.utils.supabase_users import list_all_users
+    from backend.routes.admin_routes import _enrich_teachers
+    name_by_id = {}
+    try:
+        for u in (list_all_users(sb) or []):
+            uid = getattr(u, "id", None)
+            if uid:
+                name_by_id[str(uid)] = {"email": getattr(u, "email", "") or "",
+                                        "name": (getattr(u, "user_metadata", {}) or {}).get("first_name", "") or ""}
+    except Exception as e:
+        logger.warning("district teacher name lookup failed (non-fatal): %s", type(e).__name__)
+    teachers = [{"user_id": tid, "email": name_by_id.get(tid, {}).get("email", ""),
+                 "name": name_by_id.get(tid, {}).get("name", "") or "—"} for tid in sorted(ids)]
+    _enrich_teachers(teachers)
+    return teachers
+
+
+def _build_district_analytics():
+    from backend.routes.admin_routes import compute_overview
+    sb = _get_supabase()
+    ids = _district_teacher_ids(sb) if sb else set()
+    m = compute_overview(sorted(ids)) if ids else {
+        "total_students": 0, "total_assessments": 0, "average_score": None,
+        "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}, "scored_count": 0, "hit_hard_cap": False}
+    teachers = _district_teacher_rows(ids, sb) if ids else []
+    return {
+        "overview": {"total_teachers": len(ids), "total_students": m["total_students"],
+                     "total_assessments": m["total_assessments"], "average_score": m["average_score"],
+                     "grade_distribution": m["grade_distribution"]},
+        "teachers": teachers,
+        "approximate": bool(m.get("hit_hard_cap")),
+    }
+
 
 def _get_district_password_hash():
     """Get stored password hash; bootstrap from env var on first use."""
@@ -641,3 +712,19 @@ def district_teacher_search():
                 break
 
     return jsonify({"teachers": teachers})
+
+
+# ── GET /api/district/analytics ──────────────────────────────────────────────
+
+@district_bp.route("/api/district/analytics", methods=["GET"])
+@_require_district_admin
+@handle_route_errors
+def district_analytics():
+    now = time.time()
+    if _analytics_cache["data"] is None or (now - _analytics_cache["at"]) > _ANALYTICS_TTL:
+        _analytics_cache["data"] = _build_district_analytics()
+        _analytics_cache["at"] = now
+    audit_log("DISTRICT_VIEW_ANALYTICS",
+              f"teachers={_analytics_cache['data']['overview']['total_teachers']}",
+              user="district_admin", teacher_id="system")
+    return jsonify(_analytics_cache["data"])

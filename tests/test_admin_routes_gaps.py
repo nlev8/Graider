@@ -559,6 +559,11 @@ class TestAdminOverviewBranches:
     def test_d_grade_score_lands_in_distribution(self, admin_client):
         # Pin the elif score >= 60 branch (line 632) by including a
         # 65-score in the chunked rows.
+        # PR #606 Task 1: admin_overview now delegates to compute_overview,
+        # which pulls rows via _chunked_in_rows_capped (returns (rows, capped)).
+        # Re-pointed from _chunked_in_rows to the actual internal the route
+        # calls; dispatcher returns (rows, False) tuples to match the new
+        # signature. Same captured branch (elif score >= 60 → D).
         responses = [
             [{"join_code": "JC1", "teacher_id": "t-1"}],
             [{"score": 65}],  # D grade
@@ -570,7 +575,7 @@ class TestAdminOverviewBranches:
                            order=None, limit=None):
             i = call_count["i"]
             call_count["i"] += 1
-            return responses[i] if i < len(responses) else []
+            return (responses[i] if i < len(responses) else [], False)
 
         sb = MagicMock()
         with patch(
@@ -587,7 +592,7 @@ class TestAdminOverviewBranches:
             "backend.routes.admin_routes._get_supabase",
             return_value=sb,
         ), patch(
-            "backend.routes.admin_routes._chunked_in_rows",
+            "backend.routes.admin_routes._chunked_in_rows_capped",
             side_effect=chunk_dispatch,
         ), patch(
             "backend.routes.admin_routes.audit_log",
@@ -599,8 +604,10 @@ class TestAdminOverviewBranches:
         assert resp.get_json()["grade_distribution"]["D"] == 1
 
     def test_overview_outer_exception_swallowed(self, admin_client):
-        # Make _chunked_in_rows raise → outer except logs + sentry, but
-        # returns the partially-populated overview (zeroed).
+        # Make the aggregation pull raise → compute_overview's outer except
+        # logs + sentry, but returns the zeroed overview. PR #606 Task 1:
+        # re-pointed from _chunked_in_rows to _chunked_in_rows_capped (the
+        # internal compute_overview actually calls).
         sb = MagicMock()
         with patch(
             "backend.routes.admin_routes.storage_load",
@@ -616,7 +623,7 @@ class TestAdminOverviewBranches:
             "backend.routes.admin_routes._get_supabase",
             return_value=sb,
         ), patch(
-            "backend.routes.admin_routes._chunked_in_rows",
+            "backend.routes.admin_routes._chunked_in_rows_capped",
             side_effect=RuntimeError("aggregation died"),
         ), patch(
             "backend.routes.admin_routes.audit_log",
@@ -658,11 +665,13 @@ class TestAdminOverviewBranches:
         ]
         call_count = {"i": 0}
 
+        # PR #606 Task 1: route now calls _chunked_in_rows_capped (returns
+        # (rows, capped)); dispatcher returns (rows, False) tuples.
         def chunk_dispatch(sb, table, column, values, select_cols,
                            order=None, limit=None):
             i = call_count["i"]
             call_count["i"] += 1
-            return responses[i] if i < len(responses) else []
+            return (responses[i] if i < len(responses) else [], False)
 
         sb = MagicMock()
         with patch(
@@ -679,7 +688,7 @@ class TestAdminOverviewBranches:
             "backend.routes.admin_routes._get_supabase",
             return_value=sb,
         ), patch(
-            "backend.routes.admin_routes._chunked_in_rows",
+            "backend.routes.admin_routes._chunked_in_rows_capped",
             side_effect=chunk_dispatch,
         ), patch(
             "backend.routes.admin_routes.audit_log",

@@ -1014,3 +1014,88 @@ class TestAdminOverviewBatched:
         assert sum(counts.values()) <= 6, (
             f"Total queries {sum(counts.values())} > 6; got {dict(counts)}"
         )
+
+
+# ── compute_overview unit tests + admin_overview byte-identity golden ─────
+
+import backend.routes.admin_routes as ar
+
+
+def test_compute_overview_empty_is_zeros(monkeypatch):
+    monkeypatch.setattr(ar, "_get_supabase", lambda: object())
+    out = ar.compute_overview([])
+    assert out == {"total_students": 0, "total_assessments": 0, "average_score": None,
+                   "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0},
+                   "scored_count": 0, "hit_hard_cap": False}
+
+
+def test_compute_overview_aggregates_scores(monkeypatch):
+    monkeypatch.setattr(ar, "_get_supabase", lambda: object())
+    def fake_capped(sb, table, column, values, select_cols, order=None, limit=None):
+        if table == "published_assessments":
+            return ([{"join_code": "JC1", "teacher_id": "t1"}], False)
+        if table == "submissions":
+            return ([{"score": 95}, {"score": 72}], False)
+        if table == "classes":
+            return ([{"id": "c1", "teacher_id": "t1"}], False)
+        if table == "class_students":
+            return ([{"class_id": "c1", "student_id": "s1"}], False)
+        if table == "published_content":
+            return ([{"id": "pc1", "class_id": "c1"}], False)
+        if table == "student_submissions":
+            return ([{"score": 60}], False)
+        return ([], False)
+    monkeypatch.setattr(ar, "_chunked_in_rows_capped", fake_capped)
+    out = ar.compute_overview(["t1"])
+    assert out["total_students"] == 1
+    assert out["total_assessments"] == 2          # 1 join-code assessment + 1 published_content
+    assert out["scored_count"] == 3               # 95, 72, 60
+    assert out["average_score"] == round((95 + 72 + 60) / 3, 1)
+    assert out["grade_distribution"] == {"A": 1, "B": 0, "C": 1, "D": 1, "F": 0}
+    assert out["hit_hard_cap"] is False
+
+
+def test_compute_overview_flags_hard_cap(monkeypatch):
+    monkeypatch.setattr(ar, "_get_supabase", lambda: object())
+    def fake_capped(sb, table, column, values, select_cols, order=None, limit=None):
+        if table == "published_assessments":
+            return ([{"join_code": "JC1", "teacher_id": "t1"}], False)
+        if table == "submissions":
+            return ([{"score": 90}], True)        # this pull hit the cap
+        return ([], False)
+    monkeypatch.setattr(ar, "_chunked_in_rows_capped", fake_capped)
+    assert ar.compute_overview(["t1"])["hit_hard_cap"] is True
+
+
+def test_admin_overview_no_data_branch_unchanged(authed_client, monkeypatch):
+    """No supabase → existing 'Viewed overview (no data)' audit + zeros,
+    total_teachers from len(teachers) (blank-user_id teacher still counted),
+    and EXACTLY the 5 public keys (no scored_count/hit_hard_cap leaked)."""
+    admin_role = {"school": "S", "claimed_at": "2026-03-20T00:00:00"}
+    monkeypatch.setattr(
+        ar, "_discover_teachers",
+        lambda role: [{"user_id": None, "name": "X"}],  # blank user_id
+    )
+    monkeypatch.setattr(ar, "_get_supabase", lambda: None)
+
+    captured = {}
+
+    def fake_audit(action, detail, **kwargs):
+        captured["action"] = action
+        captured["detail"] = detail
+
+    with patch("backend.storage.load",
+               side_effect=lambda k, ns: admin_role if k.startswith("admin_role:") else None), \
+         patch("backend.routes.admin_routes.audit_log", side_effect=fake_audit):
+        resp = authed_client.get(
+            "/api/admin/overview",
+            headers={"X-Test-Teacher-Id": "admin-x"},
+        )
+
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    body = resp.get_json()
+    assert body["total_teachers"] == 1            # blank-user_id teacher still counted
+    assert body["total_students"] == 0 and body["average_score"] is None
+    assert set(body.keys()) == {"total_teachers", "total_students", "total_assessments",
+                                "average_score", "grade_distribution"}   # no scored_count/hit_hard_cap leaked
+    assert captured["detail"] == "Viewed overview (no data)"

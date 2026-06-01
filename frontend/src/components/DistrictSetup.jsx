@@ -505,6 +505,133 @@ export function SsoAdminSection(props) {
   );
 }
 
+export function DistrictAnalyticsSection() {
+  var dataState = useState(null);
+  var data = dataState[0];
+  var setData = dataState[1];
+
+  var loadingState = useState(true);
+  var loading = loadingState[0];
+  var setLoading = loadingState[1];
+
+  useEffect(function() {
+    api.getDistrictAnalytics().then(function(res) {
+      setLoading(false);
+      if (res) {
+        setData(res);
+      }
+    }).catch(function() {
+      setLoading(false);
+    });
+  }, []);
+
+  var gradeColors = { A: GREEN, B: "#84cc16", C: "#eab308", D: "#f97316", F: RED };
+
+  function statCard(labelText, valueText) {
+    return React.createElement("div", {
+      key: labelText,
+      style: {
+        flex: "1 1 120px",
+        minWidth: "110px",
+        padding: "14px",
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid " + BORDER,
+        borderRadius: "10px",
+        textAlign: "center",
+      },
+    },
+      React.createElement("div", { style: { fontSize: "24px", fontWeight: "700", color: TEXT } }, valueText),
+      React.createElement("div", { style: { fontSize: "12px", color: TEXT_DIM, marginTop: "4px" } }, labelText)
+    );
+  }
+
+  var body;
+  if (loading) {
+    body = React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "Loading analytics...");
+  } else if (!data) {
+    body = React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "Analytics are not available right now");
+  } else {
+    var overview = data.overview || {};
+    var grades = overview.grade_distribution || {};
+    var teachers = data.teachers || [];
+    var avg = (overview.average_score === null || overview.average_score === undefined)
+      ? "—"
+      : (overview.average_score + "%");
+    var gradeKeys = ["A", "B", "C", "D", "F"];
+    var maxGrade = gradeKeys.reduce(function(m, k) {
+      var v = grades[k] || 0;
+      return v > m ? v : m;
+    }, 0);
+
+    body = React.createElement(React.Fragment, null,
+      // Stat cards
+      React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "12px" } },
+        statCard("Teachers", String(overview.total_teachers || 0)),
+        statCard("Students", String(overview.total_students || 0)),
+        statCard("Assessments", String(overview.total_assessments || 0)),
+        statCard("Average Score", avg)
+      ),
+
+      // Grade distribution bars
+      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: TEXT, marginTop: "20px", marginBottom: "10px" } }, "Grade Distribution"),
+      React.createElement("div", null,
+        gradeKeys.map(function(k) {
+          var count = grades[k] || 0;
+          var pct = maxGrade > 0 ? Math.round((count / maxGrade) * 100) : 0;
+          return React.createElement("div", {
+            key: k,
+            style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" },
+          },
+            React.createElement("span", { style: { width: "16px", color: TEXT_DIM, fontSize: "13px", fontWeight: "600" } }, k),
+            React.createElement("div", { style: { flex: 1, height: "14px", background: "rgba(255,255,255,0.05)", borderRadius: "7px", overflow: "hidden" } },
+              React.createElement("div", { style: { width: pct + "%", height: "100%", background: gradeColors[k], borderRadius: "7px" } })
+            ),
+            React.createElement("span", { style: { width: "32px", textAlign: "right", color: TEXT, fontSize: "13px" } }, String(count))
+          );
+        })
+      ),
+
+      // Teacher list
+      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: TEXT, marginTop: "20px", marginBottom: "10px" } }, "Teachers"),
+      teachers.length > 0 ? React.createElement("div", {
+        style: { maxHeight: "260px", overflowY: "auto", border: "1px solid " + BORDER, borderRadius: "10px" },
+      },
+        teachers.map(function(t) {
+          return React.createElement("div", {
+            key: t.user_id,
+            style: {
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "10px 12px",
+              borderBottom: "1px solid " + BORDER,
+            },
+          },
+            React.createElement("div", null,
+              React.createElement("div", { style: { color: TEXT, fontSize: "13px", fontWeight: "500" } }, t.name || "Unknown"),
+              React.createElement("div", { style: { color: TEXT_DIM, fontSize: "12px" } }, t.email || "")
+            ),
+            React.createElement("div", { style: { color: TEXT_DIM, fontSize: "12px", textAlign: "right" } },
+              (t.classes_count || 0) + " classes • " + (t.students_count || 0) + " students • " + (t.assessments_count || 0) + " assessments"
+            )
+          );
+        })
+      ) : React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "No teacher activity yet"),
+
+      // Approximate note
+      data.approximate ? React.createElement("div", {
+        style: { fontSize: "12px", color: TEXT_DIM, marginTop: "12px", fontStyle: "italic" },
+      }, "Counts are approximate above 100k rows.") : null
+    );
+  }
+
+  return React.createElement(React.Fragment, null,
+    React.createElement("div", { style: styles.sectionHeading }, "District Analytics"),
+    React.createElement("div", { style: styles.helperText }, "School-wide rollup across all teachers and assessments"),
+    body
+  );
+}
+
 function ConfigForm(props) {
   var isDark = props.isDark !== false;
   var onLogout = props.onLogout;
@@ -1190,6 +1317,9 @@ function ConfigForm(props) {
 
       // Section 3b: SSO Admin Access (Graider-managed SSO designations)
       React.createElement(SsoAdminSection, { isDark: isDark }),
+
+      // Section 3c: District Analytics (school-wide rollup)
+      React.createElement(DistrictAnalyticsSection, null),
 
       // Section 4: Configuration Summary + Logout
       React.createElement("div", { style: styles.sectionHeading }, "Configuration Summary"),
