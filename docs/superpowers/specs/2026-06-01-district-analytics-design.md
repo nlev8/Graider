@@ -2,8 +2,17 @@
 
 **Date:** 2026-06-01
 **Class:** B (new auth-gated endpoint) + A (behavior-preserving refactor of the school overview)
-**Status:** Approved (brainstorming) → revised **v2** after three-way review (Claude/Codex/Gemini) → re-review → ready for plan
+**Status:** Approved (brainstorming) → **v3** after two three-way review rounds (Claude/Codex/Gemini) → ready for plan
 **Closes:** #606
+
+> **v3 note (round-2 re-review).** Gemini passed v2; Codex cleared B2 but flagged B1 as
+> under-specified and B3 as still a scale risk. Resolved: **B1** — §3.1/§3.3 now explicitly
+> preserve *both* school audit branches (no-data + scored) and filter internal fields
+> (`scored_count`, `hit_hard_cap`) out of both JSON responses; golden test covers both
+> branches (§7). **B3** — decision: v1 ships the **cached score-pull + `approximate` flag**
+> (YAGNI-correct for current district sizes); the DB-side aggregate RPC (which eliminates the
+> cold-request score pull entirely) is filed as the scale-up follow-up **#611**. Cache
+> single-tenant assumption called out (§3.5).
 
 > **v2 revision note.** Codex + Gemini both flagged two **blockers** in v1: (1) extracting
 > `compute_overview` would break the school dashboard's `total_teachers` (which counts
@@ -49,11 +58,23 @@ def compute_overview(teacher_ids):
 ```python
 teachers = _discover_teachers(g.admin_role)
 teacher_ids = [t["user_id"] for t in teachers if t.get("user_id")]
+# Preserve the EXISTING no-data early-audit branch (admin_routes.py:574) exactly:
+sb = _get_supabase()
+if not sb or not teacher_ids:
+    audit_log("ADMIN_VIEW_OVERVIEW", "Viewed overview (no data)", user="admin", teacher_id=g.teacher_id)
+    return jsonify({"total_teachers": len(teachers), "total_students": 0, "total_assessments": 0,
+                    "average_score": None, "grade_distribution": {"A":0,"B":0,"C":0,"D":0,"F":0}})
 metrics = compute_overview(teacher_ids)
-overview = {"total_teachers": len(teachers), **{k: metrics[k] for k in (...school keys...)}}
-audit_log("ADMIN_VIEW_OVERVIEW", f"... {metrics['scored_count']} scores", ...)  # parity preserved
+audit_log("ADMIN_VIEW_OVERVIEW", f"... {metrics['scored_count']} scores", ...)   # scored branch (admin_routes.py:669) preserved
+# Build the response with the EXACT existing public keys only — never spread internal
+# fields (scored_count, hit_hard_cap) into the JSON:
+return jsonify({"total_teachers": len(teachers),
+                "total_students": metrics["total_students"],
+                "total_assessments": metrics["total_assessments"],
+                "average_score": metrics["average_score"],
+                "grade_distribution": metrics["grade_distribution"]})
 ```
-The `total_teachers = len(teachers)` and the audit score-count stay in `admin_overview`, so the school response and audit line are unchanged. A golden test pins this (Blocker 1 fix).
+**B1 invariants (Codex):** (a) both audit branches — the no-data early line *and* the scored line — are preserved verbatim; (b) `total_teachers = len(teachers)` (incl. blank-`user_id` SIS/manual teachers) stays in `admin_overview`; (c) internal fields (`scored_count`, `hit_hard_cap`) are **never** included in the school JSON — the response uses explicit public keys, not `**metrics`. The golden test (§7) pins both branches + the response shape. Note: `compute_overview`'s totals use `count='exact'` (§3.5), which is byte-identical to the old row-pull for any school below `_HARD_CAP` (i.e. every realistic school) and merely more accurate for a pathological >100k-row school — a latent-bug fix, not a regression.
 
 ### 3.2 District teacher set — **data-owners, not auth users** (Blocker 2 fix)
 
@@ -85,8 +106,17 @@ ids = sorted(_district_teacher_ids(sb)) if sb else []
 metrics = compute_overview(ids)                    # imported from admin_routes
 teachers = _district_teacher_rows(ids, sb)         # per-teacher counts + best-effort name
 audit_log("DISTRICT_VIEW_ANALYTICS", f"teachers={len(ids)}", user="district_admin", teacher_id="system")
-return {"overview": {"total_teachers": len(ids), **metrics}, "teachers": teachers,
-        "approximate": metrics.get("hit_hard_cap", False)}   # no silent caps
+return {
+    "overview": {  # explicit public keys only — do NOT spread **metrics (Codex: keeps scored_count/hit_hard_cap internal)
+        "total_teachers": len(ids),
+        "total_students": metrics["total_students"],
+        "total_assessments": metrics["total_assessments"],
+        "average_score": metrics["average_score"],
+        "grade_distribution": metrics["grade_distribution"],
+    },
+    "teachers": teachers,
+    "approximate": metrics.get("hit_hard_cap", False),   # the only internal flag promoted (intentional UX signal)
+}
 ```
 `_district_teacher_rows` reuses the existing `_enrich_*` counters (chunked) over the data-owner ids. Gated by `@_require_district_admin` only (NOT `@require_admin`).
 
@@ -96,10 +126,10 @@ New section in the authenticated `ConfigForm` of `DistrictSetup.jsx`, **built in
 
 ### 3.5 Performance (Important — both reviewers)
 
-- **Short-TTL cache** (module-level, ~5 min) keyed on nothing (single-tenant): the expensive scan/aggregation runs at most once per window regardless of refreshes/multiple admins. Cache stores the built response; invalidated by TTL only (v1 — no event invalidation).
-- **Cheap counts where possible:** `total_students`/`total_assessments` via Supabase `count='exact'` head requests rather than pulling rows; only `average_score`/`grade_distribution` pull the score column (lighter than full rows).
-- **`_HARD_CAP` disclosure:** `compute_overview` surfaces whether any chunk hit `_HARD_CAP=100_000`; the response carries `approximate: true` and the UI shows "approximate above 100k rows" — **no silent undercount**.
-- v1 ships with measured scale noted in the PR (what teacher/row count it was tested at). A DB-side aggregate RPC/materialized view is the right *next* step if the cached scan is still too slow — noted, not built (YAGNI).
+- **Short-TTL cache** (module-level, ~5 min): the expensive scan/aggregation runs at most once per window regardless of refreshes/multiple admins. **Single-tenant assumption (Codex):** the cache is keyed on nothing because a deployment serves one district and the response is identical for every district admin — safe under the single-`district:password_hash` model (same invariant as the SSO-designation feature). If Graider ever goes multi-tenant, the cache must be keyed by tenant. Invalidated by TTL only (v1 — no event invalidation).
+- **Cheap counts where possible:** `total_students`/`total_assessments` via Supabase `count='exact'` head requests rather than pulling rows; only `average_score`/`grade_distribution` pull the score column.
+- **`_HARD_CAP` disclosure (contract change):** `_chunked_in_rows` currently returns rows without metadata, so `compute_overview` detects a cap hit by checking whether any chunk returned **exactly** `_HARD_CAP=100_000` rows, and returns `hit_hard_cap: bool`. (If that heuristic is fragile, add a thin parallel helper that returns `(rows, capped)` — do NOT change the existing `_chunked_in_rows` signature, to avoid disturbing the school path.) The response promotes this as `approximate: true` and the UI shows "approximate above 100k rows" — **no silent undercount**.
+- **B3 decision (cached score-pull now; RPC later — #611):** the cache *amortizes* the cost, but the first request after each TTL expiry still pulls all score rows into Python. For current district sizes (sub-second on tens-of-thousands of score numbers, then cached) this is acceptable for v1. The cold-request pull is **eliminated** by the DB-side aggregate RPC tracked in **#611** — the bulletproof scale-up when a district gets large. v1 PR must document the teacher/row scale it was actually tested at (no silent scale assumptions).
 
 ## 4. Data flow
 
@@ -130,8 +160,8 @@ District admin → /district → "District Analytics" → GET /api/district/anal
 
 ## 7. Testing (TDD; mixed A/B ⇒ opus review)
 
-- **School overview byte-identical (Blocker 1):** golden test where `_discover_teachers` returns a teacher with **blank `user_id`** → `total_teachers` still counts it; `average_score`/`grade_distribution`/audit score-count unchanged vs pre-refactor.
-- `compute_overview(teacher_ids)`: totals/avg/A–F with mocked Supabase; `[]` → zeros; the `_HARD_CAP` boundary sets the approximate flag.
+- **School overview byte-identical (B1):** golden tests covering **both** audit branches — (1) the **no-data** branch (no Supabase / no teacher_ids → "Viewed overview (no data)" audit + zeros payload) and (2) the **scored** branch (audit carries the score-count). Plus: `_discover_teachers` returns a teacher with **blank `user_id`** → `total_teachers` still counts it; and the response JSON has **exactly** the 5 public keys (no `scored_count`/`hit_hard_cap` leaked).
+- `compute_overview(teacher_ids)`: totals/avg/A–F with mocked Supabase; `[]` → zeros; a chunk returning exactly `_HARD_CAP` rows → `hit_hard_cap: True` (and the endpoint's `approximate: true`).
 - **District teacher set (Blocker 2):** `_district_teacher_ids` unions distinct `teacher_id` across the 3 tables; **includes a `clever:{id}` owner**; **excludes** an admin-only auth user with no data; mocked.
 - `GET /api/district/analytics`: non-district → 401; district → `{overview, teachers, approximate}` with correct rollup; no-Supabase → zeros; **cache** returns the same object within TTL without re-querying (assert query count).
 - Frontend: section renders stat cards + grade bars + teacher list + the approximate note (vitest, mocked api).
