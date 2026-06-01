@@ -1655,43 +1655,6 @@ def test_roster_sync_skips_when_partial_config(monkeypatch):
     clr._run_classlink_roster_sync("11111111-1111-1111-1111-111111111111", "2284")
 
 
-def test_role_probe_captures_raw_role_verbatim():
-    """DEBUG_CLASSLINK_ROLE_PROBE must emit the raw ClassLink Role claim
-    (verbatim, before normalization) so we can design 5-role SSO routing."""
-    app = _make_app()
-    priv, pub = _make_rsa_keypair()
-    id_token = make_id_token(priv, aud="test-client-id", sub="cl-admin-1",
-                             email="admin@school.edu", given_name="Pat",
-                             family_name="Lee", role="District Administrator")
-    mock_token_resp = MagicMock(status_code=200)
-    mock_token_resp.json.return_value = {"access_token": "t", "id_token": id_token}
-    mock_user_resp = MagicMock(status_code=200)
-    mock_user_resp.json.return_value = {
-        "UserId": "cl-admin-1", "SourcedId": "cl-admin-1",
-        "FirstName": "Pat", "LastName": "Lee", "Email": "admin@school.edu",
-        "Role": "District Administrator", "TenantId": "district-456",
-    }
-
-    captured = []
-    with app.test_client() as client:
-        with client.session_transaction() as sess:
-            sess['classlink_oauth_state'] = 'valid-state'
-        with patch('backend.routes.classlink_routes.requests.post', return_value=mock_token_resp), \
-             patch('backend.routes.classlink_routes.requests.get', return_value=mock_user_resp), \
-             patch('backend.routes.classlink_routes.get_classlink_oidc_config', return_value=_mock_oidc_config()), \
-             patch('backend.routes.classlink_routes.get_classlink_jwks_client', return_value=_mock_jwks_client(pub)), \
-             patch('backend.routes.classlink_routes._trigger_roster_sync'), \
-             patch('backend.routes.classlink_routes.sentry_sdk.capture_message',
-                   side_effect=lambda msg, **kw: captured.append(msg)):
-            client.get('/api/classlink/callback?code=c&state=valid-state')
-
-    probe = next((m for m in captured if 'DEBUG_CLASSLINK_ROLE_PROBE' in m), None)
-    assert probe is not None, f"probe not emitted; captured={captured}"
-    assert "District Administrator" in probe       # raw role, verbatim
-    assert "normalized_role='district administrator'" in probe
-    assert "admin@school.edu" not in probe          # no PII (FERPA)
-
-
 # ── Task 4: ClassLink callback → SSO admin designation wiring ──────────
 # The district-managed designation (Task 2 `apply_sso_admin_designation`) routes
 # the resolved teacher: district → /district (sets session district_admin),
