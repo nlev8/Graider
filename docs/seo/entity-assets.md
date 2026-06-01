@@ -16,7 +16,6 @@ Use these **verbatim and identically** across every profile. Consistency (same n
 |---|---|---|
 | X / Twitter | https://x.com/graiderlive (username forced; display name still "Graider") | **LIVE** |
 | LinkedIn | https://www.linkedin.com/company/graider | claim |
-| GitHub | https://github.com/graider | claim |
 | Crunchbase | https://www.crunchbase.com/organization/graider | claim |
 | Product Hunt | https://www.producthunt.com/products/graider | claim |
 | Wikidata | (created in 1.1 — paste QID URL back) | claim |
