@@ -1690,3 +1690,58 @@ def test_role_probe_captures_raw_role_verbatim():
     assert "District Administrator" in probe       # raw role, verbatim
     assert "normalized_role='district administrator'" in probe
     assert "admin@school.edu" not in probe          # no PII (FERPA)
+
+
+# ── Task 4: ClassLink callback → SSO admin designation wiring ──────────
+# The district-managed designation (Task 2 `apply_sso_admin_designation`) routes
+# the resolved teacher: district → /district (sets session district_admin),
+# school → lands in app as admin, none → lands in app as teacher. Modeled on
+# test_successful_teacher_login. The module autouse fixture patches
+# resolve_classlink_user_id to a fixed UUID so callbacks complete hermetically.
+
+def _drive_designation_callback(designation_tier):
+    """Drive a ClassLink callback; patch apply_sso_admin_designation to return the tier."""
+    app = _make_app()
+    priv, pub = _make_rsa_keypair()
+    id_token = make_id_token(priv, aud="test-client-id", sub="cl-1",
+                             email="a@school.edu", given_name="A", family_name="B", role="teacher")
+    tok = MagicMock(status_code=200); tok.json.return_value = {"access_token": "t", "id_token": id_token}
+    usr = MagicMock(status_code=200)
+    usr.json.return_value = {"UserId": "cl-1", "SourcedId": "cl-1", "FirstName": "A",
+                             "LastName": "B", "Email": "a@school.edu", "Role": "teacher", "TenantId": "d-456"}
+
+    def _fake_apply(email, uuid, session):
+        if designation_tier == "district":
+            session["district_admin"] = True
+        return designation_tier
+
+    with app.test_client() as client:
+        with client.session_transaction() as s:
+            s['classlink_oauth_state'] = 'valid-state'
+        with patch('backend.routes.classlink_routes.requests.post', return_value=tok), \
+             patch('backend.routes.classlink_routes.requests.get', return_value=usr), \
+             patch('backend.routes.classlink_routes.get_classlink_oidc_config', return_value=_mock_oidc_config()), \
+             patch('backend.routes.classlink_routes.get_classlink_jwks_client', return_value=_mock_jwks_client(pub)), \
+             patch('backend.routes.classlink_routes._trigger_roster_sync'), \
+             patch('backend.routes.classlink_routes.apply_sso_admin_designation', side_effect=_fake_apply):
+            resp = client.get('/api/classlink/callback?code=c&state=valid-state')
+        with client.session_transaction() as s:
+            return resp, dict(s)
+
+
+def test_designated_district_redirects_to_district():
+    resp, sess = _drive_designation_callback("district")
+    assert resp.status_code in (301, 302)
+    assert resp.location.endswith("/district")
+    assert sess.get("district_admin") is True
+
+
+def test_designated_school_lands_in_app():
+    resp, sess = _drive_designation_callback("school")
+    assert "classlink_login=success" in resp.location
+    assert sess.get("district_admin") is None
+
+
+def test_non_designated_lands_in_app():
+    resp, sess = _drive_designation_callback("none")
+    assert "classlink_login=success" in resp.location
