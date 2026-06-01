@@ -11,15 +11,17 @@ Use these **verbatim and identically** across every profile. Consistency (same n
 - **Location:** United States
 - **Contact:** admin@graider.live
 
-### Canonical handles to claim (use these exact slugs)
-| Platform | Target URL |
-|---|---|
-| X / Twitter | https://x.com/graider |
-| LinkedIn | https://www.linkedin.com/company/graider |
-| GitHub | https://github.com/graider |
-| Crunchbase | https://www.crunchbase.com/organization/graider |
-| Product Hunt | https://www.producthunt.com/products/graider |
-| Wikidata | (created in 1.1 — paste QID URL back) |
+### Canonical handles (slug: **graiderlive** — `graider` was taken on X, so we standardize on `graiderlive` everywhere for entity consistency)
+| Platform | Target URL | Status |
+|---|---|---|
+| X / Twitter | https://x.com/graiderlive | **LIVE** |
+| LinkedIn | https://www.linkedin.com/company/graiderlive | claim |
+| GitHub | https://github.com/graiderlive | claim |
+| Crunchbase | https://www.crunchbase.com/organization/graiderlive | claim |
+| Product Hunt | https://www.producthunt.com/products/graiderlive | claim |
+| Wikidata | (created in 1.1 — paste QID URL back) | claim |
+
+> `sameAs` + footer links now point to these `graiderlive` URLs. Claim each handle as `graiderlive`; if any platform forces a different slug, tell me and I'll update that one entry.
 
 > After claiming, **paste the live URLs back to me** and I'll finalize `sameAs` + the footer links (they're currently scaffolded to these exact targets).
 
