@@ -31,6 +31,29 @@ _KEY_AI_KEYS = "district:ai_keys"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+def _district_teacher_ids(sb):
+    """Distinct teacher_id across the teacher-owner tables (classes,
+    published_content, published_assessments). Provider-agnostic: includes
+    UUID teachers AND clever:{id}/legacy owners; excludes admin/staff-only
+    accounts that never owned data. Paginates each table by _PAGE rows."""
+    if not sb:
+        return set()
+    ids: set = set()
+    _PAGE = 1000
+    for table in ("classes", "published_content", "published_assessments"):
+        offset = 0
+        while True:
+            rows = sb.table(table).select("teacher_id").range(offset, offset + _PAGE - 1).execute().data or []
+            for r in rows:
+                tid = r.get("teacher_id")
+                if tid:
+                    ids.add(str(tid))
+            if len(rows) < _PAGE:
+                break
+            offset += _PAGE
+    return ids
+
+
 def _get_district_password_hash():
     """Get stored password hash; bootstrap from env var on first use."""
     stored = storage_load(_KEY_PASSWORD_HASH, "system")
