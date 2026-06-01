@@ -1,0 +1,89 @@
+name: SEO/GEO Audit
+
+# Durable weekly audit of the landing site's search + AI-answer (GEO) health.
+# Validates JSON-LD, required schema @types, non-empty Organization.sameAs,
+# AI-crawler access, llms.txt/sitemap presence, and dead placeholder links.
+# Opens (or updates) a GitHub issue on regression. Also runnable on PRs that
+# touch the landing site, and on demand.
+
+on:
+  schedule:
+    # Mondays 14:07 UTC (off the :00 mark). Weekly cadence — SEO moves slowly.
+    - cron: "7 14 * * 1"
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "landing/**"
+      - "scripts/seo_audit.py"
+      - ".github/workflows/seo-audit.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run SEO/GEO audit
+        id: audit
+        run: |
+          set +e
+          OUT="$(python scripts/seo_audit.py landing 2>&1)"
+          CODE=$?
+          echo "$OUT"
+          {
+            echo 'report<<EOF'
+            echo "$OUT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Open issue on regression (scheduled runs only)
+        if: steps.audit.outputs.code != '0' && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const report = `${{ steps.audit.outputs.report }}`;
+            const title = "SEO/GEO audit regression";
+            const body = [
+              "The weekly SEO/GEO audit found on-page regressions that can hurt",
+              "our Google ranking or AI-answer ownership (and our disambiguation",
+              "from grAIder.de).",
+              "",
+              "```",
+              report,
+              "```",
+              "",
+              "See `docs/seo/PLAN.md`. Fix in `landing/index.html` (or assets),",
+              "then re-run `python scripts/seo_audit.py landing` locally to confirm.",
+            ].join("\n");
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "seo-audit",
+            });
+            if (existing.data.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.data[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ["seo-audit"],
+              });
+            }
+
+      - name: Fail the job on regression (PR/dispatch visibility)
+        if: steps.audit.outputs.code != '0'
+        run: |
+          echo "::error::SEO/GEO audit found regressions (see log above)."
+          exit 1
