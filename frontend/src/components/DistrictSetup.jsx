@@ -505,9 +505,7 @@ export function SsoAdminSection(props) {
   );
 }
 
-export function DistrictAnalyticsSection(props) {
-  var isDark = props.isDark !== false;
-
+export function DistrictAnalyticsSection() {
   var dataState = useState(null);
   var data = dataState[0];
   var setData = dataState[1];
@@ -519,7 +517,7 @@ export function DistrictAnalyticsSection(props) {
   useEffect(function() {
     api.getDistrictAnalytics().then(function(res) {
       setLoading(false);
-      if (res && !res.error) {
+      if (res) {
         setData(res);
       }
     }).catch(function() {
@@ -1321,7 +1319,7 @@ function ConfigForm(props) {
       React.createElement(SsoAdminSection, { isDark: isDark }),
 
       // Section 3c: District Analytics (school-wide rollup)
-      React.createElement(DistrictAnalyticsSection, { isDark: isDark }),
+      React.createElement(DistrictAnalyticsSection, null),
 
       // Section 4: Configuration Summary + Logout
       React.createElement("div", { style: styles.sectionHeading }, "Configuration Summary"),
