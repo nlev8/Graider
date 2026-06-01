@@ -1451,6 +1451,26 @@ export async function searchTeachers(query) {
   return fetchApi('/api/district/teacher-search?q=' + encodeURIComponent(query))
 }
 
+// ============ Graider-Managed SSO Admin Designations ============
+
+export async function listSsoAdmins() {
+  return fetchApi('/api/district/sso-admins')
+}
+
+export async function addSsoAdmin(email, tier, school) {
+  return fetchApi('/api/district/sso-admins', {
+    method: 'POST',
+    body: JSON.stringify({ email: email, tier: tier, school: school }),
+  })
+}
+
+export async function removeSsoAdmin(email) {
+  return fetchApi('/api/district/sso-admins', {
+    method: 'DELETE',
+    body: JSON.stringify({ email: email }),
+  })
+}
+
 export default {
   getStatus,
   stopGrading,
@@ -1648,6 +1668,10 @@ export default {
   listAdmins,
   revokeAdmin,
   searchTeachers,
+  // Graider-Managed SSO Admin Designations
+  listSsoAdmins,
+  addSsoAdmin,
+  removeSsoAdmin,
 }
 
 export async function saveDraft(contentId, answers, markedForReview, questionTimes, studentToken) {

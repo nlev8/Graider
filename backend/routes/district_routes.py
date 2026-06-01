@@ -16,6 +16,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from backend.storage import save as storage_save, load as storage_load, list_keys
 from backend.utils.audit import audit_log
 from backend.utils.errors import handle_route_errors
+from backend.utils.redaction import redact_email
 import sentry_sdk
 
 logger = logging.getLogger(__name__)
@@ -508,6 +509,97 @@ def district_revoke_admin():
         teacher_id="system",
     )
     return jsonify({"status": "revoked"})
+
+
+# ── SSO admin designations ───────────────────────────────────────────────────
+
+_VALID_SSO_TIERS = ("district", "school")
+
+
+def _revoke_designated_admin_by_email(email):
+    """Best-effort immediate revoke: if the email is linked to a Supabase user,
+    drop their SSO-designated admin grant now (not just on next login)."""
+    try:
+        from backend.supabase_client import get_supabase
+        from backend.utils.supabase_users import list_all_users
+        from backend.routes.admin_routes import _sync_sso_admin_revocation
+        sb = get_supabase()
+        if not sb:
+            return
+        norm = str(email or "").strip().lower()
+        matches = [u for u in list_all_users(sb)
+                   if getattr(u, "email", None) and u.email.lower() == norm]
+        if len(matches) == 1:
+            _sync_sso_admin_revocation(matches[0].id)
+    except Exception as e:
+        logger.warning("Immediate SSO admin revoke failed (non-fatal): %s", type(e).__name__)
+
+
+@district_bp.route("/api/district/sso-admins", methods=["GET"])
+@_require_district_admin
+@handle_route_errors
+def district_list_sso_admins():
+    """List SSO admin designations (email -> tier/school)."""
+    keys = list_keys("sso_admin_designation:", "system") or []
+    admins = []
+    for key in keys:
+        rec = storage_load(key, "system")
+        if rec and isinstance(rec, dict):
+            admins.append({
+                "email": key[len("sso_admin_designation:"):],
+                "tier": rec.get("tier", ""),
+                "school": rec.get("school", ""),
+                "created_at": rec.get("created_at", ""),
+            })
+    return jsonify({"admins": admins})
+
+
+@district_bp.route("/api/district/sso-admins", methods=["POST"])
+@_require_district_admin
+@handle_route_errors
+def district_add_sso_admin():
+    """Designate an email as a district or school SSO admin."""
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+    tier = str(data.get("tier", "")).strip().lower()
+    school = str(data.get("school", "")).strip()
+    if not email:
+        return jsonify({"error": "email is required"}), 400
+    if tier not in _VALID_SSO_TIERS:
+        return jsonify({"error": "tier must be 'district' or 'school'"}), 400
+    if tier == "school" and not school:
+        return jsonify({"error": "school is required for a school admin"}), 400
+    storage_save(
+        f"sso_admin_designation:{email}",
+        {
+            "tier": tier,
+            "school": school if tier == "school" else "",
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "created_by": "district_admin",
+        },
+        "system",
+    )
+    audit_log("DISTRICT_SSO_ADMIN_DESIGNATED",
+              f"email={redact_email(email)} tier={tier} school={school or '-'}",
+              user="district_admin", teacher_id="system")
+    return jsonify({"status": "saved", "email": email, "tier": tier})
+
+
+@district_bp.route("/api/district/sso-admins", methods=["DELETE"])
+@_require_district_admin
+@handle_route_errors
+def district_delete_sso_admin():
+    """Remove an SSO admin designation + best-effort immediate revoke."""
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+    if not email:
+        return jsonify({"error": "email is required"}), 400
+    from backend.storage import delete as storage_delete
+    storage_delete(f"sso_admin_designation:{email}", "system")
+    _revoke_designated_admin_by_email(email)
+    audit_log("DISTRICT_SSO_ADMIN_REMOVED", f"email={redact_email(email)}",
+              user="district_admin", teacher_id="system")
+    return jsonify({"status": "removed", "email": email})
 
 
 # ── GET /api/district/teacher-search ─────────────────────────────────────────

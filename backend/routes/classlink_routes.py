@@ -25,6 +25,7 @@ import urllib.parse
 from urllib.parse import urlencode
 
 from backend.auth import resolve_classlink_user_id
+from backend.routes.sso_admin import apply_sso_admin_designation
 from backend.supabase_client import get_supabase
 from backend.utils.audit import audit_log
 from backend.utils.auth_decorators import require_teacher
@@ -557,19 +558,6 @@ def classlink_callback():
     if not guid:
         return redirect("/?classlink_error=missing_identity")
 
-    # DEBUG (REVERT BEFORE NEXT FEATURE): capture the raw ClassLink Role claim
-    # to design 5-role SSO routing (district/school admin detection). Records
-    # role strings + tenant + a hashed person id only — NO email/name (FERPA).
-    _role_probe = (
-        "DEBUG_CLASSLINK_ROLE_PROBE "
-        f"id_token_Role={id_claims.get('Role')!r} "
-        f"userinfo_Role={user_data.get('Role')!r} "
-        f"normalized_role={role!r} tenant={tenant_id!r} "
-        f"person_hash={hashlib.sha256(person_id.encode()).hexdigest()[:8]}"
-    )
-    logger.warning(_role_probe)
-    sentry_sdk.capture_message(_role_probe, level="info")
-
     # Student login → resolve provisioned record, hand off to the student portal.
     if role == 'student':
         # Clear OAuth-flow markers (single-use enforcement on success).
@@ -643,11 +631,22 @@ def classlink_callback():
         'tenant_id': tenant_id,
     }
 
+    applied = apply_sso_admin_designation(email, graider_uuid, session)
+
+    if applied == "district":
+        audit_log("CLASSLINK_DISTRICT_ADMIN_LOGIN",
+                  f"ClassLink district admin SSO login: {redact_email(email)}",
+                  user="district_admin", teacher_id=graider_uuid)
+        return redirect("/district")
+
     # Background roster sync (if OneRoster configured) — keyed by the UUID.
     _trigger_roster_sync(graider_uuid, tenant_id)
 
-    audit_log("CLASSLINK_LOGIN", f"ClassLink SSO login: {redact_email(email)}",
-              user="teacher", teacher_id=graider_uuid)
+    audit_log(
+        "CLASSLINK_SCHOOL_ADMIN_LOGIN" if applied == "school" else "CLASSLINK_LOGIN",
+        (f"ClassLink school admin SSO login: {redact_email(email)}" if applied == "school"
+         else f"ClassLink SSO login: {redact_email(email)}"),
+        user=("admin" if applied == "school" else "teacher"), teacher_id=graider_uuid)
 
     return redirect("/?classlink_login=success")
 

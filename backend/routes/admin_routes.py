@@ -161,6 +161,39 @@ def admin_claim():
     return jsonify({"status": "claimed", "school": school})
 
 
+def _grant_sso_school_admin(teacher_id, school):
+    """Idempotently grant SSO-designated school-admin status for `teacher_id`.
+
+    Upserts admin_role:{teacher_id} with source='sso_designated' and the school
+    from the designation. NEVER overwrites a district-issued (invite-claimed)
+    grant, which has no 'source' key.
+    """
+    existing = storage_load(f"admin_role:{teacher_id}", "system")
+    if (existing and isinstance(existing, dict)
+            and existing.get("source") != "sso_designated"):
+        return  # invite-claimed grant — leave authoritative record untouched
+    storage_save(
+        f"admin_role:{teacher_id}",
+        {
+            "school": school or "",
+            "source": "sso_designated",
+            "granted_at": datetime.now(tz=timezone.utc).isoformat(),
+        },
+        "system",
+    )
+
+
+def _sync_sso_admin_revocation(teacher_id):
+    """Revoke a stale SSO-designated school-admin grant. Invite-claimed grants
+    are never auto-revoked.
+    """
+    existing = storage_load(f"admin_role:{teacher_id}", "system")
+    if (existing and isinstance(existing, dict)
+            and existing.get("source") == "sso_designated"):
+        from backend.storage import delete as storage_delete  # call-time: resolves the test monkeypatch
+        storage_delete(f"admin_role:{teacher_id}", "system")
+
+
 # ── GET /api/admin/teachers ───────────────────────────────────────────────
 
 @admin_bp.route("/api/admin/teachers", methods=["GET"])
