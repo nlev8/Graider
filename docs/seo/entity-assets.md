@@ -15,10 +15,14 @@ Use these **verbatim and identically** across every profile. Consistency (same n
 | Platform | Target URL | Status |
 |---|---|---|
 | X / Twitter | https://x.com/graiderlive (username forced; display name still "Graider") | **LIVE** |
+| Instagram | https://www.instagram.com/graider.live/ | **LIVE** |
+| Facebook | https://www.facebook.com/profile.php?id=61588305161288 | **LIVE** |
 | LinkedIn | https://www.linkedin.com/company/graider | claim |
 | Crunchbase | https://www.crunchbase.com/organization/graider | claim |
 | Product Hunt | https://www.producthunt.com/products/graider | claim |
 | Wikidata | (created in 1.1 — paste QID URL back) | claim |
+
+**Live in `sameAs` + footer now:** X, Instagram, Facebook. LinkedIn/Crunchbase/Product Hunt/Wikidata get added to `sameAs` + footer once created (send URLs).
 
 > `sameAs` + footer links point to these URLs. Claim each as `graider`; if any platform forces a different slug (as X did → `graiderlive`), tell me and I'll update that one entry. The **display name is "Graider" on every platform** regardless of username.
 
