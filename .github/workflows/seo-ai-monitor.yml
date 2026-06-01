@@ -1,0 +1,59 @@
+name: SEO AI-Search Monitor
+
+# Permanent weekly AI-search-position monitor (the durable version of the
+# session-cron AI layer). Uses the Anthropic API with web search to track where
+# graider.live stands vs grAIder.de in Google + AI answers, combines it with the
+# deterministic on-page audit, and opens a PR with the dated report + ranked
+# recommendations for human review.
+#
+# REQUIRES repo secret: ANTHROPIC_API_KEY  (without it, the report still runs but
+# the AI-search section is skipped — the job never hard-fails).
+
+on:
+  schedule:
+    # Mondays 13:23 UTC (off the :00 mark). Weekly — SEO/AI answers move slowly.
+    - cron: "23 13 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Anthropic SDK
+        run: pip install "anthropic>=0.96.0"
+
+      - name: Run AI-search monitor
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/ai_search_monitor.py
+
+      - name: Open PR with the weekly report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE="$(date -u +%Y-%m-%d)"
+          if [ -z "$(git status --porcelain docs/seo/reports/)" ]; then
+            echo "No report changes — nothing to PR."
+            exit 0
+          fi
+          BRANCH="seo/monitor-$DATE"
+          git config user.name "graider-seo-bot"
+          git config user.email "bot@graider.live"
+          git checkout -b "$BRANCH"
+          git add docs/seo/reports/
+          git commit -m "chore(seo): weekly AI-search monitor report $DATE"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --title "SEO/GEO monitor report — $DATE" \
+            --body "Automated weekly AI-search + on-page audit. Review the report and the ranked recommendations in \`docs/seo/reports/$DATE.md\`, then action or close. See \`docs/seo/PLAN.md\`." \
+            --label seo-audit || echo "PR create skipped (may already exist)."
