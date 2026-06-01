@@ -11,17 +11,17 @@ Use these **verbatim and identically** across every profile. Consistency (same n
 - **Location:** United States
 - **Contact:** admin@graider.live
 
-### Canonical handles (slug: **graiderlive** — `graider` was taken on X, so we standardize on `graiderlive` everywhere for entity consistency)
+### Canonical handles (slug: **graider** everywhere — the app name. X is the lone exception: `graider` was taken, so the X username is `graiderlive`. Display name is always **Graider**.)
 | Platform | Target URL | Status |
 |---|---|---|
-| X / Twitter | https://x.com/graiderlive | **LIVE** |
-| LinkedIn | https://www.linkedin.com/company/graiderlive | claim |
-| GitHub | https://github.com/graiderlive | claim |
-| Crunchbase | https://www.crunchbase.com/organization/graiderlive | claim |
-| Product Hunt | https://www.producthunt.com/products/graiderlive | claim |
+| X / Twitter | https://x.com/graiderlive (username forced; display name still "Graider") | **LIVE** |
+| LinkedIn | https://www.linkedin.com/company/graider | claim |
+| GitHub | https://github.com/graider | claim |
+| Crunchbase | https://www.crunchbase.com/organization/graider | claim |
+| Product Hunt | https://www.producthunt.com/products/graider | claim |
 | Wikidata | (created in 1.1 — paste QID URL back) | claim |
 
-> `sameAs` + footer links now point to these `graiderlive` URLs. Claim each handle as `graiderlive`; if any platform forces a different slug, tell me and I'll update that one entry.
+> `sameAs` + footer links point to these URLs. Claim each as `graider`; if any platform forces a different slug (as X did → `graiderlive`), tell me and I'll update that one entry. The **display name is "Graider" on every platform** regardless of username.
 
 > After claiming, **paste the live URLs back to me** and I'll finalize `sameAs` + the footer links (they're currently scaffolded to these exact targets).
 
