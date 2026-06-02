@@ -309,6 +309,10 @@ def classlink_login_url():
     """Return ClassLink OAuth authorization URL with CSRF state token and nonce."""
     client_id, _, redirect_uri = _get_classlink_config()
     if not client_id:
+        # In redirect mode (top-level nav from the landing page) a JSON body
+        # would render as a raw page; bounce to a friendly error instead.
+        if request.args.get("redirect"):
+            return redirect("/?classlink_error=not_configured")
         return jsonify({"error": "ClassLink SSO is not configured"}), 400
 
     state = secrets.token_urlsafe(32)

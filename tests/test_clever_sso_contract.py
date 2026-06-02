@@ -114,6 +114,9 @@ class TestLoginUrlContract:
                 resp = client.get("/api/clever/login-url?redirect=1")
         assert resp.status_code == 302
         assert resp.headers["Location"] == authorize_url
+        # The point of redirect mode: the session cookie is set on THIS response
+        # (top-level nav, first-party) so oauth_state survives to the callback.
+        assert "session=" in resp.headers.get("Set-Cookie", "")
 
     def test_login_url_missing_config(self):
         """GET /api/clever/login-url returns 503 when Clever config absent."""

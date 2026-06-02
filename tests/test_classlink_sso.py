@@ -1000,6 +1000,9 @@ class TestClassLinkStateNonceHardening:
         assert resp.status_code == 302
         loc = resp.headers["Location"]
         assert "state=" in loc and "nonce=" in loc and "client_id=" in loc
+        # The point of redirect mode: the session cookie (carrying state/nonce/
+        # initiated_by_us) is set on THIS response so it survives to the callback.
+        assert "session=" in resp.headers.get("Set-Cookie", "")
 
     def test_launchpad_initiated_with_unexpected_state_audit_logs(self):
         """If session somehow has expected_state but no initiated_by_us marker

@@ -379,6 +379,10 @@ def clever_login_url():
     """Return the Clever OAuth authorization URL."""
     config = get_clever_config()
     if not config:
+        # In redirect mode (top-level nav from the landing page) a JSON body
+        # would render as a raw page; bounce to a friendly error instead.
+        if request.args.get("redirect"):
+            return redirect("/?clever_error=not_configured")
         return jsonify({"error": "Clever not configured"}), 503
 
     state = secrets.token_urlsafe(32)
