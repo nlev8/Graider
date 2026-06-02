@@ -1732,7 +1732,10 @@ def post_remediate(class_id):
                 try:
                     variants.append(fut.result())
                 except Exception as e:
-                    errors.append({'student_id': sid, 'error': str(e)})
+                    _logger.warning(
+                        "remediation.personalize.variant_failed student=%s: %s", sid, e
+                    )
+                    errors.append({'student_id': sid, 'error': 'generation failed'})
 
         if errors:
             _logger.exception(

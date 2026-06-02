@@ -123,7 +123,7 @@ def test_connection():
         return jsonify({"status": "connected"})
     except Exception as e:
         logger.warning("OneRoster connection test failed: %s", str(e))
-        return jsonify({"error": f"Connection failed: {str(e)}"}), 502
+        return jsonify({"error": "Connection failed"}), 502
 
 
 # ── POST /api/oneroster/sync-roster ───────────────────────────────────────
@@ -365,13 +365,13 @@ def sync_grades():
         ))
     except Exception as e:
         logger.error("Failed to create/find lineItem: %s", e)
-        return jsonify({"error": f"Failed to create assignment in SIS: {str(e)}"}), 500
+        return jsonify({"error": "Failed to create assignment in SIS"}), 500
 
     try:
         result = _run_async(post_results(client, line_item_id, scores))
     except Exception as e:
         logger.error("Failed to post results: %s", e)
-        return jsonify({"error": f"Failed to post scores: {str(e)}"}), 500
+        return jsonify({"error": "Failed to post scores"}), 500
 
     return jsonify({
         "status": "success",

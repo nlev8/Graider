@@ -307,7 +307,7 @@ def _sync_one_teacher(teacher):
             "teacher_id": teacher_id,
             "provider": provider,
             "status": "failed",
-            "error": str(e)[:200],
+            "error": "sync failed",  # detail in server logs (logger.exception above); not leaked to caller
             "duration_s": duration,
         }
 

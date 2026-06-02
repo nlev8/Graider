@@ -1935,7 +1935,7 @@ def generate_study_guide():
         return jsonify({"error": "Failed to parse study guide. Please try again."}), 500
     except Exception as e:
         _logger.exception("Study guide generation failed")
-        return jsonify({"error": f"Generation failed: {str(e)[:200]}"}), 500
+        return jsonify({"error": "Generation failed"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1984,7 +1984,7 @@ def export_study_guide():
 
     except Exception as e:
         _logger.exception("Study guide export failed")
-        return jsonify({"error": f"Export failed: {str(e)[:200]}"}), 500
+        return jsonify({"error": "Export failed"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2028,7 +2028,7 @@ def generate_flashcards():
         return jsonify({"error": "Failed to parse flashcards. Please try again."}), 500
     except Exception as e:
         _logger.exception("Flashcard generation failed")
-        return jsonify({"error": "Generation failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Generation failed"}), 500
 
 
 @planner_bp.route('/api/export-flashcards', methods=['POST'])
@@ -2062,7 +2062,7 @@ def export_flashcards():
 
     except Exception as e:
         _logger.exception("Flashcard export failed")
-        return jsonify({"error": "Export failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Export failed"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2106,7 +2106,7 @@ def generate_slides():
         return jsonify({"error": "Failed to parse slide content. Please try again."}), 500
     except Exception as e:
         _logger.exception("Slide generation failed")
-        return jsonify({"error": "Generation failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Generation failed"}), 500
 
 
 @planner_bp.route('/api/export-slides', methods=['POST'])
@@ -2151,4 +2151,4 @@ def export_slides():
 
     except Exception as e:
         _logger.exception("Slide export failed")
-        return jsonify({"error": "Export failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Export failed"}), 500

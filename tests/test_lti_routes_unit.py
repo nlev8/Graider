@@ -170,7 +170,11 @@ class TestLaunch:
                 data={"id_token": "bad", "state": "s1"},
             )
         assert resp.status_code == 400
-        assert "bad signature" in resp.get_json()["error"]
+        # Generic, non-leaking message: the raw exception text ("bad signature")
+        # must NOT reach the client (Security/Error-Handling rubric level-8 [CAP]).
+        err = resp.get_json()["error"]
+        assert err == "id_token validation failed"
+        assert "bad signature" not in err
 
     def test_invalid_nonce_returns_400(self, client):
         with client.session_transaction() as sess:
