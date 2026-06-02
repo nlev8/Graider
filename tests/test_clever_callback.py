@@ -204,127 +204,144 @@ class TestCleverCallback:
 
 
 # ---------------------------------------------------------------------------
-# TestAccountMerging — email-based Clever ↔ Supabase account link
+# TestCallbackUUIDResolve — callback wires resolve_clever_user_id_or_create
 # ---------------------------------------------------------------------------
 
-class TestAccountMerging:
+class TestCallbackUUIDResolve:
+    """The teacher callback resolves to a Supabase UUID (link-or-create) and
+    only sets session user_id + starts the roster sync on a UUID outcome."""
 
-    def _run_callback_as_teacher(self, sb_mock):
-        """Helper: run the teacher callback with a given Supabase mock.
-
-        Returns the mock_save object so callers can assert on it.
-        """
+    def _run_callback(self, resolve_return, captured_threads):
+        """Drive the teacher callback with a stubbed resolver. Captures any
+        Thread starts into captured_threads so the test can assert on the
+        roster-sync target/args (or its absence)."""
         app = _make_app()
-        with (
-            patch("backend.routes.clever_routes.exchange_code_for_token",
-                  new=AsyncMock(return_value={"access_token": "test_token"})),
-            patch("backend.routes.clever_routes.get_clever_user",
-                  new=AsyncMock(return_value=_clever_user("teacher"))),
-            patch("backend.routes.clever_routes.load_clever_links",
-                  return_value={}),  # clever_id not yet linked
-            patch("backend.routes.clever_routes.save_clever_link") as mock_save,
-            patch("backend.routes.clever_routes.resolve_clever_user_id",
-                  return_value="clever:clever-teacher-001"),
-            patch("backend.routes.clever_routes._get_supabase_safe",
-                  return_value=sb_mock),
-            patch("backend.routes.clever_routes.os.getenv", return_value=None),
-        ):
-            with app.test_client() as client:
-                with client.session_transaction() as sess:
-                    sess["clever_oauth_state"] = "valid-state"
-                client.get("/api/clever/callback?code=abc123&state=valid-state")
-        return mock_save
 
-    def _make_user(self, email):
-        u = MagicMock()
-        u.email = email
-        u.id = f"sb-user-{email}"
-        return u
-
-    def test_single_email_match_saves_link(self):
-        """Exactly one Supabase user matches the Clever email → link is saved."""
-        sb = MagicMock()
-        matched_user = self._make_user("teacher@school.edu")
-        sb.auth.admin.list_users.return_value = [matched_user]
-
-        mock_save = self._run_callback_as_teacher(sb)
-
-        mock_save.assert_called_once_with("clever-teacher-001", matched_user.id)
-
-    def test_no_email_match_does_not_save_link(self):
-        """No Supabase user with that email → save_clever_link not called."""
-        sb = MagicMock()
-        sb.auth.admin.list_users.return_value = [
-            self._make_user("other@school.edu"),
-        ]
-
-        mock_save = self._run_callback_as_teacher(sb)
-
-        mock_save.assert_not_called()
-
-    def test_multiple_email_matches_does_not_save_link(self):
-        """Multiple Supabase users share the email → no link saved (ambiguous merge)."""
-        sb = MagicMock()
-        sb.auth.admin.list_users.return_value = [
-            self._make_user("teacher@school.edu"),
-            self._make_user("teacher@school.edu"),
-        ]
-
-        mock_save = self._run_callback_as_teacher(sb)
-
-        mock_save.assert_not_called()
-
-    def test_already_linked_skips_merge_check(self):
-        """Clever ID already in links dict → Supabase lookup is never attempted."""
-        app = _make_app()
-        sb = MagicMock()
+        def _fake_thread(*args, **kwargs):
+            t = MagicMock()
+            captured_threads.append(kwargs)
+            return t
 
         with (
             patch("backend.routes.clever_routes.exchange_code_for_token",
                   new=AsyncMock(return_value={"access_token": "test_token"})),
             patch("backend.routes.clever_routes.get_clever_user",
                   new=AsyncMock(return_value=_clever_user("teacher"))),
-            patch("backend.routes.clever_routes.load_clever_links",
-                  return_value={"clever-teacher-001": "sb-user-already-linked"}),
-            patch("backend.routes.clever_routes.save_clever_link") as mock_save,
-            patch("backend.routes.clever_routes.resolve_clever_user_id",
-                  return_value="sb-user-already-linked"),
-            patch("backend.routes.clever_routes._get_supabase_safe",
-                  return_value=sb),
-            patch("backend.routes.clever_routes.os.getenv", return_value=None),
-        ):
-            with app.test_client() as client:
-                with client.session_transaction() as sess:
-                    sess["clever_oauth_state"] = "valid-state"
-                client.get("/api/clever/callback?code=abc123&state=valid-state")
-
-        # Already linked — no new save and Supabase user listing never called
-        mock_save.assert_not_called()
-        sb.auth.admin.list_users.assert_not_called()
-
-    def test_supabase_error_during_merge_is_non_fatal(self):
-        """If Supabase raises during the merge check, the login still succeeds."""
-        app = _make_app()
-        sb = MagicMock()
-        sb.auth.admin.list_users.side_effect = Exception("Supabase down")
-
-        with (
-            patch("backend.routes.clever_routes.exchange_code_for_token",
-                  new=AsyncMock(return_value={"access_token": "test_token"})),
-            patch("backend.routes.clever_routes.get_clever_user",
-                  new=AsyncMock(return_value=_clever_user("teacher"))),
-            patch("backend.routes.clever_routes.load_clever_links", return_value={}),
-            patch("backend.routes.clever_routes.save_clever_link"),
-            patch("backend.routes.clever_routes.resolve_clever_user_id",
-                  return_value="clever:clever-teacher-001"),
-            patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
+                  return_value=resolve_return) as mock_resolve,
+            patch("backend.routes.clever_routes._background_roster_sync"),
+            patch("backend.routes.clever_routes.threading.Thread",
+                  side_effect=_fake_thread),
+            patch("backend.api_keys.resolve_clever_district_token",
+                  return_value="district-token-abc"),
+            patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
             patch("backend.routes.clever_routes.os.getenv", return_value=None),
         ):
             with app.test_client() as client:
                 with client.session_transaction() as sess:
                     sess["clever_oauth_state"] = "valid-state"
                 resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+                with client.session_transaction() as sess:
+                    clever_user = sess.get("clever_user", {})
+        return resp, clever_user, mock_resolve
 
-        # Login should still succeed despite merge error
+    def test_created_uuid_sets_user_id_and_starts_sync(self):
+        """A 'created' UUID outcome → session user_id set + roster sync started
+        with the UUID."""
+        threads = []
+        resp, clever_user, mock_resolve = self._run_callback(
+            ("uuid-7", "created"), threads)
+
+        assert resp.status_code == 302
+        assert "clever_login=success" in resp.location
+        assert clever_user.get("user_id") == "uuid-7"
+        mock_resolve.assert_called_once()
+        # exactly one roster-sync thread started, targeting the UUID
+        assert len(threads) == 1
+        assert threads[0]["args"] == ("district-token-abc", "uuid-7")
+
+    def test_already_linked_uuid_sets_user_id_and_starts_sync(self):
+        """An already-'linked' UUID outcome → same behavior (gating is on
+        id-shape, not the outcome string)."""
+        threads = []
+        resp, clever_user, _ = self._run_callback(
+            ("uuid-existing", "linked"), threads)
+
+        assert resp.status_code == 302
+        assert clever_user.get("user_id") == "uuid-existing"
+        assert len(threads) == 1
+        assert threads[0]["args"] == ("district-token-abc", "uuid-existing")
+
+    def test_legacy_outcome_no_user_id_no_sync(self):
+        """A legacy outcome → user_id NOT set and roster sync NOT started."""
+        threads = []
+        resp, clever_user, _ = self._run_callback(
+            ("clever:clever-teacher-001", "ambiguous_legacy"), threads)
+
+        assert resp.status_code == 302
+        assert "clever_login=success" in resp.location
+        assert "user_id" not in clever_user
+        assert threads == []
+
+
+# ---------------------------------------------------------------------------
+# TestAccountMerging — email-based Clever ↔ Supabase account link
+# ---------------------------------------------------------------------------
+
+class TestAccountMerging:
+    """The callback delegates email→UUID link-or-create to
+    resolve_clever_user_id_or_create (the merge SEMANTICS — single-match link,
+    multi-match ambiguity, already-linked, error fail-open — are owned and
+    tested by that resolver in tests/test_clever_identity.py). These tests pin
+    only the callback-layer contract: it calls the resolver with the Clever
+    email + name, and the login always succeeds (fail-open)."""
+
+    def _run_callback_as_teacher(self, resolve_return):
+        """Run the teacher callback with a stubbed resolver. Returns the
+        resolver mock so callers can assert on its call args."""
+        app = _make_app()
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("teacher"))),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
+                  return_value=resolve_return) as mock_resolve,
+            patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
+            patch("backend.routes.clever_routes.os.getenv", return_value=None),
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+        return resp, mock_resolve
+
+    def test_callback_delegates_email_and_name_to_resolver(self):
+        """The callback passes the Clever id, email, and name to the resolver."""
+        resp, mock_resolve = self._run_callback_as_teacher(("uuid-1", "matched"))
+
+        assert resp.status_code == 302
+        assert "clever_login=success" in resp.location
+        mock_resolve.assert_called_once_with(
+            "clever-teacher-001",
+            "teacher@school.edu",
+            {"first": "Ada", "last": "Lovelace"},
+        )
+
+    def test_ambiguous_outcome_login_still_succeeds(self):
+        """A >1-match (ambiguous_legacy) outcome still lands a successful login
+        (fail-open) — the resolver returns a legacy id, callback does not block."""
+        resp, _ = self._run_callback_as_teacher(
+            ("clever:clever-teacher-001", "ambiguous_legacy"))
+
+        assert resp.status_code == 302
+        assert "clever_login=success" in resp.location
+
+    def test_transient_resolver_failure_login_still_succeeds(self):
+        """A transient resolver failure (legacy fallback) is non-fatal — the
+        login still succeeds."""
+        resp, _ = self._run_callback_as_teacher(
+            ("clever:clever-teacher-001", "transient_legacy"))
+
         assert resp.status_code == 302
         assert "clever_login=success" in resp.location

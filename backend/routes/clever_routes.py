@@ -28,7 +28,12 @@ from backend.clever import (
     delete_clever_data,
 )
 from backend.accommodations import set_student_accommodation
-from backend.auth import load_clever_links, save_clever_link, resolve_clever_user_id
+from backend.auth import (
+    load_clever_links,
+    save_clever_link,
+    resolve_clever_user_id,
+    resolve_clever_user_id_or_create,
+)
 from backend.roster_sync import sync_roster_to_db as _shared_sync_roster_to_db
 from backend.supabase_client import get_supabase as _get_supabase_safe
 from backend.utils.errors import handle_route_errors
@@ -500,49 +505,27 @@ def clever_callback():
         # and only needed for the initial user fetch
     }
 
-    # Account merging: link Clever account to existing Supabase user if emails match.
-    # This lets teachers who already have a Graider account keep all their data
-    # when they switch to Clever SSO login.
+    # Resolve to a real Supabase UUID (link-or-create), failing OPEN to clever:{id}
+    # so a >1-match / outage never blocks a currently-working teacher.
     clever_id = clever_user["clever_id"]
     clever_email = clever_user.get("email", "")
-    existing_links = load_clever_links()
-    if clever_id not in existing_links and clever_email:
-        try:
-            sb = _get_supabase_safe()
-            if sb:
-                # Look up Supabase user by email — collect all matches to avoid
-                # silently merging when multiple accounts share an email.
-                res = list_all_users(sb)
-                matches = [
-                    u for u in res
-                    if getattr(u, 'email', None) and u.email.lower() == clever_email.lower()
-                ]
-                if len(matches) == 1:
-                    save_clever_link(clever_id, matches[0].id)
-                    logger.info(
-                        "Merged Clever user clever_id_hash=%s with existing account user_hash=%s email=%s",
-                        hashlib.sha256(str(clever_id).encode()).hexdigest()[:8],
-                        hashlib.sha256(str(matches[0].id).encode()).hexdigest()[:8],
-                        redact_email(clever_email),
-                    )
-                elif len(matches) > 1:
-                    logger.warning(
-                        "Multiple Supabase users match email=%s — skipping merge to avoid data conflict",
-                        redact_email(clever_email),
-                    )
-        except Exception as e:
-            logger.warning("Clever account merge check failed (non-fatal): %s", str(e))
+    resolved_id, outcome = resolve_clever_user_id_or_create(
+        clever_id, clever_email, clever_user.get("name"))
+    is_uuid = not str(resolved_id).startswith("clever:")
+    if is_uuid:
+        session["clever_user"]["user_id"] = resolved_id
+    logger.info("Clever teacher resolve: outcome=%s linked=%s", outcome, is_uuid)
 
     # Trigger BACKGROUND roster sync on login (Clever requires daily data updates;
     # login-triggered sync satisfies this requirement). Runs in a separate thread
-    # so the OAuth redirect returns immediately.
+    # so the OAuth redirect returns immediately. UUID-only: a legacy clever:{id}
+    # outcome must never start the DB roster sync.
     from backend.api_keys import resolve_clever_district_token
     district_token = resolve_clever_district_token(clever_user.get("district", "") or None)
-    teacher_id = resolve_clever_user_id(clever_id)
-    if district_token:
+    if district_token and is_uuid:
         thread = threading.Thread(
             target=_background_roster_sync,
-            args=(district_token, teacher_id),
+            args=(district_token, resolved_id),
             daemon=True,
         )
         thread.start()

@@ -96,7 +96,13 @@ SIS_CAPTURES = [
     # (except sb_err 796, Clever data-deletion Supabase cleanup) unchanged.
     # 2026-05-16: shifted 796 -> 813 by PR Task C/C1 (multi-row enumeration
     # block earlier in the file). Capture at 815 (except sb_err 813) unchanged.
-    ("backend/routes/clever_routes.py", 813),
+    # 2026-06-01: shifted 813 -> 798 by the Clever→UUID identity-parity branch
+    # Task 3 (clever_callback): the inline email-merge block (~24 lines) was
+    # replaced by a single resolve_clever_user_id_or_create call earlier in the
+    # file, net ~-15 lines above this pin. The Clever data-deletion Supabase
+    # cleanup `except sb_err` capture (the original meaning of this pin) is now
+    # at line 798. Capture itself unchanged.
+    ("backend/routes/clever_routes.py", 798),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
