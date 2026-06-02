@@ -773,6 +773,7 @@ def clever_delete_data():
                 result["legacy_cleanup"] = delete_clever_data(f"clever:{clever_id}")
             except Exception as e:
                 logger.warning("Legacy Clever cleanup failed (non-fatal): %s", type(e).__name__)
+                sentry_sdk.capture_exception(e)
                 result["legacy_cleanup_error"] = type(e).__name__
 
         # Also delete Supabase records created by Clever sync
