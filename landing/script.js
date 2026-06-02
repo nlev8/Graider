@@ -193,18 +193,12 @@ function handleMicrosoftAuth() {
 // School SSO: fetch the provider's authorize URL from the app API (CORS allows
 // graider.live) and redirect the browser to it — same flow the app login uses.
 function handleSchoolAuth(provider, label) {
-    fetch('https://app.graider.live/api/' + provider + '/login-url')
-        .then(function(resp) { return resp.json(); })
-        .then(function(data) {
-            if (data && data.url) {
-                window.location.href = data.url;
-            } else {
-                showFormError(label + ' login is not available right now.');
-            }
-        })
-        .catch(function() {
-            showFormError('Could not connect to ' + label + '. Please try again.');
-        });
+    // Top-level navigation (NOT a cross-origin fetch): the login-url endpoint
+    // sets the OAuth session cookie first-party for app.graider.live and 302s
+    // straight to the provider. A cross-origin fetch from graider.live would
+    // discard that cookie, dropping the OAuth state + the student->/join
+    // carve-out (which sent students to /student?classlink_error=not_provisioned).
+    window.location.href = 'https://app.graider.live/api/' + provider + '/login-url?redirect=1';
 }
 
 function handleCleverAuth() {

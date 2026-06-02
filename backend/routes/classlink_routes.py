@@ -309,6 +309,10 @@ def classlink_login_url():
     """Return ClassLink OAuth authorization URL with CSRF state token and nonce."""
     client_id, _, redirect_uri = _get_classlink_config()
     if not client_id:
+        # In redirect mode (top-level nav from the landing page) a JSON body
+        # would render as a raw page; bounce to a friendly error instead.
+        if request.args.get("redirect"):
+            return redirect("/?classlink_error=not_configured")
         return jsonify({"error": "ClassLink SSO is not configured"}), 400
 
     state = secrets.token_urlsafe(32)
@@ -325,7 +329,15 @@ def classlink_login_url():
         'state': state,
         'nonce': nonce,
     })
-    return jsonify({"url": f"{CLASSLINK_AUTH_URL}?{params}"})
+    auth_url = f"{CLASSLINK_AUTH_URL}?{params}"
+    # ?redirect=1 → 302 straight to ClassLink instead of returning JSON. Used by
+    # the cross-origin landing page (graider.live): a top-level navigation here
+    # sets the session cookie (oauth_state/nonce/initiated_by_us) first-party for
+    # app.graider.live — a cross-origin fetch would discard it, dropping the
+    # initiated_by_us marker and the student→/join carve-out.
+    if request.args.get("redirect"):
+        return redirect(auth_url)
+    return jsonify({"url": auth_url})
 
 
 # ── GET /api/classlink/callback ───────────────────────────────────────

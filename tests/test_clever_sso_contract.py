@@ -95,6 +95,29 @@ class TestLoginUrlContract:
         assert qs.get("response_type") == ["code"]
         assert "scope" in qs
 
+    def test_login_url_redirect_param_302s_to_provider(self):
+        """GET /api/clever/login-url?redirect=1 → 302 straight to the authorize
+        URL (cross-origin landing page initiates SSO via top-level nav so the
+        session cookie sets first-party). No param still returns JSON."""
+        app = _make_app()
+        fake_config = {
+            "client_id": "test-client-id", "client_secret": "s",
+            "redirect_uri": "https://app.graider.live/api/clever/callback",
+        }
+        authorize_url = ("https://clever.com/oauth/authorize?response_type=code"
+                         "&client_id=test-client-id&state=abc123")
+        with patch("backend.routes.clever_routes.get_clever_config",
+                   return_value=fake_config), \
+             patch("backend.routes.clever_routes.get_authorize_url",
+                   return_value=authorize_url):
+            with app.test_client() as client:
+                resp = client.get("/api/clever/login-url?redirect=1")
+        assert resp.status_code == 302
+        assert resp.headers["Location"] == authorize_url
+        # The point of redirect mode: the session cookie is set on THIS response
+        # (top-level nav, first-party) so oauth_state survives to the callback.
+        assert "session=" in resp.headers.get("Set-Cookie", "")
+
     def test_login_url_missing_config(self):
         """GET /api/clever/login-url returns 503 when Clever config absent."""
         app = _make_app()

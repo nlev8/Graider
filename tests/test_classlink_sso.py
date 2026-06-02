@@ -988,6 +988,22 @@ class TestClassLinkStateNonceHardening:
         data = resp.get_json()
         assert "nonce=" in data["url"]
 
+    def test_login_url_redirect_param_302s_to_classlink(self):
+        """/api/classlink/login-url?redirect=1 → 302 straight to ClassLink so the
+        cross-origin landing page can initiate via a top-level navigation (the
+        session cookie — oauth_state/nonce/initiated_by_us — then sets first-party
+        for app.graider.live; a cross-origin fetch would discard it). No param
+        still returns JSON."""
+        app = _make_app()
+        with app.test_client() as client:
+            resp = client.get("/api/classlink/login-url?redirect=1")
+        assert resp.status_code == 302
+        loc = resp.headers["Location"]
+        assert "state=" in loc and "nonce=" in loc and "client_id=" in loc
+        # The point of redirect mode: the session cookie (carrying state/nonce/
+        # initiated_by_us) is set on THIS response so it survives to the callback.
+        assert "session=" in resp.headers.get("Set-Cookie", "")
+
     def test_launchpad_initiated_with_unexpected_state_audit_logs(self):
         """If session somehow has expected_state but no initiated_by_us marker
         (session pollution / attacker probe), and the callback supplies a
