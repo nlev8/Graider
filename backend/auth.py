@@ -391,10 +391,13 @@ def init_auth(app):
             g.is_dev_shim = True
             return None
 
-        # Clever SSO session (cookie-based, set during OAuth callback)
+        # Clever SSO session (cookie-based, set during OAuth callback).
+        # Prefer the UUID resolved + stored at callback (clever_user['user_id']);
+        # fall back to the cheap resolver for pre-existing sessions.
         clever_user = session.get('clever_user') if hasattr(session, 'get') else None
         if clever_user and not has_bearer:
-            g.user_id = resolve_clever_user_id(clever_user['clever_id'])
+            g.user_id = clever_user.get('user_id') or resolve_clever_user_id(clever_user['clever_id'])
+            g.teacher_id = g.user_id
             g.user_email = clever_user.get('email', '')
             g.auth_source = 'clever'
             g.district_id = clever_user.get('district', '')

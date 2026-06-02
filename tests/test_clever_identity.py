@@ -155,3 +155,44 @@ def test_claim_rekeys_text_tables(monkeypatch):
 def test_claim_no_supabase_is_noop(monkeypatch):
     monkeypatch.setattr(auth, "_get_supabase", lambda: None)
     auth._claim_clever_text_data("c1", "uuid-1")   # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Task 4: check_auth reads session user_id + sets g.teacher_id
+# ---------------------------------------------------------------------------
+# check_auth is nested inside init_auth(app), so it is NOT directly callable.
+# Register it via init_auth and invoke the before_request hook (the pattern the
+# existing auth tests use). Use an /api/... path with FLASK_ENV=production and
+# no Authorization header so the Clever branch runs (not the dev-shim or
+# public-prefix skip).
+
+
+def test_check_auth_clever_prefers_session_user_id(monkeypatch):
+    from flask import Flask, g, session
+    monkeypatch.setenv("FLASK_ENV", "production")
+    app = Flask(__name__); app.secret_key = "t"
+    from backend.auth import init_auth
+    init_auth(app)
+    with app.test_request_context("/api/x"):
+        session["clever_user"] = {"clever_id": "c1", "email": "t@x",
+                                  "user_id": "uuid-1", "district": "d1"}
+        for fn in app.before_request_funcs.get(None, []):
+            fn()
+        assert g.user_id == "uuid-1"
+        assert g.teacher_id == "uuid-1"
+        assert g.auth_source == "clever"
+
+
+def test_check_auth_clever_falls_back_for_old_session(monkeypatch):
+    from flask import Flask, g, session
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setattr(auth, "resolve_clever_user_id", lambda cid: f"clever:{cid}")
+    app = Flask(__name__); app.secret_key = "t"
+    from backend.auth import init_auth
+    init_auth(app)
+    with app.test_request_context("/api/x"):
+        session["clever_user"] = {"clever_id": "c1", "email": "t@x", "district": "d1"}
+        for fn in app.before_request_funcs.get(None, []):
+            fn()
+        assert g.user_id == "clever:c1"
+        assert g.teacher_id == "clever:c1"
