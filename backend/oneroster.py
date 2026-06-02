@@ -204,6 +204,29 @@ class OneRosterClient:
                 enrollments_task, students_task, teachers_task
             )
 
+            # Fallback: the /students and /teachers convenience endpoints are
+            # optional in OneRoster, and some servers (e.g. ClassLink Roster
+            # Server) leave them empty while populating the canonical /users
+            # collection (each user carries a `role`). When either comes back
+            # empty, derive it from /users by role so rostering still works.
+            if not students or not teachers:
+                try:
+                    users = await self._get_paginated(
+                        client, "/users", "users", label="users"
+                    )
+                    if not students:
+                        students = [
+                            u for u in users
+                            if (u.get("role") or "").lower() == "student"
+                        ]
+                    if not teachers:
+                        teachers = [
+                            u for u in users
+                            if (u.get("role") or "").lower() == "teacher"
+                        ]
+                except Exception as e:
+                    logger.info("Users fallback fetch failed: %s", e)
+
             # Demographics are optional (some providers don't support them)
             demographics = []
             try:
