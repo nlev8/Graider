@@ -503,6 +503,42 @@ class TestFetchRoster:
         assert "/demographics" in paths_called
         assert len(roster["classes"]) == 1
 
+    def test_users_fallback_when_students_empty(self):
+        """Some Roster Servers (e.g. ClassLink) leave the /students and
+        /teachers convenience endpoints empty and only populate /users. When
+        either comes back empty, fetch_roster derives it from /users by role."""
+        from backend.oneroster import OneRosterClient
+        cli = OneRosterClient("https://x.example", "c", "s")
+
+        by_path = {
+            "/classes": [{"sourcedId": "c1"}],
+            "/enrollments": [{"sourcedId": "e1"}],
+            "/students": [],          # empty — the bug
+            "/teachers": [],          # empty too
+            "/demographics": [],
+            "/users": [
+                {"sourcedId": "u1", "role": "student"},
+                {"sourcedId": "u2", "role": "teacher"},
+                {"sourcedId": "u3", "role": "student"},
+            ],
+        }
+
+        async def fake_paginated(client, path, key, label=""):
+            return list(by_path.get(path, []))
+
+        async def fake_ensure(client):
+            cli._token = "t"; cli._token_expires = 999999999999
+
+        with patch.object(cli, "_get_paginated", fake_paginated), \
+             patch.object(cli, "_ensure_token", fake_ensure), \
+             patch("backend.oneroster.httpx.AsyncClient") as ac_mock:
+            ac_mock.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            ac_mock.return_value.__aexit__ = AsyncMock()
+            roster = asyncio.run(cli.fetch_roster())
+
+        assert [u["sourcedId"] for u in roster["students"]] == ["u1", "u3"]
+        assert [u["sourcedId"] for u in roster["teachers"]] == ["u2"]
+
     def test_all_classes_with_school_filter(self):
         from backend.oneroster import OneRosterClient
         cli = OneRosterClient("https://x.example", "c", "s")
