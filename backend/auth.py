@@ -161,6 +161,99 @@ def resolve_classlink_user_id(guid, email, name=None):
         return None
 
 
+def _claim_clever_text_data(clever_id, uuid):
+    """Re-key the teacher's TEXT-keyed rows from clever:{id} -> uuid. Called
+    ONLY on the create path (the UUID is brand-new, so a blind UPDATE cannot
+    collide with a pre-existing (teacher_id, data_key) PK). Best-effort,
+    non-fatal. NOTE: submissions has no teacher_id (it follows join_code), so
+    it is intentionally excluded."""
+    legacy = f"clever:{clever_id}"
+    try:
+        sb = _get_supabase()
+        if not sb:
+            return
+        for table in ("teacher_data", "published_assessments", "student_history"):
+            try:
+                sb.table(table).update({"teacher_id": uuid}).eq("teacher_id", legacy).execute()
+            except Exception as e:
+                logger.warning("Clever data-claim on %s failed (non-fatal): %s", table, type(e).__name__)
+    except Exception as e:
+        logger.warning("Clever data-claim failed (non-fatal): %s", type(e).__name__)
+        sentry_sdk.capture_exception(e)
+
+
+def resolve_clever_user_id_or_create(clever_id, email, name=None):
+    """Resolve a Clever id to a real Supabase Auth UUID (link-or-create), but
+    FAIL OPEN to the legacy clever:{id} namespace on any non-resolution. Unlike
+    resolve_classlink_user_id (which fails closed), Clever has live unlinked
+    users and clever:{id} is an isolated namespace, so falling back never blocks
+    login or merges into a wrong account. Returns (id, outcome) where outcome is
+    one of: 'linked' | 'matched' | 'created' | 'ambiguous_legacy' |
+    'transient_legacy' | 'create_failed_legacy'. UUID outcomes -> real UUID;
+    *_legacy outcomes -> f'clever:{clever_id}'. The 'created' path also re-keys
+    the teacher's TEXT-keyed data via _claim_clever_text_data."""
+    legacy = f"clever:{clever_id}"
+
+    linked = load_clever_links().get(clever_id)
+    if linked:
+        return linked, "linked"
+
+    email = (email or "").strip()
+    if not email:
+        logger.warning("Clever resolve: missing email; failing open to legacy")
+        return legacy, "transient_legacy"
+
+    name = name or {}
+    try:
+        sb = _get_supabase()
+        if not sb:
+            logger.warning("Clever resolve: no Supabase client; failing open to legacy")
+            return legacy, "transient_legacy"
+
+        def _email_matches():
+            return [
+                u for u in list_all_users(sb)
+                if getattr(u, 'email', None) and u.email.lower() == email.lower()
+            ]
+
+        matches = _email_matches()
+        if len(matches) == 1:
+            save_clever_link(clever_id, matches[0].id)
+            return matches[0].id, "matched"
+        if len(matches) > 1:
+            logger.warning("Clever resolve: %d users match email — failing open to legacy", len(matches))
+            return legacy, "ambiguous_legacy"
+
+        try:
+            res = sb.auth.admin.create_user({
+                "email": email,
+                "email_confirm": True,
+                "password": secrets.token_urlsafe(32),
+                "user_metadata": {
+                    "approved": True,
+                    "first_name": name.get('first', ''),
+                    "last_name": name.get('last', ''),
+                    "auth_source": "clever",
+                },
+            })
+            new_id = res.user.id
+            save_clever_link(clever_id, new_id)
+            _claim_clever_text_data(clever_id, new_id)
+            return new_id, "created"
+        except Exception as create_err:
+            logger.warning("Clever resolve: create_user failed (%s); re-resolving by email",
+                           type(create_err).__name__)
+            recheck = _email_matches()
+            if len(recheck) == 1:
+                save_clever_link(clever_id, recheck[0].id)
+                return recheck[0].id, "matched"
+            return legacy, "create_failed_legacy"
+    except Exception as e:
+        logger.warning("Clever resolve failed (non-fatal): %s", type(e).__name__)
+        sentry_sdk.capture_exception(e)
+        return legacy, "transient_legacy"
+
+
 # Routes that don't require authentication
 # SECURITY: Be explicit — only list endpoints that truly need to be public.
 # Student dashboard/content endpoints use X-Student-Token (not JWT) for their own auth.
