@@ -338,27 +338,42 @@ class TestApplyAccommodations:
 
 
 class TestDeleteData:
-    def test_non_clever_user_returns_403(self):
-        # Build an app whose before_request sets g.user_id to a Supabase
-        # UUID (account is linked, so teacher_id no longer carries the
-        # "clever:" prefix). Production's `if not teacher_id.startswith(
-        # "clever:")` then short-circuits the deletion with 403.
-        from backend.routes.clever_routes import clever_bp
+    def test_linked_clever_uuid_user_can_delete_and_cleans_legacy(self, monkeypatch):
+        # A UUID-LINKED Clever teacher (g.teacher_id is a UUID, session IS a
+        # Clever session) must be allowed to delete (200, not 403) AND the
+        # endpoint must call delete_clever_data for BOTH the UUID and the
+        # legacy clever:{clever_id} (so old roster files are cleaned).
+        import backend.routes.clever_routes as cr
         from flask import g, session as flask_session
+        calls = []
+        monkeypatch.setattr(cr, "delete_clever_data",
+                            lambda tid: (calls.append(tid), {"roster_files": 0})[1])
+        monkeypatch.setattr(cr, "_get_supabase_safe", lambda: None)  # skip Supabase leg
+        app = Flask(__name__)
+        app.secret_key = "test-secret-key"
+        app.register_blueprint(cr.clever_bp)
+
+        @app.before_request
+        def _linked_uid():
+            if flask_session.get("clever_user"):
+                g.user_id = "supabase-uuid-1"  # Linked, no "clever:" prefix
+        with app.test_client() as client:
+            _logged_in_session(client)               # sets session['clever_user'] w/ clever_id
+            resp = client.post("/api/clever/delete-data")
+        assert resp.status_code == 200               # linked Clever user CAN delete
+        assert "supabase-uuid-1" in calls            # UUID-keyed cleanup
+        assert any(str(c).startswith("clever:") for c in calls)   # legacy cleanup too
+
+    def test_non_clever_session_returns_403(self):
+        # No clever_user in session → genuinely not a Clever user.
+        from backend.routes.clever_routes import clever_bp
         app = Flask(__name__)
         app.secret_key = "test-secret-key"
         app.register_blueprint(clever_bp)
-
-        @app.before_request
-        def _set_linked_uid():
-            if flask_session.get("clever_user"):
-                g.user_id = "supabase-uuid-1"  # Linked, no "clever:" prefix
-
         with app.test_client() as client:
-            _logged_in_session(client)
             resp = client.post("/api/clever/delete-data")
-        assert resp.status_code == 403
-        assert "Not a Clever user" in resp.get_json()["error"]
+        # @require_clever_session rejects (401/403) when there's no clever session.
+        assert resp.status_code in (401, 403)
 
     def test_happy_path_deletes_files_and_supabase_data(self):
         app = _make_app()

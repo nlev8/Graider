@@ -96,7 +96,28 @@ SIS_CAPTURES = [
     # (except sb_err 796, Clever data-deletion Supabase cleanup) unchanged.
     # 2026-05-16: shifted 796 -> 813 by PR Task C/C1 (multi-row enumeration
     # block earlier in the file). Capture at 815 (except sb_err 813) unchanged.
-    ("backend/routes/clever_routes.py", 813),
+    # 2026-06-01: shifted 813 -> 798 by the Clever→UUID identity-parity branch
+    # Task 3 (clever_callback): the inline email-merge block (~24 lines) was
+    # replaced by a single resolve_clever_user_id_or_create call earlier in the
+    # file, net ~-15 lines above this pin. Then shifted 798 -> 796 by the
+    # follow-up dead-import cleanup (commit 074cdde removed `save_clever_link`
+    # + `list_all_users` import lines, -2 above this pin). The Clever
+    # data-deletion Supabase cleanup `except sb_err` capture (the original
+    # meaning of this pin) is now at line 796. Capture itself unchanged.
+    # 2026-06-01 (Task 5): shifted 796 -> 809 by the delete-data gate change
+    # (id-shape-agnostic gate + legacy clever:{id} roster-file cleanup block,
+    # +13 lines inserted above this capture). Then shifted 809 -> 816 by the
+    # Task 5 review fix (I1/I3: expanded the legacy-cleanup comment to note it
+    # purges Supabase rows too + added result["legacy_cleanup_error"], +7 lines
+    # above this capture). Then shifted 816 -> 818 by the whole-branch review fix
+    # (added sentry_sdk.capture_exception(e) to the legacy-cleanup except, +1 line
+    # above this capture). Capture itself unchanged — still the
+    # `except sb_err: sentry_sdk.capture_exception(sb_err)` in clever_delete_data.
+    ("backend/routes/clever_routes.py", 818),
+    # 2026-06-01 (whole-branch review): NEW capture pinned — the legacy
+    # clever:{id} cleanup `except e` in clever_delete_data now captures to
+    # Sentry (FERPA right-to-delete observability guardrail). Capture at 776.
+    ("backend/routes/clever_routes.py", 776),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
