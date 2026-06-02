@@ -747,12 +747,25 @@ def clever_delete_data():
     This endpoint removes roster CSVs, period files, parent contacts,
     and accommodation data sourced from Clever.
     """
-    teacher_id = g.teacher_id
-    if not teacher_id.startswith("clever:"):
+    # @require_clever_session already guarantees a Clever session; gate on its
+    # presence (NOT the id prefix — UUID-linked Clever teachers have a non-
+    # 'clever:' teacher_id but are still Clever users entitled to delete).
+    if not g.get("clever_user"):
         return jsonify({"error": "Not a Clever user"}), 403
+    teacher_id = g.teacher_id
+    clever_id = g.clever_user.get("clever_id", "")
 
     try:
         result = delete_clever_data(teacher_id)
+        # FERPA: also clean any legacy clever:{id}-keyed local files written
+        # BEFORE this teacher was linked to a UUID (delete_clever_data keys
+        # files by teacher_id.replace(':','_'), so UUID-keyed deletion misses
+        # the old clever_{id} files). No-op when none exist.
+        if clever_id and not str(teacher_id).startswith("clever:"):
+            try:
+                result["legacy_cleanup"] = delete_clever_data(f"clever:{clever_id}")
+            except Exception as e:
+                logger.warning("Legacy Clever file cleanup failed (non-fatal): %s", type(e).__name__)
 
         # Also delete Supabase records created by Clever sync
         try:
