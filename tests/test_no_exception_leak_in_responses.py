@@ -35,6 +35,12 @@ _EXC = re.compile(r"str\(e\)|str\(exc\)|str\(err\)|\{e[}\[:!]|\{str\(e\)|\{exc[}
 # (a) a logging statement — the exception belongs here.
 _LOGGING = re.compile(r"^(?:_?logger|logging|log|current_app\.logger)\.")
 # (b) inline exception-content inspection for control flow — not a response.
+# NOTE: this exemption assumes the inspected value is used for control flow only
+# (e.g. `if "timeout" in str(e).lower()`), NOT returned. `jsonify({"error":
+# str(e).lower()})` would slip through — don't do that; lowercasing an exception
+# into a response is still a leak. Acceptable residual for a regex guard (the
+# pattern is unidiomatic and the exemption is required for the 503 network-error
+# detection in planner_routes).
 _INSPECT = re.compile(r"str\((?:e|exc|err)\)\.(?:lower|upper|find|startswith|split)|in str\((?:e|exc|err)\)|str\((?:e|exc|err)\)\s*==|==\s*str\((?:e|exc|err)\)")
 
 
