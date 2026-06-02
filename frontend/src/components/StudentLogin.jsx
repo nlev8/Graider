@@ -82,6 +82,11 @@ export default function StudentLogin({ onLogin }) {
         padding: "40px", maxWidth: "400px", width: "90%",
         border: "1px solid var(--glass-border)",
       }}>
+        <img
+          src={lightMode ? "/graider-brain-light.png" : "/graider-brain-dark.png"}
+          alt="Graider"
+          style={{ width: 72, height: 72, display: "block", margin: "0 auto 12px" }}
+        />
         <h1 style={{ color: "var(--text-primary)", fontSize: "1.5rem", fontWeight: 700, marginBottom: "8px", textAlign: "center" }}>
           Graider Student Portal
         </h1>
@@ -156,14 +161,25 @@ export default function StudentLogin({ onLogin }) {
           width: "100%", padding: "12px", borderRadius: "10px", marginBottom: "10px",
           background: "var(--input-bg)", border: "1px solid var(--input-border)",
           color: "var(--text-primary)", fontSize: "0.95rem", fontWeight: 600, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
         }}>
+          <svg width="20" height="20" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path d="M80 55c0-16.6-13.4-30-30-30-12.7 0-23.6 7.9-28 19C13.4 44 6 51.4 6 61c0 11 9 20 20 20h54c8.8 0 16-7.2 16-16 0-7.3-5-13.5-12-15.3C83.3 48 80 51.2 80 55z" fill="#2196F3"/>
+            <circle cx="50" cy="42" r="8" fill="white"/>
+            <path d="M38 62c0-6.6 5.4-12 12-12s12 5.4 12 12" stroke="white" strokeWidth="4" fill="none" strokeLinecap="round"/>
+          </svg>
           Sign in with ClassLink
         </button>
         <button type="button" onClick={() => { window.location.href = "/api/clever/login-url?redirect=1"; }} style={{
           width: "100%", padding: "12px", borderRadius: "10px",
           background: "var(--input-bg)", border: "1px solid var(--input-border)",
           color: "var(--text-primary)", fontSize: "0.95rem", fontWeight: 600, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
         }}>
+          <svg width="18" height="18" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" rx="14" fill="#4274F6"/>
+            <path d="M32.8 16.4C29.2 14.3 24.6 14.5 21.2 17C17.8 19.5 16.2 23.7 17 27.8C17.8 31.9 20.8 35.1 24.8 36.2C28.8 37.3 33 35.9 35.6 32.8" stroke="white" strokeWidth="4.5" strokeLinecap="round"/>
+          </svg>
           Sign in with Clever
         </button>
       </div>
