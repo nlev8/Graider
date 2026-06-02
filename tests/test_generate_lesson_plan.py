@@ -108,7 +108,8 @@ def test_lesson_plan_missing_key_returns_mock_fallback(client, headers):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["method"] == "Mock"
-    assert "Missing or placeholder API Key" in body["error"]
+    # Generic, non-leaking fallback message (no raw exception text to client).
+    assert body["error"] == "AI provider unavailable; showing fallback content"
     assert body["plan"]["days"]  # mock_plan has fallback days
 
 
@@ -122,7 +123,8 @@ def test_lesson_plan_ai_failure_returns_mock_fallback(client, headers):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["method"] == "Mock"
-    assert "upstream 503" in body["error"]
+    # Raw exception ("upstream 503") must not reach the client; generic message only.
+    assert body["error"] == "AI provider unavailable; showing fallback content"
 
 
 # ── Direct service-level tests (pin generate_lesson_plan_content contract) ──

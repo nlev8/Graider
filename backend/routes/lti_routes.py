@@ -126,7 +126,7 @@ def lti_launch():
         claims = validate_launch_jwt(id_token, platform_config)
     except ValueError as e:
         logger.warning("LTI launch JWT validation failed: %s", e)
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": "id_token validation failed"}), 400
 
     # Validate nonce (constant-time, issue #373)
     expected_nonce = session.get("lti_nonce")

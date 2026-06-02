@@ -503,7 +503,7 @@ def district_test_connection():
             return jsonify({"status": "connected"})
         except Exception as e:
             logger.warning("District OneRoster connection test failed: %s", str(e))
-            return jsonify({"error": f"Connection failed: {str(e)}"}), 502
+            return jsonify({"error": "Connection failed"}), 502
 
     return jsonify({"error": f"Unknown SIS type: {sis_type}"}), 400
 

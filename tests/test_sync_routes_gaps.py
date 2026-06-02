@@ -227,5 +227,9 @@ class TestSyncOneTeacherBranches:
         ):
             result = mod._sync_one_teacher(teacher)
         assert result["status"] == "failed"
-        assert "clever api dead" in result["error"]
+        # Generic, non-leaking error: the raw exception text ("clever api dead")
+        # must NOT reach the caller (Security/Error-Handling rubric level-8 [CAP]);
+        # detail is in the server log via logger.exception.
+        assert result["error"] == "sync failed"
+        assert "clever api dead" not in result["error"]
         assert "duration_s" in result

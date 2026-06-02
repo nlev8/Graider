@@ -88,7 +88,8 @@ def test_brainstorm_missing_key_returns_mock_fallback(client, headers):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["method"] == "Mock"  # wart: mock fallback at 200
-    assert "Missing or placeholder API Key" in body["error"]
+    # Generic, non-leaking fallback message (no raw exception text to client).
+    assert body["error"] == "AI provider unavailable; showing fallback content"
     assert len(body["ideas"]) == 3  # the 3 hardcoded fallback ideas
 
 
@@ -102,7 +103,8 @@ def test_brainstorm_ai_failure_returns_mock_fallback(client, headers):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["method"] == "Mock"
-    assert "upstream 500" in body["error"]
+    # Raw exception ("upstream 500") must not reach the client; generic message only.
+    assert body["error"] == "AI provider unavailable; showing fallback content"
     assert len(body["ideas"]) == 3
 
 

@@ -65,8 +65,11 @@ def test_assessment_missing_key_returns_500(client, headers):
                           json={"standards": ["SS.8.A.1.1"], "config": CONFIG,
                                 "assessmentConfig": ACFG}, headers=headers)
     assert resp.status_code == 500  # NO mock fallback — real 500
-    assert "Failed to generate assessment" in resp.get_json()["error"]
-    assert "Missing or placeholder API Key" in resp.get_json()["error"]
+    # Generic, non-leaking message: the raw exception ("Missing or placeholder
+    # API Key") must NOT reach the client.
+    err = resp.get_json()["error"]
+    assert err == "Failed to generate assessment"
+    assert "Missing or placeholder API Key" not in err
 
 
 def test_assessment_ai_failure_returns_500(client, headers):
@@ -78,7 +81,11 @@ def test_assessment_ai_failure_returns_500(client, headers):
                           json={"standards": ["SS.8.A.1.1"], "config": CONFIG,
                                 "assessmentConfig": ACFG}, headers=headers)
     assert resp.status_code == 500
-    assert "Failed to generate assessment: upstream 502" in resp.get_json()["error"]
+    # Generic, non-leaking message: the raw exception ("upstream 502") must NOT
+    # reach the client (Security/Error-Handling rubric level-8 [CAP]).
+    err = resp.get_json()["error"]
+    assert err == "Failed to generate assessment"
+    assert "upstream 502" not in err
 
 
 # ── Direct service-level tests (pin generate_assessment_content + usage-discard wart) ──

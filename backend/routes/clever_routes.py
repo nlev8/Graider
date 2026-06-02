@@ -735,7 +735,7 @@ def clever_apply_accommodations():
                 errors.append(f"Failed to save for {student_id}")
         except Exception as e:
             logger.error("Error applying accommodation for %s: %s",
-                         hashlib.sha256(str(student_id).encode()).hexdigest()[:8], str(e))
+                         hashlib.sha256(str(student_id).encode()).hexdigest()[:8], e)
             errors.append(f"Error for {student_id}")
 
     _clever_audit("clever_apply_accommodations",

@@ -380,7 +380,6 @@ def brainstorm_lesson_ideas():
         return jsonify(brainstorm_lesson_ideas_content(
             selected_standards=selected_standards, config=config, api_key=api_key))
     except Exception as e:
-        error_msg = str(e)
         _logger.exception("Brainstorm Error")
         # Fallback mock ideas
         mock_ideas = {
@@ -390,7 +389,7 @@ def brainstorm_lesson_ideas():
                 {"id": 3, "title": "Research Project", "approach": "Research", "brief": "Students investigate topics independently.", "hook": "Essential question", "key_activity": "Guided research", "assessment_type": "Presentation"},
             ]
         }
-        return jsonify({**mock_ideas, "error": error_msg, "method": "Mock"})
+        return jsonify({**mock_ideas, "error": "AI provider unavailable; showing fallback content", "method": "Mock"})
 
 
 @planner_bp.route('/api/generate-lesson-plan', methods=['POST'])
@@ -424,7 +423,6 @@ def generate_lesson_plan():
             generate_variations=generate_variations, reference_docs=reference_docs,
             api_key=api_key, openai_context=_get_openai_context()))
     except Exception as e:
-        error_msg = str(e)
         # Keep as warning (recoverable — falls back to mock) but add exc_info for traceback.
         _logger.warning("OpenAI API Error — falling back to Mock Mode", exc_info=True)
 
@@ -433,7 +431,7 @@ def generate_lesson_plan():
 
         mock_plan = {
             "title": f"{config.get('title', 'Unit Plan')} ({content_type} - Mock)",
-            "overview": f"GENERATED IN MOCK MODE. Error: {error_msg}",
+            "overview": "GENERATED IN MOCK MODE.",
             "days": [],
             "unit_assessment": "Mock Assessment"
         }
@@ -463,7 +461,7 @@ def generate_lesson_plan():
                 } for i in range(int(config.get('duration', 5)))
             ]
 
-        return jsonify({"plan": mock_plan, "method": "Mock", "error": error_msg})
+        return jsonify({"plan": mock_plan, "method": "Mock", "error": "AI provider unavailable; showing fallback content"})
 
 
 @planner_bp.route('/api/generate-assignment-from-lesson', methods=['POST'])
@@ -504,11 +502,11 @@ def generate_assignment_from_lesson():
             content_only=content_only, config_standards=config_standards,
             reference_docs=reference_docs, api_key=api_key, openai_context=_get_openai_context()))
     except Exception as e:
-        error_msg = str(e)
         _logger.exception("Assignment Generation Error")
 
-        # Detect network-blocked AI provider
-        error_lower = error_msg.lower()
+        # Detect network-blocked AI provider (inspect the exception text inline —
+        # never store it in a variable that could flow into a response).
+        error_lower = str(e).lower()
         if any(kw in error_lower for kw in ['connection', 'timeout', 'unreachable', 'refused', 'apiconnectionerror', 'connecttimeout', 'name resolution']):
             return jsonify({
                 "error": "Unable to connect to the AI provider. This may be due to network restrictions on your school's network. "
@@ -542,10 +540,10 @@ def generate_assignment_from_lesson():
                     ]
                 }
             ],
-            "error": error_msg,
+            "error": "AI provider unavailable; showing fallback content",
             "method": "Mock"
         }
-        return jsonify({"assignment": mock_assignment, "method": "Mock", "error": error_msg})
+        return jsonify({"assignment": mock_assignment, "method": "Mock", "error": "AI provider unavailable; showing fallback content"})
 
 
 @planner_bp.route('/api/export-lesson-plan', methods=['POST'])
@@ -1408,9 +1406,8 @@ def generate_assessment():
             content_only=content_only, content_sources=data.get('contentSources', []),
             api_key=api_key, openai_context=_get_openai_context()))
     except Exception as e:
-        error_msg = str(e)
         _logger.exception("Assessment Generation Error")
-        return jsonify({"error": f"Failed to generate assessment: {error_msg}"}), 500
+        return jsonify({"error": "Failed to generate assessment"}), 500
 
 
 @planner_bp.route('/api/export-assessment', methods=['POST'])
@@ -1935,7 +1932,7 @@ def generate_study_guide():
         return jsonify({"error": "Failed to parse study guide. Please try again."}), 500
     except Exception as e:
         _logger.exception("Study guide generation failed")
-        return jsonify({"error": f"Generation failed: {str(e)[:200]}"}), 500
+        return jsonify({"error": "Generation failed"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1984,7 +1981,7 @@ def export_study_guide():
 
     except Exception as e:
         _logger.exception("Study guide export failed")
-        return jsonify({"error": f"Export failed: {str(e)[:200]}"}), 500
+        return jsonify({"error": "Export failed"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2028,7 +2025,7 @@ def generate_flashcards():
         return jsonify({"error": "Failed to parse flashcards. Please try again."}), 500
     except Exception as e:
         _logger.exception("Flashcard generation failed")
-        return jsonify({"error": "Generation failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Generation failed"}), 500
 
 
 @planner_bp.route('/api/export-flashcards', methods=['POST'])
@@ -2062,7 +2059,7 @@ def export_flashcards():
 
     except Exception as e:
         _logger.exception("Flashcard export failed")
-        return jsonify({"error": "Export failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Export failed"}), 500
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2106,7 +2103,7 @@ def generate_slides():
         return jsonify({"error": "Failed to parse slide content. Please try again."}), 500
     except Exception as e:
         _logger.exception("Slide generation failed")
-        return jsonify({"error": "Generation failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Generation failed"}), 500
 
 
 @planner_bp.route('/api/export-slides', methods=['POST'])
@@ -2151,4 +2148,4 @@ def export_slides():
 
     except Exception as e:
         _logger.exception("Slide export failed")
-        return jsonify({"error": "Export failed: " + str(e)[:200]}), 500
+        return jsonify({"error": "Export failed"}), 500

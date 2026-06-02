@@ -97,7 +97,8 @@ def test_assignment_missing_key_returns_mock_fallback(client, headers):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["method"] == "Mock"
-    assert "Missing or placeholder API Key" in body["error"]
+    # Generic, non-leaking fallback message (no raw exception text to client).
+    assert body["error"] == "AI provider unavailable; showing fallback content"
     assert body["assignment"]["sections"]  # mock has sections
 
 
@@ -111,7 +112,8 @@ def test_assignment_ai_failure_returns_mock_fallback(client, headers):
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["method"] == "Mock"
-    assert "model overloaded" in body["error"]
+    # Raw exception ("model overloaded") must not reach the client; generic message only.
+    assert body["error"] == "AI provider unavailable; showing fallback content"
 
 
 def test_assignment_network_error_returns_503(client, headers):

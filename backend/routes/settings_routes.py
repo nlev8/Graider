@@ -1586,8 +1586,8 @@ def _run_focus_import(creds_path=None):
 
     except Exception as e:
         _focus_import_state["status"] = "failed"
-        sentry_sdk.capture_exception(e)
-        _focus_import_state["error"] = str(e)
+        sentry_sdk.capture_exception(e)  # full exception detail to Sentry, not to the client
+        _focus_import_state["error"] = "Import failed"
 
 
 def _process_focus_import(import_data):
@@ -1870,7 +1870,7 @@ def _save_parent_contacts(contacts, teacher_id=None):
                     continue
                 result["supabase_ok"] = False
                 _logger.warning("Failed to save parent contacts to Supabase for teacher %s after retry: %s. "
-                               "File write succeeded — data is preserved locally.", teacher_id, str(e))
+                               "File write succeeded — data is preserved locally.", teacher_id, e)
     return result
 
 
