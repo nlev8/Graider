@@ -111,7 +111,49 @@ def test_no_supabase_fails_open(monkeypatch):
 def test_missing_email_fails_open(monkeypatch):
     _patch(monkeypatch)
     assert auth.resolve_clever_user_id_or_create("c1", "") == ("clever:c1", "transient_legacy")
+
+
+def test_create_race_reresolves_to_matched(monkeypatch):
+    # create_user raises, but a parallel login already created the user;
+    # the re-resolve finds exactly 1 → 'matched' (links to the racer's UUID).
+    saved = {}
+    seq = [[], [_U("uuid-race", "t@x")]]   # 1st match-check empty, 2nd finds the racer
+    monkeypatch.setattr(auth, "load_clever_links", lambda: {})
+    monkeypatch.setattr(auth, "save_clever_link", lambda c, u: saved.__setitem__(c, u))
+    monkeypatch.setattr(auth, "_claim_clever_text_data", lambda c, u: None)
+    monkeypatch.setattr(auth, "list_all_users", lambda s: seq.pop(0))
+
+    class _Admin:
+        def create_user(self, payload): raise RuntimeError("duplicate")
+    sb = type("SB", (), {"auth": type("A", (), {"admin": _Admin()})()})()
+    monkeypatch.setattr(auth, "_get_supabase", lambda: sb)
+    assert auth.resolve_clever_user_id_or_create("c1", "t@x") == ("uuid-race", "matched")
+    assert saved == {"c1": "uuid-race"}
+
+
+def test_create_failed_no_race_fails_open(monkeypatch):
+    # create_user raises AND re-resolve finds nothing → fail open (NOT blocked).
+    monkeypatch.setattr(auth, "load_clever_links", lambda: {})
+    monkeypatch.setattr(auth, "save_clever_link", lambda c, u: None)
+    monkeypatch.setattr(auth, "_claim_clever_text_data", lambda c, u: None)
+    monkeypatch.setattr(auth, "list_all_users", lambda s: [])   # always empty
+
+    class _Admin:
+        def create_user(self, payload): raise RuntimeError("boom")
+    sb = type("SB", (), {"auth": type("A", (), {"admin": _Admin()})()})()
+    monkeypatch.setattr(auth, "_get_supabase", lambda: sb)
+    assert auth.resolve_clever_user_id_or_create("c1", "t@x") == ("clever:c1", "create_failed_legacy")
+
+
+def test_all_legacy_outcomes_return_non_none_id(monkeypatch):
+    # Fail-open contract: callers branch on `not id.startswith("clever:")`,
+    # so the id must NEVER be None for any outcome.
+    _patch(monkeypatch, sb=None)
+    rid, _outcome = auth.resolve_clever_user_id_or_create("c1", "t@x")
+    assert rid is not None and rid.startswith("clever:")
 ```
+
+(All six outcomes are now pinned: `linked`, `matched`, `created`, `ambiguous_legacy`, `transient_legacy` (no-supabase + missing-email), `create_failed_legacy`, plus the create-race success path and the non-None fail-open contract.)
 
 - [ ] **Step 2: Run → FAIL**
 
@@ -408,25 +450,52 @@ git commit -m "feat(clever): check_auth reads session user_id + sets g.teacher_i
 
 ---
 
-### Task 5: Delete-data gate id-shape-agnostic
+### Task 5: Delete-data gate id-shape-agnostic + legacy-file cleanup (FERPA)
 
 **Files:**
-- Modify: `backend/routes/clever_routes.py` (`clever_delete_data`, ~line 770)
-- Test: `tests/test_clever_callback.py` (or the delete test file — grep `clever_delete` in tests/)
+- Modify: `backend/routes/clever_routes.py` (`clever_delete_data`, ~line 762-790)
+- Test: **`tests/test_clever_routes_gaps.py`** (`TestDeleteData`) — this file **pins the bug** and MUST be updated (Codex review).
 
-- [ ] **Step 1: Write the failing test** — drive `DELETE /api/clever/delete-data` with a Clever session whose resolved `g.teacher_id` is a **UUID** (set `session['clever_user'] = {'clever_id':'c1','user_id':'uuid-1', ...}`), and assert it does NOT return 403. Then drive with no clever session → 403. READ the existing delete-data test (grep `delete-data` / `clever_delete` in `tests/`) and reuse its harness.
+> **CROSS-CUTTING (Codex finding):** `tests/test_clever_routes_gaps.py::TestDeleteData::test_non_clever_user_returns_403` currently asserts a **UUID-linked Clever user gets 403** — it pins the *bug* as correct behavior. The fix flips that, so this test MUST be rewritten, not just added to. (This is the "existing test pins old behavior" trap from `workflow.md`.)
 
-- [ ] **Step 2: Run → FAIL** (current gate `if not teacher_id.startswith("clever:")` 403s the UUID-linked teacher).
-
-- [ ] **Step 3: Implement** — in `clever_delete_data`, replace:
+- [ ] **Step 1: Rewrite the bug-pinning test + add the cleanup test** in `tests/test_clever_routes_gaps.py` (`TestDeleteData`). Replace `test_non_clever_user_returns_403` (which wrongly 403s a linked Clever user) with the correct semantics, and add a legacy-file-cleanup assertion. Reuse the file's existing `_make_app` / `_logged_in_session` / Supabase-mock helpers:
 
 ```python
-    teacher_id = g.teacher_id
-    if not teacher_id.startswith("clever:"):
-        return jsonify({"error": "Not a Clever user"}), 403
+    def test_linked_clever_uuid_user_can_delete(self):
+        # A UUID-LINKED Clever teacher (g.teacher_id is a UUID, but the session
+        # IS a Clever session) must be allowed to delete — NOT 403.
+        from backend.routes.clever_routes import clever_bp
+        from flask import g, session as flask_session
+        app = Flask(__name__); app.secret_key = "t"
+        app.register_blueprint(clever_bp)
+
+        @app.before_request
+        def _linked_uid():
+            if flask_session.get("clever_user"):
+                g.user_id = "supabase-uuid-1"
+                g.teacher_id = "supabase-uuid-1"
+                g.clever_user = flask_session["clever_user"]
+        with app.test_client() as client:
+            _logged_in_session(client)
+            resp = client.post("/api/clever/delete-data")
+        assert resp.status_code != 403          # linked Clever user CAN delete
+
+    def test_non_clever_session_returns_403(self):
+        # No clever_user in session → genuinely not a Clever user → 403.
+        from backend.routes.clever_routes import clever_bp
+        app = Flask(__name__); app.secret_key = "t"
+        app.register_blueprint(clever_bp)
+        with app.test_client() as client:
+            resp = client.post("/api/clever/delete-data")
+        # @require_clever_session rejects (401/403) when there's no clever session.
+        assert resp.status_code in (401, 403)
 ```
 
-with:
+(If `@require_clever_session` returns 401 for no-session, the second test asserts that; the load-bearing change is that a **linked UUID** Clever session is no longer 403'd.)
+
+- [ ] **Step 2: Run → FAIL** — `pytest tests/test_clever_routes_gaps.py::TestDeleteData -v` (the new linked-user test fails: current gate 403s it).
+
+- [ ] **Step 3: Implement** — in `clever_delete_data`, replace the gate AND add legacy-file cleanup:
 
 ```python
     # @require_clever_session already guarantees a Clever session; gate on its
@@ -435,15 +504,30 @@ with:
     if not g.get("clever_user"):
         return jsonify({"error": "Not a Clever user"}), 403
     teacher_id = g.teacher_id
+    clever_id = g.clever_user.get("clever_id", "")
+
+    try:
+        result = delete_clever_data(teacher_id)
+        # FERPA: also clean any legacy clever:{id}-keyed local files written
+        # BEFORE this teacher was linked to a UUID (delete_clever_data keys
+        # files by teacher_id.replace(':','_'), so UUID-keyed deletion misses
+        # the old clever_{id} files). No-op when none exist.
+        if clever_id and not str(teacher_id).startswith("clever:"):
+            try:
+                result["legacy_cleanup"] = delete_clever_data(f"clever:{clever_id}")
+            except Exception as e:
+                logger.warning("Legacy Clever file cleanup failed (non-fatal): %s", type(e).__name__)
 ```
 
-- [ ] **Step 4: Run → PASS** — the new test + `pytest tests/ -k "clever and delete" -q`.
+(Keep the existing Supabase-deletion block below unchanged — it already deletes by `teacher_id` (the UUID), which is correct, since `_claim_clever_text_data` already migrated the TEXT-keyed Supabase rows on create.)
+
+- [ ] **Step 4: Run → PASS** — `pytest tests/test_clever_routes_gaps.py -v` + `pytest tests/ -k "clever and delete" -q`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/routes/clever_routes.py tests/test_clever_callback.py
-git commit -m "fix(clever): delete-data gate id-shape-agnostic (UUID-linked teachers can delete) [Class B]"
+git add backend/routes/clever_routes.py tests/test_clever_routes_gaps.py
+git commit -m "fix(clever): delete-data gate id-shape-agnostic + legacy-file cleanup; fix bug-pinning test [Class B]"
 ```
 
 ---
@@ -487,7 +571,8 @@ git commit -m "feat(clever): /api/clever/session returns resolved user_id [Class
 
 - [ ] Full suite: `source venv/bin/activate && pytest -q --ignore=tests/load` — green (or any failure *proven* pre-existing via `git checkout main -- <file>` per workflow.md Hard Rule #1).
 - [ ] Cross-cutting grep: `for f in backend/auth.py backend/routes/clever_routes.py; do grep -rln "$f" tests/; done` — run each surfaced test (esp. `tests/test_sis_alerting.py` if line numbers shifted in clever_routes — pin scan per Hard Rule #3).
-- [ ] **Clever compliance non-regression:** `pytest tests/test_clever_compliance.py tests/test_clever_callback.py -q` (38+ green).
+- [ ] **Clever compliance non-regression:** `pytest tests/test_clever_compliance.py tests/test_clever_callback.py tests/test_clever_routes_gaps.py -q` (Task 5 rewrote a `TestDeleteData` case — confirm the whole file is green).
+- [ ] **Periodic-sync confirmation (Codex finding):** `backend/routes/sync_routes.py:218-228` reverse-resolves UUID→clever_id via `load_clever_links()`. A `created`/`matched` teacher now HAS a link, so the daily cron resolves them (previously 0-match unlinked teachers were skipped with "Could not resolve Clever ID"). Run `pytest tests/ -k "sync" -q` to confirm no regression; this is a net improvement, not a break.
 - [ ] **ClassLink non-regression** (shared `auth.py`): `pytest tests/test_classlink_identity.py tests/test_classlink_sso.py -q`.
 - [ ] `ruff check backend/auth.py backend/routes/clever_routes.py`; `bandit -q -r` the same.
 - [ ] No circular import: `python -c "import backend.app" && echo OK`.
