@@ -1066,3 +1066,125 @@ The deferred judgment step after completing the **CLI/email facade split** — t
 
 ## Honest note
 A genuine, earned full step to the program's first 9.5. The CLI/email split took the grading facade from a 658-LOC god-file to a 332-LOC pure-shim layer with **zero inline logic**, completing the exact named co-requisite the 9.4 re-score recorded as the sole remaining blocker — `run_grading` moved AST byte-identical verbatim, the rest byte-identical modulo mechanical print→logger, all behind the green golden + prompt-snapshot nets. Two independent models (Claude first-hand, Codex via shell) verified the live state; Gemini corroborated. Reconciled 9.5 with unanimous agreement and the same next lever (provider adapters). Overall ~8.4 → ~8.5. This dated section closes the Wave-8 path-to-9.5 (PRs #568–#579).
+
+---
+
+# 2026-06-02 ADVERSARIAL Re-Score — correcting incremental-anchoring optimism (HEAD `main`)
+
+**Why this re-score exists.** The user asked for "real, shrewd analysis … honest ratings,
+not optimistic." Every re-score since 2026-05-16 was *incremental* — each measured one
+wave's delta against the immediately-prior baseline and granted half/full-step credit for
+the named lever closed that wave. That method is correct for crediting work but it
+**ratchets**: it never re-measured the absolute LOC/complexity distribution of the WHOLE
+codebase, so unnamed large files and remaining god-functions never docked the score. This
+section is a fresh **absolute, adversarial** pass — each model instructed to hunt for
+evidence that LOWERS each score, scoring from scratch, not relative to the prior wave.
+
+**Method.** Three independent legs, each verifying the live code with its own shell
+commands against the adversarial brief (`docs/superpowers/specs/_rescore_brief.md`):
+Codex (`codex exec --sandbox read-only`), a Claude general-purpose subagent, and
+controller first-hand verification. **Gemini failed-to-run** (HTTP 403 — the GCP billing
+block `Lightning dunning decision is deny` that persisted all session); per the established
+discipline (2026-05-09 / Slice-4 / Slice-5 precedents) a model that cannot produce an
+assessment is treated as failed-to-run, not failed-low, and reconciliation rests on the
+completed legs with the conservative-floor rule applied. Conservative floor: on a split the
+lower score wins unless a model presents strong disconfirming file:line evidence for the
+higher.
+
+| Dimension | Claimed (05-25) | Codex | Claude-sub | Controller | **Reconciled** |
+|---|--:|--:|--:|--:|--:|
+| Security | 8 | 7 | 7.0 | 7.5 | **7** |
+| Error Handling | 8 | 6.5 | 7.0 | 7.5 | **7** |
+| Code Quality | 9.5 | 6.5 | 6.5 | 7.5 | **6.5** |
+| Architecture | 8 | 7 | 6.5 | 7.5 | **7** |
+| Test Coverage | 8 | 6.5 | 6.5 | 6.75 | **6.5** |
+| Documentation | 8 | 6.5 | 7.5 | 7.5 | **7** |
+| Debugging/Observability | 8 | 7.5 | 7.0 | 7 | **7** |
+| Data Integrity | 9 | 8 | 7.5 | 8 | **7.5** |
+| Operational Safety | 9 | 7.5 | 6.5 | 7 | **7** |
+| Clever Compliance | 10 | 8 | 9.0 | 9 | **9** |
+| **OVERALL** | **~8.5** | **7.2** | **7.0** | **~7.6** | **~7.2** |
+
+**Reconciled overall: 7.2** (down from the claimed 8.5). The three legs were tightly
+clustered (7.0 / 7.2 / 7.6) and **unanimous that Code Quality 9.5 was the single most
+inflated score.** The drop is not a regression in the code — nothing got worse — it is the
+correction of accumulated incremental-anchoring optimism.
+
+### The biggest correction: Code Quality 9.5 → 6.5 (−3.0)
+
+All three legs independently, with file:line evidence. The wave-by-wave narrative drove the
+*named* files down (PlannerTab, SettingsTab, App.jsx −33%, planner_routes, assignment_grader
+−88%) and credited each — but the absolute distribution shows complexity was **relocated,
+not eliminated**, and several large files were **never in the narrative at all**:
+
+- `frontend/src/App.jsx` **4,811 LOC** (still the largest source file; only partially cut)
+- `frontend/src/tabs/AnalyticsTab.jsx` **2,954** — never decomposed, never mentioned
+- `backend/services/assistant_tools_reports.py` **2,719** — never mentioned
+- `frontend/src/tabs/ResultsTab.jsx` **2,694** — never mentioned
+- `frontend/src/components/SettingsClassroom.jsx` **2,307** — spun out *as* a 2.3k sub-god-file
+- `backend/services/grading_pipeline.py` **2,233**, containing `grade_assignment` **~407 LOC**
+  (`:1075`) and `grade_multipass` **~363 LOC** (`:1572`) — god-functions survived the wave
+- `backend/services/assignment_post_processing.py` **2,164** — never mentioned
+- four backend route files still >2,000 LOC (`student_portal_routes` 2,302, `assistant_routes`
+  2,240, `settings_routes` 2,172, `planner_routes` 2,154)
+
+A 9.5/10 ("near-exemplary maintainability") is not defensible when the largest file is 4,811
+lines and single functions are ~400 lines. ~15 files exceed 1,600 LOC.
+
+### Other corrections (all three legs, file:line)
+
+- **Test Coverage 8 → 6.5.** CI floor is `--cov-fail-under=60` (`ci.yml:51`), measured ~63%
+  — mediocre for a ~35k-LOC services layer. "E2E" is a smoke gate: CI runs only
+  `health-check.spec.js` (`ci.yml:159`); the broader ~28 specs carry 111 silent
+  `test.skip(!joinCode, …)` masks that pass when setup fails. `tests/e2e` is `--ignore`d in
+  the backend run (`ci.yml:46`).
+- **Operational Safety 9 → 7.** Only **1 real DDL migration** (`0001_baseline` is a no-op
+  `pass` stamp; `0002` the dedup indexes) — the live schema is unversioned. No feature-flag
+  system anywhere. No post-deploy smoke gate against the deployed image (E2E runs pre-merge
+  on a locally-spawned backend — Hard Rule #8 says this). No off-Railway status page / uptime
+  monitor in-repo. Rollback = Railway auto-deploy of the previous merge. (Infra that *does*
+  exist: `/healthz`, Migrations-Smoke, Lockfile-Drift, a `runbook.md`.)
+- **Observability 8 → 7.** Zero metrics/OTel/Prometheus/statsd anywhere. Sentry disables
+  entirely when `SENTRY_DSN` is unset (`sentry.py:536`). Audit log is now dual-write
+  (file + Supabase `audit_log`) so it survives redeploy — but the DB insert swallows errors
+  (`utils/audit.py:176-178`) and writes the local file first.
+- **Architecture 8 → 7.** Zero dependency injection (no punq/dependency-injector/injector/
+  `@inject`/`Depends` in code or `requirements*.txt`); deps via `get_supabase()` service-
+  locator (88 sites) + ~291 in-function imports. Dual publish path consolidated only at the
+  **code boundary** (`submission_repository.py`); two physical table families persist.
+- **Security 7, Error Handling 7.** Auth model genuinely solid (allowlists, ES256→HS256,
+  request-ID, Redis rate limiter with bounded fallback) and `handle_route_errors` applied to
+  ~296/303 routes — but **raw `str(e)` still reaches clients** at multiple routes
+  (`oneroster_routes.py:368`, `district_routes.py:506`, `lti_routes.py:129`,
+  `planner_routes.py:1938`), and ~69 `except … : pass` swallow blocks remain among 644 broad
+  excepts. The old "error-leak" cap reason was never fully closed.
+- **Data Integrity 9 → 7.5.** The dedup partial-UNIQUE indexes are genuinely in `0002`
+  (verified) — but the live schema's integrity guarantees (NOT NULL/FK/cascade on the bulk of
+  tables) live in Supabase out-of-band, unversioned, since `0001` is a no-op stamp.
+- **Clever Compliance 10 → 9.** The strongest dimension, genuinely: multi-district token
+  write path + per-district resolver verified, duplicate-student dedup correct
+  (`roster_sync.py:163`), UUID parity (#617) clean. But an absolute 10 is not defensible —
+  the cross-teacher "one student = N rows" design and the fail-open-to-legacy `clever:{id}`
+  path (`auth.py:186`) plus a documented legacy-key cleanup gap (`clever_routes.py:779`) are
+  real residuals. (The earlier "10" was scoped to *Clever Library cert coverage*, not
+  absolute compliance — that scoping was itself an optimistic read of a 10/10.)
+
+### Methodological lesson (the real finding)
+
+The scores didn't inflate because any single re-score lied — each wave's *delta* credit was
+defensible in isolation. They inflated because **incremental re-scoring anchored to the prior
+wave and never re-measured the whole**. Half-steps accumulated upward; nothing ever
+re-measured the absolute LOC/complexity floor, so unnamed god-files and surviving
+god-functions never pulled the number back. **Going forward: an absolute adversarial pass
+(score from scratch, hunt for the disconfirming evidence) every N waves, not only
+incremental deltas.** The honest current state is **~7.2**, and the largest real lever is
+unchanged — but it is now correctly priced: broad de-concentration across `App.jsx`,
+`AnalyticsTab.jsx`, `ResultsTab.jsx`, the 2k+ route files, and the surviving
+`grade_assignment`/`grade_multipass` god-functions, plus the absent DI and the unversioned
+schema. Code Quality is a 6.5, not a 9.5, until that breadth is actually closed.
+
+**Honest note.** Two independent legs (Codex + Claude subagent) plus controller first-hand
+verification, tightly clustered at 7.0–7.6, unanimous on the biggest-optimism call
+(Code Quality). Gemini failed-to-run (billing 403), faithfully reported, not counted. No
+code changed in this session's re-score — this section corrects the *measurement*, and
+supersedes the 2026-05-25 scorecard as the current honest baseline.
