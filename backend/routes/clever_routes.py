@@ -757,15 +757,22 @@ def clever_delete_data():
 
     try:
         result = delete_clever_data(teacher_id)
-        # FERPA: also clean any legacy clever:{id}-keyed local files written
-        # BEFORE this teacher was linked to a UUID (delete_clever_data keys
-        # files by teacher_id.replace(':','_'), so UUID-keyed deletion misses
-        # the old clever_{id} files). No-op when none exist.
+        # FERPA: also purge any legacy clever:{id}-keyed data written BEFORE this
+        # teacher was linked to a UUID. delete_clever_data -> delete_roster_data
+        # deletes roster CSVs AND the Supabase roster rows it keys by teacher_id
+        # (classes/students/student_sessions/published_content/student_submissions
+        # /class_students), so this second call closes the gap where pre-link
+        # rows keyed clever:{id} would otherwise survive a UUID-only delete
+        # (_claim_clever_text_data only re-keys teacher_data/published_assessments
+        # /student_history, and only on the create path). NOT covered here:
+        # legacy-keyed period or parent-contact files — pre-existing scope gap.
+        # No-op when no legacy data exists.
         if clever_id and not str(teacher_id).startswith("clever:"):
             try:
                 result["legacy_cleanup"] = delete_clever_data(f"clever:{clever_id}")
             except Exception as e:
-                logger.warning("Legacy Clever file cleanup failed (non-fatal): %s", type(e).__name__)
+                logger.warning("Legacy Clever cleanup failed (non-fatal): %s", type(e).__name__)
+                result["legacy_cleanup_error"] = type(e).__name__
 
         # Also delete Supabase records created by Clever sync
         try:

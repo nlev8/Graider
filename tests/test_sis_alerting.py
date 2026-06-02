@@ -106,9 +106,12 @@ SIS_CAPTURES = [
     # meaning of this pin) is now at line 796. Capture itself unchanged.
     # 2026-06-01 (Task 5): shifted 796 -> 809 by the delete-data gate change
     # (id-shape-agnostic gate + legacy clever:{id} roster-file cleanup block,
-    # +13 lines inserted above this capture). Capture itself unchanged — still
-    # the `except sb_err: sentry_sdk.capture_exception(sb_err)` in clever_delete_data.
-    ("backend/routes/clever_routes.py", 809),
+    # +13 lines inserted above this capture). Then shifted 809 -> 816 by the
+    # Task 5 review fix (I1/I3: expanded the legacy-cleanup comment to note it
+    # purges Supabase rows too + added result["legacy_cleanup_error"], +7 lines
+    # above this capture). Capture itself unchanged — still the
+    # `except sb_err: sentry_sdk.capture_exception(sb_err)` in clever_delete_data.
+    ("backend/routes/clever_routes.py", 816),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
