@@ -334,9 +334,9 @@ git commit -m "feat(clever): _claim_clever_text_data — re-key TEXT tables on c
 
 - [ ] **Step 1: Write the failing test**
 
-Add a test that drives the teacher callback with a stubbed `resolve_clever_user_id_or_create` and asserts: (a) on a UUID outcome, `session['clever_user']['user_id']` is set and `_background_roster_sync` is started with the UUID; (b) on a legacy outcome, `user_id` is NOT set and roster sync is NOT started. Mirror the existing callback test's monkeypatching (it already stubs the Clever token exchange + user fetch). Concretely, patch `clever_routes.resolve_clever_user_id_or_create` to return `("uuid-7", "created")` then assert; and `("clever:c1", "ambiguous_legacy")` then assert no sync. Capture sync starts by monkeypatching `clever_routes._background_roster_sync` and `threading.Thread` (or assert on a recorded call list).
+Add a test that drives the teacher callback with a stubbed `resolve_clever_user_id_or_create` and asserts: (a) on a **created** UUID outcome `("uuid-7", "created")` → `session['clever_user']['user_id']` is set and `_background_roster_sync` is started with the UUID; (b) on an **already-linked** UUID outcome `("uuid-existing", "linked")` → same (user_id set + sync starts — proves UUID gating is on id-shape, not on a specific outcome string; Codex finding); (c) on a **legacy** outcome `("clever:c1", "ambiguous_legacy")` → `user_id` is NOT set and roster sync is NOT started. Mirror the existing callback test's monkeypatching (it already stubs the Clever token exchange + user fetch). Capture sync starts by monkeypatching `clever_routes._background_roster_sync` and `threading.Thread` (or assert on a recorded call list).
 
-READ the existing `tests/test_clever_callback.py` and reuse its fixtures; the load-bearing assertions are the two above.
+READ the existing `tests/test_clever_callback.py` and reuse its fixtures; the load-bearing assertions are the three above.
 
 - [ ] **Step 2: Run → FAIL** (callback still calls the old merge/`resolve_clever_user_id` path).
 
@@ -390,36 +390,52 @@ git commit -m "feat(clever): callback resolves to UUID; roster sync UUID-only [C
 - Modify: `backend/auth.py` (`check_auth` Clever branch, ~line 297-304)
 - Test: `tests/test_clever_identity.py`
 
-- [ ] **Step 1: Write the failing test** — append (drive `check_auth` via a Flask test request context; mirror how `tests/test_auth_*.py` builds a request context, or use the app fixture):
+- [ ] **Step 1: Write the failing test** — `check_auth` is **nested inside `init_auth(app)`** (auth.py ~line 265), so it is NOT directly callable as `auth.check_auth()` (Codex finding). Register it via `init_auth` and invoke the before_request hook (this is how the existing auth tests drive it — READ `tests/test_auth_*.py` to confirm the exact helper). A self-contained helper:
 
 ```python
+def _run_check_auth(app, path="/api/x"):
+    """Invoke the before_request auth hook registered by init_auth."""
+    with app.test_request_context(path):
+        for fn in app.before_request_funcs.get(None, []):
+            rv = fn()
+            if rv is not None:
+                return rv
+        from flask import g
+        return g
+
+
 def test_check_auth_clever_prefers_session_user_id(monkeypatch):
-    from flask import Flask, g
-    app = Flask(__name__)
-    monkeypatch.setattr(auth, "_get_jwks_client", lambda: None)
+    from flask import Flask, g, session
+    monkeypatch.setenv("FLASK_ENV", "production")
+    app = Flask(__name__); app.secret_key = "t"
+    from backend.auth import init_auth
+    init_auth(app)
     with app.test_request_context("/api/x"):
-        from flask import session
         session["clever_user"] = {"clever_id": "c1", "email": "t@x",
                                   "user_id": "uuid-1", "district": "d1"}
-        auth.check_auth()
+        for fn in app.before_request_funcs.get(None, []):
+            fn()
         assert g.user_id == "uuid-1"
         assert g.teacher_id == "uuid-1"
         assert g.auth_source == "clever"
 
 
 def test_check_auth_clever_falls_back_for_old_session(monkeypatch):
-    from flask import Flask, g
-    app = Flask(__name__)
+    from flask import Flask, g, session
+    monkeypatch.setenv("FLASK_ENV", "production")
     monkeypatch.setattr(auth, "resolve_clever_user_id", lambda cid: f"clever:{cid}")
+    app = Flask(__name__); app.secret_key = "t"
+    from backend.auth import init_auth
+    init_auth(app)
     with app.test_request_context("/api/x"):
-        from flask import session
         session["clever_user"] = {"clever_id": "c1", "email": "t@x", "district": "d1"}
-        auth.check_auth()
+        for fn in app.before_request_funcs.get(None, []):
+            fn()
         assert g.user_id == "clever:c1"
         assert g.teacher_id == "clever:c1"
 ```
 
-(If `check_auth` early-returns for non-`/api/` paths or dev-shim, use an `/api/...` path and ensure `FLASK_ENV` isn't `development`; set `monkeypatch.setenv("FLASK_ENV", "production")` and ensure no `Authorization` header.)
+(Use an `/api/...` path with `FLASK_ENV=production` and no `Authorization` header so the Clever branch — not the dev-shim or public-prefix skip — runs. If `init_auth` needs extra app config, mirror the existing auth test's app fixture.)
 
 - [ ] **Step 2: Run → FAIL** (current branch always calls `resolve_clever_user_id` and never sets `g.teacher_id`).
 
@@ -461,13 +477,19 @@ git commit -m "feat(clever): check_auth reads session user_id + sets g.teacher_i
 - [ ] **Step 1: Rewrite the bug-pinning test + add the cleanup test** in `tests/test_clever_routes_gaps.py` (`TestDeleteData`). Replace `test_non_clever_user_returns_403` (which wrongly 403s a linked Clever user) with the correct semantics, and add a legacy-file-cleanup assertion. Reuse the file's existing `_make_app` / `_logged_in_session` / Supabase-mock helpers:
 
 ```python
-    def test_linked_clever_uuid_user_can_delete(self):
-        # A UUID-LINKED Clever teacher (g.teacher_id is a UUID, but the session
-        # IS a Clever session) must be allowed to delete — NOT 403.
-        from backend.routes.clever_routes import clever_bp
+    def test_linked_clever_uuid_user_can_delete_and_cleans_legacy(self, monkeypatch):
+        # A UUID-LINKED Clever teacher (g.teacher_id is a UUID, session IS a
+        # Clever session) must be allowed to delete (200, not 403) AND the
+        # endpoint must call delete_clever_data for BOTH the UUID and the
+        # legacy clever:{clever_id} (so old roster files are cleaned).
+        import backend.routes.clever_routes as cr
         from flask import g, session as flask_session
+        calls = []
+        monkeypatch.setattr(cr, "delete_clever_data",
+                            lambda tid: (calls.append(tid), {"roster_files": 0})[1])
+        monkeypatch.setattr(cr, "_get_supabase_safe", lambda: None)  # skip Supabase leg
         app = Flask(__name__); app.secret_key = "t"
-        app.register_blueprint(clever_bp)
+        app.register_blueprint(cr.clever_bp)
 
         @app.before_request
         def _linked_uid():
@@ -476,12 +498,14 @@ git commit -m "feat(clever): check_auth reads session user_id + sets g.teacher_i
                 g.teacher_id = "supabase-uuid-1"
                 g.clever_user = flask_session["clever_user"]
         with app.test_client() as client:
-            _logged_in_session(client)
+            _logged_in_session(client)               # sets session['clever_user'] w/ clever_id
             resp = client.post("/api/clever/delete-data")
-        assert resp.status_code != 403          # linked Clever user CAN delete
+        assert resp.status_code == 200               # linked Clever user CAN delete
+        assert "supabase-uuid-1" in calls            # UUID-keyed cleanup
+        assert any(str(c).startswith("clever:") for c in calls)   # legacy cleanup too
 
     def test_non_clever_session_returns_403(self):
-        # No clever_user in session → genuinely not a Clever user → 403.
+        # No clever_user in session → genuinely not a Clever user.
         from backend.routes.clever_routes import clever_bp
         app = Flask(__name__); app.secret_key = "t"
         app.register_blueprint(clever_bp)
@@ -491,7 +515,9 @@ git commit -m "feat(clever): check_auth reads session user_id + sets g.teacher_i
         assert resp.status_code in (401, 403)
 ```
 
-(If `@require_clever_session` returns 401 for no-session, the second test asserts that; the load-bearing change is that a **linked UUID** Clever session is no longer 403'd.)
+(Ensure `_logged_in_session` seeds `session['clever_user']` with a `clever_id`; if it doesn't, set it in the test. The load-bearing changes: a **linked UUID** Clever session returns **200** (no longer 403), and **both** the UUID and the legacy `clever:{id}` are passed to `delete_clever_data`.)
+
+> **SCOPE NOTE (Codex finding):** `delete_clever_data` → `delete_roster_data` removes **roster files only**, not period or parent-contact files (`backend/clever.py:467,543` write those; pre-existing gap). Task 5's legacy cleanup therefore covers **legacy roster files**, not "all local Clever data" — do not over-claim in the commit message or tests. The broader local-cleanup completeness is a separate pre-existing follow-up.
 
 - [ ] **Step 2: Run → FAIL** — `pytest tests/test_clever_routes_gaps.py::TestDeleteData -v` (the new linked-user test fails: current gate 403s it).
 

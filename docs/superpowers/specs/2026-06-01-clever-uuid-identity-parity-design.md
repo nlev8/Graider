@@ -28,13 +28,15 @@ ClassLink fails **closed** (block → `account_conflict`) because it had **no li
 
 **Therefore Clever resolution is a best-effort _upgrade_, never a block.** The resolver returns a **structured outcome**, and only UUID outcomes trigger session persistence, the DB roster sync, and the data-claim. Legacy outcomes preserve today's exact behavior (works for TEXT features; still crashes on class-creation — *no worse than now*).
 
+> **Outcome names are canonical as written below** (`linked`/`matched`/`created`/`ambiguous_legacy`/`transient_legacy`/`create_failed_legacy`) — these MUST match the strings the resolver returns and the tests assert (the implementation plan is the source of truth).
+
 | Outcome | Trigger | Effect |
 |---|---|---|
-| `linked_uuid` | `clever_link` already exists | use linked UUID (unchanged) |
-| `matched_uuid` | exactly 1 email match | `save_clever_link` + use UUID (no claim — §4) |
-| `created_uuid` | 0 email matches | `create_user` (approved, `auth_source=clever`) + link + **claim** + use UUID |
+| `linked` | `clever_link` already exists | use linked UUID (unchanged) |
+| `matched` | exactly 1 email match | `save_clever_link` + use UUID (no claim — §4) |
+| `created` | 0 email matches | `create_user` (approved, `auth_source=clever`) + link + **claim** + use UUID |
 | `ambiguous_legacy` | >1 email match | fall back to `clever:{id}`; WARNING + Sentry; **no block** |
-| `transient_legacy` | no Supabase client / list outage | fall back to `clever:{id}`; **no block** |
+| `transient_legacy` | no Supabase / outage / missing email | fall back to `clever:{id}`; **no block** |
 | `create_failed_legacy` | `create_user` raised; race re-resolve found 0/>1 | fall back to `clever:{id}`; **no block** |
 
 Security note: fail-open is safe specifically because the legacy value is the teacher's *own* isolated `clever:{id}` namespace. We **never** auto-merge into a matched account on ambiguity (>1) — that path stays legacy.
