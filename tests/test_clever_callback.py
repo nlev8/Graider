@@ -156,9 +156,8 @@ class TestCleverCallback:
             patch("backend.routes.clever_routes.get_clever_user",
                   new=AsyncMock(return_value=_clever_user("teacher"))),
             patch("backend.routes.clever_routes.load_clever_links", return_value={}),
-            patch("backend.routes.clever_routes.save_clever_link"),
-            patch("backend.routes.clever_routes.resolve_clever_user_id",
-                  return_value="clever:clever-teacher-001"),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
+                  return_value=("clever:clever-teacher-001", "transient_legacy")),
             patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
             patch("backend.routes.clever_routes.os.getenv", return_value=None),
         ):
@@ -180,9 +179,8 @@ class TestCleverCallback:
             patch("backend.routes.clever_routes.get_clever_user",
                   new=AsyncMock(return_value=_clever_user("contact"))),
             patch("backend.routes.clever_routes.load_clever_links", return_value={}),
-            patch("backend.routes.clever_routes.save_clever_link"),
-            patch("backend.routes.clever_routes.resolve_clever_user_id",
-                  return_value="clever:clever-teacher-001"),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
+                  return_value=("clever:clever-teacher-001", "transient_legacy")),
             patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
             patch("backend.routes.clever_routes.os.getenv", return_value=None),
         ):
