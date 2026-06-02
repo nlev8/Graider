@@ -190,6 +190,31 @@ function handleMicrosoftAuth() {
     });
 }
 
+// School SSO: fetch the provider's authorize URL from the app API (CORS allows
+// graider.live) and redirect the browser to it — same flow the app login uses.
+function handleSchoolAuth(provider, label) {
+    fetch('https://app.graider.live/api/' + provider + '/login-url')
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data && data.url) {
+                window.location.href = data.url;
+            } else {
+                showFormError(label + ' login is not available right now.');
+            }
+        })
+        .catch(function() {
+            showFormError('Could not connect to ' + label + '. Please try again.');
+        });
+}
+
+function handleCleverAuth() {
+    handleSchoolAuth('clever', 'Clever');
+}
+
+function handleClassLinkAuth() {
+    handleSchoolAuth('classlink', 'ClassLink');
+}
+
 function handleSignup(event) {
     event.preventDefault();
     var firstName = document.getElementById('signup-first').value;
