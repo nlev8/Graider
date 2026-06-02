@@ -145,6 +145,27 @@ export default function StudentLogin({ onLogin }) {
             {loading ? "Logging in..." : "Enter Portal"}
           </button>
         </form>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "20px 0" }}>
+          <div style={{ flex: 1, height: "1px", background: "var(--glass-border)" }} />
+          <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>or sign in with your school account</span>
+          <div style={{ flex: 1, height: "1px", background: "var(--glass-border)" }} />
+        </div>
+
+        <button type="button" onClick={() => { window.location.href = "/api/classlink/login-url?redirect=1"; }} style={{
+          width: "100%", padding: "12px", borderRadius: "10px", marginBottom: "10px",
+          background: "var(--input-bg)", border: "1px solid var(--input-border)",
+          color: "var(--text-primary)", fontSize: "0.95rem", fontWeight: 600, cursor: "pointer",
+        }}>
+          Sign in with ClassLink
+        </button>
+        <button type="button" onClick={() => { window.location.href = "/api/clever/login-url?redirect=1"; }} style={{
+          width: "100%", padding: "12px", borderRadius: "10px",
+          background: "var(--input-bg)", border: "1px solid var(--input-border)",
+          color: "var(--text-primary)", fontSize: "0.95rem", fontWeight: 600, cursor: "pointer",
+        }}>
+          Sign in with Clever
+        </button>
       </div>
     </div>
   );
