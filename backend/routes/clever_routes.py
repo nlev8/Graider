@@ -384,6 +384,13 @@ def clever_login_url():
     state = secrets.token_urlsafe(32)
     session["clever_oauth_state"] = state
     url = get_authorize_url(state=state)
+    # ?redirect=1 → 302 straight to the provider instead of returning JSON.
+    # Used by the cross-origin landing page (graider.live): a top-level
+    # navigation to this endpoint sets the session cookie first-party for
+    # app.graider.live (a cross-origin fetch would discard it), so the OAuth
+    # state survives to the callback.
+    if request.args.get("redirect"):
+        return redirect(url)
     return jsonify({"url": url})
 
 
