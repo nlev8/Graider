@@ -24,7 +24,7 @@ A 0-match Clever teacher (Clever-first, no pre-existing Graider account by that 
 
 ## 2. Key decision: hybrid **fail-open**, not fail-closed
 
-ClassLink fails **closed** (block → `account_conflict`) because it had **no live users**. Clever has **live unlinked teachers working under `clever:{id}` today**. Blocking them on a `>1`-match or a Supabase outage would be an **availability regression**. And it is unnecessary: `clever:{id}` is an **isolated namespace** (not a wrong-account merge), so falling back to it is safe — it never merges into someone else's account.
+ClassLink fails **closed** (block → `account_conflict`) because it was a clean break with no users to protect. Clever, by contrast, is the established production integration (with email-merge logic and an unknown number of teachers already authenticating under `clever:{id}`). We do **not** assume a large live population — fail-open is the right call **regardless of the count (0, 1, or many)** because it is **strictly non-regressing at near-zero cost**: it can never lock out a teacher who can log in today (protecting even a single one), while fail-closed's only "benefit" — hard-blocking on a `>1`-match or a Supabase outage — is a *downside* for a live integration, not an upside. And falling back is safe: `clever:{id}` is an **isolated namespace** (not a wrong-account merge), so it never merges into someone else's account.
 
 **Therefore Clever resolution is a best-effort _upgrade_, never a block.** The resolver returns a **structured outcome**, and only UUID outcomes trigger session persistence, the DB roster sync, and the data-claim. Legacy outcomes preserve today's exact behavior (works for TEXT features; still crashes on class-creation — *no worse than now*).
 
@@ -109,5 +109,5 @@ Regression: full Clever compliance suite (38) + `tests/test_clever_callback.py` 
 ## 7. Review provenance
 
 - **Codex** (read-only): returned BLOCKED-as-written; caught the `delete-data` prefix gate, roster-sync-on-legacy, missing `g.teacher_id`, `student_history` in the claim set, and recommended the structured fail-open outcome. All folded in above.
-- **Self-review**: confirmed fail-open over fail-closed (live users + isolated namespace) and create-only claim (PK-collision avoidance).
+- **Self-review**: confirmed fail-open over fail-closed (strictly non-regressing regardless of user count + isolated namespace) and create-only claim (PK-collision avoidance).
 - **Gemini**: unavailable this session (GCP billing/dunning 403). Optional third pass against this committed spec once billing is resolved.
