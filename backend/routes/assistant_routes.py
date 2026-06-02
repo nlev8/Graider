@@ -1932,10 +1932,12 @@ def assistant_chat():
                     messages.append({"role": "user", "content": tool_results})
 
                 except Exception as e:
-                    error_msg = str(e)
+                    logger.warning("Assistant stream error (%s): %s", active_provider, e)
                     if "APIError" in type(e).__name__ or "AuthenticationError" in type(e).__name__:
-                        error_msg = f"API error ({active_provider}): {error_msg}"
-                    yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+                        content = f"The {active_provider} provider returned an error. Please try again."
+                    else:
+                        content = "The assistant hit an error. Please try again."
+                    yield f"data: {json.dumps({'type': 'error', 'content': content})}\n\n"
                     break
 
 

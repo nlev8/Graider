@@ -1509,7 +1509,8 @@ def delete_all_student_history():
                 os.remove(os.path.join(history_dir, f))
                 deleted_count += 1
             except Exception as e:
-                errors.append(f"{f}: {e}")
+                _logger.warning("Failed to delete history file %s: %s", f, e)
+                errors.append(f"{f}: failed to delete")
 
     return jsonify({
         "status": "cleared",

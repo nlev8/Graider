@@ -354,7 +354,8 @@ def sync_roster_to_class(class_id):
                     }, on_conflict='class_id,student_id').execute()
                     synced += 1
             except Exception as e:
-                errors.append(f"{first} {last}: {str(e)}")
+                _logger.warning("Roster sync failed for %s %s: %s", first, last, e)
+                errors.append(f"{first} {last}: sync failed")
 
         return jsonify({
             "success": True,
