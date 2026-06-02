@@ -345,3 +345,33 @@ class TestAccountMerging:
 
         assert resp.status_code == 302
         assert "clever_login=success" in resp.location
+
+
+# ---------------------------------------------------------------------------
+# TestCleverSessionCheck — /api/clever/session returns resolved user_id
+# ---------------------------------------------------------------------------
+
+class TestCleverSessionCheck:
+    """GET /api/clever/session surfaces the session-stored resolved UUID as
+    `user_id` so the frontend stores the real identity (Task 6)."""
+
+    def test_session_returns_stored_user_id(self):
+        """When the session already holds a resolved UUID, the response echoes
+        it as user_id and account_linked is True (not a clever: legacy id)."""
+        app = _make_app()
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["clever_user"] = {
+                    "clever_id": "c1",
+                    "user_id": "uuid-1",
+                    "type": "teacher",
+                    "email": "t@school.edu",
+                    "name": {"first": "Ada", "last": "Lovelace"},
+                    "district": "district-xyz",
+                }
+            resp = client.get("/api/clever/session")
+
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body.get("user_id") == "uuid-1"
+        assert body.get("account_linked") is True

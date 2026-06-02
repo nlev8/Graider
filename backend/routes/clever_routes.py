@@ -543,7 +543,7 @@ def clever_session_check():
     clever_user = session.get("clever_user")
     if not clever_user:
         return jsonify({"authenticated": False})
-    resolved_id = resolve_clever_user_id(clever_user["clever_id"])
+    resolved_id = clever_user.get("user_id") or resolve_clever_user_id(clever_user["clever_id"])
 
     import time
     import glob as _glob
@@ -564,6 +564,7 @@ def clever_session_check():
         "name": clever_user.get("name", {}),
         "type": clever_user.get("type", ""),
         "district": clever_user.get("district", ""),
+        "user_id": resolved_id,
         "account_linked": not resolved_id.startswith("clever:"),
         "last_sync": last_sync_time,
     })
