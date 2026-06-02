@@ -30,7 +30,6 @@ from backend.clever import (
 from backend.accommodations import set_student_accommodation
 from backend.auth import (
     load_clever_links,
-    save_clever_link,
     resolve_clever_user_id,
     resolve_clever_user_id_or_create,
 )
@@ -39,7 +38,6 @@ from backend.supabase_client import get_supabase as _get_supabase_safe
 from backend.utils.errors import handle_route_errors
 from backend.utils.auth_decorators import require_clever_session
 from backend.utils.redaction import redact_email
-from backend.utils.supabase_users import list_all_users
 from backend.services.clever_roster_scope import filter_roster_to_teacher
 
 logger = logging.getLogger(__name__)
