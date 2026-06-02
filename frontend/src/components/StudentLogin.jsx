@@ -82,6 +82,11 @@ export default function StudentLogin({ onLogin }) {
         padding: "40px", maxWidth: "400px", width: "90%",
         border: "1px solid var(--glass-border)",
       }}>
+        <img
+          src={lightMode ? "/graider-brain-light.png" : "/graider-brain-dark.png"}
+          alt="Graider"
+          style={{ width: 72, height: 72, display: "block", margin: "0 auto 12px" }}
+        />
         <h1 style={{ color: "var(--text-primary)", fontSize: "1.5rem", fontWeight: 700, marginBottom: "8px", textAlign: "center" }}>
           Graider Student Portal
         </h1>
