@@ -111,13 +111,16 @@ SIS_CAPTURES = [
     # purges Supabase rows too + added result["legacy_cleanup_error"], +7 lines
     # above this capture). Then shifted 816 -> 818 by the whole-branch review fix
     # (added sentry_sdk.capture_exception(e) to the legacy-cleanup except, +1 line
-    # above this capture). Capture itself unchanged — still the
+    # above this capture). Then shifted 818 -> 829 by the SSO redirect-mode fix
+    # (added ?redirect=1 branch + misconfig-redirect to clever_login_url, ~+11
+    # lines above this capture). Capture itself unchanged — still the
     # `except sb_err: sentry_sdk.capture_exception(sb_err)` in clever_delete_data.
-    ("backend/routes/clever_routes.py", 818),
+    ("backend/routes/clever_routes.py", 829),
     # 2026-06-01 (whole-branch review): NEW capture pinned — the legacy
-    # clever:{id} cleanup `except e` in clever_delete_data now captures to
-    # Sentry (FERPA right-to-delete observability guardrail). Capture at 776.
-    ("backend/routes/clever_routes.py", 776),
+    # clever:{id} cleanup `except e` in clever_delete_data captures to Sentry
+    # (FERPA right-to-delete observability guardrail). Shifted 776 -> 787 by the
+    # SSO redirect-mode fix (~+11 lines in clever_login_url above it).
+    ("backend/routes/clever_routes.py", 787),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
