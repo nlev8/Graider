@@ -54,6 +54,26 @@ def test_zero_match_creates_and_claims(monkeypatch):
     assert claimed == {"c1": "uuid-new"}      # claim runs on create
 
 
+def test_create_returns_none_id_fails_open(monkeypatch):
+    # create_user succeeds but the returned object has .user.id == None.
+    # Must NOT save a None link or return (None, "created") — fail open instead.
+    saved, claimed = {}, {}
+    monkeypatch.setattr(auth, "load_clever_links", lambda: {})
+    monkeypatch.setattr(auth, "save_clever_link", lambda c, u: saved.__setitem__(c, u))
+    monkeypatch.setattr(auth, "_claim_clever_text_data", lambda c, u: claimed.__setitem__(c, u))
+    monkeypatch.setattr(auth, "list_all_users", lambda s: [])
+
+    class _Res:  # noqa
+        user = _U(None, "t@x")
+
+    class _Admin:
+        def create_user(self, payload): return _Res()
+    sb = type("SB", (), {"auth": type("A", (), {"admin": _Admin()})()})()
+    monkeypatch.setattr(auth, "_get_supabase", lambda: sb)
+    assert auth.resolve_clever_user_id_or_create("c1", "t@x") == ("clever:c1", "create_failed_legacy")
+    assert saved == {} and claimed == {}
+
+
 def test_ambiguous_match_fails_open(monkeypatch):
     saved, claimed = _patch(monkeypatch, users=[_U("a", "t@x"), _U("b", "t@x")])
     out = auth.resolve_clever_user_id_or_create("c1", "t@x")

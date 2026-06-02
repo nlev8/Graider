@@ -177,6 +177,7 @@ def _claim_clever_text_data(clever_id, uuid):
                 sb.table(table).update({"teacher_id": uuid}).eq("teacher_id", legacy).execute()
             except Exception as e:
                 logger.warning("Clever data-claim on %s failed (non-fatal): %s", table, type(e).__name__)
+                sentry_sdk.capture_exception(e)
     except Exception as e:
         logger.warning("Clever data-claim failed (non-fatal): %s", type(e).__name__)
         sentry_sdk.capture_exception(e)
@@ -236,7 +237,10 @@ def resolve_clever_user_id_or_create(clever_id, email, name=None):
                     "auth_source": "clever",
                 },
             })
-            new_id = res.user.id
+            new_id = getattr(getattr(res, "user", None), "id", None)
+            if not new_id:
+                logger.warning("Clever resolve: create_user returned no user id; failing open")
+                return legacy, "create_failed_legacy"
             save_clever_link(clever_id, new_id)
             _claim_clever_text_data(clever_id, new_id)
             return new_id, "created"
