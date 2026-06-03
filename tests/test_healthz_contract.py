@@ -307,3 +307,42 @@ class TestHealthzDrill:
         assert resp.status_code == 200
         body = resp.get_json()
         assert "drill_forced_failure" not in str(body)
+
+
+class TestHealthzVersion:
+    """Build-version marker for the post-deploy smoke (closes Hard Rule #8)."""
+
+    def _getenv_with(self, overrides):
+        real_getenv = os.getenv
+
+        def fake_getenv(key, default=None):
+            if key in overrides:
+                return overrides[key]
+            return real_getenv(key, default)
+
+        return fake_getenv
+
+    def test_reports_short_railway_sha(self):
+        overrides = {
+            "RAILWAY_GIT_COMMIT_SHA": "deadbeefcafe1234",
+            "SUPABASE_URL": None, "SUPABASE_SERVICE_KEY": None,
+            "REDIS_URL": None, "FORCE_HEALTHZ_FAIL": None,
+        }
+        backend_app = _import_app()
+        with patch.object(backend_app.os, "getenv",
+                          side_effect=self._getenv_with(overrides)):
+            resp = backend_app.app.test_client().get("/healthz")
+        assert resp.status_code == 200
+        assert resp.get_json()["version"] == "deadbee"
+
+    def test_version_unknown_without_railway_var(self):
+        overrides = {
+            "RAILWAY_GIT_COMMIT_SHA": None, "SUPABASE_URL": None,
+            "SUPABASE_SERVICE_KEY": None, "REDIS_URL": None,
+            "FORCE_HEALTHZ_FAIL": None,
+        }
+        backend_app = _import_app()
+        with patch.object(backend_app.os, "getenv",
+                          side_effect=self._getenv_with(overrides)):
+            resp = backend_app.app.test_client().get("/healthz")
+        assert resp.get_json()["version"] == "unknown"
