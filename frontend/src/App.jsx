@@ -68,6 +68,7 @@ import Sidebar from "./components/Sidebar";
 import { useTheme } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
 import { useAuthSession } from "./hooks/useAuthSession";
+import { useBillingRedirect } from "./hooks/useBillingRedirect";
 import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
 import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
@@ -1361,26 +1362,8 @@ function App() {
   }, [settingsLoaded]);
 
 
-  // Handle Stripe redirect URL params (?billing=success or ?billing=cancel)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const billingParam = params.get("billing");
-    if (billingParam === "success") {
-      addToast("Subscription activated successfully!", "success");
-      setActiveTab("settings");
-      setSettingsTab("billing");
-      window.history.replaceState({}, "", window.location.pathname);
-    } else if (billingParam === "cancel") {
-      addToast("Checkout cancelled", "info");
-      setActiveTab("settings");
-      setSettingsTab("billing");
-      window.history.replaceState({}, "", window.location.pathname);
-    } else if (billingParam === "portal-return") {
-      setActiveTab("settings");
-      setSettingsTab("billing");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
+  // Stripe billing redirect handling extracted to useBillingRedirect (decomp slice 4).
+  useBillingRedirect({ addToast, setActiveTab, setSettingsTab });
 
   // Auto-save Builder assignment when it changes (debounced)
   useEffect(() => {
