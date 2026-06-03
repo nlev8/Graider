@@ -233,6 +233,14 @@ def handle_404(e):
     # Don't return JSON for HTML pages (SPA routing)
     if request.path.startswith('/api/'):
         return jsonify({"error": "Not found"}), 404
+    # A missing /assets/* request is a genuinely-absent hashed bundle/chunk —
+    # e.g. a stale browser (SPA tab open across a deploy) requesting an asset a
+    # later build deleted. Return an honest 404 so the client sees a chunk-load
+    # error and can reload to the current build, instead of masking it by
+    # serving index.html as if it were JavaScript. Only true SPA routes
+    # (no /assets/ prefix) fall back to index.html for client-side routing.
+    if request.path.startswith('/assets/'):
+        return 'Not Found', 404
     return send_from_directory(app.static_folder, 'index.html')
 
 # Recover stale partial submissions from prior deploys (daemon threads killed on restart)
