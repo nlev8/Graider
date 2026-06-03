@@ -1259,3 +1259,55 @@ written (`2026-06-03-app-jsx-decomposition.md`), deferred.
 **Two cleanups shipped with this re-score:** `usedforsecurity=False` on the seed MD5; the
 two stale `--cov-fail-under=60` references in `ARCHITECTURE.md` corrected to 70. Honest
 current baseline: **7.25.**
+
+---
+
+# 2026-06-03 CORRECTION — Test Coverage is 7, not 6 → overall **7.35** (the re-score was too pessimistic)
+
+**Both legs of the re-score above missed `e2e-nightly.yml`.** Codex and Claude each held
+Test Coverage at 6 on the basis "CI runs only `health-check.spec.js` (`ci.yml:159`) + 111
+silent `test.skip(!joinCode)`" — they checked only the PR job in `ci.yml` and never looked
+at the **nightly** E2E workflow. Controller verification (the load-bearing check the legs
+skipped) found:
+
+- `.github/workflows/e2e-nightly.yml` runs a 13-spec allowlist in **gating mode** (line 204:
+  "no continue-on-error — a spec failure fails the workflow"), scheduled daily.
+- **9+ of those specs have ZERO silent skips**: `publish-flow`, `teacher-dashboard`,
+  `teacher-settings-save` + all 6 `tests/e2e/specs` integration specs (multi-teacher,
+  full-workflow, analytics-display, planner-workflow, settings-workflow, smoke).
+- It passes against a locally-spawned backend on **local-file storage** (no Supabase needed).
+- **6 consecutive green runs** verified via `gh run list` (2026-05-29 → 06-03).
+
+So the rubric Test Coverage **level-7 e2e criterion** ("CI runs ≥5 real e2e specs with no
+silent-skip masking") **was already met** — by the nightly job, independent of the sprint.
+The 111 silent skips are in the deliberately-deferred **Stage-3b** Supabase/student specs
+(documented in `2026-05-11-audit-major5-e2e-promotion.md`), which are NOT in the gate — they
+aren't "masking" a running suite, they're explicitly out of it pending a Supabase fixture.
+
+**Therefore Test Coverage = 7** (floor 70 ✓ + measured 70.5% ✓ + nightly real-e2e ✓). The
+sprint's floor bump (#638) was the genuinely-completing piece. Corrected scorecard:
+
+| Dimension | Reconciled |
+|---|--:|
+| Security | 7 |
+| Error Handling | 7.5 |
+| Code Quality | 6 |
+| Architecture | 7 |
+| **Test Coverage** | **7** (was wrongly held at 6) |
+| Documentation | 8 |
+| Debugging/Observability | 7 |
+| Data Integrity | 7.5 |
+| Operational Safety | 7.5 |
+| SSO/Roster Compliance | 9 |
+| **Overall** | **7.35** |
+
+**The lesson (symmetric to the original optimism lesson).** The adversarial "hunt-to-lower"
+framing made BOTH models miss *mitigating* evidence (the nightly job) — exactly as the
+earlier optimistic framing over-credited. Adversarial is not automatically correct; it has
+its own directional bias (too pessimistic). The fix is the same in both directions:
+**the controller must independently verify the load-bearing claim**, not accept either an
+optimistic or a pessimistic consensus. Here the load-bearing claim was "CI runs no real
+e2e" — a 30-second `gh run list` + reading `e2e-nightly.yml` disproved it. Both the over-
+claim ("Test Coverage 6→7" mid-sprint, asserted without checking the e2e criterion) and the
+over-correction ("held at 6", trusting the legs) were measurement errors fixed by the same
+discipline: verify, don't assert and don't merely concur. **Honest current baseline: 7.35.**
