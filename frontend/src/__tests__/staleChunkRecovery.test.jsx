@@ -34,4 +34,15 @@ describe('recoverFromStaleChunk (stale-deploy recovery)', () => {
     expect(did).toBe(true)
     expect(reload).toHaveBeenCalledTimes(1)
   })
+
+  it('does NOT reload if storage throws (no unguarded loop in hardened contexts)', () => {
+    const reload = vi.fn()
+    const throwingStorage = {
+      getItem: () => { throw new Error('sessionStorage blocked') },
+      setItem: () => { throw new Error('blocked') },
+    }
+    const did = recoverFromStaleChunk({ now: 1_000_000, storage: throwingStorage, reload })
+    expect(did).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
+  })
 })

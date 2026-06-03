@@ -14,13 +14,20 @@ const GUARD_MS = 10_000
 // Pure + injectable for testing. Returns true if it triggered a reload.
 export function recoverFromStaleChunk(opts = {}) {
   const now = opts.now ?? Date.now()
-  const storage = opts.storage ?? window.sessionStorage
+  const storage = opts.storage ?? (typeof window !== 'undefined' ? window.sessionStorage : null)
   const reload = opts.reload ?? (() => window.location.reload())
-  const last = Number(storage.getItem(KEY) || 0)
-  if (now - last < GUARD_MS) {
-    return false // already reloaded very recently — don't loop on a real failure
+  try {
+    if (!storage) return false
+    const last = Number(storage.getItem(KEY) || 0)
+    if (now - last < GUARD_MS) {
+      return false // already reloaded very recently — don't loop on a real failure
+    }
+    storage.setItem(KEY, String(now))
+  } catch {
+    // sessionStorage unavailable/throws (private mode, sandboxed iframe). Without
+    // a persistable guard we can't prevent a reload loop, so don't reload.
+    return false
   }
-  storage.setItem(KEY, String(now))
   reload()
   return true
 }
