@@ -21,11 +21,14 @@ import sys
 import json
 import base64
 import time
+import logging
 
 # Add parent dir to path so we can import districts
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from districts import find_district_by_email
 import sentry_sdk
+
+_logger = logging.getLogger(__name__)
 
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 BROWSER_DATA_DIR = os.path.join(GRAIDER_DATA_DIR, "outlook_browser")
@@ -164,7 +167,7 @@ def navigate_to_outlook(page, context, district, email, password):
             state="visible", timeout=30000
         )
     except Exception:
-        pass
+        _logger.debug("New mail button wait failed", exc_info=True)
     page.wait_for_timeout(2000)
 
     return page
@@ -196,7 +199,7 @@ def send_email(page, eml, index, total):
                 expand_btn.click()
                 page.wait_for_timeout(500)
         except Exception:
-            pass  # CC field may already be visible
+            _logger.debug("CC/BCC expand failed", exc_info=True)  # CC field may already be visible
         page.locator('[aria-label="Cc"]').last.click()
         page.keyboard.type(eml["cc"])
         page.wait_for_timeout(1000)
@@ -218,6 +221,7 @@ def send_email(page, eml, index, total):
             subject_filled = True
             break
         except Exception:
+            _logger.debug("subject field selector failed", exc_info=True)
             continue
     if not subject_filled:
         raise Exception("Could not find subject field")
@@ -241,6 +245,7 @@ def send_email(page, eml, index, total):
             body_filled = True
             break
         except Exception:
+            _logger.debug("body field selector failed", exc_info=True)
             continue
     if not body_filled:
         raise Exception("Could not find body field")
@@ -349,7 +354,7 @@ def main():
                     try:
                         page.click('[aria-label="Discard"]', timeout=3000)
                     except Exception:
-                        pass
+                        _logger.debug("compose window discard failed", exc_info=True)
 
                 # Brief delay between emails
                 if i < total - 1:

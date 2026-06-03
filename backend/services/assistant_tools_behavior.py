@@ -139,7 +139,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
                 dt = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
                 timestamp = dt.strftime('%H:%M')
             except Exception:
-                pass
+                logger.debug("behavior event timestamp parse failed", exc_info=True)
 
         student = students[sid]
         student["name"] = name
@@ -860,7 +860,7 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
         storage_save("pending_send:send_behavior_email", pending, teacher_id)
         storage_save("pending_send", pending, teacher_id)
     except Exception:
-        pass
+        logger.debug("pending behavior email storage save failed", exc_info=True)
 
     # Filesystem fallback — GH #280 fix: per-tenant path (was global)
     try:

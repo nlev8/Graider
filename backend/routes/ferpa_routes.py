@@ -340,7 +340,7 @@ def export_individual_student_data():
                         meta = json.load(mf)
                     period_label = meta.get('period_name', period_label)
                 except Exception:
-                    pass
+                    _logger.warning("period metadata read failed", exc_info=True)
             try:
                 with open(os.path.join(periods_dir, fname), 'r', encoding='utf-8') as pf:
                     reader = csv.DictReader(pf)
@@ -360,7 +360,8 @@ def export_individual_student_data():
                             matched_email = row.get('Email', row.get('email', ''))
                             matched_period = period_label
                             break
-            except Exception:
+            except Exception as e:
+                _logger.warning("period roster scan failed: %s", type(e).__name__)
                 continue
             if matched_name:
                 break
@@ -547,7 +548,7 @@ def export_individual_student_data():
         try:
             subprocess.run(['open', export_dir], check=False)
         except Exception:
-            pass
+            _logger.warning("export folder open (local dev) failed", exc_info=True)
 
     audit_log("EXPORT_STUDENT_DATA", f"Exported full data for student (name redacted), {record_count} records")
 

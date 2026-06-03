@@ -58,6 +58,7 @@ def load_support_documents_for_planning() -> str:
                         doc = Document(filepath)
                         content = '\n'.join([p.text for p in doc.paragraphs])
                     except Exception:
+                        _logger.debug("standards docx extraction failed", exc_info=True)
                         continue
                 elif filepath.endswith('.pdf'):
                     try:
@@ -66,6 +67,7 @@ def load_support_documents_for_planning() -> str:
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
                     except Exception:
+                        _logger.debug("standards pdf extraction failed", exc_info=True)
                         continue
 
                 if content and total_chars + len(content) < max_chars:
@@ -77,7 +79,8 @@ def load_support_documents_for_planning() -> str:
                     docs_content.append(f"[{doc_label}]\n{chunk}")
                     total_chars += len(chunk)
 
-            except Exception as e:
+            except Exception:
+                _logger.debug("support document load failed", exc_info=True)
                 continue
 
     if not docs_content:

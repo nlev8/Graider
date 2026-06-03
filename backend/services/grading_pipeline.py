@@ -997,8 +997,8 @@ def _load_ell_language(student_id):
                 lang = ell_entry.get("language")
                 if lang and lang != "none":
                     ell_language = lang
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.warning("ELL language load failed: %s", type(e).__name__)
     return ell_language
 
 
@@ -1458,8 +1458,8 @@ in your scoring or feedback. The teacher knows their students better than any ru
                     "skills_demonstrated": {"strengths": [], "developing": []},
                     "json_recovery": True
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.warning("malformed-JSON regex recovery failed: %s", type(e).__name__)
 
         return {
             "score": 0,
@@ -1710,8 +1710,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                             "excellent": True, "improvement_note": ""
                         }
                         continue  # Skip LLM call — instant correct, zero cost
-                except Exception:
-                    pass  # SymPy failed — fall through to normal AI grading
+                except Exception as e:
+                    _logger.debug("SymPy equivalence check failed: %s", type(e).__name__)  # SymPy failed — fall through to normal AI grading
 
             f = executor.submit(
                 grade_per_question,
@@ -1793,8 +1793,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 lang = ell_entry.get("language")
                 if lang and lang != "none":
                     ell_language = lang
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.warning("ELL language load failed: %s", type(e).__name__)
 
     # === BUILD BREAKDOWN (before feedback so we can pass rubric scores) ===
     content_pts = int(round((total_earned / max(total_possible, 1)) * 40))
@@ -1925,8 +1925,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
             if ai_flag not in ["likely", "possible"]:
                 try:
                     update_writing_profile(student_id, current_writing_style, student_name)
-                except Exception:
-                    pass
+                except Exception as e:
+                    _logger.warning("writing profile update failed: %s", type(e).__name__)
 
     _logger.info(f"  ✅ Multi-pass grading complete: {final_score} ({letter_grade})")
     return result

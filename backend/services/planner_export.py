@@ -659,6 +659,7 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
                             y_vals = np.full_like(x_vals, float(y_vals))
                         ax.plot(x_vals, y_vals, color=colors[idx % len(colors)], linewidth=2)
                     except Exception:
+                        _logger.debug("function plot render failed", exc_info=True)
                         continue
 
         elif q_type == 'dot_plot':

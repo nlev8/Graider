@@ -476,7 +476,7 @@ def get_oneroster_config(teacher_id=None):
                 try:
                     teacher_sourced_id = load("oneroster_teacher_id", teacher_id)
                 except Exception:
-                    pass
+                    logger.debug("oneroster teacher sourcedId load failed", exc_info=True)
             return {
                 "base_url": district_cfg.get("base_url"),
                 "client_id": district_cfg.get("client_id"),

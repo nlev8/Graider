@@ -110,7 +110,7 @@ def _is_client_error(event: dict) -> bool:
     except Exception:
         # Defensive: never let the scrubber crash — a broken scrubber
         # swallows events silently.
-        pass
+        logger.debug("client-error classification scrub failed", exc_info=True)
     return False
 
 
@@ -329,7 +329,7 @@ def _scrub_frame_locals(event: dict) -> None:
                         frame_vars[name] = "[PII-scrubbed]"
     except Exception:
         # Defensive: never let the scrubber crash.
-        pass
+        logger.debug("PII local-variable scrub failed", exc_info=True)
 
 
 def before_send(event: dict, hint: dict) -> Optional[dict]:
@@ -466,7 +466,7 @@ def critical_path(fn):
                 import sentry_sdk
                 sentry_sdk.set_tag("severity", "critical")
             except Exception:
-                pass
+                logger.debug("critical severity tag attach failed", exc_info=True)
             raise
 
     return wrapper

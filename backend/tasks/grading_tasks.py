@@ -53,9 +53,9 @@ class PortalGradingTask(Task):
             # DB effect is byte-identical.
             from backend.providers import get_submission_repository
             get_submission_repository(supabase_table).mark_failed(submission_id, exc)
-        except Exception:
+        except Exception as e:
             # Sentry already has the original exception; don't mask it.
-            pass
+            _logger.warning("submission mark_failed (status update) failed: %s", type(e).__name__)
 
 
 # Retry semantics:
@@ -181,8 +181,8 @@ def grade_portal_submission(
                 submission_id,
                 'Assessment content unavailable at grading time',
             )
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.warning("submission mark_failed (missing content) failed: %s", type(e).__name__)
         return
 
     grade_portal_submission_sync(

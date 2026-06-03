@@ -21,6 +21,7 @@ Tool handler functions and definitions are in submodules:
 import os
 import csv
 import json
+import logging
 import subprocess
 import statistics
 from collections import defaultdict
@@ -28,6 +29,8 @@ from datetime import datetime
 import sentry_sdk
 
 from backend.paths import graider_export_dir
+
+_logger = logging.getLogger(__name__)
 
 # Import storage abstraction
 try:
@@ -422,7 +425,7 @@ def _load_period_class_levels(teacher_id='local-dev'):
                 class_level = meta.get('class_level', 'standard')
                 levels[period_name] = class_level
             except Exception:
-                pass
+                _logger.debug("period class-level metadata load failed", exc_info=True)
     return levels
 
 
@@ -465,7 +468,7 @@ def _load_settings(teacher_id='local-dev'):
             with open(settings_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception:
-            pass
+            _logger.debug("settings file load failed", exc_info=True)
     return {}
 
 
@@ -483,7 +486,7 @@ def _load_standards():
         result = _planner_load(state, subject, grade)
         return result.get('standards', [])
     except Exception:
-        pass
+        _logger.debug("planner standards load failed", exc_info=True)
 
     # Fallback: try legacy file path directly
     subject_map = {
@@ -633,7 +636,7 @@ def _load_roster(teacher_id='local-dev'):
                     csv_name = f.replace('.meta.json', '')
                     period_meta[csv_name] = meta
                 except Exception:
-                    pass
+                    _logger.debug("period metadata load failed", exc_info=True)
 
         for f in sorted(os.listdir(PERIODS_DIR)):
             if not f.endswith('.csv'):

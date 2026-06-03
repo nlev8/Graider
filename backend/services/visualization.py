@@ -13,7 +13,10 @@ Supports:
 
 import io
 import base64
+import logging
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 # Lazy import matplotlib to avoid startup overhead
 _plt = None
@@ -606,6 +609,7 @@ def create_function_graph(
                 ax.plot(x_vals, y_vals, color=color, linewidth=2, label=label)
                 all_y.extend(y_vals[np.isfinite(y_vals)])
             except Exception:
+                _logger.debug("expression curve plot failed", exc_info=True)
                 continue
 
         if labels or len(expressions) > 1:

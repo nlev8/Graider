@@ -335,7 +335,7 @@ def list_saved_assessments():
                             "question_count": question_count,
                         })
                 except Exception:
-                    pass
+                    _logger.debug("saved assessment listing entry failed", exc_info=True)
 
         assessments.sort(key=lambda x: x.get('saved_at', ''), reverse=True)
         return jsonify({"assessments": assessments})

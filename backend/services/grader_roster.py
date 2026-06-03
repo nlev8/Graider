@@ -214,7 +214,7 @@ def load_roster(roster_path: str) -> dict:
                         meta = json.load(mf)
                         period_name = meta.get('period_name', period_name)
                 except Exception:
-                    pass
+                    _logger.debug("period metadata read failed", exc_info=True)
             filepath = os.path.join(periods_dir, period_file)
             try:
                 with open(filepath, 'r', encoding='utf-8') as fh:
@@ -282,8 +282,8 @@ def load_roster(roster_path: str) -> dict:
                             if short_key not in roster:
                                 roster[short_key] = entry
                         added += 1
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.debug("roster CSV row parse failed: %s", type(e).__name__)
         if added:
             _logger.info("Supplemented with %d students from period CSVs", added)
 
@@ -319,7 +319,7 @@ def build_roster_from_periods() -> dict:
                     meta = json.load(mf)
                     period_name = meta.get('period_name', period_name)
             except Exception:
-                pass
+                _logger.debug("period metadata read failed", exc_info=True)
 
         filepath = os.path.join(periods_dir, period_file)
         try:
@@ -395,8 +395,8 @@ def build_roster_from_periods() -> dict:
                         space_key = f"{first_name_simple} {space_last}".lower().strip()
                         if space_key not in roster:
                             roster[space_key] = entry
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug("roster name-variant key build failed: %s", type(e).__name__)
 
     unique_count = len(set(id(v) for v in roster.values()))
     _logger.info("Built roster with %d students from period CSVs", unique_count)

@@ -257,14 +257,14 @@ def get_assessment_results():
                     enrolled = db.table('class_students').select('id', count='exact').eq('class_id', class_id).execute()
                     expected = enrolled.count
                 except Exception:
-                    pass
+                    _logger.debug("enrolled student count lookup failed", exc_info=True)
                 try:
                     cls_row = db.table('classes').select('clever_section_id').eq('id', class_id).single().execute()
                     ext_id = (cls_row.data or {}).get('clever_section_id', '')
                     if ext_id and ext_id.startswith('oneroster:'):
                         class_sourced_id = ext_id[len('oneroster:'):]
                 except Exception:
-                    pass
+                    _logger.debug("class sourcedId lookup failed", exc_info=True)
 
             scores = [s.get('percentage') for s in subs if s.get('percentage') is not None]
             times = [s.get('time_taken_seconds') for s in subs if s.get('time_taken_seconds')]

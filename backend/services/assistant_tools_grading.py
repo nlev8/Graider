@@ -10,6 +10,7 @@ import os
 import csv
 import json
 import re
+import logging
 import statistics
 from collections import defaultdict, Counter
 from datetime import datetime
@@ -23,6 +24,8 @@ from backend.services.assistant_tools import (
 )
 from backend.utils.compliance import require_teacher_id
 from backend.paths import graider_export_dir
+
+_logger = logging.getLogger(__name__)
 
 # Import storage abstraction
 try:
@@ -836,7 +839,7 @@ def scan_submissions_folder(top_n=None, assignment_filter=None,
                 settings_data = json.load(f)
             folder = settings_data.get('config', {}).get('assignments_folder', '')
         except Exception:
-            pass
+            _logger.debug("assignments folder settings load failed", exc_info=True)
     if not folder:
         # Fallback: try _load_settings() (global settings) then default
         gs = _load_settings(teacher_id)

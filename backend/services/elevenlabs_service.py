@@ -202,7 +202,7 @@ class ElevenLabsTTSStream:
         try:
             self._send_json({"text": ""})  # EOS
         except Exception:
-            pass
+            logger.debug("end-of-stream signal send failed", exc_info=True)
         self.audio_queue.put(None)
 
     def iter_audio(self):
@@ -257,7 +257,7 @@ class ElevenLabsTTSStream:
                 # The pipeline must stay alive for subsequent text rounds.
                 self._flush_done.set()
         except Exception:
-            pass
+            logger.debug("audio stream message handling failed", exc_info=True)
 
     def _on_error(self, ws, error):
         logger.error("ElevenLabs WS error: %s", error)

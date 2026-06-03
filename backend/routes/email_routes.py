@@ -922,7 +922,7 @@ def send_confirmation_emails():
                             if alias:
                                 alias_to_title[alias] = title
                     except Exception:
-                        pass
+                        _logger.debug("assignment config alias load failed", exc_info=True)
         all_config_names = set(alias_to_title.keys())
 
         # Track which assignments each student has submitted (by file presence)
@@ -1139,7 +1139,7 @@ def pending_confirmations():
                     if r.get('confirmation_sent'):
                         confirmed_filenames.add(r.get('filename', ''))
         except Exception:
-            pass  # Grading state not available — skip
+            _logger.debug("confirmation-sent filename collection failed", exc_info=True)  # Grading state not available — skip
 
         # Stage files first — canonicalize and deduplicate
         from backend.staging import stage_files, MANIFEST_NAME
