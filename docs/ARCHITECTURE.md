@@ -98,13 +98,13 @@ cd .. && FLASK_ENV=development python backend/app.py   # http://localhost:3000 (
 |-------|---------|----------------|
 | Frontend unit | `cd frontend && npx vitest run` | 47 files — component smoke tests + hook `renderHook` characterization tests |
 | Frontend E2E | `cd frontend && E2E_REUSE_BACKEND=1 npx playwright test` | 24 specs — live-app flows (dashboard nav, modals, sidebar, settings) + `health-check` |
-| Backend | `pytest` (in the venv) | 270 files; CI gate `--cov-fail-under=60` |
+| Backend | `pytest` (in the venv) | 270 files; CI gate `--cov-fail-under=70` |
 
 The E2E `webServer` builds the frontend and spawns `backend/app.py`; `E2E_REUSE_BACKEND=1` reuses an already-running `:3000`. E2E is the safety net that catches integration regressions the unit tests structurally can't (e.g. a prop dropped at a call site).
 
 ## 9. CI/CD & deployment
 
-All changes go through PRs. **Branch protection on `main` requires 9 status checks**: Backend Tests (`--cov-fail-under=60`), Frontend Build, Frontend E2E Smoke, Migrations Smoke, Lockfile Drift Check, Ruff Lint, Bandit SAST, Secret Scan (trufflehog), Mypy Strict (Critical Modules). Merging to `main` auto-deploys the backend (with the built SPA) to Railway. The marketing landing deploys separately to Vercel (`cd landing && npx vercel --prod`).
+All changes go through PRs. **Branch protection on `main` requires 9 status checks**: Backend Tests (`--cov-fail-under=70`), Frontend Build, Frontend E2E Smoke, Migrations Smoke, Lockfile Drift Check, Ruff Lint, Bandit SAST, Secret Scan (trufflehog), Mypy Strict (Critical Modules). Merging to `main` auto-deploys the backend (with the built SPA) to Railway. The marketing landing deploys separately to Vercel (`cd landing && npx vercel --prod`).
 
 ## 10. Conventions & gotchas
 

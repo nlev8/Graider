@@ -1188,3 +1188,74 @@ verification, tightly clustered at 7.0–7.6, unanimous on the biggest-optimism 
 (Code Quality). Gemini failed-to-run (billing 403), faithfully reported, not counted. No
 code changed in this session's re-score — this section corrects the *measurement*, and
 supersedes the 2026-05-25 scorecard as the current honest baseline.
+
+---
+
+# 2026-06-03 Post-Sprint Adversarial Re-Score — verified 7.0 → **7.25** (modest, honest)
+
+**Context.** A hardening sprint shipped 6 PRs (Error Handling silent-swallow sweep #632,
+Observability audit/Sentry #633, Security public-prefix guard #634, Documentation
+cell-fill #635, post-deploy-smoke #636, Test-Coverage-to-70 #638), correctly SKIPPED two
+re-score-mis-flagged items (Alembic baseline, Redis fail-closed — both deliberate
+documented decisions), and DEFERRED App.jsx (plan written) + the Observability metrics
+layer + feature flags. This is the fresh adversarial re-score that prices the result —
+Codex (high-effort) + Claude subagent + controller, score-from-scratch, hunt-to-lower,
+conservative-floor reconciliation.
+
+| Dimension | 2026-06-02 | Codex | Claude | **Reconciled** | Δ |
+|---|--:|--:|--:|--:|--:|
+| Security | 7 | 4 | 7 | **7** | 0 |
+| Error Handling | 7 | 8 | 7.5 | **7.5** | +0.5 |
+| Code Quality | 6 | 6 | 6 | **6** | 0 |
+| Architecture | 7 | 7 | 7 | **7** | 0 |
+| Test Coverage | 6 | 6 | 6 | **6** | **0** |
+| Documentation | 7 | 7 | 8 | **8** | +1 |
+| Debugging/Observability | 7 | 7 | 7 | **7** | 0 |
+| Data Integrity | 7.5 | 7.5 | 7.5 | **7.5** | 0 |
+| Operational Safety | 7 | 7.5 | 7.5 | **7.5** | +0.5 |
+| SSO/Roster Compliance | 9 | 9 | 9 | **9** | 0 |
+| **Overall (mean)** | **7.0** | 6.9 | 7.25 | **7.25** | **+0.25** |
+
+**Verified movers (3):** Documentation 7→8 (0 blank cells AND the stale `--cov-fail-under=60`
+in `ARCHITECTURE.md` fixed in this section's cleanup), Error Handling 7→7.5 (broad silent
+swallows = 0 via the AST guard; the residual narrow typed `except: pass` count holds it
+short of a full 8), Operational Safety 7→7.5 (post-deploy smoke against the live image
+landed + validated; absent feature-flag system + status page hold it short of 8).
+
+### The honest correction: Test Coverage did NOT move (it stayed 6)
+The sprint raised measured coverage 69.5%→**70.5%** and bumped the CI floor 60→**70** — both
+real. But the rubric's Test Coverage **level-7 has THREE criteria**: floor ≥70 AND measured
+≥70 AND **≥5 real e2e specs with no silent-skip masking**. The third is unmet — CI still
+runs only `health-check.spec.js` (`ci.yml:159`) and the other 23 specs are gated behind
+**111 silent `test.skip(!joinCode)`** masks. So the dimension **holds at 6**. The mid-sprint
+claim "Test Coverage 6→7" was **wrong** — the floor work is genuine value but it did not
+clear the level. Both Codex and Claude independently held it at 6. Recorded as the lesson:
+a multi-criteria rubric level does not advance until ALL its criteria are met; clearing the
+easy two doesn't move the score.
+
+### The decisive split (resolved): Security 4 vs 7
+Codex scored Security **4** on a "Bandit is red" High finding — `hashlib.md5` at
+`assistant_tools_edtech.py:115` (B324). Disconfirmed at the source: that finding is in the
+CI `.bandit-baseline.json` (CI-equivalent bandit = "No issues identified"), so the SAST gate
+is legitimately green — Codex ran raw bandit without the baseline. Substantively it's a
+non-security use (a deterministic RNG seed). **Cleanup applied in this section:** marked it
+`usedforsecurity=False` (clears B324 even raw, no baseline reliance, hash output unchanged).
+Security reconciles to **7** — the `memory://` limiter fallback (`extensions.py`, deliberate
+incident-driven availability choice) is the genuine level-8 disqualifier, not the MD5.
+
+### Why +0.25 despite 6 shipped PRs (the meta-lesson)
+The sprint did substantial REAL work — 82 swallows now logged, 31 doc cells filled, 166 new
+behavioral tests + a coverage floor ratchet, a live-validated post-deploy gate, a clean
+public-prefix auth audit. But the **mechanical score moved only +0.25**, because most
+dimensions have multiple level-8 criteria and the sprint cleared them **one at a time**:
+Test Coverage (e2e masking), Security (`memory://`), Observability (no metrics layer) each
+have a single unmet criterion blocking the next level. The honest read: **the sprint's VALUE
+exceeds its SCORE movement.** The cheapest remaining full-point move is unanimous —
+**Test Coverage 6→7: provision a seeded join-code / publish fixture in CI and run ≥5 real
+student-flow e2e specs without the silent `test.skip` masks.** That single change clears the
+one blocking criterion. Code Quality 6→7 (App.jsx <3,000) is the other named lever — plan
+written (`2026-06-03-app-jsx-decomposition.md`), deferred.
+
+**Two cleanups shipped with this re-score:** `usedforsecurity=False` on the seed MD5; the
+two stale `--cov-fail-under=60` references in `ARCHITECTURE.md` corrected to 70. Honest
+current baseline: **7.25.**
