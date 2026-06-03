@@ -49,7 +49,32 @@ For a slice extracting cluster `X` into `useX`:
 
 ---
 
-## Task 0: Build the characterization harness (THE SAFETY NET — do first)
+## Task 0 — ADAPTED 2026-06-03: use the repo's proven `renderHook` net (NOT a full-`<App/>` snapshot)
+
+**Why adapted (verified before slice 1):** `frontend/src/hooks/` already exists with **11 extracted
+hooks** (`useSubscription`, `useFocusPolling`, `useSettingsAutoSave`, `usePortalSubmissions`,
+`useConfig`, `useQuestionEditing`, `useVoice`, `useBehaviorStore`, `useBehaviorListener`,
+`useOutlookSendPolling`, …), and **6 of them carry `renderHook` unit tests** in
+`src/hooks/__tests__/`. **No test in the repo renders `<App/>`** — the existing App tests
+(`App.logout.test.jsx`, `AppTabImports.test.jsx`) deliberately use static source inspection
+because "App.jsx requires non-trivial render infrastructure." The plan's full-`<App/>` snapshot
+harness (below) both contradicts that proven pattern and mocked the wrong module
+(`../supabaseClient`; the real one is `./services/supabase`).
+
+**Adopted safety net per slice (decided with the user, 2026-06-03):**
+1. A `renderHook` unit test (in `src/hooks/__tests__/useX.test.jsx`) pinning the extracted hook's
+   behavior — the same shape as `useSubscription.test.jsx`.
+2. The existing static App tests (`App.logout`, `AppTabImports`) stay green.
+3. Full `npx vitest run` stays green.
+4. `npm run build` succeeds — esbuild is the authoritative no-undef / free-variable gate
+   (the repo has no ESLint flat config, so `eslint` is unavailable; the build replaces Step D).
+5. Codex (high-effort) + Claude dual review per slice; manual merge (Class B); merge before next.
+
+The full-`<App/>` skeleton below is RETAINED for historical context but is NOT executed.
+
+---
+
+## Task 0 (original, NOT executed): full-`<App/>` characterization harness
 
 **Files:**
 - Create: `frontend/src/__tests__/App.characterization.test.jsx`
