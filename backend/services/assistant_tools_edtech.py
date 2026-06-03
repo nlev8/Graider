@@ -112,7 +112,11 @@ EDTECH_TOOL_DEFINITIONS = [
 def _deterministic_seed(topic, assignment_name):
     """Create a stable seed so the same inputs produce the same questions."""
     key = f"{topic or ''}-{assignment_name or ''}"
-    return int(hashlib.md5(key.encode()).hexdigest()[:8], 16)
+    # Non-security: MD5 here only derives a stable RNG seed from the inputs so the
+    # same topic/assignment reproduces the same questions. usedforsecurity=False
+    # marks that intent and clears Bandit B324 (no baseline suppression needed);
+    # the hash output is unchanged.
+    return int(hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:8], 16)
 
 
 def _build_questions_from_source(topic=None, assignment_name=None, content=None,
