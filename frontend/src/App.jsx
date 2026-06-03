@@ -66,6 +66,7 @@ import EmailPreviewModal from "./components/EmailPreviewModal";
 import DocumentEditorModal from "./components/DocumentEditorModal";
 import ReviewModal from "./components/ReviewModal";
 import Sidebar from "./components/Sidebar";
+import { useTheme } from "./hooks/useTheme";
 import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
 import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
@@ -487,21 +488,8 @@ function App() {
     window.__graiderUser = null;
   }
 
-  // Theme state with localStorage persistence
-  const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem("graider-theme");
-    return savedTheme || "dark";
-  });
-
-  // Apply theme to document body
-  useEffect(() => {
-    document.body.setAttribute("data-theme", theme);
-    localStorage.setItem("graider-theme", theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
+  // Theme state + persistence (extracted to useTheme; App.jsx decomposition slice 1)
+  const { theme, toggleTheme } = useTheme();
 
   // Per-model cost estimates ($ per assignment)
   const MODEL_COST_PER_ASSIGNMENT = {
