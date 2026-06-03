@@ -33,6 +33,7 @@ describe('useBillingRedirect', () => {
     expect(addToast).toHaveBeenCalledWith('Checkout cancelled', 'info');
     expect(setActiveTab).toHaveBeenCalledWith('settings');
     expect(setSettingsTab).toHaveBeenCalledWith('billing');
+    expect(window.location.search).toBe('');
   });
 
   it('billing=portal-return: opens Settings>Billing with NO toast', () => {
@@ -41,6 +42,7 @@ describe('useBillingRedirect', () => {
     expect(addToast).not.toHaveBeenCalled();
     expect(setActiveTab).toHaveBeenCalledWith('settings');
     expect(setSettingsTab).toHaveBeenCalledWith('billing');
+    expect(window.location.search).toBe('');
   });
 
   it('no billing param: does nothing', () => {
