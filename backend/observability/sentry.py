@@ -535,7 +535,16 @@ def init_sentry(environment: str = 'web') -> None:
 
     dsn = os.getenv("SENTRY_DSN")
     if not dsn:
-        logger.info("SENTRY_DSN not set; Sentry disabled")
+        # Quiet in explicit development; LOUD everywhere else — a deployed
+        # environment with no DSN means error tracking is silently off.
+        in_dev = os.getenv("FLASK_ENV", "").lower() in ("development", "dev")
+        if in_dev:
+            logger.info("SENTRY_DSN not set; Sentry disabled (development)")
+        else:
+            logger.warning(
+                "SENTRY_DSN not set outside development — error tracking is "
+                "DISABLED; set SENTRY_DSN in production"
+            )
         _initialized = True
         return
 
