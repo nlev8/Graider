@@ -640,8 +640,8 @@ def export_focus_csv():
                                 name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
-            except Exception:
-                _logger.debug("roster CSV parse failed", exc_info=True)
+            except Exception as e:
+                _logger.debug("roster CSV parse failed: %s", type(e).__name__)
 
     # Load from periods
     if periods_dir.exists():
@@ -681,8 +681,8 @@ def export_focus_csv():
                                 name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
-            except Exception:
-                _logger.debug("period roster CSV parse failed", exc_info=True)
+            except Exception as e:
+                _logger.debug("period roster CSV parse failed: %s", type(e).__name__)
 
     # Build list of students to match
     students_to_match = []

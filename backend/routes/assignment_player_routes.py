@@ -992,8 +992,8 @@ def grade_box_plot(question, answer):
             student_val = float(answer.get(key, 0))
             if abs(student_val - exp_val) < tolerance:
                 correct_count += 1
-        except Exception:
-            _logger.debug("numeric answer comparison failed", exc_info=True)
+        except Exception as e:
+            _logger.debug("numeric answer comparison failed: %s", type(e).__name__)
 
     if correct_count == total:
         return {'correct': True, 'feedback': 'All values correct!'}

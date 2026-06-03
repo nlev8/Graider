@@ -90,8 +90,8 @@ def grade_individual():
     if student_info_str:
         try:
             student_info = json.loads(student_info_str)
-        except Exception:
-            _logger.debug("student info JSON parse failed", exc_info=True)
+        except Exception as e:
+            _logger.debug("student info JSON parse failed: %s", type(e).__name__)
 
     # Parse assignment config if provided
     assignment_config = None

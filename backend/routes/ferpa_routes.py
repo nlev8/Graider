@@ -360,8 +360,8 @@ def export_individual_student_data():
                             matched_email = row.get('Email', row.get('email', ''))
                             matched_period = period_label
                             break
-            except Exception:
-                _logger.warning("period roster scan failed", exc_info=True)
+            except Exception as e:
+                _logger.warning("period roster scan failed: %s", type(e).__name__)
                 continue
             if matched_name:
                 break

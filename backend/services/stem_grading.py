@@ -69,14 +69,14 @@ def _normalize_math_input(expr_str: str):
     algebraic = re.sub(r'([a-zA-Z\d])\(', r'\1*(', algebraic)
     try:
         return sympify(algebraic)
-    except Exception:
-        _logger.debug("sympify normalization failed", exc_info=True)
+    except Exception as e:
+        _logger.debug("sympify normalization failed: %s", type(e).__name__)
 
     # 6. LaTeX fallback
     try:
         return parse_latex(s)
-    except Exception:
-        _logger.debug("LaTeX parse fallback failed", exc_info=True)
+    except Exception as e:
+        _logger.debug("LaTeX parse fallback failed: %s", type(e).__name__)
 
     # 7. Give up
     return None
@@ -101,8 +101,8 @@ def _compare_numeric_forms(student_str: str, correct_str: str, tolerance: float 
         diff = simplify(student_expr - correct_expr)
         if diff == 0:
             return {'equivalent': True, 'method': 'symbolic'}
-    except Exception:
-        _logger.debug("symbolic equivalence comparison failed", exc_info=True)
+    except Exception as e:
+        _logger.debug("symbolic equivalence comparison failed: %s", type(e).__name__)
 
     # Try numerical comparison
     try:
