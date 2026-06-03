@@ -245,13 +245,15 @@ function sectionHeadingStyle(isDark) {
 function PasswordField(props) {
   var show = props.show;
   var setShow = props.setShow;
+  var isDark = props.isDark !== false;
+  var pfInput = isDark ? styles.input : Object.assign({}, styles.input, { background: "#f9f9f9", border: "1px solid #ddd", color: "#333" });
   return React.createElement("div", { style: styles.passwordWrap },
     React.createElement("input", {
       type: show ? "text" : "password",
       value: props.value,
       onChange: props.onChange,
       placeholder: props.placeholder || "",
-      style: Object.assign({}, styles.input, { paddingRight: "60px" }),
+      style: Object.assign({}, pfInput, { paddingRight: "60px" }),
       autoComplete: props.autoComplete || "off",
     }),
     React.createElement("button", {
@@ -336,7 +338,7 @@ function LoginGate(props) {
       ),
       React.createElement("form", { onSubmit: handleSubmit },
         React.createElement("label", { style: styles.label }, "Password"),
-        React.createElement(PasswordField, {
+        React.createElement(PasswordField, { isDark: isDark,
           value: password,
           onChange: function(e) { setPassword(e.target.value); },
           placeholder: needsSetup ? "Min 8 characters" : "Enter password",
@@ -346,7 +348,7 @@ function LoginGate(props) {
         }),
         needsSetup ? React.createElement(React.Fragment, null,
           React.createElement("label", { style: styles.label }, "Confirm Password"),
-          React.createElement(PasswordField, {
+          React.createElement(PasswordField, { isDark: isDark,
             value: confirm,
             onChange: function(e) { setConfirm(e.target.value); },
             placeholder: "Re-enter password",
@@ -654,6 +656,8 @@ function ConfigForm(props) {
   var isDark = props.isDark !== false;
   var txt = isDark ? TEXT : LIGHT_TEXT;
   var txtDim = isDark ? TEXT_DIM : LIGHT_TEXT_DIM;
+  var inputStyleThemed = isDark ? styles.input : Object.assign({}, styles.input, { background: "#f9f9f9", border: "1px solid #ddd", color: "#333" });
+  var radioLabelStyle = isDark ? styles.radioLabel : Object.assign({}, styles.radioLabel, { color: LIGHT_TEXT });
   var onLogout = props.onLogout;
 
   var configState = useState({
@@ -974,7 +978,7 @@ function ConfigForm(props) {
       // Section 1: SIS Provider
       React.createElement("div", { style: sectionHeadingStyle(isDark) }, "SIS Provider"),
       React.createElement("div", { style: styles.radioGroup },
-        React.createElement("label", { style: styles.radioLabel },
+        React.createElement("label", { style: radioLabelStyle },
           React.createElement("input", {
             type: "radio",
             name: "sis_type",
@@ -984,7 +988,7 @@ function ConfigForm(props) {
           }),
           "Clever"
         ),
-        React.createElement("label", { style: styles.radioLabel },
+        React.createElement("label", { style: radioLabelStyle },
           React.createElement("input", {
             type: "radio",
             name: "sis_type",
@@ -1000,7 +1004,7 @@ function ConfigForm(props) {
       sisType === "clever" ? React.createElement(React.Fragment, null,
         React.createElement("label", { style: styles.label }, "Client ID"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: config.clever_client_id,
           onChange: function(e) { updateField("clever_client_id", e.target.value); },
           placeholder: "Clever application client ID",
@@ -1011,7 +1015,7 @@ function ConfigForm(props) {
             style: Object.assign({}, styles.badge, styles.badgeGreen),
           }, "Saved") : null
         ),
-        React.createElement(PasswordField, {
+        React.createElement(PasswordField, { isDark: isDark,
           value: config.clever_client_secret,
           onChange: function(e) { updateField("clever_client_secret", e.target.value); },
           placeholder: hasKeys.has_clever_secret ? "Leave blank to keep current" : "Clever client secret",
@@ -1020,7 +1024,7 @@ function ConfigForm(props) {
         }),
         React.createElement("label", { style: styles.label }, "Redirect URI"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: config.clever_redirect_uri,
           onChange: function(e) { updateField("clever_redirect_uri", e.target.value); },
           placeholder: "https://app.graider.live/api/clever/callback",
@@ -1031,7 +1035,7 @@ function ConfigForm(props) {
             style: Object.assign({}, styles.badge, styles.badgeGreen),
           }, "Saved") : null
         ),
-        React.createElement(PasswordField, {
+        React.createElement(PasswordField, { isDark: isDark,
           value: config.clever_district_token,
           onChange: function(e) { updateField("clever_district_token", e.target.value); },
           placeholder: hasKeys.has_clever_token ? "Leave blank to keep current" : "For Secure Sync (optional)",
@@ -1044,14 +1048,14 @@ function ConfigForm(props) {
       sisType === "oneroster" ? React.createElement(React.Fragment, null,
         React.createElement("label", { style: styles.label }, "Base URL"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: config.oneroster_base_url,
           onChange: function(e) { updateField("oneroster_base_url", e.target.value); },
           placeholder: "https://sis.district.org/ims/oneroster/v1p1",
         }),
         React.createElement("label", { style: styles.label }, "Client ID"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: config.oneroster_client_id,
           onChange: function(e) { updateField("oneroster_client_id", e.target.value); },
           placeholder: "OAuth 2.0 client ID",
@@ -1062,7 +1066,7 @@ function ConfigForm(props) {
             style: Object.assign({}, styles.badge, styles.badgeGreen),
           }, "Saved") : null
         ),
-        React.createElement(PasswordField, {
+        React.createElement(PasswordField, { isDark: isDark,
           value: config.oneroster_client_secret,
           onChange: function(e) { updateField("oneroster_client_secret", e.target.value); },
           placeholder: hasKeys.has_oneroster_secret ? "Leave blank to keep current" : "OAuth 2.0 client secret",
@@ -1071,7 +1075,7 @@ function ConfigForm(props) {
         }),
         React.createElement("label", { style: styles.label }, "Token URL (optional)"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: config.oneroster_token_url,
           onChange: function(e) { updateField("oneroster_token_url", e.target.value); },
           placeholder: "Auto-detected if blank",
@@ -1090,7 +1094,7 @@ function ConfigForm(props) {
         ),
         React.createElement("label", { style: styles.label }, "School ID (optional)"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: config.oneroster_school_id,
           onChange: function(e) { updateField("oneroster_school_id", e.target.value); },
           placeholder: "sourcedId to scope roster",
@@ -1129,7 +1133,7 @@ function ConfigForm(props) {
           style: Object.assign({}, styles.badge, styles.badgeGreen),
         }, "Saved") : null
       ),
-      React.createElement(PasswordField, {
+      React.createElement(PasswordField, { isDark: isDark,
         value: config.openai_api_key,
         onChange: function(e) { updateField("openai_api_key", e.target.value); },
         placeholder: hasKeys.has_openai ? "Leave blank to keep current" : "sk-...",
@@ -1143,7 +1147,7 @@ function ConfigForm(props) {
           style: Object.assign({}, styles.badge, styles.badgeGreen),
         }, "Saved") : null
       ),
-      React.createElement(PasswordField, {
+      React.createElement(PasswordField, { isDark: isDark,
         value: config.anthropic_api_key,
         onChange: function(e) { updateField("anthropic_api_key", e.target.value); },
         placeholder: hasKeys.has_anthropic ? "Leave blank to keep current" : "sk-ant-...",
@@ -1157,7 +1161,7 @@ function ConfigForm(props) {
           style: Object.assign({}, styles.badge, styles.badgeGreen),
         }, "Saved") : null
       ),
-      React.createElement(PasswordField, {
+      React.createElement(PasswordField, { isDark: isDark,
         value: config.gemini_api_key,
         onChange: function(e) { updateField("gemini_api_key", e.target.value); },
         placeholder: hasKeys.has_gemini ? "Leave blank to keep current" : "AIza...",
@@ -1227,7 +1231,7 @@ function ConfigForm(props) {
 
         React.createElement("label", { style: styles.label }, "School Name"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: adminSchoolName,
           onChange: function(e) { setAdminSchoolName(e.target.value); },
           placeholder: "Lincoln Middle School",
@@ -1235,7 +1239,7 @@ function ConfigForm(props) {
 
         React.createElement("label", { style: Object.assign({}, styles.label, { marginTop: "14px" }) }, "Pre-assign Teachers (optional)"),
         React.createElement("input", {
-          style: styles.input,
+          style: inputStyleThemed,
           value: adminTeacherSearch,
           onChange: function(e) {
             var val = e.target.value;
@@ -1378,14 +1382,14 @@ function ConfigForm(props) {
           React.createElement("label", { style: styles.label }, "Current Password"),
           React.createElement("input", {
             type: "password",
-            style: styles.input,
+            style: inputStyleThemed,
             value: currentPw,
             onChange: function(e) { setCurrentPw(e.target.value); },
           }),
           React.createElement("label", { style: styles.label }, "New Password"),
           React.createElement("input", {
             type: "password",
-            style: styles.input,
+            style: inputStyleThemed,
             value: newPw,
             onChange: function(e) { setNewPw(e.target.value); },
             placeholder: "Min 8 characters",
