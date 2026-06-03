@@ -79,7 +79,7 @@ All endpoints are under the application host (production: `https://app.graider.l
 | `POST` | `/api/stripe/create-checkout-session` | Teacher | Create a Stripe Checkout session for a new subscription. |
 | `POST` | `/api/stripe/create-portal-session` | Teacher | Create a Stripe Customer Portal session for subscription management. |
 | `GET` | `/api/stripe/subscription-status` | Teacher | Get the current user's subscription status from Stripe. |
-| `POST` | `/api/stripe/webhook` | Public |  |
+| `POST` | `/api/stripe/webhook` | Public | Handle Stripe webhook events, verified via Stripe-Signature header. |
 
 ## ClassLink SSO
 
@@ -146,7 +146,7 @@ All endpoints are under the application host (production: `https://app.graider.l
 |--------|------|------|---------|
 | `POST` | `/api/confirm-send` | Teacher | Execute a confirmed send action from the assistant preview. |
 | `GET` | `/api/email-status` | Teacher | Check if email is configured. |
-| `POST` | `/api/export-outlook-emails` | Teacher |  |
+| `POST` | `/api/export-outlook-emails` | Teacher | Build parent-notification email payloads as JSON for Outlook. |
 | `GET` | `/api/focus-comms/status` | Teacher | Get current Focus Communications sending progress. |
 | `POST` | `/api/focus-comms/stop` | Teacher | Kill the Focus Communications subprocess if running. |
 | `POST` | `/api/mark-confirmations-sent-file` | Teacher | Mark files as confirmation_sent after Outlook send completes. |
@@ -164,30 +164,30 @@ All endpoints are under the application host (production: `https://app.graider.l
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `GET` | `/api/ferpa/audit-log` | Teacher |  |
-| `GET` | `/api/ferpa/data-summary` | Teacher |  |
-| `POST` | `/api/ferpa/delete-all-data` | Teacher |  |
-| `GET` | `/api/ferpa/export-data` | Teacher |  |
-| `POST` | `/api/ferpa/export-student` | Teacher |  |
+| `GET` | `/api/ferpa/audit-log` | Teacher | Retrieve audit log entries showing who accessed data when. |
+| `GET` | `/api/ferpa/data-summary` | Teacher | Summarize what student data is stored locally. |
+| `POST` | `/api/ferpa/delete-all-data` | Teacher | Securely delete all student data, settings, and cache. |
+| `GET` | `/api/ferpa/export-data` | Teacher | Export all student data for portability requests. |
+| `POST` | `/api/ferpa/export-student` | Teacher | Export one student's data as JSON plus PDF report. |
 | `POST` | `/api/ferpa/import-student` | Teacher | FERPA-compliant: Import a previously exported student data file. |
 
 ## Grading
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `POST` | `/api/check-math-equivalence` | Teacher |  |
+| `POST` | `/api/check-math-equivalence` | Teacher | Check whether two math expressions are equivalent. |
 | `POST` | `/api/clear-results` | Teacher | Clear grading results. Optionally filter by assignment name. |
 | `GET` | `/api/ell-students` | Teacher | Get all ELL student designations. |
 | `POST` | `/api/ell-students` | Teacher | Save ELL student designations. |
-| `POST` | `/api/export-focus-batch` | Teacher |  |
-| `POST` | `/api/export-focus-comments` | Teacher |  |
-| `POST` | `/api/export-focus-csv` | Teacher |  |
-| `POST` | `/api/export-lms-csv` | Teacher |  |
+| `POST` | `/api/export-focus-batch` | Teacher | Export per-period CSV files for Focus SIS bulk import. |
+| `POST` | `/api/export-focus-comments` | Teacher | Export per-student comments as per-period JSON for Focus SIS. |
+| `POST` | `/api/export-focus-csv` | Teacher | Export grades as CSV for Focus SIS import. |
+| `POST` | `/api/export-lms-csv` | Teacher | Export grades as CSV for Canvas or PowerSchool import. |
 | `GET` | `/api/focus-comments/status` | Teacher | Get current Focus comments upload progress. |
-| `POST` | `/api/grade-coordinates` | Teacher |  |
-| `POST` | `/api/grade-data-table` | Teacher |  |
-| `POST` | `/api/grade-math` | Teacher |  |
-| `POST` | `/api/grade-place-name` | Teacher |  |
+| `POST` | `/api/grade-coordinates` | Teacher | Grade a geography coordinate answer with distance tolerance. |
+| `POST` | `/api/grade-data-table` | Teacher | Grade a science data table with numerical tolerance. |
+| `POST` | `/api/grade-math` | Teacher | Grade a math answer using SymPy equivalence checking. |
+| `POST` | `/api/grade-place-name` | Teacher | Grade a geography place-name answer accepting accepted alternatives. |
 | `GET` | `/api/status` | Teacher | Get current grading status. |
 | `POST` | `/api/stop-grading` | Teacher | Stop grading and save progress. |
 | `DELETE` | `/api/student-history` | Teacher | Delete ALL student history (fresh start). |
@@ -238,7 +238,7 @@ All endpoints are under the application host (production: `https://app.graider.l
 | `POST` | `/api/export-slides` | Teacher | Export generated slides as PowerPoint (.pptx). |
 | `POST` | `/api/export-study-guide` | Teacher | Export a study guide to DOCX or PDF. |
 | `POST` | `/api/extract-text` | Teacher | Extract plain text from uploaded documents (docx, pdf, txt) or images (png, jpg, etc.). |
-| `POST` | `/api/generate-assessment` | Teacher |  |
+| `POST` | `/api/generate-assessment` | Teacher | Generate a standards-aligned assessment with DOK distribution. |
 | `POST` | `/api/generate-assignment-from-lesson` | Teacher | Generate an assignment based on an existing lesson plan. |
 | `POST` | `/api/generate-flashcards` | Teacher | Generate flashcards from content using Gemini Flash. |
 | `POST` | `/api/generate-lesson-plan` | Teacher | Generate a lesson plan using AI. |
@@ -246,7 +246,7 @@ All endpoints are under the application host (production: `https://app.graider.l
 | `POST` | `/api/generate-study-guide` | Teacher | Generate a structured study guide from content using Gemini Flash. |
 | `POST` | `/api/get-lesson-templates` | Teacher | Get subject-specific lesson activity templates. |
 | `POST` | `/api/get-standards` | Teacher | Get standards for a specific state, grade, and subject. |
-| `POST` | `/api/grade-assessment-answers` | Teacher |  |
+| `POST` | `/api/grade-assessment-answers` | Teacher | Grade student answers against an assessment using AI. |
 | `GET` | `/api/planner/costs` | Teacher | Return planner API cost summary. |
 | `POST` | `/api/regenerate-questions` | Teacher | Regenerate specific questions in an assessment/assignment using AI. |
 | `POST` | `/api/rewrite-for-alignment` | Teacher | Rewrite specific questions to better align with selected standards. |
@@ -328,14 +328,14 @@ All endpoints are under the application host (production: `https://app.graider.l
 | `GET` | `/api/accommodation-stats` | Teacher | Get statistics about accommodation usage. |
 | `POST` | `/api/add-student` | Teacher | Add a student to a period CSV and optionally to parent contacts. |
 | `GET` | `/api/check-api-keys` | Teacher | Check which API keys are configured (without exposing the keys). |
-| `POST` | `/api/clear-accommodations` | Teacher |  |
+| `POST` | `/api/clear-accommodations` | Teacher | Delete all student accommodation data. |
 | `POST` | `/api/delete-document` | Teacher | Delete a supporting document. |
 | `POST` | `/api/delete-period` | Teacher | Delete a period file. |
 | `POST` | `/api/delete-roster` | Teacher | Delete a roster file. |
-| `GET` | `/api/export-accommodations` | Teacher |  |
+| `GET` | `/api/export-accommodations` | Teacher | Export all accommodation data for backup. |
 | `GET` | `/api/focus-import-status` | Teacher | Get current status of the Focus import process. |
 | `POST` | `/api/get-period-students` | Teacher | Get student names from a period CSV file. |
-| `POST` | `/api/import-accommodations` | Teacher |  |
+| `POST` | `/api/import-accommodations` | Teacher | Import accommodations from an uploaded CSV file. |
 | `POST` | `/api/import-from-focus` | Teacher | Trigger Focus SIS roster import via Playwright. |
 | `GET` | `/api/list-documents` | Teacher | List all uploaded supporting documents. |
 | `GET` | `/api/list-periods` | Teacher | List all uploaded period files with their students. |
@@ -343,14 +343,14 @@ All endpoints are under the application host (production: `https://app.graider.l
 | `GET` | `/api/load-global-settings` | Teacher | Load global AI notes and settings. |
 | `GET` | `/api/load-rubric` | Teacher | Load rubric configuration. |
 | `GET` | `/api/parent-contacts` | Teacher | Return stored parent contacts with summary stats. |
-| `POST` | `/api/preview-parent-contacts` | Teacher |  |
+| `POST` | `/api/preview-parent-contacts` | Teacher | Preview uploaded class-list file headers and suggested column mapping. |
 | `POST` | `/api/remove-student` | Teacher | Remove a student from period CSV and parent contacts. |
 | `POST` | `/api/save-api-keys` | Teacher | Save API keys securely via BYOK module. |
 | `POST` | `/api/save-global-settings` | Teacher | Save global AI notes and settings. |
-| `POST` | `/api/save-parent-contact-mapping` | Teacher |  |
+| `POST` | `/api/save-parent-contact-mapping` | Teacher | Process uploaded file with confirmed mapping, save parent contacts. |
 | `POST` | `/api/save-roster-mapping` | Teacher | Save column mapping for a roster file. |
 | `POST` | `/api/save-rubric` | Teacher | Save rubric configuration. |
-| `GET` | `/api/student-accommodations` | Teacher |  |
+| `GET` | `/api/student-accommodations` | Teacher | Get all student accommodation mappings with name resolution. |
 | `DELETE` | `/api/student-accommodations/<student_id>` | Teacher | Remove accommodation settings for a student. |
 | `GET` | `/api/student-accommodations/<student_id>` | Teacher | Get accommodation settings for a specific student. |
 | `POST` | `/api/student-accommodations/<student_id>` | Teacher | Set accommodation presets for a student. |
@@ -392,10 +392,10 @@ All endpoints are under the application host (production: `https://app.graider.l
 | `POST` | `/api/delete-saved-assessment` | Teacher | Delete a saved assessment. |
 | `GET` | `/api/list-saved-assessments` | Teacher | List all saved assessments. |
 | `POST` | `/api/load-saved-assessment` | Teacher | Load a saved assessment by filename. |
-| `POST` | `/api/publish-assessment` | Teacher |  |
+| `POST` | `/api/publish-assessment` | Teacher | Publish an assessment, returning a join code and link. |
 | `POST` | `/api/save-assessment` | Teacher | Save a generated assessment locally for later use. |
-| `GET` | `/api/student/join/<code>` | Public |  |
-| `POST` | `/api/student/submit/<code>` | Public |  |
+| `GET` | `/api/student/join/<code>` | Public | Get assessment details (without answers) for a join code. |
+| `POST` | `/api/student/submit/<code>` | Public | Submit student answers for grading, returning immediate feedback. |
 | `DELETE` | `/api/teacher/assessment/<code>` | Teacher | Delete a published assessment and all its submissions. |
 | `GET` | `/api/teacher/assessment/<code>/results` | Teacher | Get all submissions for a published assessment. |
 | `POST` | `/api/teacher/assessment/<code>/toggle` | Teacher | Activate or deactivate a published assessment. |
@@ -433,8 +433,8 @@ All endpoints are under the application host (production: `https://app.graider.l
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | `GET` | `/api/analytics` | Teacher | Load master CSV and return analytics data for charts. |
-| `POST` | `/api/analytics/cleanup` | Teacher |  |
-| `GET` | `/api/export-district-report` | Teacher |  |
+| `POST` | `/api/analytics/cleanup` | Teacher | One-time cleanup of master_grades.csv names and Approved column. |
+| `GET` | `/api/export-district-report` | Teacher | Export anonymized aggregate statistics (no PII) for district reporting. |
 
 ## assessment_results_routes
 
@@ -446,9 +446,9 @@ All endpoints are under the application host (production: `https://app.graider.l
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `GET` | `/api/auth/approval-status` | Public |  |
+| `GET` | `/api/auth/approval-status` | Public | Check whether the current user is approved. |
 | `GET/POST` | `/api/auth/approve-user` | Public | One-click user approval from admin notification email. |
-| `POST` | `/api/auth/notify-signup` | Public |  |
+| `POST` | `/api/auth/notify-signup` | Public | Send admin notification email when a new user signs up. |
 
 ## document_routes
 
