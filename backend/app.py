@@ -507,6 +507,10 @@ def healthz():
         return jsonify({"app": "ok", "supabase": "drill_forced_failure"}), 503
 
     status = {"app": "ok"}
+    # Build marker: lets a post-deploy smoke confirm the NEW image is live
+    # (not just that *some* image is healthy). Railway sets
+    # RAILWAY_GIT_COMMIT_SHA on every deploy; falls back to "unknown" locally.
+    status["version"] = (os.getenv("RAILWAY_GIT_COMMIT_SHA") or "unknown")[:7]
     # Supabase — raw httpx GET with a short timeout.
     # Deliberately bypasses ResilientClient: a healthcheck must fail fast,
     # not retry for 30s while the pod reports healthy. If this check fails
