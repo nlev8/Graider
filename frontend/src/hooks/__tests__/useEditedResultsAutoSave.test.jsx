@@ -41,7 +41,16 @@ describe('useEditedResultsAutoSave', () => {
     expect(api.updateResult).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1000);
     expect(api.updateResult).toHaveBeenCalledWith('a.docx', { score: 90, letter_grade: 'A', feedback: 'good' });
-    expect(setEditedResults).toHaveBeenCalled(); // clears the edited flag
+    // The clear-flag updater must clear ONLY the matching item's `edited` flag.
+    const updater = setEditedResults.mock.calls[0][0];
+    const next = updater([
+      { filename: 'a.docx', edited: true, score: 90 },
+      { filename: 'other.docx', edited: true, score: 50 },
+    ]);
+    expect(next).toEqual([
+      { filename: 'a.docx', edited: false, score: 90 },     // cleared
+      { filename: 'other.docx', edited: true, score: 50 },  // untouched (different filename)
+    ]);
   });
 
   it('only persists items that have a filename', async () => {
