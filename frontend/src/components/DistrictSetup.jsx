@@ -229,6 +229,19 @@ var styles = {
   },
 };
 
+var LIGHT_TEXT = "#333";
+var LIGHT_TEXT_DIM = "#666";
+var LIGHT_BORDER = "#e0e0e0";
+
+// Section headings (and several body text nodes) hardcode the dark-mode
+// TEXT/TEXT_DIM constants. On the light-mode white card that renders
+// white-on-white (invisible). Theme them per the established isDark pattern.
+function sectionHeadingStyle(isDark) {
+  return isDark
+    ? styles.sectionHeading
+    : Object.assign({}, styles.sectionHeading, { color: LIGHT_TEXT, borderBottom: "1px solid " + LIGHT_BORDER });
+}
+
 function PasswordField(props) {
   var show = props.show;
   var setShow = props.setShow;
@@ -355,6 +368,8 @@ function LoginGate(props) {
 
 export function SsoAdminSection(props) {
   var isDark = props.isDark !== false;
+  var txt = isDark ? TEXT : LIGHT_TEXT;
+  var txtDim = isDark ? TEXT_DIM : LIGHT_TEXT_DIM;
 
   var adminsState = useState([]);
   var admins = adminsState[0];
@@ -435,7 +450,7 @@ export function SsoAdminSection(props) {
   var inputStyle = isDark ? styles.input : Object.assign({}, styles.input, { background: "#f9f9f9", border: "1px solid #ddd", color: "#333" });
 
   return React.createElement(React.Fragment, null,
-    React.createElement("div", { style: styles.sectionHeading }, "SSO Admin Access"),
+    React.createElement("div", { style: sectionHeadingStyle(isDark) }, "SSO Admin Access"),
     React.createElement("div", { style: styles.helperText }, "Grant district- or school-level admin access to users who sign in through Graider-managed SSO (matched by email at login)"),
 
     // Current designations list
@@ -445,7 +460,7 @@ export function SsoAdminSection(props) {
           key: a.email,
           style: Object.assign({}, styles.summaryItem, { alignItems: "center" }),
         },
-          React.createElement("span", { style: { color: TEXT } },
+          React.createElement("span", { style: { color: txt } },
             a.email,
             " — ",
             a.tier === "district" ? "District Admin" : "School Admin",
@@ -458,11 +473,11 @@ export function SsoAdminSection(props) {
           }, "Remove")
         );
       })
-    ) : React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "No SSO admin designations yet"),
+    ) : React.createElement("div", { style: { color: txtDim, fontSize: "13px", marginTop: "8px" } }, "No SSO admin designations yet"),
 
     // Add designation form
     React.createElement("div", { style: { marginTop: "20px", padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "10px", border: "1px solid " + BORDER } },
-      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: TEXT, marginBottom: "12px" } }, "Add Designation"),
+      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: txt, marginBottom: "12px" } }, "Add Designation"),
 
       React.createElement("label", { style: labelStyle }, "Email"),
       React.createElement("input", {
@@ -505,7 +520,10 @@ export function SsoAdminSection(props) {
   );
 }
 
-export function DistrictAnalyticsSection() {
+export function DistrictAnalyticsSection(props) {
+  var isDark = !props || props.isDark !== false;
+  var txt = isDark ? TEXT : LIGHT_TEXT;
+  var txtDim = isDark ? TEXT_DIM : LIGHT_TEXT_DIM;
   var dataState = useState(null);
   var data = dataState[0];
   var setData = dataState[1];
@@ -540,16 +558,16 @@ export function DistrictAnalyticsSection() {
         textAlign: "center",
       },
     },
-      React.createElement("div", { style: { fontSize: "24px", fontWeight: "700", color: TEXT } }, valueText),
-      React.createElement("div", { style: { fontSize: "12px", color: TEXT_DIM, marginTop: "4px" } }, labelText)
+      React.createElement("div", { style: { fontSize: "24px", fontWeight: "700", color: txt } }, valueText),
+      React.createElement("div", { style: { fontSize: "12px", color: txtDim, marginTop: "4px" } }, labelText)
     );
   }
 
   var body;
   if (loading) {
-    body = React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "Loading analytics...");
+    body = React.createElement("div", { style: { color: txtDim, fontSize: "13px", marginTop: "8px" } }, "Loading analytics...");
   } else if (!data) {
-    body = React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "Analytics are not available right now");
+    body = React.createElement("div", { style: { color: txtDim, fontSize: "13px", marginTop: "8px" } }, "Analytics are not available right now");
   } else {
     var overview = data.overview || {};
     var grades = overview.grade_distribution || {};
@@ -573,7 +591,7 @@ export function DistrictAnalyticsSection() {
       ),
 
       // Grade distribution bars
-      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: TEXT, marginTop: "20px", marginBottom: "10px" } }, "Grade Distribution"),
+      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: txt, marginTop: "20px", marginBottom: "10px" } }, "Grade Distribution"),
       React.createElement("div", null,
         gradeKeys.map(function(k) {
           var count = grades[k] || 0;
@@ -582,17 +600,17 @@ export function DistrictAnalyticsSection() {
             key: k,
             style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" },
           },
-            React.createElement("span", { style: { width: "16px", color: TEXT_DIM, fontSize: "13px", fontWeight: "600" } }, k),
+            React.createElement("span", { style: { width: "16px", color: txtDim, fontSize: "13px", fontWeight: "600" } }, k),
             React.createElement("div", { style: { flex: 1, height: "14px", background: "rgba(255,255,255,0.05)", borderRadius: "7px", overflow: "hidden" } },
               React.createElement("div", { style: { width: pct + "%", height: "100%", background: gradeColors[k], borderRadius: "7px" } })
             ),
-            React.createElement("span", { style: { width: "32px", textAlign: "right", color: TEXT, fontSize: "13px" } }, String(count))
+            React.createElement("span", { style: { width: "32px", textAlign: "right", color: txt, fontSize: "13px" } }, String(count))
           );
         })
       ),
 
       // Teacher list
-      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: TEXT, marginTop: "20px", marginBottom: "10px" } }, "Teachers"),
+      React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: txt, marginTop: "20px", marginBottom: "10px" } }, "Teachers"),
       teachers.length > 0 ? React.createElement("div", {
         style: { maxHeight: "260px", overflowY: "auto", border: "1px solid " + BORDER, borderRadius: "10px" },
       },
@@ -608,25 +626,25 @@ export function DistrictAnalyticsSection() {
             },
           },
             React.createElement("div", null,
-              React.createElement("div", { style: { color: TEXT, fontSize: "13px", fontWeight: "500" } }, t.name || "Unknown"),
-              React.createElement("div", { style: { color: TEXT_DIM, fontSize: "12px" } }, t.email || "")
+              React.createElement("div", { style: { color: txt, fontSize: "13px", fontWeight: "500" } }, t.name || "Unknown"),
+              React.createElement("div", { style: { color: txtDim, fontSize: "12px" } }, t.email || "")
             ),
-            React.createElement("div", { style: { color: TEXT_DIM, fontSize: "12px", textAlign: "right" } },
+            React.createElement("div", { style: { color: txtDim, fontSize: "12px", textAlign: "right" } },
               (t.classes_count || 0) + " classes • " + (t.students_count || 0) + " students • " + (t.assessments_count || 0) + " assessments"
             )
           );
         })
-      ) : React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "No teacher activity yet"),
+      ) : React.createElement("div", { style: { color: txtDim, fontSize: "13px", marginTop: "8px" } }, "No teacher activity yet"),
 
       // Approximate note
       data.approximate ? React.createElement("div", {
-        style: { fontSize: "12px", color: TEXT_DIM, marginTop: "12px", fontStyle: "italic" },
+        style: { fontSize: "12px", color: txtDim, marginTop: "12px", fontStyle: "italic" },
       }, "Counts are approximate above 100k rows.") : null
     );
   }
 
   return React.createElement(React.Fragment, null,
-    React.createElement("div", { style: styles.sectionHeading }, "District Analytics"),
+    React.createElement("div", { style: sectionHeadingStyle(isDark) }, "District Analytics"),
     React.createElement("div", { style: styles.helperText }, "School-wide rollup across all teachers and assessments"),
     body
   );
@@ -634,6 +652,8 @@ export function DistrictAnalyticsSection() {
 
 function ConfigForm(props) {
   var isDark = props.isDark !== false;
+  var txt = isDark ? TEXT : LIGHT_TEXT;
+  var txtDim = isDark ? TEXT_DIM : LIGHT_TEXT_DIM;
   var onLogout = props.onLogout;
 
   var configState = useState({
@@ -927,7 +947,7 @@ function ConfigForm(props) {
   if (loading) {
     return React.createElement("div", { style: styles.page },
       React.createElement("div", { style: styles.card },
-        React.createElement("div", { style: { textAlign: "center", color: TEXT_DIM } }, "Loading configuration...")
+        React.createElement("div", { style: { textAlign: "center", color: txtDim } }, "Loading configuration...")
       )
     );
   }
@@ -952,7 +972,7 @@ function ConfigForm(props) {
       ),
 
       // Section 1: SIS Provider
-      React.createElement("div", { style: styles.sectionHeading }, "SIS Provider"),
+      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "SIS Provider"),
       React.createElement("div", { style: styles.radioGroup },
         React.createElement("label", { style: styles.radioLabel },
           React.createElement("input", {
@@ -1100,7 +1120,7 @@ function ConfigForm(props) {
       }, testResult.error ? "Error: " + testResult.error : "Connection successful") : null,
 
       // Section 2: AI API Keys
-      React.createElement("div", { style: styles.sectionHeading }, "AI API Keys"),
+      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "AI API Keys"),
       React.createElement("div", { style: styles.helperText }, "Teachers can override with their own keys in Settings"),
 
       React.createElement("label", { style: styles.label },
@@ -1158,7 +1178,7 @@ function ConfigForm(props) {
       error ? React.createElement("div", { style: styles.error }, error) : null,
 
       // Section 3: School Admins
-      React.createElement("div", { style: styles.sectionHeading }, "School Admins"),
+      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "School Admins"),
       React.createElement("div", { style: styles.helperText }, "Invite teachers to become school-level administrators"),
 
       // Current admins table
@@ -1166,18 +1186,18 @@ function ConfigForm(props) {
         React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "13px" } },
           React.createElement("thead", null,
             React.createElement("tr", { style: { borderBottom: "1px solid " + BORDER } },
-              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: TEXT_DIM, fontWeight: "500" } }, "Name"),
-              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: TEXT_DIM, fontWeight: "500" } }, "School"),
-              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: TEXT_DIM, fontWeight: "500" } }, "Granted"),
+              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: txtDim, fontWeight: "500" } }, "Name"),
+              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: txtDim, fontWeight: "500" } }, "School"),
+              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: txtDim, fontWeight: "500" } }, "Granted"),
               React.createElement("th", { style: { textAlign: "right", padding: "8px 4px" } }, "")
             )
           ),
           React.createElement("tbody", null,
             adminList.map(function(admin) {
               return React.createElement("tr", { key: admin.user_id, style: { borderBottom: "1px solid " + BORDER } },
-                React.createElement("td", { style: { padding: "8px 4px", color: TEXT } }, admin.name || admin.email || "Unknown"),
-                React.createElement("td", { style: { padding: "8px 4px", color: TEXT } }, admin.school || "-"),
-                React.createElement("td", { style: { padding: "8px 4px", color: TEXT_DIM } }, admin.granted_at ? new Date(admin.granted_at).toLocaleDateString() : "-"),
+                React.createElement("td", { style: { padding: "8px 4px", color: txt } }, admin.name || admin.email || "Unknown"),
+                React.createElement("td", { style: { padding: "8px 4px", color: txt } }, admin.school || "-"),
+                React.createElement("td", { style: { padding: "8px 4px", color: txtDim } }, admin.granted_at ? new Date(admin.granted_at).toLocaleDateString() : "-"),
                 React.createElement("td", { style: { padding: "8px 4px", textAlign: "right" } },
                   React.createElement("button", {
                     type: "button",
@@ -1199,11 +1219,11 @@ function ConfigForm(props) {
             })
           )
         )
-      ) : React.createElement("div", { style: { color: TEXT_DIM, fontSize: "13px", marginTop: "8px" } }, "No school admins yet"),
+      ) : React.createElement("div", { style: { color: txtDim, fontSize: "13px", marginTop: "8px" } }, "No school admins yet"),
 
       // Create invite form
       React.createElement("div", { style: { marginTop: "20px", padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "10px", border: "1px solid " + BORDER } },
-        React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: TEXT, marginBottom: "12px" } }, "Create Admin Invite"),
+        React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: txt, marginBottom: "12px" } }, "Create Admin Invite"),
 
         React.createElement("label", { style: styles.label }, "School Name"),
         React.createElement("input", {
@@ -1301,7 +1321,7 @@ function ConfigForm(props) {
         adminInviteCode ? React.createElement("div", {
           style: { marginTop: "16px", padding: "16px", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "10px", textAlign: "center" },
         },
-          React.createElement("div", { style: { fontSize: "12px", color: TEXT_DIM, marginBottom: "6px" } }, "Invite Code"),
+          React.createElement("div", { style: { fontSize: "12px", color: txtDim, marginBottom: "6px" } }, "Invite Code"),
           React.createElement("div", {
             style: { fontSize: "24px", fontWeight: "700", color: GREEN, letterSpacing: "2px", cursor: "pointer", fontFamily: "monospace" },
             title: "Click to copy",
@@ -1309,7 +1329,7 @@ function ConfigForm(props) {
               navigator.clipboard.writeText(adminInviteCode.code);
             },
           }, adminInviteCode.code),
-          React.createElement("div", { style: { fontSize: "12px", color: TEXT_DIM, marginTop: "8px" } },
+          React.createElement("div", { style: { fontSize: "12px", color: txtDim, marginTop: "8px" } },
             "Expires: " + new Date(adminInviteCode.expires_at).toLocaleDateString() + " \u2022 Click code to copy"
           )
         ) : null
@@ -1319,10 +1339,10 @@ function ConfigForm(props) {
       React.createElement(SsoAdminSection, { isDark: isDark }),
 
       // Section 3c: District Analytics (school-wide rollup)
-      React.createElement(DistrictAnalyticsSection, null),
+      React.createElement(DistrictAnalyticsSection, { isDark: isDark }),
 
       // Section 4: Configuration Summary + Logout
-      React.createElement("div", { style: styles.sectionHeading }, "Configuration Summary"),
+      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "Configuration Summary"),
 
       React.createElement("div", { style: styles.summaryItem },
         React.createElement("span", null, "SIS Provider"),
@@ -1402,6 +1422,8 @@ export default function DistrictSetup() {
   var districtTheme = themeState[0];
   var setDistrictTheme = themeState[1];
   var isDark = districtTheme !== 'light';
+  var txt = isDark ? TEXT : LIGHT_TEXT;
+  var txtDim = isDark ? TEXT_DIM : LIGHT_TEXT_DIM;
 
   var needsSetup = needsSetupState[0];
   var setNeedsSetup = needsSetupState[1];
@@ -1438,7 +1460,7 @@ export default function DistrictSetup() {
   if (checking) {
     return React.createElement("div", { style: styles.page },
       React.createElement("div", { style: styles.card },
-        React.createElement("div", { style: { textAlign: "center", color: TEXT_DIM } }, "Loading...")
+        React.createElement("div", { style: { textAlign: "center", color: txtDim } }, "Loading...")
       )
     );
   }
