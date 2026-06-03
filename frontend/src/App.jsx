@@ -67,6 +67,7 @@ import DocumentEditorModal from "./components/DocumentEditorModal";
 import ReviewModal from "./components/ReviewModal";
 import Sidebar from "./components/Sidebar";
 import { useTheme } from "./hooks/useTheme";
+import { useToasts } from "./hooks/useToasts";
 import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
 import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
@@ -891,31 +892,18 @@ function App() {
     return function() { clearInterval(interval); };
   }, [user, showTutorial, userApproved]);
 
-  // Toast notifications
-  const [toasts, setToasts] = useState([]);
+  // Toast notifications (state + add/remove handlers extracted to useToasts; decomp
+  // slice 2). The status.results-keyed toast-spawn effect and its lastResultCount ref
+  // stay in App below — that effect is coupled to grading `status` and moving it would
+  // reorder a useEffect across ~40 hooks. setToasts is returned for the live-toast
+  // mutation in the grading-status block.
+  const { toasts, setToasts, addToast, removeToast } = useToasts();
   const lastResultCount = useRef(0);
-  const toastIdCounter = useRef(0);
-
-  const addToast = (message, type = "success", duration = 4000) => {
-    const id = ++toastIdCounter.current;
-    setToasts((prev) => [...prev, { id, message, type }]);
-    // If duration is 0 or null, toast persists until manually removed
-    if (duration) {
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, duration);
-    }
-    return id; // Return ID so caller can remove it later
-  };
 
   const {
     focusCommsStatus, setFocusCommsStatus, focusCommsPolling, setFocusCommsPolling,
     focusCommentsStatus, setFocusCommentsStatus, focusCommentsPolling, setFocusCommentsPolling,
   } = useFocusPolling(addToast);
-
-  const removeToast = (id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
 
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
