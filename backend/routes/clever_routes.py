@@ -566,7 +566,7 @@ def clever_session_check():
         if roster_files:
             last_sync_time = os.path.getmtime(roster_files[0])
     except Exception:
-        pass
+        logger.warning("clever roster last-sync time lookup failed", exc_info=True)
 
     return jsonify({
         "authenticated": True,

@@ -251,9 +251,9 @@ try:
                         _sb.table(table).update({'status': 'grading_failed'}).eq('id', sid).execute()
                     _logger.info("Recovered %d stale partial submissions in %s", len(ids), table)
             except Exception:
-                pass
+                _logger.debug("stale partial submission recovery (per-table) failed", exc_info=True)
 except Exception:
-    pass
+    _logger.debug("stale partial submission recovery (startup sweep) failed", exc_info=True)
 
 # ══════════════════════════════════════════════════════════════
 # GRADING STATE MANAGEMENT
@@ -312,6 +312,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                         doc = Document(filepath)
                         content = '\n'.join([p.text for p in doc.paragraphs])
                     except Exception:
+                        _logger.debug("support document docx extraction failed", exc_info=True)
                         continue
                 elif filepath.endswith('.pdf'):
                     try:
@@ -320,6 +321,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
                     except Exception:
+                        _logger.debug("support document pdf extraction failed", exc_info=True)
                         continue
 
                 if content and total_chars + len(content) < max_chars:

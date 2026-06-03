@@ -11,6 +11,9 @@ Features:
 
 from math import radians, sin, cos, sqrt, atan2
 import re
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -67,13 +70,13 @@ def _normalize_math_input(expr_str: str):
     try:
         return sympify(algebraic)
     except Exception:
-        pass
+        _logger.debug("sympify normalization failed", exc_info=True)
 
     # 6. LaTeX fallback
     try:
         return parse_latex(s)
     except Exception:
-        pass
+        _logger.debug("LaTeX parse fallback failed", exc_info=True)
 
     # 7. Give up
     return None
@@ -99,7 +102,7 @@ def _compare_numeric_forms(student_str: str, correct_str: str, tolerance: float 
         if diff == 0:
             return {'equivalent': True, 'method': 'symbolic'}
     except Exception:
-        pass
+        _logger.debug("symbolic equivalence comparison failed", exc_info=True)
 
     # Try numerical comparison
     try:

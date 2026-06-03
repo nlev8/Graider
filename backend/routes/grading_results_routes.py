@@ -91,7 +91,7 @@ def grade_individual():
         try:
             student_info = json.loads(student_info_str)
         except Exception:
-            pass
+            _logger.debug("student info JSON parse failed", exc_info=True)
 
     # Parse assignment config if provided
     assignment_config = None
@@ -99,7 +99,7 @@ def grade_individual():
         try:
             assignment_config = json.loads(assignment_config_str)
         except Exception:
-            pass
+            _logger.debug("assignment config JSON parse failed", exc_info=True)
 
     # Build AI notes from config
     file_ai_notes = global_ai_notes or ''

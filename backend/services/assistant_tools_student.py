@@ -702,7 +702,7 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
             if _fuzzy_name_match(student_name, r.get("student_name", ""))
         )
     except Exception:
-        pass
+        _logger.debug("student results count from grading state failed", exc_info=True)
 
     # Build and save pending payload
     pending = {"action": "remove_student", "student_name": matched_name, "teacher_id": teacher_id}

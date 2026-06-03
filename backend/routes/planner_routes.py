@@ -882,7 +882,7 @@ def _save_grading_config_for_export(assignment):
                 teacher_id = getattr(g, 'user_id', 'local-dev')
                 storage_save(f'assignment:{safe_title}', config, teacher_id)
             except Exception:
-                pass  # Local save succeeded, Supabase is best-effort
+                _logger.debug("assignment Supabase save failed", exc_info=True)  # Local save succeeded, Supabase is best-effort
 
         _logger.info("Saved grading config: %s", config_path)
     except Exception as e:
@@ -1676,7 +1676,7 @@ def get_assessment_templates():
                     metadata = json.load(mf)
                     templates.append(metadata)
             except Exception:
-                pass
+                _logger.debug("template metadata load failed", exc_info=True)
 
     # Sort by creation date (newest first)
     templates.sort(key=lambda x: x.get('created_at', ''), reverse=True)
@@ -2131,7 +2131,7 @@ def export_slides():
             try:
                 images[int(k)] = base64.b64decode(v)
             except Exception:
-                pass
+                _logger.debug("slide image base64 decode failed", exc_info=True)
 
         filepath = os.path.join(export_dir, safe_title + ".pptx")
         assemble_pptx(

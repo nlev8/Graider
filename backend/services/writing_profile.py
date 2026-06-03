@@ -93,6 +93,6 @@ def get_writing_profile(student_id: str) -> dict:
                 history = json.load(f)
                 return history.get("writing_profile")
     except Exception:
-        pass
+        _logger.debug("writing profile history load failed", exc_info=True)
 
     return None

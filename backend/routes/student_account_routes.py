@@ -1426,7 +1426,7 @@ def send_submission_confirmations():
                     dt = datetime.fromisoformat(sub_time.replace('Z', '+00:00'))
                     sub_time = dt.strftime('%B %d, %Y at %I:%M %p')
                 except Exception:
-                    pass
+                    _logger.debug("submission timestamp format failed", exc_info=True)
             body += f"Submitted: {sub_time}\n"
 
             if row['attempt_number'] > 1:

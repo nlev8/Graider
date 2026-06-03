@@ -9,12 +9,15 @@ import atexit
 import signal
 import subprocess
 import threading
+import logging
 from datetime import datetime
 
 from flask import Blueprint, g, jsonify, request
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
 import sentry_sdk
+
+_logger = logging.getLogger(__name__)
 
 automation_bp = Blueprint('automation', __name__)
 
@@ -58,7 +61,7 @@ def _cleanup_subprocesses():
                 try:
                     proc.kill()
                 except Exception:
-                    pass
+                    _logger.debug("automation subprocess kill failed", exc_info=True)
 
 atexit.register(_cleanup_subprocesses)
 

@@ -33,7 +33,7 @@ def _find_master_grades():
                     if os.path.exists(path):
                         return path
         except Exception:
-            pass
+            _logger.debug("master grades CSV path resolution failed", exc_info=True)
 
     # Check common locations
     candidates = [
@@ -693,7 +693,7 @@ def export_district_report():
             school_name = settings.get("school_name", school_name)
             subject = settings.get("subject", subject)
     except Exception:
-        pass
+        _logger.debug("teacher settings load from storage failed", exc_info=True)
 
     # Fallback to local file settings
     if teacher_name == "Unknown Teacher":
@@ -706,7 +706,7 @@ def export_district_report():
                     school_name = file_settings.get('school_name', school_name)
                     subject = file_settings.get('subject', subject)
             except Exception:
-                pass
+                _logger.debug("teacher settings load from local file failed", exc_info=True)
 
     # Collect anonymized aggregate data
     all_grades = []

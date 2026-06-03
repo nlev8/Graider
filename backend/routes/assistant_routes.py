@@ -579,6 +579,7 @@ def _load_resource_content():
                     with open(fpath, 'r', encoding='utf-8') as f:
                         content = f.read()
             except Exception:
+                logger.debug("attachment text extraction failed", exc_info=True)
                 continue
 
             if not content or content.startswith("[Error") or content.startswith("[PDF extraction"):

@@ -9,6 +9,7 @@ import os
 import csv
 import io
 import json
+import logging
 import subprocess
 import re
 import uuid
@@ -34,6 +35,8 @@ from backend.utils.pending_send import (
     assert_pending_belongs_to as _assert_pending_belongs_to,
 )
 import sentry_sdk
+
+_logger = logging.getLogger(__name__)
 
 try:
     from backend.storage import load as storage_load, save as storage_save
@@ -796,6 +799,7 @@ def _parse_curriculum_map_for_dates(start_date, end_date):
                     curriculum_file = os.path.join(DOCUMENTS_DIR, fname)
                     break
             except Exception:
+                _logger.debug("curriculum document metadata read failed", exc_info=True)
                 continue
         elif 'curriculum' in fname.lower() or 'pacing' in fname.lower():
             curriculum_file = os.path.join(DOCUMENTS_DIR, fname)
@@ -2029,7 +2033,7 @@ def list_resources_tool(teacher_id='local-dev'):
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         meta = json.load(f)
                 except Exception:
-                    pass
+                    _logger.debug("document metadata load failed", exc_info=True)
 
             size_kb = round(os.path.getsize(fpath) / 1024, 1)
             documents.append({
@@ -2102,7 +2106,7 @@ def read_resource_tool(filename, teacher_id='local-dev'):
             result["doc_type"] = meta.get("doc_type", "unknown")
             result["description"] = meta.get("description", "")
         except Exception:
-            pass
+            _logger.debug("resource doc metadata enrich failed", exc_info=True)
 
     return result
 

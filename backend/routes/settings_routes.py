@@ -428,7 +428,7 @@ def upload_period():
                 headers = reader.fieldnames or []
             storage_save(f'period:{filename}', {"headers": headers, "rows": rows}, teacher_id)
         except Exception:
-            pass
+            _logger.debug("period roster Supabase persist failed", exc_info=True)
 
     return jsonify({
         "status": "uploaded",
@@ -1149,7 +1149,7 @@ def get_parent_contacts():
                         if not contacts[sid].get('student_email'):
                             contacts[sid]['student_email'] = email
         except Exception:
-            pass  # Results merge is best-effort
+            _logger.debug("student email merge from results failed", exc_info=True)  # Results merge is best-effort
 
         with_email = sum(1 for c in contacts.values() if c.get('parent_emails'))
 
@@ -1254,7 +1254,7 @@ def get_all_student_accommodations():
                             if name:
                                 id_to_name[sid] = name
             except Exception:
-                pass
+                _logger.debug("period roster id-to-name build failed", exc_info=True)
     # Fallback to local files
     if not id_to_name and os.path.exists(PERIODS_DIR):
         for fname in os.listdir(PERIODS_DIR):

@@ -641,7 +641,7 @@ def export_focus_csv():
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
             except Exception:
-                pass
+                _logger.debug("roster CSV parse failed", exc_info=True)
 
     # Load from periods
     if periods_dir.exists():
@@ -682,7 +682,7 @@ def export_focus_csv():
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
             except Exception:
-                pass
+                _logger.debug("period roster CSV parse failed", exc_info=True)
 
     # Build list of students to match
     students_to_match = []
@@ -929,7 +929,7 @@ def export_focus_batch():
         try:
             subprocess.Popen(['open', FOCUS_EXPORTS_DIR])
         except Exception:
-            pass
+            _logger.debug("Focus exports folder open (local dev) failed", exc_info=True)
 
     return jsonify(manifest)
 
@@ -1052,7 +1052,7 @@ def export_lms_csv():
         try:
             subprocess.Popen(['open', export_dir])
         except Exception:
-            pass
+            _logger.debug("exports folder open (local dev) failed", exc_info=True)
 
     return jsonify(manifest)
 

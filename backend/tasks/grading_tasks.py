@@ -55,7 +55,7 @@ class PortalGradingTask(Task):
             get_submission_repository(supabase_table).mark_failed(submission_id, exc)
         except Exception:
             # Sentry already has the original exception; don't mask it.
-            pass
+            _logger.warning("submission mark_failed (status update) failed", exc_info=True)
 
 
 # Retry semantics:
@@ -182,7 +182,7 @@ def grade_portal_submission(
                 'Assessment content unavailable at grading time',
             )
         except Exception:
-            pass
+            _logger.warning("submission mark_failed (missing content) failed", exc_info=True)
         return
 
     grade_portal_submission_sync(

@@ -998,7 +998,7 @@ def _load_ell_language(student_id):
                 if lang and lang != "none":
                     ell_language = lang
             except Exception:
-                pass
+                _logger.warning("ELL language load failed", exc_info=True)
     return ell_language
 
 
@@ -1459,7 +1459,7 @@ in your scoring or feedback. The teacher knows their students better than any ru
                     "json_recovery": True
                 }
         except Exception:
-            pass
+            _logger.warning("malformed-JSON regex recovery failed", exc_info=True)
 
         return {
             "score": 0,
@@ -1711,7 +1711,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                         }
                         continue  # Skip LLM call — instant correct, zero cost
                 except Exception:
-                    pass  # SymPy failed — fall through to normal AI grading
+                    _logger.warning("SymPy equivalence check failed", exc_info=True)  # SymPy failed — fall through to normal AI grading
 
             f = executor.submit(
                 grade_per_question,
@@ -1794,7 +1794,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 if lang and lang != "none":
                     ell_language = lang
             except Exception:
-                pass
+                _logger.warning("ELL language load failed", exc_info=True)
 
     # === BUILD BREAKDOWN (before feedback so we can pass rubric scores) ===
     content_pts = int(round((total_earned / max(total_possible, 1)) * 40))
@@ -1926,7 +1926,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 try:
                     update_writing_profile(student_id, current_writing_style, student_name)
                 except Exception:
-                    pass
+                    _logger.warning("writing profile update failed", exc_info=True)
 
     _logger.info(f"  ✅ Multi-pass grading complete: {final_score} ({letter_grade})")
     return result

@@ -135,7 +135,7 @@ def list_lessons():
                         units[unit_name].append(lesson_info)
                         all_lessons.append(lesson_info)
                 except Exception:
-                    pass
+                    logger.debug("saved lesson JSON load failed", exc_info=True)
 
     return jsonify({"units": units, "lessons": all_lessons})
 

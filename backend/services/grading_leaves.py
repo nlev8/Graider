@@ -350,7 +350,7 @@ Respond ONLY with this JSON (no other text):
             if parsed:
                 return parsed.model_dump()
         except Exception:
-            pass  # Fall through to text fallback
+            _logger.debug("structured detection parse failed", exc_info=True)  # Fall through to text fallback
 
         # Text fallback if structured output fails
         response = with_retry(lambda: client.chat.completions.create(

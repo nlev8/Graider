@@ -317,7 +317,7 @@ def list_periods():
                         with open(os.path.join(periods_dir, f), 'r', encoding='utf-8') as pf:
                             count = sum(1 for _ in pf) - 1  # Subtract header
                     except Exception:
-                        pass
+                        _logger.debug("period student count failed", exc_info=True)
                     periods.append({"name": period_name, "file": f, "student_count": count})
 
         periods.sort(key=lambda x: x['name'])

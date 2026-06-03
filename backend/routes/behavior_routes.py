@@ -204,7 +204,7 @@ def get_behavior_data():
                 dt = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
                 timestamp = dt.strftime('%H:%M')
             except Exception:
-                pass
+                _logger.debug("event timestamp parse failed", exc_info=True)
 
         student = students[sid]
         student["name"] = name

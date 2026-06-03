@@ -92,7 +92,7 @@ def _load_teacher_context():
                     context['rubric_prompt'] = "CUSTOM RUBRIC:\n" + '\n'.join(parts)
             context['grading_style'] = settings.get('gradingStyle', 'standard')
     except Exception:
-        pass
+        _logger.debug("rubric/grading-style context build failed", exc_info=True)
     return context
 
 
@@ -993,7 +993,7 @@ def grade_box_plot(question, answer):
             if abs(student_val - exp_val) < tolerance:
                 correct_count += 1
         except Exception:
-            pass
+            _logger.debug("numeric answer comparison failed", exc_info=True)
 
     if correct_count == total:
         return {'correct': True, 'feedback': 'All values correct!'}
@@ -1163,6 +1163,7 @@ def grade_function_graph(question, answer):
             try:
                 exp_sym = sympify(exp_norm)
             except Exception:
+                _logger.debug("expected expression sympify failed", exc_info=True)
                 continue
 
             for stu_expr in student_exprs:
