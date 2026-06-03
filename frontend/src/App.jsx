@@ -69,6 +69,7 @@ import { useTheme } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
 import { useAuthSession } from "./hooks/useAuthSession";
 import { useBillingRedirect } from "./hooks/useBillingRedirect";
+import { useAssignmentAutoSave } from "./hooks/useAssignmentAutoSave";
 import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
 import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
@@ -1365,87 +1366,20 @@ function App() {
   // Stripe billing redirect handling extracted to useBillingRedirect (decomp slice 4).
   useBillingRedirect({ addToast, setActiveTab, setSettingsTab });
 
-  // Auto-save Builder assignment when it changes (debounced)
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    if (!assignment.title) return; // Don't save assignments without a title
-    if (isLoadingAssignment) return; // Don't save while loading an assignment
-    // Skip auto-save right after loading — data is already on disk
-    if (skipAutoSaveRef.current) {
-      skipAutoSaveRef.current = false;
-      return;
-    }
-
-    const saveTimeout = setTimeout(async () => {
-      // Double-check we're not in the middle of loading
-      if (isLoadingAssignment) return;
-
-      try {
-        let dataToSave = { ...assignment, importedDoc };
-        // Compare sanitized names to detect real renames (not just special-char differences)
-        // Backend sanitizes titles to filenames by keeping only [a-zA-Z0-9 \-_]
-        const sanitizeForFilename = (s) => s.replace(/[^a-zA-Z0-9 \-_]/g, '').trim();
-        const isRename =
-          loadedAssignmentName && sanitizeForFilename(loadedAssignmentName) !== sanitizeForFilename(assignment.title);
-
-        // If title changed from a previously loaded assignment, add old name to aliases
-        if (isRename) {
-          const currentAliases = assignment.aliases || [];
-          if (!currentAliases.includes(loadedAssignmentName)) {
-            dataToSave.aliases = [...currentAliases, loadedAssignmentName];
-            // Also update local state with new alias
-            setAssignment((prev) => ({ ...prev, aliases: dataToSave.aliases }));
-          }
-        }
-
-        const saveResult = await api.saveAssignmentConfig(dataToSave);
-
-        // Only proceed if save was successful
-        if (saveResult.status === "saved") {
-          // If renamed, delete the old assignment file (alias is preserved in new file)
-          if (isRename) {
-            try {
-              await api.deleteAssignment(loadedAssignmentName);
-              console.log(`Renamed assignment: "${loadedAssignmentName}" → "${assignment.title}" (old name saved as alias)`);
-            } catch (deleteErr) {
-              console.error("Failed to delete old assignment file:", deleteErr);
-              // Don't fail the whole operation if delete fails
-            }
-          }
-
-          if (isRename) {
-            // Full list refresh on rename (list structure changed)
-            const list = await api.listAssignments();
-            if (list.assignments) setSavedAssignments(list.assignments);
-            if (list.assignmentData) setSavedAssignmentData(list.assignmentData);
-          } else {
-            // Normal save — update this card's data locally without full refresh
-            const cardKey = sanitizeForFilename(assignment.title);
-            setSavedAssignmentData(prev => ({
-              ...prev,
-              [cardKey]: {
-                ...(prev[cardKey] || {}),
-                rubricType: assignment.rubricType || 'standard',
-                completionOnly: assignment.completionOnly || false,
-                countsTowardsGrade: assignment.countsTowardsGrade !== false,
-                title: assignment.title,
-                aliases: assignment.aliases || [],
-              }
-            }));
-          }
-          // Update loaded assignment name to reflect current title
-          setLoadedAssignmentName(assignment.title);
-        } else if (saveResult.error) {
-          console.error("Failed to save assignment:", saveResult.error);
-          addToast("Failed to save assignment: " + saveResult.error, "error");
-        }
-      } catch (error) {
-        console.error("Failed to auto-save assignment:", error);
-      }
-    }, 1500); // Debounce 1.5 seconds (slightly longer for assignment changes)
-
-    return () => clearTimeout(saveTimeout);
-  }, [assignment, importedDoc, settingsLoaded, loadedAssignmentName, isLoadingAssignment]);
+  // Builder assignment auto-save extracted to useAssignmentAutoSave (decomp slice 5).
+  useAssignmentAutoSave({
+    assignment,
+    setAssignment,
+    importedDoc,
+    settingsLoaded,
+    loadedAssignmentName,
+    setLoadedAssignmentName,
+    isLoadingAssignment,
+    skipAutoSaveRef,
+    setSavedAssignments,
+    setSavedAssignmentData,
+    addToast,
+  });
 
   // Fetch status once on mount (catch in-progress grading on page refresh)
   useEffect(() => {
