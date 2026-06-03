@@ -72,6 +72,7 @@ import { useBillingRedirect } from "./hooks/useBillingRedirect";
 import { useAssignmentAutoSave } from "./hooks/useAssignmentAutoSave";
 import { useGradingStatusPoll } from "./hooks/useGradingStatusPoll";
 import { useGradingToast } from "./hooks/useGradingToast";
+import { useEditedResultsAutoSave } from "./hooks/useEditedResultsAutoSave";
 import { useSubscription } from "./hooks/useSubscription";
 import { useFocusPolling } from "./hooks/useFocusPolling";
 import { useOutlookSendPolling } from "./hooks/useOutlookSendPolling";
@@ -1549,36 +1550,8 @@ function App() {
     });
   }, [status.results]);
 
-  // Auto-save edited results to backend (debounced)
-  useEffect(() => {
-    if (!editedResults.length) return;
-
-    // Find results that have been edited
-    const editedItems = editedResults.filter((r) => r.edited && r.filename);
-    if (!editedItems.length) return;
-
-    const saveTimeout = setTimeout(async () => {
-      for (const item of editedItems) {
-        try {
-          await api.updateResult(item.filename, {
-            score: item.score,
-            letter_grade: item.letter_grade,
-            feedback: item.feedback,
-          });
-          // Mark as saved by clearing the edited flag
-          setEditedResults((prev) =>
-            prev.map((r) =>
-              r.filename === item.filename ? { ...r, edited: false } : r
-            )
-          );
-        } catch (error) {
-          console.error("Failed to save result:", error);
-        }
-      }
-    }, 1000); // 1 second debounce
-
-    return () => clearTimeout(saveTimeout);
-  }, [editedResults]);
+  // Edited-results auto-save extracted to useEditedResultsAutoSave (decomp slice 8).
+  useEditedResultsAutoSave({ editedResults, setEditedResults });
 
   // Show toast when new assignments are graded
   useEffect(() => {
