@@ -1,0 +1,51 @@
+name: Post-Deploy Smoke
+
+# Closes the Hard Rule #8 gap: pre-merge CI proves the code is correct against
+# our test imagination; it does NOT prove the DEPLOYED image is healthy. This
+# job runs AFTER a merge to main (once Railway has had time to deploy) and
+# verifies the live image at app.graider.live:
+#   - /healthz returns 200 (app + Supabase healthy — a HARD dep)
+#   - the reported build version matches the merged commit (the NEW image is live)
+#
+# It is a MONITOR, not a merge gate (it can't gate the merge that triggers the
+# deploy). A failure surfaces as a red run + GitHub notification so a broken or
+# stuck deploy is caught in minutes, not by a user.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Don't pile up overlapping runs if several merges land quickly — only the
+# latest matters (it deploys last).
+concurrency:
+  group: post-deploy-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Railway deploy, then verify /healthz reports the merged SHA
+        env:
+          HEALTHZ_URL: https://app.graider.live/healthz
+        run: |
+          set -uo pipefail
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          echo "Expecting deployed version=$SHORT_SHA at $HEALTHZ_URL"
+          # Poll up to ~12 min (48 × 15s) — longer than a normal Railway deploy.
+          for i in $(seq 1 48); do
+            code=$(curl -s -m 10 -o /tmp/hz.json -w '%{http_code}' "$HEALTHZ_URL" || echo 000)
+            ver=$(python3 -c "import json;print(json.load(open('/tmp/hz.json')).get('version',''))" 2>/dev/null || echo "")
+            echo "[$i/48] http=$code version=$ver $(cat /tmp/hz.json 2>/dev/null)"
+            if [ "$code" = "200" ] && [ "$ver" = "$SHORT_SHA" ]; then
+              echo "✅ Deploy live and healthy at $SHORT_SHA"
+              exit 0
+            fi
+            if [ "$code" = "200" ] && [ "$ver" = "unknown" ]; then
+              echo "::warning::/healthz is 200 but reports version=unknown — RAILWAY_GIT_COMMIT_SHA is not exposed on the backend service, so the new-image check is degraded to a health-only check. Set it to make this gate verify the deployed commit."
+            fi
+            sleep 15
+          done
+          echo "::error::Post-deploy smoke FAILED: $HEALTHZ_URL did not report version=$SHORT_SHA with HTTP 200 within ~12 min. The deploy may be unhealthy, stuck, or the build marker is unwired."
+          exit 1
