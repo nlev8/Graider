@@ -174,5 +174,7 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
                 'user_type': user,
             }).execute()
     except Exception as e:
-        pass  # Supabase unavailable — local file is the fallback
+        # Supabase unavailable — the local file is the fallback. Record to
+        # Sentry AND logs (class name only; audit details may contain PII).
         sentry_sdk.capture_exception(e)
+        logger.warning("Audit DB insert failed: %s", type(e).__name__)
