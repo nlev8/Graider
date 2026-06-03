@@ -1,9 +1,13 @@
 /**
- * App logout wiring — static + behavioral verification
+ * Logout wiring — static verification.
  *
- * Verifies that the handleLogout handler in App.jsx calls BOTH
- * /api/clever/logout and /api/classlink/logout. Using static inspection
- * because App.jsx is ~7K LOC and requires non-trivial render infrastructure.
+ * Verifies that the handleLogout handler calls BOTH /api/clever/logout and
+ * /api/classlink/logout. Using static inspection as a cheap regression pin.
+ *
+ * As of the App.jsx decomposition (slice 3), handleLogout was moved verbatim
+ * out of App.jsx into the useAuthSession hook — so this reads the hook file.
+ * The behavioral counterpart now lives in
+ * src/hooks/__tests__/useAuthSession.test.jsx (which render-tests the same wiring).
  *
  * Closes MAJOR audit finding: ClassLink Flask sessions persisted server-side
  * after frontend logout because only /api/clever/logout was called.
@@ -12,10 +16,10 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 
-var APP_PATH = path.join(__dirname, '../App.jsx')
+var AUTH_HOOK_PATH = path.join(__dirname, '../hooks/useAuthSession.js')
 
-describe('App logout wiring', () => {
-  var src = fs.readFileSync(APP_PATH, 'utf-8')
+describe('logout wiring (handleLogout in useAuthSession)', () => {
+  var src = fs.readFileSync(AUTH_HOOK_PATH, 'utf-8')
 
   it('calls /api/classlink/logout in the logout handler', () => {
     expect(src).toMatch(/['"]\/api\/classlink\/logout['"]/)
