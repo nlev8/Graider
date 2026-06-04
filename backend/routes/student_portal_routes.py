@@ -1920,6 +1920,61 @@ def post_remediate(class_id):
     }), 200
 
 
+# Module-level remediation-effectiveness mastery readers (Code Quality 6→7 function-split:
+# moved verbatim out of get_class_remediation_effectiveness; pure — only _normalize_mastery_shape).
+# Helper: read mastery percentage for a standard from a single submission.
+def _percentage_for_standard(sub, std_code):
+    mastery = (sub.get('results') or {}).get('standards_mastery') or {}
+    if not isinstance(mastery, dict):
+        return None
+    entry = mastery.get(std_code)
+    # Phase 4.3 Sprint 2: route through the shape adapter so both old
+    # flat and new {overall, by_dok} entries work transparently.
+    normalized = _normalize_mastery_shape(entry)
+    if normalized is None:
+        return None
+    ov = normalized['overall']
+    # Prefer pre-computed percentage (legacy aggregated entries can
+    # carry it); otherwise derive from points.
+    pct = ov.get('percentage')
+    if isinstance(pct, (int, float)):
+        return float(pct)
+    try:
+        earned = float(ov.get('points_earned') or 0)
+        possible = float(ov.get('points_possible') or 0)
+    except (ValueError, TypeError):
+        return None
+    if possible <= 0:
+        return None
+    return round((earned / possible) * 100, 1)
+
+# Phase 4.3 Sprint 3: per-DOK split of mastery percentage for a standard.
+# Returns {int_dok: float_percentage} for every DOK that contributed at
+# least one question (points_possible > 0). Empty dict for legacy data
+# (old flat shape, or new shape with empty by_dok).
+def _per_dok_percentages_for_standard(sub, std_code):
+    mastery = (sub.get('results') or {}).get('standards_mastery') or {}
+    if not isinstance(mastery, dict):
+        return {}
+    entry = mastery.get(std_code)
+    normalized = _normalize_mastery_shape(entry)
+    if normalized is None:
+        return {}
+    out = {}
+    for dok, dok_agg in (normalized.get('by_dok') or {}).items():
+        if not isinstance(dok_agg, dict):
+            continue
+        try:
+            earned = float(dok_agg.get('points_earned') or 0)
+            possible = float(dok_agg.get('points_possible') or 0)
+        except (ValueError, TypeError):
+            continue
+        if possible <= 0:
+            continue
+        out[dok] = round((earned / possible) * 100, 1)
+    return out
+
+
 @student_portal_bp.route('/api/teacher/class/<class_id>/remediation-effectiveness', methods=['GET'])
 @require_teacher
 @handle_route_errors
@@ -2094,58 +2149,6 @@ def get_class_remediation_effectiveness(class_id):
     for sid_buckets in subs_by_student_with_standard.values():
         for std_code, bucket in sid_buckets.items():
             bucket.sort(key=lambda s: _parse_ts(s.get('submitted_at')), reverse=True)
-
-    # Helper: read mastery percentage for a standard from a single submission.
-    def _percentage_for_standard(sub, std_code):
-        mastery = (sub.get('results') or {}).get('standards_mastery') or {}
-        if not isinstance(mastery, dict):
-            return None
-        entry = mastery.get(std_code)
-        # Phase 4.3 Sprint 2: route through the shape adapter so both old
-        # flat and new {overall, by_dok} entries work transparently.
-        normalized = _normalize_mastery_shape(entry)
-        if normalized is None:
-            return None
-        ov = normalized['overall']
-        # Prefer pre-computed percentage (legacy aggregated entries can
-        # carry it); otherwise derive from points.
-        pct = ov.get('percentage')
-        if isinstance(pct, (int, float)):
-            return float(pct)
-        try:
-            earned = float(ov.get('points_earned') or 0)
-            possible = float(ov.get('points_possible') or 0)
-        except (ValueError, TypeError):
-            return None
-        if possible <= 0:
-            return None
-        return round((earned / possible) * 100, 1)
-
-    # Phase 4.3 Sprint 3: per-DOK split of mastery percentage for a standard.
-    # Returns {int_dok: float_percentage} for every DOK that contributed at
-    # least one question (points_possible > 0). Empty dict for legacy data
-    # (old flat shape, or new shape with empty by_dok).
-    def _per_dok_percentages_for_standard(sub, std_code):
-        mastery = (sub.get('results') or {}).get('standards_mastery') or {}
-        if not isinstance(mastery, dict):
-            return {}
-        entry = mastery.get(std_code)
-        normalized = _normalize_mastery_shape(entry)
-        if normalized is None:
-            return {}
-        out = {}
-        for dok, dok_agg in (normalized.get('by_dok') or {}).items():
-            if not isinstance(dok_agg, dict):
-                continue
-            try:
-                earned = float(dok_agg.get('points_earned') or 0)
-                possible = float(dok_agg.get('points_possible') or 0)
-            except (ValueError, TypeError):
-                continue
-            if possible <= 0:
-                continue
-            out[dok] = round((earned / possible) * 100, 1)
-        return out
 
     # 7) For each (remediation, student_id) pair, compute before/after/delta.
     out_remediations = []
