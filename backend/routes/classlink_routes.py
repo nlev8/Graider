@@ -342,6 +342,117 @@ def classlink_login_url():
 
 # ── GET /api/classlink/callback ───────────────────────────────────────
 
+def _handle_classlink_student_login(tenant_id, person_id, initiated_by_us):
+    """Resolve a ClassLink student SSO identity to a provisioned portal
+    session and redirect into the student portal (or /join for the
+    homepage-button carve-out). Returns a Flask redirect Response.
+
+    Extracted verbatim from classlink_callback (CQ7 god-function split); runs
+    only AFTER full id_token validation. Behavior pinned by
+    tests/test_classlink_student_sso.py.
+    """
+    # Clear OAuth-flow markers (single-use enforcement on success).
+    session.pop('classlink_oauth_state', None)
+    session.pop('classlink_oauth_nonce', None)
+    session.pop('classlink_oauth_initiated_by_us', None)
+
+    # Homepage-button SSO carve-out.
+    #
+    # The Graider login screen has separate paths for teachers
+    # (email/password, Google, Microsoft, "Log in with ClassLink",
+    # "Log in with Clever") and students ("I'm a student — go to Student
+    # Portal" link at the bottom). When `initiated_by_us=True`, the SSO
+    # flow was kicked off by the homepage button — a teacher entry point.
+    # A `role=student` arriving via that entry point clicked the wrong
+    # button; the right UX is to land them DIRECTLY at /join (the
+    # anonymous join-code portal), where the entire UI is a single
+    # join-code input. No banner, no detour through the homepage's heavy
+    # supabase auth bootstrap (which introduced a visible flicker per
+    # operator validation on #598), no second login screen. Original
+    # #598 bounced to "/?classlink_status=use_student_portal" with a blue
+    # info banner; that worked but required the student to read +
+    # navigate to a small link. /join is the actionable destination.
+    #
+    # LaunchPad-tile students arrive with `initiated_by_us=False` (we
+    # never called login-url) and continue to the unchanged provisioning
+    # path below. Production-realistic student SSO is unaffected.
+    if initiated_by_us:
+        logger.info(
+            "ClassLink self-initiated student SSO routed to /join: "
+            "tenant=%s", tenant_id,
+        )
+        return redirect("/join")
+
+    student_session = _create_classlink_student_session(tenant_id, person_id)
+    if student_session and student_session.get("status") == "needs_class_selection":
+        params = urlencode({"classlink_select": "1", "sel": student_session["selection_token"]})
+        return redirect("/student?" + params)
+    if student_session:
+        auth_code = _create_classlink_student_auth_code(student_session["token"])
+        params = urlencode({"classlink": "1", "code": auth_code})
+        return redirect("/student?" + params)
+
+    # Fail closed — no provisioned row for this tenant-scoped identity.
+    audit_log(
+        "CLASSLINK_STUDENT_NOT_PROVISIONED",
+        "ClassLink student has no provisioned roster row: "
+        f"tenant={tenant_id} person_hash={hashlib.sha256(person_id.encode()).hexdigest()[:8]}",
+        user="anonymous", teacher_id="",
+    )
+    return redirect("/student?classlink_error=not_provisioned")
+
+
+def _handle_classlink_teacher_login(email, first_name, last_name, guid,
+                                    person_id, role, tenant_id):
+    """Establish the teacher/admin ClassLink session (link-or-create the
+    Supabase UUID, apply admin designation, trigger roster sync) and
+    redirect. Returns a Flask redirect Response.
+
+    Extracted verbatim from classlink_callback (CQ7 god-function split); runs
+    only AFTER full id_token validation. Behavior pinned by
+    tests/test_classlink_sso.py.
+    """
+    # Teacher/admin login
+    session.clear()
+    session.permanent = True
+
+    # Resolve the tenant-scoped GUID to a real Supabase Auth UUID (link-or-create).
+    graider_uuid = resolve_classlink_user_id(
+        guid, email, {'first': first_name, 'last': last_name}
+    )
+    if not graider_uuid:
+        return redirect("/?classlink_error=account_conflict")
+
+    session['classlink_user'] = {
+        'classlink_id': person_id,   # external identity (unchanged)
+        'guid': guid,                # tenant-scoped GUID, kept for audit/debug
+        'user_id': graider_uuid,     # real Supabase UUID → g.user_id / g.teacher_id
+        'email': email,
+        'name': {'first': first_name, 'last': last_name},
+        'type': role or 'teacher',
+        'tenant_id': tenant_id,
+    }
+
+    applied = apply_sso_admin_designation(email, graider_uuid, session)
+
+    if applied == "district":
+        audit_log("CLASSLINK_DISTRICT_ADMIN_LOGIN",
+                  f"ClassLink district admin SSO login: {redact_email(email)}",
+                  user="district_admin", teacher_id=graider_uuid)
+        return redirect("/district")
+
+    # Background roster sync (if OneRoster configured) — keyed by the UUID.
+    _trigger_roster_sync(graider_uuid, tenant_id)
+
+    audit_log(
+        "CLASSLINK_SCHOOL_ADMIN_LOGIN" if applied == "school" else "CLASSLINK_LOGIN",
+        (f"ClassLink school admin SSO login: {redact_email(email)}" if applied == "school"
+         else f"ClassLink SSO login: {redact_email(email)}"),
+        user=("admin" if applied == "school" else "teacher"), teacher_id=graider_uuid)
+
+    return redirect("/?classlink_login=success")
+
+
 @classlink_bp.route('/api/classlink/callback', methods=['GET'])
 def classlink_callback():
     """Handle ClassLink OAuth callback — exchange code for token, fetch user."""
@@ -572,95 +683,11 @@ def classlink_callback():
 
     # Student login → resolve provisioned record, hand off to the student portal.
     if role == 'student':
-        # Clear OAuth-flow markers (single-use enforcement on success).
-        session.pop('classlink_oauth_state', None)
-        session.pop('classlink_oauth_nonce', None)
-        session.pop('classlink_oauth_initiated_by_us', None)
+        return _handle_classlink_student_login(tenant_id, person_id, initiated_by_us)
 
-        # Homepage-button SSO carve-out.
-        #
-        # The Graider login screen has separate paths for teachers
-        # (email/password, Google, Microsoft, "Log in with ClassLink",
-        # "Log in with Clever") and students ("I'm a student — go to Student
-        # Portal" link at the bottom). When `initiated_by_us=True`, the SSO
-        # flow was kicked off by the homepage button — a teacher entry point.
-        # A `role=student` arriving via that entry point clicked the wrong
-        # button; the right UX is to land them DIRECTLY at /join (the
-        # anonymous join-code portal), where the entire UI is a single
-        # join-code input. No banner, no detour through the homepage's heavy
-        # supabase auth bootstrap (which introduced a visible flicker per
-        # operator validation on #598), no second login screen. Original
-        # #598 bounced to "/?classlink_status=use_student_portal" with a blue
-        # info banner; that worked but required the student to read +
-        # navigate to a small link. /join is the actionable destination.
-        #
-        # LaunchPad-tile students arrive with `initiated_by_us=False` (we
-        # never called login-url) and continue to the unchanged provisioning
-        # path below. Production-realistic student SSO is unaffected.
-        if initiated_by_us:
-            logger.info(
-                "ClassLink self-initiated student SSO routed to /join: "
-                "tenant=%s", tenant_id,
-            )
-            return redirect("/join")
-
-        student_session = _create_classlink_student_session(tenant_id, person_id)
-        if student_session and student_session.get("status") == "needs_class_selection":
-            params = urlencode({"classlink_select": "1", "sel": student_session["selection_token"]})
-            return redirect("/student?" + params)
-        if student_session:
-            auth_code = _create_classlink_student_auth_code(student_session["token"])
-            params = urlencode({"classlink": "1", "code": auth_code})
-            return redirect("/student?" + params)
-
-        # Fail closed — no provisioned row for this tenant-scoped identity.
-        audit_log(
-            "CLASSLINK_STUDENT_NOT_PROVISIONED",
-            "ClassLink student has no provisioned roster row: "
-            f"tenant={tenant_id} person_hash={hashlib.sha256(person_id.encode()).hexdigest()[:8]}",
-            user="anonymous", teacher_id="",
-        )
-        return redirect("/student?classlink_error=not_provisioned")
-
-    # Teacher/admin login
-    session.clear()
-    session.permanent = True
-
-    # Resolve the tenant-scoped GUID to a real Supabase Auth UUID (link-or-create).
-    graider_uuid = resolve_classlink_user_id(
-        guid, email, {'first': first_name, 'last': last_name}
+    return _handle_classlink_teacher_login(
+        email, first_name, last_name, guid, person_id, role, tenant_id,
     )
-    if not graider_uuid:
-        return redirect("/?classlink_error=account_conflict")
-
-    session['classlink_user'] = {
-        'classlink_id': person_id,   # external identity (unchanged)
-        'guid': guid,                # tenant-scoped GUID, kept for audit/debug
-        'user_id': graider_uuid,     # real Supabase UUID → g.user_id / g.teacher_id
-        'email': email,
-        'name': {'first': first_name, 'last': last_name},
-        'type': role or 'teacher',
-        'tenant_id': tenant_id,
-    }
-
-    applied = apply_sso_admin_designation(email, graider_uuid, session)
-
-    if applied == "district":
-        audit_log("CLASSLINK_DISTRICT_ADMIN_LOGIN",
-                  f"ClassLink district admin SSO login: {redact_email(email)}",
-                  user="district_admin", teacher_id=graider_uuid)
-        return redirect("/district")
-
-    # Background roster sync (if OneRoster configured) — keyed by the UUID.
-    _trigger_roster_sync(graider_uuid, tenant_id)
-
-    audit_log(
-        "CLASSLINK_SCHOOL_ADMIN_LOGIN" if applied == "school" else "CLASSLINK_LOGIN",
-        (f"ClassLink school admin SSO login: {redact_email(email)}" if applied == "school"
-         else f"ClassLink SSO login: {redact_email(email)}"),
-        user=("admin" if applied == "school" else "teacher"), teacher_id=graider_uuid)
-
-    return redirect("/?classlink_login=success")
 
 
 # ── GET /api/classlink/session ────────────────────────────────────────

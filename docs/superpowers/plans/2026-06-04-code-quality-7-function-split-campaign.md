@@ -4,8 +4,11 @@
 function below **300 LOC** (the level-7 anchor: *"No file >3,000 LOC; no function >300 LOC; a
 Flask-free service layer exists"*), behavior-preservingly.
 
-> **Status: IN PROGRESS — 11/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **7 backend
-> functions >300 LOC remain** (the harder half: route control-flow handlers + the grading giants).
+> **Status: IN PROGRESS — 12/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **6 backend
+> functions >300 LOC remain** — ALL the hard giants now: the 4 grading monsters
+> (`_run_grading_thread_inner` 1492, `extract_student_responses` 866, `grade_single_file` 626,
+> `grade_portal_submission_sync` 452) + the intertwined `assistant_chat`/`generate` pair (472/373,
+> `generate` is a nested closure). These need fresh-context dedicated sessions + new golden nets.
 > Code Quality stays **6** until ALL are <300 (and a frontend-JS function scan is run).
 
 ---
@@ -75,9 +78,10 @@ drift). Then:
 | #677 | `_build_system_prompt` | 341 → 184 | A |
 | #681 | `export_generated_assignment` (PDF section loop → `_render_assignment_pdf_sections`) | 439 → 168 | A |
 | #682 | `post_remediate` (personalized + shared paths → 2 helpers) | 471 → 236 | B |
+| #683 | `classlink_callback` 🔐 (student + teacher login tails → 2 helpers) | 318 → 234 | B |
 
-### Remaining 7 (the harder half)
-- **Route control-flow handlers** (early returns / branching — extract response/compute blocks, mind the decorator-insertion gotcha): `classlink_callback` (318 🔐 auth), `generate` (373), `assistant_chat` (472). Note: `generate` is a nested closure inside `assistant_chat` (1613–1985 ⊂ 1524–1995) — do those two together, last among the route handlers.
+### Remaining 6 (the harder half)
+- **Intertwined assistant route** (do together, last among route handlers): `generate` (373), `assistant_chat` (472). `generate` is a nested closure inside `assistant_chat` (1613–1985 ⊂ 1524–1995).
 - **Grading giants — write a golden net FIRST, then Codex co-planning** (no deterministic net today): `grade_portal_submission_sync` (452 🔴), `extract_student_responses` (866, shared mutable state across marker loops), `grade_single_file` (626, nested closure in `_run_grading_thread_inner`), `_run_grading_thread_inner` (1492, ThreadPoolExecutor orchestrator).
 
 > The route handlers are doable with the established protocol; the 4 grading giants are the part
@@ -90,7 +94,7 @@ drift). Then:
 | LOC | Function | File | Helpers | Notes |
 |--|--|--|--|--|
 | 866 | `extract_student_responses` | services/response_extraction.py | 3+ | 18 golden char tests. Dominated by a 640-line `if custom_markers:` block → split the marker-position builder (~903-1067) + per-marker extraction loop (~1121-1447, itself ~327 LOC → sub-split). Shared mutable state (marker_positions, extracted, blank_questions) — careful. |
-| 318 | `classlink_callback` 🔐 | routes/classlink_routes.py | 4 | auth; 10+ SSO/security tests. Watch OIDC require-list rules (workflow.md #10). |
+| 318 | ~~`classlink_callback`~~ ✅ #683 🔐 | routes/classlink_routes.py | 2 | auth; ~141 SSO/security tests. Extracted the 2 post-auth login tails (student/teacher); OIDC validation + require-list left byte-identical inline (Rule #10). |
 | 440 | `generate_assessment_content` | services/planner_generation.py | 8 | char test |
 | 451 | `generate_lesson_plan_content` | services/planner_generation.py | 9 | contract tests |
 | 471 | ~~`post_remediate`~~ ✅ #682 | routes/student_portal_routes.py | 2 | Strong net (111 remediation tests, not 9). Split the 2 tail blocks (personalized + shared paths) that already ended in `return`. |
