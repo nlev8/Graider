@@ -21,6 +21,7 @@ from backend.services.grading_pipeline import (
     _finalize_grading_result,
     _letter_grade,
     _load_ell_language,
+    _multipass_grade_questions_parallel,
     _multipass_perform_extraction,
     _pre_extract_responses,
 )
@@ -288,3 +289,49 @@ def test_finalize_grading_result_annotates_style_deviation():
         student_id=None, current_writing_style=None, style_comparison=cmp,
         extracted_responses_section="")
     assert out["writing_style_deviation"] == cmp
+
+
+def test_multipass_grade_questions_parallel_contract(monkeypatch):
+    """Pin the Pass-2 helper extracted from grade_multipass (Code Quality 6→7 function-split):
+    returns one result per response, forwarding grade_per_question's output, with the deterministic
+    'Error during grading' fallback when a question raises. End-to-end scoring (the exact
+    per_question_scores list) is pinned by test_grader_golden.py::test_multipass_social_studies_golden.
+    """
+    import backend.services.grading_pipeline as gp
+
+    responses = [
+        {"question": "1) Q one", "answer": "ans one", "type": "marker_response"},
+        {"question": "2) Q two", "answer": "ans two", "type": "marker_response"},
+    ]
+
+    seen = []
+
+    def fake_gpq(**kwargs):
+        seen.append(kwargs["question"])
+        if kwargs["question"].startswith("2"):
+            raise RuntimeError("boom")  # exercise the per-question failure fallback
+        return {"grade": {"score": 9, "possible": 10, "reasoning": "ok",
+                          "is_correct": True, "quality": "good"},
+                "excellent": False, "improvement_note": ""}
+
+    monkeypatch.setattr(gp, "grade_per_question", fake_gpq)
+
+    out = gp._multipass_grade_questions_parallel(
+        responses=responses, marker_config=None, effort_points=15, expected_answers={},
+        grade_level="6", subject="Social Studies", effective_instructions="",
+        grading_style="standard", ai_model="gpt-4o-mini", provider="openai",
+        tracker=None, student_name="Test Student",
+    )
+
+    assert len(out) == 2
+    # Q1 forwarded verbatim from grade_per_question
+    assert out[0]["grade"]["score"] == 9
+    assert out[0]["grade"]["quality"] == "good"
+    # Q2 raised → deterministic fallback (int(points*0.7), is_correct True, quality adequate)
+    assert out[1]["grade"]["reasoning"] == "Error during grading"
+    assert out[1]["grade"]["quality"] == "adequate"
+    assert out[1]["grade"]["is_correct"] is True
+    assert isinstance(out[1]["grade"]["score"], int)
+    assert out[1]["excellent"] is False
+    # both questions were dispatched to the (mocked) per-question grader
+    assert sorted(seen) == ["1) Q one", "2) Q two"]
