@@ -161,146 +161,10 @@ Make each idea distinct - vary the approaches (hands-on activities, discussions,
     return {**ideas, "usage": usage}
 
 
-def generate_lesson_plan_content(*, selected_standards, config, selected_idea,
-                                 generate_variations, reference_docs, api_key, openai_context):
-    """Generate a lesson plan (or 3 variations). Returns {"plan"|"variations",
-    "method": "AI", "usage"}; raises on any failure (the route catches and
-    returns its mock fallback). `openai_context` is the (user_id, client) tuple
-    the route resolves via _get_openai_context (used only for Assignment
-    post-processing). Wave 6 Slice 11b - extracted from planner_routes.
-    """
-    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
-
-    if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
-        raise Exception("Missing or placeholder API Key")
-
-    adapter = OpenAIAdapter(api_key=api_key)
-
-    period_length = config.get('periodLength', 50)
-    content_type = config.get('type', 'Lesson Plan')
-
-    # Load support documents (curriculum guides, standards)
-    support_docs = load_support_documents_for_planning()
-
-    # Build available tools instruction (same mapping as brainstorm)
-    available_tools = config.get('availableTools', [])
-    tools_instruction = ""
-    if available_tools:
-        tool_names = {
-            'microsoft_365': 'Microsoft 365 (Word, Excel, PowerPoint)',
-            'microsoft_teams': 'Microsoft Teams',
-            'google_classroom': 'Google Classroom',
-            'google_slides': 'Google Slides',
-            'google_docs': 'Google Docs',
-            'canvas': 'Canvas LMS',
-            'nearpod': 'Nearpod',
-            'edpuzzle': 'Edpuzzle',
-            'pear_deck': 'Pear Deck',
-            'padlet': 'Padlet',
-            'flipgrid': 'Flip/Flipgrid',
-            'canva': 'Canva',
-            'adobe_express': 'Adobe Express',
-            'ixl': 'IXL',
-            'desmos': 'Desmos',
-            'geogebra': 'GeoGebra',
-            'delta_math': 'DeltaMath',
-            'fl_math_4_all': 'FL Math 4 All',
-            'prodigy': 'Prodigy',
-            'zearn': 'Zearn',
-            'newsela': 'Newsela',
-            'commonlit': 'CommonLit',
-            'phet': 'PhET Simulations',
-            'dbq_online': 'DBQ Online',
-            'cpalms': 'CPALMS',
-            'brainpop': 'BrainPOP',
-            'edgenuity': 'Edgenuity',
-            'everfi': 'EVERFI',
-            'progress_learning': 'Progress Learning',
-            'hour_of_code': 'Hour of Code',
-            'kahoot': 'Kahoot',
-            'quizlet': 'Quizlet',
-            'blooket': 'Blooket',
-            'gimkit': 'Gimkit',
-            'khan_academy': 'Khan Academy',
-            'youtube': 'YouTube',
-        }
-        tool_list = []
-        for t in available_tools:
-            if t.startswith('custom:'):
-                tool_list.append(t[7:])
-            else:
-                tool_list.append(tool_names.get(t, t))
-        tools_instruction = f"""
-
-AVAILABLE TECHNOLOGY TOOLS (teacher has access to these - ONLY use these for tech activities):
-{', '.join(tool_list)}
-"""
-    else:
-        tools_instruction = """
-
-NO TECHNOLOGY TOOLS: Focus entirely on non-digital activities (whiteboards, paper, manipulatives, discussions, group work).
-"""
-
-    # Build idea-specific guidance if a brainstormed idea was selected
-    idea_guidance = ""
-    if selected_idea:
-        idea_guidance = f"""
-IMPORTANT: Base this plan on the following concept:
-- Title/Theme: {selected_idea.get('title', '')}
-- Teaching Approach: {selected_idea.get('approach', '')}
-- Concept: {selected_idea.get('brief', '')}
-- Opening Hook: {selected_idea.get('hook', '')}
-- Key Activity: {selected_idea.get('key_activity', '')}
-- Assessment Type: {selected_idea.get('assessment_type', '')}
-
-Develop this specific concept into a complete, detailed lesson plan.
-"""
-
-    # Handle title - if empty, instruct AI to generate based on standards
-    provided_title = config.get('title', '').strip()
-    if provided_title:
-        title_instruction = f'Title: "{provided_title}"'
-    else:
-        title_instruction = "Title: Generate a descriptive, engaging title based on the standards and content below."
-
-    # Build subject boundary constraint for prompt injection
-    subject_boundary = _build_subject_boundary_prompt(
-        config.get('subject', ''), config.get('grade', ''))
-
-    # Build reference documents block
-    ref_docs_block = ''
-    if reference_docs:
-        ref_docs_block = "\n=== REFERENCE DOCUMENTS (use this content to inform your plan) ===\n"
-        for doc in reference_docs:
-            doc_name = doc.get('filename', 'Document')
-            doc_text = doc.get('text', '')[:6000]
-            ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
-        ref_docs_block += "Use the content, vocabulary, examples, and concepts from these reference documents when creating activities, questions, and explanations.\n"
-
-    # Build content-type-specific prompt, JSON structure, and instructions
-    common_header = f"""You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
-{subject_boundary}
-{support_docs}
-{idea_guidance}
-{tools_instruction}
-{title_instruction}
-Standards to Cover:
-{', '.join(selected_standards)}
-
-Additional Requirements:
-{config.get('requirements', 'None specified')}
-{ref_docs_block}"""
-    teacher_notes_block = f"""
-TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
-{config.get('globalAINotes', '')}
-""" if config.get('globalAINotes') else ''
-
-    # Build section categories instruction for assignments
-    assignment_section_cats = config.get('sectionCategories', {})
-    assignment_sections_block = ''
-    if assignment_section_cats and any(assignment_section_cats.values()):
-        assignment_sections_block = '\n' + _build_section_categories_prompt(assignment_section_cats, config.get('subject', ''), question_type_counts=config.get('questionTypeCounts')) + '\n'
-
+def _build_lesson_content_prompt(content_type, config, common_header, teacher_notes_block, assignment_section_cats, assignment_sections_block, period_length):
+    """Build the content-type-specific prompt (Assignment / Project) for a lesson-content
+    generation. Returns the assembled prompt string. Extracted verbatim from
+    generate_lesson_plan_content (Code Quality 6→7 split)."""
     if content_type == 'Assignment':
         total_q = config.get('totalQuestions', 10)
         per_section = config.get('questionsPerSection', 0)
@@ -514,6 +378,150 @@ Return JSON with this structure:
 }}
 {teacher_notes_block}
 Make the content SPECIFIC and DETAILED with real examples and facts."""
+    return prompt
+
+
+def generate_lesson_plan_content(*, selected_standards, config, selected_idea,
+                                 generate_variations, reference_docs, api_key, openai_context):
+    """Generate a lesson plan (or 3 variations). Returns {"plan"|"variations",
+    "method": "AI", "usage"}; raises on any failure (the route catches and
+    returns its mock fallback). `openai_context` is the (user_id, client) tuple
+    the route resolves via _get_openai_context (used only for Assignment
+    post-processing). Wave 6 Slice 11b - extracted from planner_routes.
+    """
+    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+
+    if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
+        raise Exception("Missing or placeholder API Key")
+
+    adapter = OpenAIAdapter(api_key=api_key)
+
+    period_length = config.get('periodLength', 50)
+    content_type = config.get('type', 'Lesson Plan')
+
+    # Load support documents (curriculum guides, standards)
+    support_docs = load_support_documents_for_planning()
+
+    # Build available tools instruction (same mapping as brainstorm)
+    available_tools = config.get('availableTools', [])
+    tools_instruction = ""
+    if available_tools:
+        tool_names = {
+            'microsoft_365': 'Microsoft 365 (Word, Excel, PowerPoint)',
+            'microsoft_teams': 'Microsoft Teams',
+            'google_classroom': 'Google Classroom',
+            'google_slides': 'Google Slides',
+            'google_docs': 'Google Docs',
+            'canvas': 'Canvas LMS',
+            'nearpod': 'Nearpod',
+            'edpuzzle': 'Edpuzzle',
+            'pear_deck': 'Pear Deck',
+            'padlet': 'Padlet',
+            'flipgrid': 'Flip/Flipgrid',
+            'canva': 'Canva',
+            'adobe_express': 'Adobe Express',
+            'ixl': 'IXL',
+            'desmos': 'Desmos',
+            'geogebra': 'GeoGebra',
+            'delta_math': 'DeltaMath',
+            'fl_math_4_all': 'FL Math 4 All',
+            'prodigy': 'Prodigy',
+            'zearn': 'Zearn',
+            'newsela': 'Newsela',
+            'commonlit': 'CommonLit',
+            'phet': 'PhET Simulations',
+            'dbq_online': 'DBQ Online',
+            'cpalms': 'CPALMS',
+            'brainpop': 'BrainPOP',
+            'edgenuity': 'Edgenuity',
+            'everfi': 'EVERFI',
+            'progress_learning': 'Progress Learning',
+            'hour_of_code': 'Hour of Code',
+            'kahoot': 'Kahoot',
+            'quizlet': 'Quizlet',
+            'blooket': 'Blooket',
+            'gimkit': 'Gimkit',
+            'khan_academy': 'Khan Academy',
+            'youtube': 'YouTube',
+        }
+        tool_list = []
+        for t in available_tools:
+            if t.startswith('custom:'):
+                tool_list.append(t[7:])
+            else:
+                tool_list.append(tool_names.get(t, t))
+        tools_instruction = f"""
+
+AVAILABLE TECHNOLOGY TOOLS (teacher has access to these - ONLY use these for tech activities):
+{', '.join(tool_list)}
+"""
+    else:
+        tools_instruction = """
+
+NO TECHNOLOGY TOOLS: Focus entirely on non-digital activities (whiteboards, paper, manipulatives, discussions, group work).
+"""
+
+    # Build idea-specific guidance if a brainstormed idea was selected
+    idea_guidance = ""
+    if selected_idea:
+        idea_guidance = f"""
+IMPORTANT: Base this plan on the following concept:
+- Title/Theme: {selected_idea.get('title', '')}
+- Teaching Approach: {selected_idea.get('approach', '')}
+- Concept: {selected_idea.get('brief', '')}
+- Opening Hook: {selected_idea.get('hook', '')}
+- Key Activity: {selected_idea.get('key_activity', '')}
+- Assessment Type: {selected_idea.get('assessment_type', '')}
+
+Develop this specific concept into a complete, detailed lesson plan.
+"""
+
+    # Handle title - if empty, instruct AI to generate based on standards
+    provided_title = config.get('title', '').strip()
+    if provided_title:
+        title_instruction = f'Title: "{provided_title}"'
+    else:
+        title_instruction = "Title: Generate a descriptive, engaging title based on the standards and content below."
+
+    # Build subject boundary constraint for prompt injection
+    subject_boundary = _build_subject_boundary_prompt(
+        config.get('subject', ''), config.get('grade', ''))
+
+    # Build reference documents block
+    ref_docs_block = ''
+    if reference_docs:
+        ref_docs_block = "\n=== REFERENCE DOCUMENTS (use this content to inform your plan) ===\n"
+        for doc in reference_docs:
+            doc_name = doc.get('filename', 'Document')
+            doc_text = doc.get('text', '')[:6000]
+            ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
+        ref_docs_block += "Use the content, vocabulary, examples, and concepts from these reference documents when creating activities, questions, and explanations.\n"
+
+    # Build content-type-specific prompt, JSON structure, and instructions
+    common_header = f"""You are an expert curriculum developer creating a COMPLETE, READY-TO-USE {content_type} for a {config.get('grade', '7')}th grade {config.get('subject', 'Civics')} class.
+{subject_boundary}
+{support_docs}
+{idea_guidance}
+{tools_instruction}
+{title_instruction}
+Standards to Cover:
+{', '.join(selected_standards)}
+
+Additional Requirements:
+{config.get('requirements', 'None specified')}
+{ref_docs_block}"""
+    teacher_notes_block = f"""
+TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
+{config.get('globalAINotes', '')}
+""" if config.get('globalAINotes') else ''
+
+    # Build section categories instruction for assignments
+    assignment_section_cats = config.get('sectionCategories', {})
+    assignment_sections_block = ''
+    if assignment_section_cats and any(assignment_section_cats.values()):
+        assignment_sections_block = '\n' + _build_section_categories_prompt(assignment_section_cats, config.get('subject', ''), question_type_counts=config.get('questionTypeCounts')) + '\n'
+
+    prompt = _build_lesson_content_prompt(content_type, config, common_header, teacher_notes_block, assignment_section_cats, assignment_sections_block, period_length)
 
     # If generating variations, create 3 different versions
     if generate_variations:
