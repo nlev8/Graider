@@ -799,742 +799,537 @@ STUDENT_WORK_MARKERS = [
 ]
 
 
-def extract_student_responses(document_text: str, custom_markers: list = None, exclude_markers: list = None, template_text: str = None) -> dict:
+def _build_marker_positions(custom_markers, document_text, doc_lower,
+                            doc_lower_normalized, normalize_for_search):
+    """Locate each custom marker in the document (exact / first-line /
+    fuzzy strategies) and return (marker_positions, exact_matches,
+    fuzzy_matches). Extracted verbatim from extract_student_responses (CQ7).
     """
-    Extract student responses from document using customMarkers from Builder.
+    marker_positions = []
+    exact_matches = 0
+    fuzzy_matches = 0
 
-    Args:
-        document_text: The student's submitted document text
-        custom_markers: List of markers to look for
-        exclude_markers: List of markers to exclude from grading
-        template_text: Original assignment template (for fill-in-the-blank comparison)
+    for marker in custom_markers:
+        # Handle both string and object markers
+        if isinstance(marker, dict):
+            marker_clean = marker.get('start', '').strip()
+            end_marker = marker.get('end', '').strip()
+        else:
+            marker_clean = str(marker).strip()
+            end_marker = None
 
-    APPROACH (with fallbacks):
-    1. TEMPLATE COMPARISON: If template provided, compare to find filled blanks
-    2. EXACT MATCH: Find markers exactly in document
-    2. FUZZY MATCH: If exact fails, try fuzzy matching (~1-2ms)
-    3. PATTERN MATCH: If all else fails, use regex patterns
+        if not marker_clean:
+            continue
 
-    Args:
-        document_text: The full document text
-        custom_markers: List of marker strings from Builder (the template/prompt text)
-        exclude_markers: List of section names to NOT grade (e.g., "Notes Section")
+        # Split marker into lines for multi-line matching strategies
+        marker_lines = [l.strip() for l in marker_clean.split('\n') if l.strip()]
+        first_line = marker_lines[0] if marker_lines else marker_clean
+        marker_lower = marker_clean.lower()
 
-    Returns:
-        {
-            "extracted_responses": [{"question": "...", "answer": "...", "type": "..."}, ...],
-            "blank_questions": ["question text", ...],
-            "total_questions": int,
-            "answered_questions": int,
-            "extraction_summary": "string describing what was found",
-            "excluded_sections": ["section name", ...] - sections that were skipped
-        }
-    """
-    import re
+        pos = -1
+        match_type = None
+        content_end_pos = -1  # Where content actually starts (after all marker/prompt lines)
 
-    extracted = []
-    blank_questions = []
-    doc_lower = document_text.lower()
-
-    # Pre-compute normalized doc text (en-dash → hyphen, smart quotes → regular)
-    def normalize_for_search(text):
-        return text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
-    doc_lower_normalized = normalize_for_search(doc_lower)
-
-    # PRIORITY 0: Fill-in-the-blank detection
-    # Only trigger FITB if the document/title explicitly mentions fill-in-the-blank
-    # Don't trigger just because there are underscores (Cornell Notes has blank lines too)
-    has_fitb_keyword = 'fill-in' in doc_lower or 'fill in the blank' in doc_lower or 'fillintheblank' in doc_lower.replace(' ', '').replace('-', '')
-    has_timestamps = bool(re.search(r'\d+\.\s*\(\d+:\d+', document_text))  # Has timestamps like "1. (0:00)"
-
-    # Only use underscores as indicator if FITB keyword is also present
-    is_fitb = has_fitb_keyword or has_timestamps
-
-    if is_fitb:
-        print(f"  📝 Detected fill-in-the-blank format - using FITB extraction")  # noqa: T201
-        fitb_results = extract_fitb_by_template_comparison(document_text, template_text)
-        if fitb_results:
-            # Filter out excluded sections and blank/template content
-            exclude_lower = [em.lower().strip() for em in exclude_markers] if exclude_markers else []
-            filtered_fitb = []
-            for resp in fitb_results:
-                question = resp.get('question', '').lower()
-                answer = resp.get('answer', '')
-                answer_lower = answer.lower()
-
-                # Skip blank underscore lines (e.g., "• _______________")
-                answer_stripped = re.sub(r'[_•\-\s]', '', answer)
-                if len(answer_stripped) < 5:
-                    continue
-
-                # Skip template instruction text
-                if any(kw in answer_lower for kw in ['use bullets', 'write important', 'add more notes', 'drawing']):
-                    continue
-
-                # Check if this response is from an excluded section
-                # Check both directions: exclude text in answer, AND answer in exclude text
-                is_excluded = False
-                for em in exclude_lower:
-                    # Original: exclude marker contained in answer (short marker, long answer)
-                    if em in answer_lower:
-                        is_excluded = True
-                        break
-                    # Reverse: answer contained in exclude marker (long marker, short answer)
-                    # Only for answers with enough length to avoid false positives
-                    if len(answer_lower) >= 15 and answer_lower in em:
-                        is_excluded = True
-                        break
-                if not is_excluded:
-                    filtered_fitb.append(resp)
-            fitb_results = filtered_fitb
-            extracted.extend(fitb_results)
-            print(f"      Found {len(fitb_results)} responses via FITB extraction")  # noqa: T201
-
-    # PRIORITY 1: Use customMarkers from Builder (most reliable)
-    # Markers can be:
-    #   - String: "Summary (Bottom Section)" - extracts until next marker
-    #   - Object: {"start": "Summary", "end": "📖"} - extracts until end marker
-    if custom_markers and len(custom_markers) > 0:
-        # Find positions of all markers in the document (exact + fuzzy)
-        marker_positions = []
-        exact_matches = 0
-        fuzzy_matches = 0
-
-        for marker in custom_markers:
-            # Handle both string and object markers
-            if isinstance(marker, dict):
-                marker_clean = marker.get('start', '').strip()
-                end_marker = marker.get('end', '').strip()
-            else:
-                marker_clean = str(marker).strip()
-                end_marker = None
-
-            if not marker_clean:
-                continue
-
-            # Split marker into lines for multi-line matching strategies
-            marker_lines = [l.strip() for l in marker_clean.split('\n') if l.strip()]
-            first_line = marker_lines[0] if marker_lines else marker_clean
-            marker_lower = marker_clean.lower()
-
-            pos = -1
-            match_type = None
-            content_end_pos = -1  # Where content actually starts (after all marker/prompt lines)
-
-            # Strategy 1: Full exact match (ideal — whole multi-line marker found as-is)
-            # Prefer line-start matches to avoid substring hits (e.g., "NOTES" in "CORNELL NOTES")
-            # A "line-start" match means the marker is at position 0, or preceded by a newline
-            # (possibly with emoji/whitespace between the newline and the marker text).
-            pos = -1
-            search_start = 0
-            while True:
-                candidate = doc_lower.find(marker_lower, search_start)
-                if candidate == -1:
-                    break
-                # Check if this is a standalone section header (at line start)
-                is_line_start = (candidate == 0)
-                if not is_line_start and candidate > 0:
-                    # Look back from candidate to the previous newline — if only
-                    # whitespace/emoji/special chars between newline and marker, it's line-start
-                    lookback = doc_lower[max(0, candidate - 10):candidate]
-                    newline_pos = lookback.rfind('\n')
-                    if newline_pos != -1:
-                        between = lookback[newline_pos + 1:]
-                        # Only whitespace, emoji, or common prefix chars (star, bullet, dash)
-                        is_line_start = all(
-                            c in ' \t\u2b50\U0001f31f\U0001f4d3\U0001f4dd\U0001f331\U0001f4d6\U0001f4da\U0001f50d\u2022\u2013\u2014-*'
-                            or ord(c) > 0x2600  # emoji/symbol unicode ranges
-                            for c in between
-                        )
-                if is_line_start:
-                    pos = candidate
-                    break
-                # Otherwise keep searching for a line-start match
-                if pos == -1:
-                    pos = candidate  # fallback to first occurrence if no line-start match
-                search_start = candidate + 1
-            if pos != -1:
-                match_type = 'exact'
-                content_end_pos = pos + len(marker_clean)
-
-            # Strategy 2: First-line exact match + forward scan for subsequent lines
+        # Strategy 1: Full exact match (ideal — whole multi-line marker found as-is)
+        # Prefer line-start matches to avoid substring hits (e.g., "NOTES" in "CORNELL NOTES")
+        # A "line-start" match means the marker is at position 0, or preceded by a newline
+        # (possibly with emoji/whitespace between the newline and the marker text).
+        pos = -1
+        search_start = 0
+        while True:
+            candidate = doc_lower.find(marker_lower, search_start)
+            if candidate == -1:
+                break
+            # Check if this is a standalone section header (at line start)
+            is_line_start = (candidate == 0)
+            if not is_line_start and candidate > 0:
+                # Look back from candidate to the previous newline — if only
+                # whitespace/emoji/special chars between newline and marker, it's line-start
+                lookback = doc_lower[max(0, candidate - 10):candidate]
+                newline_pos = lookback.rfind('\n')
+                if newline_pos != -1:
+                    between = lookback[newline_pos + 1:]
+                    # Only whitespace, emoji, or common prefix chars (star, bullet, dash)
+                    is_line_start = all(
+                        c in ' \t\u2b50\U0001f31f\U0001f4d3\U0001f4dd\U0001f331\U0001f4d6\U0001f4da\U0001f50d\u2022\u2013\u2014-*'
+                        or ord(c) > 0x2600  # emoji/symbol unicode ranges
+                        for c in between
+                    )
+            if is_line_start:
+                pos = candidate
+                break
+            # Otherwise keep searching for a line-start match
             if pos == -1:
-                first_line_lower = first_line.lower()
-                matched_len = len(first_line)  # Track actual matched text length
+                pos = candidate  # fallback to first occurrence if no line-start match
+            search_start = candidate + 1
+        if pos != -1:
+            match_type = 'exact'
+            content_end_pos = pos + len(marker_clean)
 
-                # Try with original text
-                pos = doc_lower.find(first_line_lower)
+        # Strategy 2: First-line exact match + forward scan for subsequent lines
+        if pos == -1:
+            first_line_lower = first_line.lower()
+            matched_len = len(first_line)  # Track actual matched text length
 
-                # Try with normalized dashes/quotes
-                if pos == -1:
-                    first_normalized = normalize_for_search(first_line_lower)
-                    pos = doc_lower_normalized.find(first_normalized)
+            # Try with original text
+            pos = doc_lower.find(first_line_lower)
 
-                # Try without emojis (matched_len changes since emoji chars aren't in doc)
-                if pos == -1:
-                    first_no_emoji = strip_emojis(first_line_lower).strip()
-                    if first_no_emoji and len(first_no_emoji) >= 3:
-                        pos = doc_lower.find(first_no_emoji)
-                        if pos == -1:
-                            # Try normalized + emoji-stripped
-                            pos = doc_lower_normalized.find(normalize_for_search(first_no_emoji))
-                        if pos != -1:
-                            matched_len = len(first_no_emoji)  # Use stripped length
-
-                if pos != -1:
-                    match_type = 'first_line'
-                    # Find the actual end of the heading line in the document
-                    heading_newline = doc_lower.find('\n', pos)
-                    if heading_newline != -1 and heading_newline < pos + matched_len + 50:
-                        content_end_pos = heading_newline + 1  # Start of next line
-                    else:
-                        content_end_pos = pos + matched_len
-
-                    # Scan forward for instruction/prompt lines that come RIGHT AFTER
-                    # the heading — skip past them so content starts at student answers.
-                    # STOP scanning at numbered questions (1., 2.) since those contain
-                    # individual Q&A pairs that parse_numbered_questions will handle.
-                    if len(marker_lines) > 1:
-                        last_advance = content_end_pos
-                        search_to = min(last_advance + len(marker_clean) + 500, len(doc_lower))
-
-                        for mline in marker_lines[1:]:
-                            mline_lower = mline.lower().strip()
-
-                            # Stop at numbered questions — don't skip past them
-                            if re.match(r'^\d+[\.\)]\s', mline_lower):
-                                break
-
-                            mline_normalized = normalize_for_search(mline_lower)
-
-                            # Try finding this line near the current position
-                            line_pos = doc_lower.find(mline_lower, last_advance, search_to)
-                            if line_pos == -1:
-                                line_pos = doc_lower_normalized.find(mline_normalized, last_advance, search_to)
-                            if line_pos == -1:
-                                mline_no_emoji = strip_emojis(mline_lower).strip()
-                                if mline_no_emoji and len(mline_no_emoji) >= 5:
-                                    line_pos = doc_lower.find(mline_no_emoji, last_advance, search_to)
-                            if line_pos == -1:
-                                # Try first few words (handles table | format)
-                                mline_words = mline_lower.split()[:3]
-                                if len(mline_words) >= 2:
-                                    short_search = ' '.join(mline_words)
-                                    if len(short_search) >= 5:
-                                        line_pos = doc_lower.find(short_search, last_advance, search_to)
-
-                            if line_pos != -1:
-                                # Only advance if this line is CLOSE (no big gap with student content)
-                                if line_pos - last_advance > 200:
-                                    break  # Gap too large — student content in between
-                                newline_after = doc_lower.find('\n', line_pos)
-                                if newline_after != -1 and newline_after < search_to:
-                                    content_end_pos = max(content_end_pos, newline_after + 1)
-                                    last_advance = newline_after + 1
-                                else:
-                                    content_end_pos = max(content_end_pos, line_pos + len(mline_lower))
-                                    last_advance = content_end_pos
-                            else:
-                                break  # Line not found — stop scanning
-
-            # Strategy 3: Fuzzy match (fallback)
+            # Try with normalized dashes/quotes
             if pos == -1:
-                pos = fuzzy_find_marker(document_text, marker_clean)
-                if pos != -1:
-                    match_type = 'fuzzy'
-                    content_end_pos = pos + min(len(marker_clean), 100)
+                first_normalized = normalize_for_search(first_line_lower)
+                pos = doc_lower_normalized.find(first_normalized)
+
+            # Try without emojis (matched_len changes since emoji chars aren't in doc)
+            if pos == -1:
+                first_no_emoji = strip_emojis(first_line_lower).strip()
+                if first_no_emoji and len(first_no_emoji) >= 3:
+                    pos = doc_lower.find(first_no_emoji)
+                    if pos == -1:
+                        # Try normalized + emoji-stripped
+                        pos = doc_lower_normalized.find(normalize_for_search(first_no_emoji))
+                    if pos != -1:
+                        matched_len = len(first_no_emoji)  # Use stripped length
 
             if pos != -1:
-                if match_type == 'exact':
-                    exact_matches += 1
-                elif match_type == 'first_line':
-                    exact_matches += 1  # First-line is reliable enough to count as exact
+                match_type = 'first_line'
+                # Find the actual end of the heading line in the document
+                heading_newline = doc_lower.find('\n', pos)
+                if heading_newline != -1 and heading_newline < pos + matched_len + 50:
+                    content_end_pos = heading_newline + 1  # Start of next line
                 else:
-                    fuzzy_matches += 1
+                    content_end_pos = pos + matched_len
 
-                marker_positions.append({
-                    'marker': marker_clean,
-                    'start': pos,
-                    'end': content_end_pos,
-                    'end_marker': end_marker,
-                    'match_type': match_type,
-                    'section_type': marker.get('type', 'written') if isinstance(marker, dict) else 'written',
-                })
+                # Scan forward for instruction/prompt lines that come RIGHT AFTER
+                # the heading — skip past them so content starts at student answers.
+                # STOP scanning at numbered questions (1., 2.) since those contain
+                # individual Q&A pairs that parse_numbered_questions will handle.
+                if len(marker_lines) > 1:
+                    last_advance = content_end_pos
+                    search_to = min(last_advance + len(marker_clean) + 500, len(doc_lower))
 
-        # Sort by position in document
-        marker_positions.sort(key=lambda x: x['start'])
+                    for mline in marker_lines[1:]:
+                        mline_lower = mline.lower().strip()
 
-        # Track excluded sections
-        excluded_sections = []
-
-        # Normalize exclude markers for comparison
-        exclude_markers_normalized = []
-        if exclude_markers:
-            for em in exclude_markers:
-                exclude_markers_normalized.append(em.lower().strip())
-
-        # Track markers that were NOT found in the document at all
-        # Build a set of found marker names using multiple representations
-        # (full text, first line, emoji-stripped) so multi-line or emoji markers
-        # are correctly matched against the config
-        found_marker_names = set()
-        for mp in marker_positions:
-            m = mp['marker'].lower()
-            found_marker_names.add(m)
-            # Also add first line (for multi-line markers found by first-line strategy)
-            first_line_found = m.split('\n')[0].strip()
-            if first_line_found:
-                found_marker_names.add(first_line_found)
-            # Also add emoji-stripped versions
-            m_no_emoji = strip_emojis(m).strip()
-            if m_no_emoji:
-                found_marker_names.add(m_no_emoji)
-            first_no_emoji = strip_emojis(first_line_found).strip()
-            if first_no_emoji:
-                found_marker_names.add(first_no_emoji)
-
-        missing_sections = []
-        for marker in custom_markers:
-            if isinstance(marker, dict):
-                marker_name = marker.get('start', '').strip()
-            else:
-                marker_name = str(marker).strip()
-            if not marker_name:
-                continue
-            # Check multiple representations of the marker name
-            marker_lower = marker_name.lower()
-            marker_first_line = marker_lower.split('\n')[0].strip()
-            marker_no_emoji = strip_emojis(marker_lower).strip()
-            marker_first_no_emoji = strip_emojis(marker_first_line).strip()
-            is_found = (marker_lower in found_marker_names
-                       or marker_first_line in found_marker_names
-                       or marker_no_emoji in found_marker_names
-                       or marker_first_no_emoji in found_marker_names)
-            if not is_found:
-                # Don't flag excluded sections as missing
-                is_excluded = any(em in marker_name.lower() or marker_name.lower() in em
-                                for em in exclude_markers_normalized)
-                if not is_excluded:
-                    missing_sections.append(marker_name)
-
-        # Extract response after each marker
-        for i, mp in enumerate(marker_positions):
-            marker_text = mp['marker']
-            content_start = mp['end']
-            end_marker = mp.get('end_marker')
-            section_type = mp.get('section_type', 'written')
-            # Detect short-answer from explicit type OR from marker name containing FITB keywords
-            marker_name_hint = mp['marker'].lower()
-            is_short_answer = (
-                section_type in ('fill-blank', 'fill_in_blank', 'vocabulary', 'matching')
-                or 'fill-in' in marker_name_hint
-                or 'fill in' in marker_name_hint
-                or 'fitb' in marker_name_hint
-                or 'blanks' in marker_name_hint
-            )
-
-            # Check if this marker should be excluded from grading
-            marker_lower = marker_text.lower().strip()
-            marker_first_line = marker_lower.split('\n')[0].strip()
-            marker_first_no_emoji = strip_emojis(marker_first_line).strip()
-            is_excluded = False
-            for em in exclude_markers_normalized:
-                em_first_line = em.split('\n')[0].strip()
-                em_first_no_emoji = strip_emojis(em_first_line).strip()
-                # Compare full text, first lines, and emoji-stripped first lines
-                if (em in marker_lower or marker_lower in em
-                    or em_first_line in marker_first_line or marker_first_line in em_first_line
-                    or (em_first_no_emoji and marker_first_no_emoji
-                        and (em_first_no_emoji in marker_first_no_emoji or marker_first_no_emoji in em_first_no_emoji))):
-                    is_excluded = True
-                    excluded_sections.append(marker_text[:80])
-                    break
-
-            if is_excluded:
-                continue  # Skip this section - don't grade it
-
-            # Determine where content ends (in priority order):
-            # 1. Explicit end marker (if defined)
-            # 2. Next start marker
-            # 3. Section delimiters
-            # 4. Document end (capped at 1500 chars)
-
-            if end_marker:
-                # Use explicit end marker with fallback for suspiciously short content
-                MIN_CONTENT_LENGTH = 50  # If content is shorter, end marker may have been found too early
-
-                end_pos = doc_lower.find(end_marker.lower(), content_start)
-                if end_pos != -1:
-                    # Check if content is suspiciously short
-                    potential_content = document_text[content_start:end_pos].strip()
-
-                    # If too short, look for NEXT occurrence of end marker
-                    search_pos = end_pos + 1
-                    while len(potential_content) < MIN_CONTENT_LENGTH and search_pos < len(document_text):
-                        next_end_pos = doc_lower.find(end_marker.lower(), search_pos)
-                        if next_end_pos == -1:
-                            break  # No more occurrences
-                        potential_content = document_text[content_start:next_end_pos].strip()
-                        if len(potential_content) >= MIN_CONTENT_LENGTH:
-                            end_pos = next_end_pos
+                        # Stop at numbered questions — don't skip past them
+                        if re.match(r'^\d+[\.\)]\s', mline_lower):
                             break
-                        search_pos = next_end_pos + 1
 
-                    content_end = end_pos
-                else:
-                    # End marker not found, fall back to next marker or cap
-                    if i + 1 < len(marker_positions):
-                        content_end = marker_positions[i + 1]['start']
-                    else:
-                        content_end = min(content_start + 1500, len(document_text))
-            elif i + 1 < len(marker_positions):
-                # End at next marker
+                        mline_normalized = normalize_for_search(mline_lower)
+
+                        # Try finding this line near the current position
+                        line_pos = doc_lower.find(mline_lower, last_advance, search_to)
+                        if line_pos == -1:
+                            line_pos = doc_lower_normalized.find(mline_normalized, last_advance, search_to)
+                        if line_pos == -1:
+                            mline_no_emoji = strip_emojis(mline_lower).strip()
+                            if mline_no_emoji and len(mline_no_emoji) >= 5:
+                                line_pos = doc_lower.find(mline_no_emoji, last_advance, search_to)
+                        if line_pos == -1:
+                            # Try first few words (handles table | format)
+                            mline_words = mline_lower.split()[:3]
+                            if len(mline_words) >= 2:
+                                short_search = ' '.join(mline_words)
+                                if len(short_search) >= 5:
+                                    line_pos = doc_lower.find(short_search, last_advance, search_to)
+
+                        if line_pos != -1:
+                            # Only advance if this line is CLOSE (no big gap with student content)
+                            if line_pos - last_advance > 200:
+                                break  # Gap too large — student content in between
+                            newline_after = doc_lower.find('\n', line_pos)
+                            if newline_after != -1 and newline_after < search_to:
+                                content_end_pos = max(content_end_pos, newline_after + 1)
+                                last_advance = newline_after + 1
+                            else:
+                                content_end_pos = max(content_end_pos, line_pos + len(mline_lower))
+                                last_advance = content_end_pos
+                        else:
+                            break  # Line not found — stop scanning
+
+        # Strategy 3: Fuzzy match (fallback)
+        if pos == -1:
+            pos = fuzzy_find_marker(document_text, marker_clean)
+            if pos != -1:
+                match_type = 'fuzzy'
+                content_end_pos = pos + min(len(marker_clean), 100)
+
+        if pos != -1:
+            if match_type == 'exact':
+                exact_matches += 1
+            elif match_type == 'first_line':
+                exact_matches += 1  # First-line is reliable enough to count as exact
+            else:
+                fuzzy_matches += 1
+
+            marker_positions.append({
+                'marker': marker_clean,
+                'start': pos,
+                'end': content_end_pos,
+                'end_marker': end_marker,
+                'match_type': match_type,
+                'section_type': marker.get('type', 'written') if isinstance(marker, dict) else 'written',
+            })
+
+    return marker_positions, exact_matches, fuzzy_matches
+
+
+def _determine_marker_content_end(i, marker_positions, content_start, end_marker,
+                                  document_text, doc_lower, doc_lower_normalized,
+                                  exclude_markers_normalized):
+    """Compute where a marker section's content ends (explicit end marker /
+    next marker / section delimiters / exclude boundaries). Extracted
+    verbatim from the per-marker loop of extract_student_responses (CQ7).
+    """
+    # Determine where content ends (in priority order):
+    # 1. Explicit end marker (if defined)
+    # 2. Next start marker
+    # 3. Section delimiters
+    # 4. Document end (capped at 1500 chars)
+
+    if end_marker:
+        # Use explicit end marker with fallback for suspiciously short content
+        MIN_CONTENT_LENGTH = 50  # If content is shorter, end marker may have been found too early
+
+        end_pos = doc_lower.find(end_marker.lower(), content_start)
+        if end_pos != -1:
+            # Check if content is suspiciously short
+            potential_content = document_text[content_start:end_pos].strip()
+
+            # If too short, look for NEXT occurrence of end marker
+            search_pos = end_pos + 1
+            while len(potential_content) < MIN_CONTENT_LENGTH and search_pos < len(document_text):
+                next_end_pos = doc_lower.find(end_marker.lower(), search_pos)
+                if next_end_pos == -1:
+                    break  # No more occurrences
+                potential_content = document_text[content_start:next_end_pos].strip()
+                if len(potential_content) >= MIN_CONTENT_LENGTH:
+                    end_pos = next_end_pos
+                    break
+                search_pos = next_end_pos + 1
+
+            content_end = end_pos
+        else:
+            # End marker not found, fall back to next marker or cap
+            if i + 1 < len(marker_positions):
                 content_end = marker_positions[i + 1]['start']
             else:
-                # Last marker - cap at 1500 chars
                 content_end = min(content_start + 1500, len(document_text))
+    elif i + 1 < len(marker_positions):
+        # End at next marker
+        content_end = marker_positions[i + 1]['start']
+    else:
+        # Last marker - cap at 1500 chars
+        content_end = min(content_start + 1500, len(document_text))
 
-            # Also stop at known section delimiters (reading material, etc.)
-            # BUT skip this if we already have an explicit end marker (to avoid re-truncating)
-            # NOTE: Removed '___' from delimiters - it conflicts with fill-in-the-blank notation
-            if not end_marker:
-                section_delimiters = ['📖', '📚', '🔍', '--- ', '***', '===']
-                for delim in section_delimiters:
-                    delim_pos = document_text.find(delim, content_start, content_end)
-                    if delim_pos != -1 and delim_pos > content_start:
-                        content_end = delim_pos
+    # Also stop at known section delimiters (reading material, etc.)
+    # BUT skip this if we already have an explicit end marker (to avoid re-truncating)
+    # NOTE: Removed '___' from delimiters - it conflicts with fill-in-the-blank notation
+    if not end_marker:
+        section_delimiters = ['📖', '📚', '🔍', '--- ', '***', '===']
+        for delim in section_delimiters:
+            delim_pos = document_text.find(delim, content_start, content_end)
+            if delim_pos != -1 and delim_pos > content_start:
+                content_end = delim_pos
 
-            # Also stop at exclude marker boundaries — don't capture excluded
-            # section content as part of an adjacent graded section's response
-            if exclude_markers_normalized:
-                for em in exclude_markers_normalized:
-                    # Try multiple search strategies (emoji/dash/encoding differences)
-                    em_lines = [l.strip() for l in em.split('\n') if l.strip()]
-                    search_terms = set()
-                    for el in em_lines[:3]:  # First 3 lines
-                        search_terms.add(el)
-                        # Without leading emoji/special chars
-                        stripped = re.sub(r'^[^a-zA-Z]*', '', el).strip()
-                        if stripped and len(stripped) >= 5:
-                            search_terms.add(stripped)
-                        # Normalized dashes/quotes
-                        normalized = el.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'")
-                        if normalized != el:
-                            search_terms.add(normalized)
+    # Also stop at exclude marker boundaries — don't capture excluded
+    # section content as part of an adjacent graded section's response
+    if exclude_markers_normalized:
+        for em in exclude_markers_normalized:
+            # Try multiple search strategies (emoji/dash/encoding differences)
+            em_lines = [l.strip() for l in em.split('\n') if l.strip()]
+            search_terms = set()
+            for el in em_lines[:3]:  # First 3 lines
+                search_terms.add(el)
+                # Without leading emoji/special chars
+                stripped = re.sub(r'^[^a-zA-Z]*', '', el).strip()
+                if stripped and len(stripped) >= 5:
+                    search_terms.add(stripped)
+                # Normalized dashes/quotes
+                normalized = el.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'")
+                if normalized != el:
+                    search_terms.add(normalized)
 
-                    found_boundary = False
-                    for em_search in search_terms:
-                        if len(em_search) >= 5 and not found_boundary:
-                            em_pos = doc_lower.find(em_search, content_start, content_end)
-                            if em_pos == -1:
-                                # Also try in normalized doc text
-                                em_pos = doc_lower_normalized.find(em_search, content_start, content_end)
-                            if em_pos != -1 and em_pos > content_start:
-                                content_end = min(content_end, em_pos)
-                                found_boundary = True
+            found_boundary = False
+            for em_search in search_terms:
+                if len(em_search) >= 5 and not found_boundary:
+                    em_pos = doc_lower.find(em_search, content_start, content_end)
+                    if em_pos == -1:
+                        # Also try in normalized doc text
+                        em_pos = doc_lower_normalized.find(em_search, content_start, content_end)
+                    if em_pos != -1 and em_pos > content_start:
+                        content_end = min(content_end, em_pos)
+                        found_boundary = True
 
-            # Extract the response
-            response = document_text[content_start:content_end].strip()
+    return content_end
 
-            # Clean up: remove leading colons, newlines
-            response = re.sub(r'^[:\s\n]+', '', response).strip()
 
-            # Check if response contains numbered questions (1., 2., 3., etc.)
-            # If so, parse them individually instead of as one blob
-            numbered_items = parse_numbered_questions(response)
-            if numbered_items:
-                print(f"      📝 Found {len(numbered_items)} numbered questions in section")  # noqa: T201
-                for item in numbered_items:
-                    answer = item.get("answer", "")
+def _extract_responses_per_marker(marker_positions, custom_markers, template_text,
+                                  document_text, doc_lower, doc_lower_normalized,
+                                  exclude_markers_normalized, extracted,
+                                  blank_questions, excluded_sections):
+    """Walk the located markers and append student responses to ``extracted``
+    (and blanks to ``blank_questions``, skips to ``excluded_sections``),
+    mutating those lists in place. Extracted verbatim from
+    extract_student_responses (CQ7); the content-end computation is delegated
+    to _determine_marker_content_end.
+    """
+    # Extract response after each marker
+    for i, mp in enumerate(marker_positions):
+        marker_text = mp['marker']
+        content_start = mp['end']
+        end_marker = mp.get('end_marker')
+        section_type = mp.get('section_type', 'written')
+        # Detect short-answer from explicit type OR from marker name containing FITB keywords
+        marker_name_hint = mp['marker'].lower()
+        is_short_answer = (
+            section_type in ('fill-blank', 'fill_in_blank', 'vocabulary', 'matching')
+            or 'fill-in' in marker_name_hint
+            or 'fill in' in marker_name_hint
+            or 'fitb' in marker_name_hint
+            or 'blanks' in marker_name_hint
+        )
 
-                    # Clean template artifacts from numbered question answers:
-                    # "(25 pts)", "Response: ___", "_____" lines are template text, not student content
-                    if answer:
-                        cleaned_lines = []
-                        for aline in answer.split('\n'):
-                            stripped = aline.strip()
-                            # Skip point value markers like "(20 pts)" or "(25 pts)"
-                            if re.match(r'^\(\s*\d+\s*(?:pts?|points?)\s*\)\s*$', stripped, re.IGNORECASE):
-                                continue
-                            # Skip "Response:" with only underscores after it
-                            if re.match(r'^Response\s*:\s*[_\s]*$', stripped, re.IGNORECASE):
-                                continue
-                            # Skip lines that are only underscores/dashes/spaces
-                            if re.match(r'^[_\-\s]+$', stripped) or not stripped:
-                                continue
-                            # Skip "Response:" prefix but keep any actual text after it
-                            resp_match = re.match(r'^Response\s*:\s*(.+)', stripped, re.IGNORECASE)
-                            if resp_match:
-                                actual = resp_match.group(1).strip()
-                                if actual and not re.match(r'^[_\-\s]+$', actual):
-                                    cleaned_lines.append(actual)
-                                continue
-                            cleaned_lines.append(stripped)
-                        answer = '\n'.join(cleaned_lines).strip()
+        # Check if this marker should be excluded from grading
+        marker_lower = marker_text.lower().strip()
+        marker_first_line = marker_lower.split('\n')[0].strip()
+        marker_first_no_emoji = strip_emojis(marker_first_line).strip()
+        is_excluded = False
+        for em in exclude_markers_normalized:
+            em_first_line = em.split('\n')[0].strip()
+            em_first_no_emoji = strip_emojis(em_first_line).strip()
+            # Compare full text, first lines, and emoji-stripped first lines
+            if (em in marker_lower or marker_lower in em
+                or em_first_line in marker_first_line or marker_first_line in em_first_line
+                or (em_first_no_emoji and marker_first_no_emoji
+                    and (em_first_no_emoji in marker_first_no_emoji or marker_first_no_emoji in em_first_no_emoji))):
+                is_excluded = True
+                excluded_sections.append(marker_text[:80])
+                break
 
-                    if not answer or len(answer) < 3:
-                        blank_questions.append(item.get("question", "Unknown"))
+        if is_excluded:
+            continue  # Skip this section - don't grade it
+
+        content_end = _determine_marker_content_end(
+            i, marker_positions, content_start, end_marker, document_text,
+            doc_lower, doc_lower_normalized, exclude_markers_normalized)
+
+        # Extract the response
+        response = document_text[content_start:content_end].strip()
+
+        # Clean up: remove leading colons, newlines
+        response = re.sub(r'^[:\s\n]+', '', response).strip()
+
+        # Check if response contains numbered questions (1., 2., 3., etc.)
+        # If so, parse them individually instead of as one blob
+        numbered_items = parse_numbered_questions(response)
+        if numbered_items:
+            print(f"      📝 Found {len(numbered_items)} numbered questions in section")  # noqa: T201
+            for item in numbered_items:
+                answer = item.get("answer", "")
+
+                # Clean template artifacts from numbered question answers:
+                # "(25 pts)", "Response: ___", "_____" lines are template text, not student content
+                if answer:
+                    cleaned_lines = []
+                    for aline in answer.split('\n'):
+                        stripped = aline.strip()
+                        # Skip point value markers like "(20 pts)" or "(25 pts)"
+                        if re.match(r'^\(\s*\d+\s*(?:pts?|points?)\s*\)\s*$', stripped, re.IGNORECASE):
+                            continue
+                        # Skip "Response:" with only underscores after it
+                        if re.match(r'^Response\s*:\s*[_\s]*$', stripped, re.IGNORECASE):
+                            continue
+                        # Skip lines that are only underscores/dashes/spaces
+                        if re.match(r'^[_\-\s]+$', stripped) or not stripped:
+                            continue
+                        # Skip "Response:" prefix but keep any actual text after it
+                        resp_match = re.match(r'^Response\s*:\s*(.+)', stripped, re.IGNORECASE)
+                        if resp_match:
+                            actual = resp_match.group(1).strip()
+                            if actual and not re.match(r'^[_\-\s]+$', actual):
+                                cleaned_lines.append(actual)
+                            continue
+                        cleaned_lines.append(stripped)
+                    answer = '\n'.join(cleaned_lines).strip()
+
+                if not answer or len(answer) < 3:
+                    blank_questions.append(item.get("question", "Unknown"))
+                else:
+                    extracted.append({
+                        "question": item["question"],
+                        "answer": answer[:10000],
+                        "type": "numbered_question"
+                    })
+            continue  # Skip normal processing for this marker
+
+        # Check if this is a VOCABULARY section with Term: definition pairs
+        # Parse each vocab term individually for better grading granularity
+        marker_name_lower = marker_text.lower().split('\n')[0].strip()
+        is_vocab_section = 'vocab' in marker_name_lower
+        if is_vocab_section:
+            vocab_items = parse_vocab_terms(response)
+            if vocab_items:
+                print(f"      📖 Found {len(vocab_items)} vocab terms in section")  # noqa: T201
+                for vitem in vocab_items:
+                    if vitem.get("is_blank"):
+                        blank_questions.append(vitem["term"] + " (no definition)")
                     else:
                         extracted.append({
-                            "question": item["question"],
-                            "answer": answer[:10000],
-                            "type": "numbered_question"
+                            "question": vitem["term"],
+                            "answer": vitem["answer"][:10000],
+                            "type": "vocab_term"
                         })
-                continue  # Skip normal processing for this marker
+                continue  # Skip normal blob processing
 
-            # Check if this is a VOCABULARY section with Term: definition pairs
-            # Parse each vocab term individually for better grading granularity
-            marker_name_lower = marker_text.lower().split('\n')[0].strip()
-            is_vocab_section = 'vocab' in marker_name_lower
-            if is_vocab_section:
-                vocab_items = parse_vocab_terms(response)
-                if vocab_items:
-                    print(f"      📖 Found {len(vocab_items)} vocab terms in section")  # noqa: T201
-                    for vitem in vocab_items:
-                        if vitem.get("is_blank"):
-                            blank_questions.append(vitem["term"] + " (no definition)")
-                        else:
-                            extracted.append({
-                                "question": vitem["term"],
-                                "answer": vitem["answer"][:10000],
-                                "type": "vocab_term"
-                            })
-                    continue  # Skip normal blob processing
+        # Get a short label for the question (first 50 chars of marker)
+        question_label = marker_text[:80] + '...' if len(marker_text) > 80 else marker_text
+        # Clean up newlines in label
+        question_label = ' '.join(question_label.split())
 
-            # Get a short label for the question (first 50 chars of marker)
-            question_label = marker_text[:80] + '...' if len(marker_text) > 80 else marker_text
-            # Clean up newlines in label
-            question_label = ' '.join(question_label.split())
+        # Check if response is actually blank (just whitespace, or only template/boilerplate)
+        is_blank = False
+        if not response or len(response) <= 5:
+            is_blank = True
+        else:
+            # Filter out common template patterns that aren't student answers
+            response_clean = response.strip()
 
-            # Check if response is actually blank (just whitespace, or only template/boilerplate)
-            is_blank = False
-            if not response or len(response) <= 5:
+            # Remove lines that start with instructions/prompts
+            lines = [l.strip() for l in response_clean.split('\n') if l.strip()]
+            # Filter out blank placeholder lines, track blank vocab terms
+            student_lines = []
+            for line in lines:
+                # Skip lines that are just underscores/spaces (blank placeholders)
+                if line.replace('_', '').replace(' ', '') == '':
+                    continue
+                # Skip quoted text — primary source quotes from the template
+                stripped_q = line.strip()
+                if ((stripped_q.startswith('"') and stripped_q.endswith('"'))
+                    or (stripped_q.startswith('\u201c') and stripped_q.endswith('\u201d'))
+                    or (stripped_q.startswith('"') and stripped_q.endswith('\u201d'))
+                    or (stripped_q.startswith('\u201c') and stripped_q.endswith('"'))):
+                    continue
+                # Skip "Quote from [Person]:" attribution lines
+                if re.match(r'^(?:quote|excerpt|passage)\s+(?:from|by)\s+', line, re.IGNORECASE):
+                    continue
+                # Skip "Student Task:" / "Task:" instruction lines
+                if re.match(r'^(?:student\s+task|task|activity|directions?|instructions?)\s*:', line, re.IGNORECASE):
+                    continue
+                # Check if line has 3+ consecutive underscores (fill-in-the-blank format)
+                if re.search(r'_{3,}', line):
+                    # Strip all underscores — if meaningful text remains, keep it
+                    text_only = re.sub(r'_+', ' ', line).strip()
+                    # Remove the term/label before colon too for checking
+                    if ':' in text_only:
+                        after_colon = text_only.split(':', 1)[1].strip()
+                    else:
+                        after_colon = text_only
+                    min_answer_len = 1 if is_short_answer else 3
+                    if len(after_colon) < min_answer_len:
+                        # Truly blank — if it looks like a vocab term (Term: ___), track it
+                        if ':' in text_only:
+                            term = text_only.split(':', 1)[0].strip()
+                            if term and len(term.split()) <= 4:
+                                blank_questions.append(f"{term} (no definition)")
+                        continue
+                    # Otherwise student wrote something between/around the underscores — keep it
+                student_lines.append(line)
+
+            # If no student content remains, it's blank
+            min_content_len = 3 if is_short_answer else 10
+            if not student_lines or sum(len(l) for l in student_lines) < min_content_len:
                 is_blank = True
             else:
-                # Filter out common template patterns that aren't student answers
-                response_clean = response.strip()
+                # Use filtered response
+                response = '\n'.join(student_lines)
 
-                # Remove lines that start with instructions/prompts
-                lines = [l.strip() for l in response_clean.split('\n') if l.strip()]
-                # Filter out blank placeholder lines, track blank vocab terms
-                student_lines = []
-                for line in lines:
-                    # Skip lines that are just underscores/spaces (blank placeholders)
-                    if line.replace('_', '').replace(' ', '') == '':
-                        continue
-                    # Skip quoted text — primary source quotes from the template
-                    stripped_q = line.strip()
-                    if ((stripped_q.startswith('"') and stripped_q.endswith('"'))
-                        or (stripped_q.startswith('\u201c') and stripped_q.endswith('\u201d'))
-                        or (stripped_q.startswith('"') and stripped_q.endswith('\u201d'))
-                        or (stripped_q.startswith('\u201c') and stripped_q.endswith('"'))):
-                        continue
-                    # Skip "Quote from [Person]:" attribution lines
-                    if re.match(r'^(?:quote|excerpt|passage)\s+(?:from|by)\s+', line, re.IGNORECASE):
-                        continue
-                    # Skip "Student Task:" / "Task:" instruction lines
-                    if re.match(r'^(?:student\s+task|task|activity|directions?|instructions?)\s*:', line, re.IGNORECASE):
-                        continue
-                    # Check if line has 3+ consecutive underscores (fill-in-the-blank format)
-                    if re.search(r'_{3,}', line):
-                        # Strip all underscores — if meaningful text remains, keep it
-                        text_only = re.sub(r'_+', ' ', line).strip()
-                        # Remove the term/label before colon too for checking
-                        if ':' in text_only:
-                            after_colon = text_only.split(':', 1)[1].strip()
-                        else:
-                            after_colon = text_only
-                        min_answer_len = 1 if is_short_answer else 3
-                        if len(after_colon) < min_answer_len:
-                            # Truly blank — if it looks like a vocab term (Term: ___), track it
-                            if ':' in text_only:
-                                term = text_only.split(':', 1)[0].strip()
-                                if term and len(term.split()) <= 4:
-                                    blank_questions.append(f"{term} (no definition)")
-                            continue
-                        # Otherwise student wrote something between/around the underscores — keep it
-                    student_lines.append(line)
+        # CRITICAL: Strip template lines from response using original template.
+        # This removes instruction/prompt text that appears between the marker
+        # heading and the student's actual response (e.g., "Summarize the key events...")
+        # SKIP when:
+        #   - FITB sections: template lines ARE the questions
+        #   - Teacher explicitly set custom markers: the aggressive 60% word-overlap
+        #     heuristic in _strip_template_lines incorrectly strips valid student
+        #     answers for formats like Cornell Notes where answers share vocabulary
+        #     with the template (history content, proper nouns, etc.)
+        using_teacher_markers = bool(custom_markers and len(custom_markers) > 0)
+        if not is_blank and template_text and not is_short_answer and not using_teacher_markers:
+            response = _strip_template_lines(response, marker_text, template_text, is_short_answer=is_short_answer)
 
-                # If no student content remains, it's blank
-                min_content_len = 3 if is_short_answer else 10
-                if not student_lines or sum(len(l) for l in student_lines) < min_content_len:
-                    is_blank = True
-                else:
-                    # Use filtered response
-                    response = '\n'.join(student_lines)
+        # CRITICAL: Filter out questions/prompts from response.
+        # This correctly removes lines ending with '?' and imperative instructions.
+        # KEEP active even with custom markers — questions embedded in extracted
+        # content (e.g., "Why was the Louisiana Purchase important?") must be
+        # removed so they aren't graded as student responses.
+        # SKIP only for FITB: the prompts are the fill-in sentences themselves.
+        if not is_blank and not is_short_answer:
+            pre_filter = response
+            response = filter_questions_from_response(response)
+            if not response or len(response.strip()) < 3:
+                is_blank = True
+                print(f"      🔍 filter_questions_from_response made '{question_label[:50]}' blank")  # noqa: T201
+                print(f"         Before: {pre_filter[:120].replace(chr(10), ' ')}")  # noqa: T201
+                print(f"         After:  [{response}]")  # noqa: T201
 
-            # CRITICAL: Strip template lines from response using original template.
-            # This removes instruction/prompt text that appears between the marker
-            # heading and the student's actual response (e.g., "Summarize the key events...")
-            # SKIP when:
-            #   - FITB sections: template lines ARE the questions
-            #   - Teacher explicitly set custom markers: the aggressive 60% word-overlap
-            #     heuristic in _strip_template_lines incorrectly strips valid student
-            #     answers for formats like Cornell Notes where answers share vocabulary
-            #     with the template (history content, proper nouns, etc.)
-            using_teacher_markers = bool(custom_markers and len(custom_markers) > 0)
-            if not is_blank and template_text and not is_short_answer and not using_teacher_markers:
-                response = _strip_template_lines(response, marker_text, template_text, is_short_answer=is_short_answer)
+        # Additional blank check: if remaining response is very short and looks like
+        # template fragments (sub-prompts, topic lists, page refs), mark as blank.
+        # Real student answers for questions are typically 20+ characters.
+        if not is_blank and response:
+            resp_clean = response.strip()
+            # Remove common template artifacts: page refs, point values, "Response:" labels
+            resp_stripped = re.sub(r'\((?:pp?\.?\s*\d+[\-–]\d+|\d+\s*(?:pts?|points?))\)', '', resp_clean)
+            resp_stripped = re.sub(r'(?i)^response\s*:\s*', '', resp_stripped).strip()
+            resp_stripped = re.sub(r'[_\-\s]+$', '', resp_stripped).strip()
+            min_response_len = 3 if is_short_answer else 15
+            if len(resp_stripped) < min_response_len:
+                is_blank = True
 
-            # CRITICAL: Filter out questions/prompts from response.
-            # This correctly removes lines ending with '?' and imperative instructions.
-            # KEEP active even with custom markers — questions embedded in extracted
-            # content (e.g., "Why was the Louisiana Purchase important?") must be
-            # removed so they aren't graded as student responses.
-            # SKIP only for FITB: the prompts are the fill-in sentences themselves.
-            if not is_blank and not is_short_answer:
-                pre_filter = response
-                response = filter_questions_from_response(response)
-                if not response or len(response.strip()) < 3:
-                    is_blank = True
-                    print(f"      🔍 filter_questions_from_response made '{question_label[:50]}' blank")  # noqa: T201
-                    print(f"         Before: {pre_filter[:120].replace(chr(10), ' ')}")  # noqa: T201
-                    print(f"         After:  [{response}]")  # noqa: T201
+        if not is_blank:
+            # Check for blank vocab terms within this section (Term: with no definition)
+            resp_lines = response.split('\n')
+            for line_idx, line in enumerate(resp_lines):
+                line = line.strip()
+                if ':' in line and not line.startswith('http'):
+                    parts = line.split(':', 1)
+                    term = parts[0].strip()
+                    defn = parts[1].strip() if len(parts) > 1 else ''
+                    # If term is short (vocab-like) and definition is empty on this line,
+                    # check the NEXT line(s) — student may have put the definition there
+                    if len(term.split()) <= 3 and not defn:
+                        # Look ahead up to 2 lines for a definition
+                        has_next_line_content = False
+                        for look_ahead in range(1, 3):
+                            if line_idx + look_ahead < len(resp_lines):
+                                next_line = resp_lines[line_idx + look_ahead].strip()
+                                # Skip empty lines and underscore-only lines
+                                if next_line and not re.match(r'^[_\s\-\.]+$', next_line) and len(next_line) > 3:
+                                    has_next_line_content = True
+                                    break
+                        if has_next_line_content:
+                            continue  # Definition is on the next line — not blank
+                        # Don't flag terms that match excluded section keywords
+                        term_lower = term.lower()
+                        is_from_excluded = any(
+                            term_lower in em or em.split('\n')[0].strip().endswith(term_lower)
+                            for em in exclude_markers_normalized
+                        ) if exclude_markers_normalized else False
+                        if not is_from_excluded:
+                            blank_questions.append(f"{term} (no definition)")
 
-            # Additional blank check: if remaining response is very short and looks like
-            # template fragments (sub-prompts, topic lists, page refs), mark as blank.
-            # Real student answers for questions are typically 20+ characters.
-            if not is_blank and response:
-                resp_clean = response.strip()
-                # Remove common template artifacts: page refs, point values, "Response:" labels
-                resp_stripped = re.sub(r'\((?:pp?\.?\s*\d+[\-–]\d+|\d+\s*(?:pts?|points?))\)', '', resp_clean)
-                resp_stripped = re.sub(r'(?i)^response\s*:\s*', '', resp_stripped).strip()
-                resp_stripped = re.sub(r'[_\-\s]+$', '', resp_stripped).strip()
-                min_response_len = 3 if is_short_answer else 15
-                if len(resp_stripped) < min_response_len:
-                    is_blank = True
+            extracted.append({
+                "question": question_label,
+                "answer": response[:10000],
+                "type": "marker_response"
+            })
+        else:
+            blank_questions.append(question_label)
 
-            if not is_blank:
-                # Check for blank vocab terms within this section (Term: with no definition)
-                resp_lines = response.split('\n')
-                for line_idx, line in enumerate(resp_lines):
-                    line = line.strip()
-                    if ':' in line and not line.startswith('http'):
-                        parts = line.split(':', 1)
-                        term = parts[0].strip()
-                        defn = parts[1].strip() if len(parts) > 1 else ''
-                        # If term is short (vocab-like) and definition is empty on this line,
-                        # check the NEXT line(s) — student may have put the definition there
-                        if len(term.split()) <= 3 and not defn:
-                            # Look ahead up to 2 lines for a definition
-                            has_next_line_content = False
-                            for look_ahead in range(1, 3):
-                                if line_idx + look_ahead < len(resp_lines):
-                                    next_line = resp_lines[line_idx + look_ahead].strip()
-                                    # Skip empty lines and underscore-only lines
-                                    if next_line and not re.match(r'^[_\s\-\.]+$', next_line) and len(next_line) > 3:
-                                        has_next_line_content = True
-                                        break
-                            if has_next_line_content:
-                                continue  # Definition is on the next line — not blank
-                            # Don't flag terms that match excluded section keywords
-                            term_lower = term.lower()
-                            is_from_excluded = any(
-                                term_lower in em or em.split('\n')[0].strip().endswith(term_lower)
-                                for em in exclude_markers_normalized
-                            ) if exclude_markers_normalized else False
-                            if not is_from_excluded:
-                                blank_questions.append(f"{term} (no definition)")
 
-                extracted.append({
-                    "question": question_label,
-                    "answer": response[:10000],
-                    "type": "marker_response"
-                })
-            else:
-                blank_questions.append(question_label)
-
-        # Post-processing: strip any excluded marker text that leaked into responses
-        if exclude_markers_normalized and extracted:
-            for resp in extracted:
-                answer = resp.get("answer", "")
-                if not answer:
-                    continue
-                answer_lower = answer.lower()
-                for em in exclude_markers_normalized:
-                    em_lines = [l.strip() for l in em.split('\n') if l.strip()]
-                    for em_line in em_lines[:3]:
-                        stripped_em = re.sub(r'^[^a-zA-Z]*', '', em_line).strip()
-                        # If the exclude marker line appears at the start of the answer, strip it and everything after
-                        for search_term in [em_line, stripped_em]:
-                            if search_term and len(search_term) >= 5:
-                                pos = answer_lower.find(search_term)
-                                if pos != -1:
-                                    answer = answer[:pos].strip()
-                                    answer_lower = answer.lower()
-                # Strip trailing emoji/whitespace/special chars left over
-                answer = answer.rstrip()
-                answer = re.sub(r'[\s\U00010000-\U0010ffff]+$', '', answer).strip()
-                if answer != resp["answer"]:
-                    resp["answer"] = answer
-                    if not answer or len(answer.strip()) < 5:
-                        # Answer was entirely excluded content — mark as blank
-                        extracted.remove(resp)
-                        blank_questions.append(resp.get("question", "Unknown"))
-
-        # Post-processing: strip custom marker text that leaked into responses.
-        # This handles cases where multi-line marker forward scan fails to skip
-        # all marker lines, or where marker positions overlap with adjacent content.
-        if custom_markers and extracted:
-            marker_line_texts = []
-            for m in custom_markers:
-                mt = m.get('start', '').strip() if isinstance(m, dict) else str(m).strip()
-                if mt:
-                    for ml in mt.split('\n'):
-                        ml = ml.strip()
-                        if ml and len(ml) >= 10:
-                            marker_line_texts.append(ml.lower())
-
-            for resp in list(extracted):
-                answer = resp.get("answer", "")
-                if not answer:
-                    continue
-                lines = answer.split('\n')
-                filtered = []
-                for line in lines:
-                    line_stripped = line.strip()
-                    line_lower = line_stripped.lower()
-                    # Check if this line matches any custom marker line.
-                    # - mt in line_lower: marker text appears within the line (clear match)
-                    # - line_lower in mt: line is a substring of marker text — only match
-                    #   if the line is substantial (>=30 chars) to avoid removing short
-                    #   student answers like "Jefferson" that happen to be in a long marker
-                    is_marker_line = False
-                    for mt in marker_line_texts:
-                        if mt in line_lower or (len(line_lower) >= 30 and line_lower in mt):
-                            is_marker_line = True
-                            break
-                    if not is_marker_line:
-                        filtered.append(line)
-                new_answer = '\n'.join(filtered).strip()
-                if new_answer != answer:
-                    resp["answer"] = new_answer
-                    if not new_answer or len(new_answer.strip()) < 5:
-                        extracted.remove(resp)
-                        blank_questions.append(resp.get("question", "Unknown"))
-
-        # If we found markers, return results (skip pattern matching)
-        if marker_positions:
-            total_q = len(extracted) + len(blank_questions)
-            match_summary = f"{exact_matches} exact"
-            if fuzzy_matches > 0:
-                match_summary += f", {fuzzy_matches} fuzzy"
-            summary = f"Extracted {len(extracted)} responses using {len(marker_positions)} markers ({match_summary})."
-            if excluded_sections:
-                summary += f" Excluded {len(excluded_sections)} section(s) from grading."
-            if missing_sections:
-                summary += f" {len(missing_sections)} required section(s) MISSING from submission."
-            return {
-                "extracted_responses": extracted,
-                "blank_questions": blank_questions,
-                "missing_sections": missing_sections,
-                "total_questions": total_q,
-                "answered_questions": len(extracted),
-                "extraction_summary": summary,
-                "excluded_sections": excluded_sections
-            }
-
-    # FALLBACK: If no markers provided, use simple pattern matching
+def _extract_by_pattern_matching(document_text, extracted, blank_questions):
+    """No-marker fallback: numbered-Q&A + fill-in-the-blank pattern matching.
+    Appends to ``extracted`` and returns the final result dict. Extracted
+    verbatim from extract_student_responses (CQ7).
+    """
     lines = document_text.split('\n')
 
     # Look for numbered questions with answers
@@ -1665,6 +1460,263 @@ def extract_student_responses(document_text: str, custom_markers: list = None, e
         "answered_questions": len(extracted),
         "extraction_summary": f"Found {len(extracted)} responses via pattern matching."
     }
+
+
+def extract_student_responses(document_text: str, custom_markers: list = None, exclude_markers: list = None, template_text: str = None) -> dict:
+    """
+    Extract student responses from document using customMarkers from Builder.
+
+    Args:
+        document_text: The student's submitted document text
+        custom_markers: List of markers to look for
+        exclude_markers: List of markers to exclude from grading
+        template_text: Original assignment template (for fill-in-the-blank comparison)
+
+    APPROACH (with fallbacks):
+    1. TEMPLATE COMPARISON: If template provided, compare to find filled blanks
+    2. EXACT MATCH: Find markers exactly in document
+    2. FUZZY MATCH: If exact fails, try fuzzy matching (~1-2ms)
+    3. PATTERN MATCH: If all else fails, use regex patterns
+
+    Args:
+        document_text: The full document text
+        custom_markers: List of marker strings from Builder (the template/prompt text)
+        exclude_markers: List of section names to NOT grade (e.g., "Notes Section")
+
+    Returns:
+        {
+            "extracted_responses": [{"question": "...", "answer": "...", "type": "..."}, ...],
+            "blank_questions": ["question text", ...],
+            "total_questions": int,
+            "answered_questions": int,
+            "extraction_summary": "string describing what was found",
+            "excluded_sections": ["section name", ...] - sections that were skipped
+        }
+    """
+    import re
+
+    extracted = []
+    blank_questions = []
+    doc_lower = document_text.lower()
+
+    # Pre-compute normalized doc text (en-dash → hyphen, smart quotes → regular)
+    def normalize_for_search(text):
+        return text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+    doc_lower_normalized = normalize_for_search(doc_lower)
+
+    # PRIORITY 0: Fill-in-the-blank detection
+    # Only trigger FITB if the document/title explicitly mentions fill-in-the-blank
+    # Don't trigger just because there are underscores (Cornell Notes has blank lines too)
+    has_fitb_keyword = 'fill-in' in doc_lower or 'fill in the blank' in doc_lower or 'fillintheblank' in doc_lower.replace(' ', '').replace('-', '')
+    has_timestamps = bool(re.search(r'\d+\.\s*\(\d+:\d+', document_text))  # Has timestamps like "1. (0:00)"
+
+    # Only use underscores as indicator if FITB keyword is also present
+    is_fitb = has_fitb_keyword or has_timestamps
+
+    if is_fitb:
+        print(f"  📝 Detected fill-in-the-blank format - using FITB extraction")  # noqa: T201
+        fitb_results = extract_fitb_by_template_comparison(document_text, template_text)
+        if fitb_results:
+            # Filter out excluded sections and blank/template content
+            exclude_lower = [em.lower().strip() for em in exclude_markers] if exclude_markers else []
+            filtered_fitb = []
+            for resp in fitb_results:
+                question = resp.get('question', '').lower()
+                answer = resp.get('answer', '')
+                answer_lower = answer.lower()
+
+                # Skip blank underscore lines (e.g., "• _______________")
+                answer_stripped = re.sub(r'[_•\-\s]', '', answer)
+                if len(answer_stripped) < 5:
+                    continue
+
+                # Skip template instruction text
+                if any(kw in answer_lower for kw in ['use bullets', 'write important', 'add more notes', 'drawing']):
+                    continue
+
+                # Check if this response is from an excluded section
+                # Check both directions: exclude text in answer, AND answer in exclude text
+                is_excluded = False
+                for em in exclude_lower:
+                    # Original: exclude marker contained in answer (short marker, long answer)
+                    if em in answer_lower:
+                        is_excluded = True
+                        break
+                    # Reverse: answer contained in exclude marker (long marker, short answer)
+                    # Only for answers with enough length to avoid false positives
+                    if len(answer_lower) >= 15 and answer_lower in em:
+                        is_excluded = True
+                        break
+                if not is_excluded:
+                    filtered_fitb.append(resp)
+            fitb_results = filtered_fitb
+            extracted.extend(fitb_results)
+            print(f"      Found {len(fitb_results)} responses via FITB extraction")  # noqa: T201
+
+    # PRIORITY 1: Use customMarkers from Builder (most reliable)
+    # Markers can be:
+    #   - String: "Summary (Bottom Section)" - extracts until next marker
+    #   - Object: {"start": "Summary", "end": "📖"} - extracts until end marker
+    if custom_markers and len(custom_markers) > 0:
+        # Find positions of all markers in the document (exact + fuzzy)
+        marker_positions, exact_matches, fuzzy_matches = _build_marker_positions(
+            custom_markers, document_text, doc_lower, doc_lower_normalized,
+            normalize_for_search)
+
+        # Sort by position in document
+        marker_positions.sort(key=lambda x: x['start'])
+
+        # Track excluded sections
+        excluded_sections = []
+
+        # Normalize exclude markers for comparison
+        exclude_markers_normalized = []
+        if exclude_markers:
+            for em in exclude_markers:
+                exclude_markers_normalized.append(em.lower().strip())
+
+        # Track markers that were NOT found in the document at all
+        # Build a set of found marker names using multiple representations
+        # (full text, first line, emoji-stripped) so multi-line or emoji markers
+        # are correctly matched against the config
+        found_marker_names = set()
+        for mp in marker_positions:
+            m = mp['marker'].lower()
+            found_marker_names.add(m)
+            # Also add first line (for multi-line markers found by first-line strategy)
+            first_line_found = m.split('\n')[0].strip()
+            if first_line_found:
+                found_marker_names.add(first_line_found)
+            # Also add emoji-stripped versions
+            m_no_emoji = strip_emojis(m).strip()
+            if m_no_emoji:
+                found_marker_names.add(m_no_emoji)
+            first_no_emoji = strip_emojis(first_line_found).strip()
+            if first_no_emoji:
+                found_marker_names.add(first_no_emoji)
+
+        missing_sections = []
+        for marker in custom_markers:
+            if isinstance(marker, dict):
+                marker_name = marker.get('start', '').strip()
+            else:
+                marker_name = str(marker).strip()
+            if not marker_name:
+                continue
+            # Check multiple representations of the marker name
+            marker_lower = marker_name.lower()
+            marker_first_line = marker_lower.split('\n')[0].strip()
+            marker_no_emoji = strip_emojis(marker_lower).strip()
+            marker_first_no_emoji = strip_emojis(marker_first_line).strip()
+            is_found = (marker_lower in found_marker_names
+                       or marker_first_line in found_marker_names
+                       or marker_no_emoji in found_marker_names
+                       or marker_first_no_emoji in found_marker_names)
+            if not is_found:
+                # Don't flag excluded sections as missing
+                is_excluded = any(em in marker_name.lower() or marker_name.lower() in em
+                                for em in exclude_markers_normalized)
+                if not is_excluded:
+                    missing_sections.append(marker_name)
+
+        _extract_responses_per_marker(
+            marker_positions, custom_markers, template_text, document_text,
+            doc_lower, doc_lower_normalized, exclude_markers_normalized,
+            extracted, blank_questions, excluded_sections,
+        )
+
+        # Post-processing: strip any excluded marker text that leaked into responses
+        if exclude_markers_normalized and extracted:
+            for resp in extracted:
+                answer = resp.get("answer", "")
+                if not answer:
+                    continue
+                answer_lower = answer.lower()
+                for em in exclude_markers_normalized:
+                    em_lines = [l.strip() for l in em.split('\n') if l.strip()]
+                    for em_line in em_lines[:3]:
+                        stripped_em = re.sub(r'^[^a-zA-Z]*', '', em_line).strip()
+                        # If the exclude marker line appears at the start of the answer, strip it and everything after
+                        for search_term in [em_line, stripped_em]:
+                            if search_term and len(search_term) >= 5:
+                                pos = answer_lower.find(search_term)
+                                if pos != -1:
+                                    answer = answer[:pos].strip()
+                                    answer_lower = answer.lower()
+                # Strip trailing emoji/whitespace/special chars left over
+                answer = answer.rstrip()
+                answer = re.sub(r'[\s\U00010000-\U0010ffff]+$', '', answer).strip()
+                if answer != resp["answer"]:
+                    resp["answer"] = answer
+                    if not answer or len(answer.strip()) < 5:
+                        # Answer was entirely excluded content — mark as blank
+                        extracted.remove(resp)
+                        blank_questions.append(resp.get("question", "Unknown"))
+
+        # Post-processing: strip custom marker text that leaked into responses.
+        # This handles cases where multi-line marker forward scan fails to skip
+        # all marker lines, or where marker positions overlap with adjacent content.
+        if custom_markers and extracted:
+            marker_line_texts = []
+            for m in custom_markers:
+                mt = m.get('start', '').strip() if isinstance(m, dict) else str(m).strip()
+                if mt:
+                    for ml in mt.split('\n'):
+                        ml = ml.strip()
+                        if ml and len(ml) >= 10:
+                            marker_line_texts.append(ml.lower())
+
+            for resp in list(extracted):
+                answer = resp.get("answer", "")
+                if not answer:
+                    continue
+                lines = answer.split('\n')
+                filtered = []
+                for line in lines:
+                    line_stripped = line.strip()
+                    line_lower = line_stripped.lower()
+                    # Check if this line matches any custom marker line.
+                    # - mt in line_lower: marker text appears within the line (clear match)
+                    # - line_lower in mt: line is a substring of marker text — only match
+                    #   if the line is substantial (>=30 chars) to avoid removing short
+                    #   student answers like "Jefferson" that happen to be in a long marker
+                    is_marker_line = False
+                    for mt in marker_line_texts:
+                        if mt in line_lower or (len(line_lower) >= 30 and line_lower in mt):
+                            is_marker_line = True
+                            break
+                    if not is_marker_line:
+                        filtered.append(line)
+                new_answer = '\n'.join(filtered).strip()
+                if new_answer != answer:
+                    resp["answer"] = new_answer
+                    if not new_answer or len(new_answer.strip()) < 5:
+                        extracted.remove(resp)
+                        blank_questions.append(resp.get("question", "Unknown"))
+
+        # If we found markers, return results (skip pattern matching)
+        if marker_positions:
+            total_q = len(extracted) + len(blank_questions)
+            match_summary = f"{exact_matches} exact"
+            if fuzzy_matches > 0:
+                match_summary += f", {fuzzy_matches} fuzzy"
+            summary = f"Extracted {len(extracted)} responses using {len(marker_positions)} markers ({match_summary})."
+            if excluded_sections:
+                summary += f" Excluded {len(excluded_sections)} section(s) from grading."
+            if missing_sections:
+                summary += f" {len(missing_sections)} required section(s) MISSING from submission."
+            return {
+                "extracted_responses": extracted,
+                "blank_questions": blank_questions,
+                "missing_sections": missing_sections,
+                "total_questions": total_q,
+                "answered_questions": len(extracted),
+                "extraction_summary": summary,
+                "excluded_sections": excluded_sections
+            }
+
+    # FALLBACK: If no markers provided, use simple pattern matching
+    return _extract_by_pattern_matching(document_text, extracted, blank_questions)
 
 
 def format_extracted_for_grading(extraction_result: dict, marker_config: list = None, extraction_mode: str = 'structured') -> str:
