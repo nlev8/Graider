@@ -70,32 +70,12 @@ def _question_to_visual_dict(q):
     return None
 
 
-def _export_assignment_docx_graider(assignment, output_folder, safe_title):
-    """Export a generated assignment as a .docx with Graider table extraction tags.
-
-    Creates a Word document with the same structure as the PDF export but using
-    Graider tables for structured student response extraction.
-
-    Returns the file path of the saved .docx.
-    """
-    from docx import Document
-    from docx.shared import Inches, Pt, RGBColor
+def _render_assignment_docx_header(doc, assignment, title, instructions, total_points):
+    """Render the assignment worksheet header (teacher/subject line, title, name/date/period
+    line, total points, instructions) into the docx. Mutates doc. Extracted verbatim from
+    _export_assignment_docx_graider (Code Quality 6→7 split)."""
+    from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker, _embed_visual
-    from backend.services.worksheet_generator import _add_options_with_bubbles, _create_answer_key_doc
-
-    doc = Document()
-
-    graider_style = {
-        "table_header_bg": "#4472C4",
-        "table_header_text_color": "#FFFFFF",
-    }
-
-    title = assignment.get('title', 'Assignment')
-    instructions = assignment.get('instructions', '')
-    sections = assignment.get('sections', [])
-    total_points = assignment.get('total_points', 100)
-
     # Teacher name and subject header
     _teacher = assignment.get('teacher_name', '')
     _subject = assignment.get('subject', '')
@@ -141,6 +121,35 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
         inst_para.add_run(instructions)
 
     doc.add_paragraph()  # Space before questions
+
+
+def _export_assignment_docx_graider(assignment, output_folder, safe_title):
+    """Export a generated assignment as a .docx with Graider table extraction tags.
+
+    Creates a Word document with the same structure as the PDF export but using
+    Graider tables for structured student response extraction.
+
+    Returns the file path of the saved .docx.
+    """
+    from docx import Document
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from backend.services.worksheet_generator import _add_graider_table, _add_graider_marker, _embed_visual
+    from backend.services.worksheet_generator import _add_options_with_bubbles, _create_answer_key_doc
+
+    doc = Document()
+
+    graider_style = {
+        "table_header_bg": "#4472C4",
+        "table_header_text_color": "#FFFFFF",
+    }
+
+    title = assignment.get('title', 'Assignment')
+    instructions = assignment.get('instructions', '')
+    sections = assignment.get('sections', [])
+    total_points = assignment.get('total_points', 100)
+
+    _render_assignment_docx_header(doc, assignment, title, instructions, total_points)
 
     question_num = 1
     answer_key_questions = []
