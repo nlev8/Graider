@@ -796,61 +796,11 @@ def _load_analytics_snapshot():
         return ""
 
 
-def _build_system_prompt():
-    """Build the system prompt dynamically, injecting teacher info from settings."""
-    teacher_name = ""
-    subject = ""
-    school_name = ""
-    teacher_email = ""
-    email_signature = ""
-    grade_level = ""
-    state = ""
-    grading_period = ""
-    global_ai_notes = ""
-    available_tools = []
-
-    if os.path.exists(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-            config = settings.get('config', {})
-            teacher_name = config.get('teacher_name', '')
-            subject = config.get('subject', '')
-            school_name = config.get('school_name', '')
-            teacher_email = config.get('teacher_email', '')
-            email_signature = config.get('email_signature', '')
-            grade_level = config.get('grade_level', '')
-            state = config.get('state', '')
-            grading_period = config.get('grading_period', '')
-            global_ai_notes = settings.get('globalAINotes', '')
-            available_tools = config.get('availableTools', [])
-        except Exception as e:
-            # Best-effort: settings load failure leaves these vars at their
-            # caller-default values.
-            logger.debug("Failed to load assistant settings/config: %s", e)
-
-    teacher_context = ""
-    if teacher_name or subject or school_name:
-        parts = []
-        if teacher_name:
-            parts.append(f"Teacher: {teacher_name}")
-        if subject:
-            parts.append(f"Subject: {subject}")
-        if grade_level:
-            parts.append(f"Grade Level: {grade_level}")
-        if state:
-            parts.append(f"State: {state}")
-        if grading_period:
-            parts.append(f"Grading Period: {grading_period}")
-        if school_name:
-            parts.append(f"School: {school_name}")
-        if teacher_email:
-            parts.append(f"Email: {teacher_email}")
-        if email_signature:
-            parts.append(f"Email Signature:\n{email_signature}")
-        teacher_context = "\n\nTeacher Information (use this for email signatures, letters, and communications):\n" + "\n".join(parts)
-
-    prompt = f"""You are a helpful teaching assistant built into Graider, an AI-powered grading tool. You help teachers understand student performance, analyze grades, and manage their gradebook.{teacher_context}
+def _base_assistant_system_prompt(teacher_context):
+    """Build the base Graider assistant system prompt (before the per-teacher context
+    injections). Returns the prompt string. Extracted verbatim (the f-string literal is
+    byte-identical) from _build_system_prompt (Code Quality 6→7 split)."""
+    return f"""You are a helpful teaching assistant built into Graider, an AI-powered grading tool. You help teachers understand student performance, analyze grades, and manage their gradebook.{teacher_context}
 
 Key guidelines:
 - Be concise and teacher-friendly. Use markdown formatting (bold, lists) when helpful.
@@ -1008,6 +958,63 @@ BEHAVIOR TRACKING:
 - send_behavior_email: Preview a behavior email via Resend or Focus portal. Returns a PREVIEW, does NOT send. After showing the preview and the teacher confirms, call confirm_and_send to actually send. NEVER claim the email was sent until confirm_and_send returns status "started".
 - debug_behavior: Diagnostic tool — shows teacher_id, total session/event counts, and stored student names. Use this FIRST if behavior data retrieval fails, to diagnose why.
 CRITICAL: If behavior tools return errors about missing data, call debug_behavior to diagnose, then report findings to the teacher. NEVER fabricate a behavior email without real data from the tools — the email MUST reference actual tracked incidents, not placeholders."""
+
+
+def _build_system_prompt():
+    """Build the system prompt dynamically, injecting teacher info from settings."""
+    teacher_name = ""
+    subject = ""
+    school_name = ""
+    teacher_email = ""
+    email_signature = ""
+    grade_level = ""
+    state = ""
+    grading_period = ""
+    global_ai_notes = ""
+    available_tools = []
+
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+            config = settings.get('config', {})
+            teacher_name = config.get('teacher_name', '')
+            subject = config.get('subject', '')
+            school_name = config.get('school_name', '')
+            teacher_email = config.get('teacher_email', '')
+            email_signature = config.get('email_signature', '')
+            grade_level = config.get('grade_level', '')
+            state = config.get('state', '')
+            grading_period = config.get('grading_period', '')
+            global_ai_notes = settings.get('globalAINotes', '')
+            available_tools = config.get('availableTools', [])
+        except Exception as e:
+            # Best-effort: settings load failure leaves these vars at their
+            # caller-default values.
+            logger.debug("Failed to load assistant settings/config: %s", e)
+
+    teacher_context = ""
+    if teacher_name or subject or school_name:
+        parts = []
+        if teacher_name:
+            parts.append(f"Teacher: {teacher_name}")
+        if subject:
+            parts.append(f"Subject: {subject}")
+        if grade_level:
+            parts.append(f"Grade Level: {grade_level}")
+        if state:
+            parts.append(f"State: {state}")
+        if grading_period:
+            parts.append(f"Grading Period: {grading_period}")
+        if school_name:
+            parts.append(f"School: {school_name}")
+        if teacher_email:
+            parts.append(f"Email: {teacher_email}")
+        if email_signature:
+            parts.append(f"Email Signature:\n{email_signature}")
+        teacher_context = "\n\nTeacher Information (use this for email signatures, letters, and communications):\n" + "\n".join(parts)
+
+    prompt = _base_assistant_system_prompt(teacher_context)
 
     # Inject global AI notes (teacher's custom grading/teaching instructions)
     if global_ai_notes:
