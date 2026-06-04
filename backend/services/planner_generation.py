@@ -1077,6 +1077,208 @@ Generate a complete assessment in this JSON format:
     return result
 
 
+def _build_assignment_from_lesson_prompt(*, all_key_points, all_objectives, all_vocabulary, assignment_type, config, essential_questions, lesson_overview, lesson_title, ref_docs_block, standards_text, subject_boundary, tools_instruction, type_instruction):
+    """Assemble the assignment-from-lesson generation prompt. Extracted verbatim (the f-string
+    literal is byte-identical) from generate_assignment_from_lesson_content (Code Quality 6→7 split)."""
+    return f"""You are an expert teacher creating an assessment/assignment based on a lesson plan.
+{subject_boundary}
+{tools_instruction}
+{standards_text}
+{ref_docs_block}
+LESSON PLAN DETAILS:
+Title: {lesson_title}
+Overview: {lesson_overview}
+
+Essential Questions:
+{chr(10).join(f'- {q}' for q in essential_questions) if essential_questions else 'None specified'}
+
+Learning Objectives:
+{chr(10).join(f'- {obj}' for obj in all_objectives) if all_objectives else 'None specified'}
+
+Key Content Points:
+{chr(10).join(f'- {kp}' for kp in all_key_points[:10]) if all_key_points else 'None specified'}
+
+Vocabulary:
+{chr(10).join(f'- {v}' for v in all_vocabulary[:15]) if all_vocabulary else 'None specified'}
+
+ASSIGNMENT TYPE: {assignment_type.title()}
+{type_instruction}
+{_build_question_count_instruction(config)}
+
+Create a complete, ready-to-use assignment that:
+1. Directly assesses the lesson objectives
+2. Uses the vocabulary and key concepts from the lesson
+3. Aligns with the essential questions
+4. Is appropriate for grade {config.get('grade', '7')} students
+
+CRITICAL REQUIREMENTS:
+- THE ASSIGNMENT MUST BE 100% SELF-CONTAINED. Every resource referenced in the instructions (tables, charts, data sets, reading passages, maps, diagrams, timelines, primary sources) MUST be fully included in the assignment JSON. NEVER tell students to "complete the data table" or "analyze the chart" without providing the actual table data or chart data in the question object. If a question references a table, include "expected_data" with headers and pre-filled data. If it references a reading passage, include the full passage text in the question field.
+- For data_table questions: ALWAYS include "column_headers" (array of header strings), "row_labels" (array of row labels), and "expected_data" (2D array with ALL correct numeric/text values — NEVER leave cells empty or use placeholders). For calculation tables where some columns are GIVEN and others are for the student to CALCULATE, include "editable_columns" (array of 0-based column indices the student fills in). Given columns will be pre-filled for the student.
+- CRITICAL: NEVER put table data as plain text or markdown pipes (| x | y |) inside the "question" string. If a question involves a table, use question_type "data_table" with structured data fields. Tables rendered as text are unreadable.
+- For Math: Use REAL numbers and actual problems (e.g., "Solve: 3/4 + 1/2 = ?"), not placeholders
+- All questions must be answerable based on the lesson content
+- Include clear, specific answer keys
+- Word problems should use realistic scenarios (shopping, cooking, sports) not fictional games or apps
+- Avoid vague or overly complex language for the grade level
+- NEVER use vague instructions like "analyze the data" without providing the data inline
+- For math/computation questions: SELF-CHECK that all given numeric values are consistent. If a problem states theorem values (e.g., tangent squared = external times whole), verify the numbers satisfy the equation BEFORE including the question. Never give more numeric values than needed to solve the problem (over-determined systems confuse students).
+- Word problems must clearly map to a single geometric/algebraic setup. Avoid mixing 2D circle theorems with 3D physical scenarios (towers, cables) unless the mapping is explicit and unambiguous.
+- Every question must be solvable with ONLY the given information — no hidden assumptions or missing data required.
+- For ELA/reading questions: If a question asks students to analyze, cite, or refer to a passage/text/excerpt, the FULL passage MUST be included in the "question" field. NEVER say "according to the passage" or "refer to the text" without embedding the actual passage text before the question. Quotations longer than one sentence must include attribution (author or source).
+- For science questions: Use ONE consistent unit system (metric or imperial) per question — do NOT mix systems unless the question is explicitly about unit conversion. All values must be physically plausible (no negative mass, no temperatures below absolute zero, no pH outside 0-14, no percentages above 100% for concentrations/efficiency).
+
+QUESTION TYPE GUIDANCE:
+- For most questions, DO NOT set question_type — the system assigns it automatically from your text and structure.
+- Write geometry dimensions clearly in question text: "Find the area of a triangle with base 8 cm and height 5 cm"
+- Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
+- For multiple choice, include "options" array. For matching, include "terms" and "definitions".
+- For data_table: ONLY use when students must FILL IN values. Include "column_headers", "row_labels", "expected_data" (2D array with ALL correct values — NEVER leave cells empty). For calculation tables where some columns are GIVEN data and others are for the student to CALCULATE, also include "editable_columns" (array of column indices the student fills in). Columns NOT in editable_columns will be pre-filled for the student.
+- ONLY set question_type explicitly for these complex types that need structured data:
+  data_table (include headers, row_labels, expected_data, editable_columns),
+  box_plot (include data array), dot_plot (include data),
+  stem_and_leaf (include data), bar_chart (include chart_data),
+  transformations (include original_vertices, transformation_type, transform_params),
+  fraction_model (include model_type, denominator, correct_numerator),
+  probability_tree, tape_diagram, venn_diagram,
+  protractor (include mode, target_angle),
+  multiselect (include options, correct indices),
+  multi_part (include parts array),
+  grid_match (include row_labels, column_labels, correct matrix),
+  inline_dropdown (include dropdowns array)
+- Students CANNOT draw/sketch. Use interactive components or ask them to upload a photo of handwritten work.
+- NEVER say "View the graph" or "See the diagram" — the system renders visuals from data fields.
+
+Return JSON with this structure:
+{{
+    "title": "Assignment title",
+    "type": "{assignment_type}",
+    "instructions": "Clear student instructions",
+    "time_estimate": "Estimated completion time",
+    "total_points": 100,
+    "sections": [
+        {{
+            "name": "Section name (e.g., Part A: Vocabulary)",
+            "type": "multiple_choice|fill_blank|short_answer|matching|essay|true_false|math_equation|data_table|coordinates",
+            "points": 20,
+            "questions": [
+                {{
+                    "number": 1,
+                    "question": "The question text",
+                    "question_type": "short_answer",  // or "math_equation", "data_table", "coordinates"
+                    "options": ["A) ...", "B) ...", "C) ...", "D) ..."],  // for multiple choice
+                    "answer": "The correct answer",  // for most types
+                    "expected_data": [[1, 2], [3, 4]],  // for data_table type — ALL cells must have real values
+                    "editable_columns": [1],  // for data_table calculation tables — column indices students fill in
+                    "tolerance": 0.05,  // for data_table (optional, default 5%)
+                    "tolerance_km": 50,  // for coordinates (optional, default 50km)
+                    "points": 2
+                }}
+            ]
+        }}
+    ],
+    "answer_key": {{
+        "section_name": ["answer1", "answer2", ...]
+    }},
+    "rubric": {{
+        "criteria": [
+            {{"name": "Criterion", "points": 10, "description": "What earns full points"}}
+        ]
+    }}
+}}
+
+SUBJECT-SPECIFIC GUIDANCE:
+
+For MATH subjects:
+- Include at least one "math_equation" section where students solve and write expressions
+- Write geometry dimensions in text: "Find the area of a triangle with base 8 cm and height 5 cm"
+- Write equations in text: "Graph y = 2x + 1 on the coordinate plane"
+
+For ELA / READING subjects:
+- Passage-based questions MUST embed the full passage in the "question" field BEFORE the question prompt.
+  Example MC question JSON:
+  {{"question": "Read the following passage:\\n\\nThe morning sun crept over the rooftops, casting long shadows across the empty schoolyard. Maria clutched her notebook and hesitated at the gate. Three years in this country and the words still tangled on her tongue like knots in wet rope. But today was different. Today she had a story to tell.\\n\\nThe author uses the simile 'like knots in wet rope' to convey that Maria —", "options": ["A) is frustrated by the rainy weather", "B) struggles to express herself in English", "C) is nervous about her school assignment", "D) feels tangled in a difficult situation"], "answer": "B", "dok": 2, "points": 1}}
+- For vocabulary-in-context questions, include the sentence with the target word:
+  {{"question": "In the sentence 'The committee voted to ratify the new policy despite vocal opposition,' what does the word 'ratify' most likely mean?", "options": ["A) reject", "B) formally approve", "C) discuss publicly", "D) delay indefinitely"], "answer": "B", "dok": 2, "points": 1}}
+- Extended response must give the source text first, then the prompt with a rubric:
+  {{"question": "Read the following excerpt from Frederick Douglass's 'Narrative of the Life of Frederick Douglass':\\n\\n'I did not, when a slave, understand the deep meaning of those rude and apparently incoherent songs. I was myself within the circle; and neither saw nor heard as those without might see and hear.'\\n\\nExplain how Douglass uses contrast to develop his central idea about the experience of slavery. Use at least two pieces of textual evidence to support your analysis.", "answer": "Strong response addresses Douglass's contrast between inside/outside perspective, quotes specific language, and explains how the rhetorical strategy develops the theme of misunderstanding slavery from the outside.", "dok": 3, "points": 4}}
+- For matching sections, use literary/rhetorical terms:
+  {{"question": "Match each literary device to its correct definition.", "terms": ["Metaphor", "Alliteration", "Foreshadowing", "Irony"], "definitions": ["Repetition of initial consonant sounds", "A hint about future events in a story", "A comparison without using like or as", "A contrast between expectation and reality"], "answer": {{"Metaphor": "A comparison without using like or as", "Alliteration": "Repetition of initial consonant sounds", "Foreshadowing": "A hint about future events in a story", "Irony": "A contrast between expectation and reality"}}, "dok": 1, "points": 2}}
+
+For SCIENCE subjects:
+The portal has interactive visual components — use them instead of referencing diagrams/figures.
+NEVER say "refer to the diagram" or "look at the figure." Use structured data fields and the system renders the visual.
+
+- DATA TABLE (question_type: "data_table") — for lab data, measurements, classification, calculations:
+  Calculation table (some columns given, student calculates others):
+  {{"question": "A student measured the time for a ball to roll down ramps of different heights. Complete the data table by calculating average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "editable_columns": [3], "answer": "speed = distance / time", "dok": 2, "points": 3}}
+
+  Classification table:
+  {{"question": "Classify each substance as an element, compound, or mixture.", "question_type": "data_table", "column_headers": ["Substance", "Classification", "Reasoning"], "row_labels": ["Oxygen (O₂)", "Water (H₂O)", "Salt water", "Iron (Fe)"], "expected_data": [["Oxygen (O₂)", "Element", "Single type of atom"], ["Water (H₂O)", "Compound", "Two elements chemically bonded"], ["Salt water", "Mixture", "Separable by evaporation"], ["Iron (Fe)", "Element", "Single type of atom"]], "answer": "See expected_data", "dok": 2, "points": 3}}
+
+- BAR CHART (question_type: "bar_chart") — for comparing measurements, experiment results:
+  {{"question": "The bar chart shows average monthly rainfall in Jacksonville, FL. Which month had the greatest increase compared to the previous month?", "question_type": "bar_chart", "chart_data": {{"labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], "values": [3.3, 3.0, 3.9, 2.8, 3.6, 5.7], "title": "Average Monthly Rainfall (inches)"}}, "answer": "June (increased 2.1 inches from May)", "dok": 2, "points": 2}}
+
+- DOT PLOT (question_type: "dot_plot") — for frequency distributions, repeated measurements:
+  {{"question": "A student measured 15 leaf lengths (cm): 5, 6, 6, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10. Create a dot plot showing the frequency of each length.", "question_type": "dot_plot", "minVal": 4, "maxVal": 11, "step": 1, "correct_dots": {{"5": 1, "6": 2, "7": 3, "8": 4, "9": 3, "10": 2}}, "answer": "Roughly normal distribution centered at 8 cm", "dok": 2, "points": 2}}
+
+- BOX PLOT (question_type: "box_plot") — for data spread, comparing datasets:
+  {{"question": "Calculate the five-number summary for each class's test scores.", "question_type": "box_plot", "data": [[65, 70, 72, 75, 78, 80, 82, 85, 88, 92], [55, 60, 68, 72, 75, 75, 80, 85, 90, 95]], "data_labels": ["Class A", "Class B"], "expected_values": {{"Class A": {{"min": 65, "q1": 72, "median": 79, "q3": 85, "max": 92}}, "Class B": {{"min": 55, "q1": 68, "median": 75, "q3": 85, "max": 95}}}}, "answer": "Class B has greater spread (range 40 vs 27) but lower median", "dok": 3, "points": 3}}
+
+- COORDINATE PLANE (question_type: "coordinate_plane") — for plotting experimental data:
+  {{"question": "A student recorded distance (m) over time (s): (0,0), (1,2), (2,4), (3,6), (4,8). Plot these points. What relationship do they show?", "question_type": "coordinate_plane", "x_range": [0, 6], "y_range": [0, 10], "points_to_plot": [[0,0], [1,2], [2,4], [3,6], [4,8]], "answer": "Linear/proportional — constant speed of 2 m/s", "dok": 2, "points": 3}}
+
+- FUNCTION GRAPH (question_type: "function_graph") — for graphing physics equations:
+  {{"question": "A ball thrown upward has height h = 20t - 5t². Graph this function. When does it reach maximum height?", "question_type": "function_graph", "x_range": [0, 5], "y_range": [0, 25], "correct_expressions": ["20x - 5x^2"], "answer": "Maximum height at t = 2 seconds (h = 20 m)", "dok": 3, "points": 3}}
+
+- NUMBER LINE (question_type: "number_line") — for pH scale, temperature, ordering:
+  {{"question": "Place these substances on the pH scale: lemon juice (pH 2), pure water (pH 7), baking soda (pH 9), stomach acid (pH 1.5), bleach (pH 13).", "question_type": "number_line", "min_val": 0, "max_val": 14, "points_to_plot": [1.5, 2, 7, 9, 13], "answer": "Stomach acid (1.5), lemon juice (2), water (7), baking soda (9), bleach (13)", "dok": 1, "points": 2}}
+
+- VENN DIAGRAM (question_type: "venn_diagram") — for classification, comparing:
+  {{"question": "Classify these characteristics as Plant Cells Only, Animal Cells Only, or Both: cell wall, cell membrane, chloroplasts, mitochondria, nucleus, large central vacuole, lysosomes, cytoplasm.", "question_type": "venn_diagram", "sets": 2, "labels": ["Plant Cells Only", "Animal Cells Only"], "mode": "element", "answer": "Plant Only: cell wall, chloroplasts, large central vacuole. Animal Only: lysosomes. Both: cell membrane, mitochondria, nucleus, cytoplasm", "dok": 2, "points": 3}}
+
+- Experiment-based MC (describe full setup, no diagram references):
+  {{"question": "A student places three identical plants in separate rooms. Plant A receives 12 hours of sunlight, Plant B receives 6 hours, and Plant C receives 0 hours. All plants receive the same water and soil. After 2 weeks, the student measures each plant's height. What is the independent variable?", "options": ["A) The height of the plants", "B) The amount of water given", "C) The number of hours of sunlight", "D) The type of plant used"], "answer": "C", "dok": 2, "points": 1}}
+
+- Calculation with units (metric preferred for FL science):
+  {{"question": "A block with a mass of 2.5 kg is pushed with a force of 10 N. Using F = ma, calculate the acceleration. Show your work.", "answer": "a = F/m = 10 N / 2.5 kg = 4 m/s²", "dok": 2, "points": 2}}
+
+CRITICAL RULES FOR SCIENCE:
+- Use ONE unit system per question (metric preferred). All values must be physically plausible.
+- NEVER reference a diagram, figure, or image. Use the interactive components above instead.
+- For classification → use data_table or venn_diagram
+- For data analysis → use bar_chart, dot_plot, box_plot, or data_table
+- For graphing relationships → use coordinate_plane or function_graph
+- For ordering/scales → use number_line
+
+For SOCIAL STUDIES / HISTORY subjects:
+- Primary source questions MUST embed the source text, not reference it externally:
+  {{"question": "Read the following excerpt from the Declaration of Independence (1776):\\n\\n'We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness. — That to secure these rights, Governments are instituted among Men, deriving their just powers from the consent of the governed.'\\n\\nBased on this excerpt, which Enlightenment idea MOST influenced the founders?", "options": ["A) Divine right of kings", "B) Social contract theory", "C) Mercantilism", "D) Manifest destiny"], "answer": "B", "dok": 2, "points": 1}}
+- Cause-and-effect questions should be specific, not vague:
+  {{"question": "Which event was a DIRECT cause of the United States entering World War I in 1917?", "options": ["A) The assassination of Archduke Franz Ferdinand", "B) Germany's unrestricted submarine warfare against American ships", "C) The Treaty of Versailles", "D) The formation of the League of Nations"], "answer": "B", "dok": 2, "points": 1}}
+- Extended response with document analysis:
+  {{"question": "Read the following quote from President Abraham Lincoln's Gettysburg Address (1863):\\n\\n'Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure.'\\n\\nExplain how Lincoln connects the founding ideals of the United States to the purpose of the Civil War. In your response, identify at least one specific founding ideal Lincoln references and explain why he believed the war was necessary to preserve it.", "answer": "Strong response identifies equality and/or liberty as founding ideals, explains Lincoln frames the Civil War as a test of whether democratic self-government can survive, and connects the 'proposition that all men are created equal' to the broader struggle over slavery and union.", "dok": 3, "points": 4}}
+- Matching for key terms/events:
+  {{"question": "Match each amendment to the right it protects.", "terms": ["1st Amendment", "2nd Amendment", "4th Amendment", "5th Amendment"], "definitions": ["Right to bear arms", "Freedom of speech, religion, and press", "Protection against self-incrimination", "Protection against unreasonable searches"], "answer": {{"1st Amendment": "Freedom of speech, religion, and press", "2nd Amendment": "Right to bear arms", "4th Amendment": "Protection against unreasonable searches", "5th Amendment": "Protection against self-incrimination"}}, "dok": 1, "points": 2}}
+
+For GEOGRAPHY subjects:
+- Include a "coordinates" section for map/location questions
+- Location-based questions should test real places with coordinates:
+  {{"question": "What is the capital city located nearest to the coordinates 30.4°N, 84.3°W?", "answer": "Tallahassee, Florida", "dok": 1, "points": 1}}
+- Map analysis with data_table for comparison:
+  {{"question": "Complete the table comparing physical features of Florida's five geographic regions.", "question_type": "data_table", "column_headers": ["Region", "Major Landform", "Elevation Range", "Key Water Feature"], "row_labels": ["Northwest", "Northeast", "Central", "Southwest", "Southeast"], "expected_data": [["Northwest", "Rolling hills", "50-100 m", "Apalachicola River"], ["Northeast", "Coastal plains", "0-30 m", "St. Johns River"], ["Central", "Lake region", "20-50 m", "Lake Okeechobee"], ["Southwest", "Low coastal plain", "0-15 m", "Everglades"], ["Southeast", "Coastal ridge", "0-5 m", "Biscayne Bay"]], "answer": "Students identify correct landforms, elevation ranges, and water features for each region", "dok": 2, "points": 3}}
+{f'''
+TEACHER ADDITIONAL REQUIREMENTS (MUST FOLLOW — every question/activity must reflect these):
+{config.get('requirements', '').strip()}
+''' if config.get('requirements', '').strip() else ''}
+{f'''
+TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
+{config.get('globalAINotes', '')}
+''' if config.get('globalAINotes') else ''}
+Make the questions specific to the lesson content. Include a variety of question types appropriate for the assignment type.
+
+"""
+
+
 def generate_assignment_from_lesson_content(*, lesson_plan, config, assignment_type,
                                             content_only, config_standards, reference_docs,
                                             api_key, openai_context):
@@ -1297,203 +1499,20 @@ NO TECHNOLOGY TOOLS SPECIFIED: Focus on paper-based or physical deliverables onl
                 doc_text = doc.get('text', '')[:6000]
                 ref_docs_block += f"--- {doc_name} ---\n{doc_text}\n\n"
 
-    prompt = f"""You are an expert teacher creating an assessment/assignment based on a lesson plan.
-{subject_boundary}
-{tools_instruction}
-{standards_text}
-{ref_docs_block}
-LESSON PLAN DETAILS:
-Title: {lesson_title}
-Overview: {lesson_overview}
-
-Essential Questions:
-{chr(10).join(f'- {q}' for q in essential_questions) if essential_questions else 'None specified'}
-
-Learning Objectives:
-{chr(10).join(f'- {obj}' for obj in all_objectives) if all_objectives else 'None specified'}
-
-Key Content Points:
-{chr(10).join(f'- {kp}' for kp in all_key_points[:10]) if all_key_points else 'None specified'}
-
-Vocabulary:
-{chr(10).join(f'- {v}' for v in all_vocabulary[:15]) if all_vocabulary else 'None specified'}
-
-ASSIGNMENT TYPE: {assignment_type.title()}
-{type_instruction}
-{_build_question_count_instruction(config)}
-
-Create a complete, ready-to-use assignment that:
-1. Directly assesses the lesson objectives
-2. Uses the vocabulary and key concepts from the lesson
-3. Aligns with the essential questions
-4. Is appropriate for grade {config.get('grade', '7')} students
-
-CRITICAL REQUIREMENTS:
-- THE ASSIGNMENT MUST BE 100% SELF-CONTAINED. Every resource referenced in the instructions (tables, charts, data sets, reading passages, maps, diagrams, timelines, primary sources) MUST be fully included in the assignment JSON. NEVER tell students to "complete the data table" or "analyze the chart" without providing the actual table data or chart data in the question object. If a question references a table, include "expected_data" with headers and pre-filled data. If it references a reading passage, include the full passage text in the question field.
-- For data_table questions: ALWAYS include "column_headers" (array of header strings), "row_labels" (array of row labels), and "expected_data" (2D array with ALL correct numeric/text values — NEVER leave cells empty or use placeholders). For calculation tables where some columns are GIVEN and others are for the student to CALCULATE, include "editable_columns" (array of 0-based column indices the student fills in). Given columns will be pre-filled for the student.
-- CRITICAL: NEVER put table data as plain text or markdown pipes (| x | y |) inside the "question" string. If a question involves a table, use question_type "data_table" with structured data fields. Tables rendered as text are unreadable.
-- For Math: Use REAL numbers and actual problems (e.g., "Solve: 3/4 + 1/2 = ?"), not placeholders
-- All questions must be answerable based on the lesson content
-- Include clear, specific answer keys
-- Word problems should use realistic scenarios (shopping, cooking, sports) not fictional games or apps
-- Avoid vague or overly complex language for the grade level
-- NEVER use vague instructions like "analyze the data" without providing the data inline
-- For math/computation questions: SELF-CHECK that all given numeric values are consistent. If a problem states theorem values (e.g., tangent squared = external times whole), verify the numbers satisfy the equation BEFORE including the question. Never give more numeric values than needed to solve the problem (over-determined systems confuse students).
-- Word problems must clearly map to a single geometric/algebraic setup. Avoid mixing 2D circle theorems with 3D physical scenarios (towers, cables) unless the mapping is explicit and unambiguous.
-- Every question must be solvable with ONLY the given information — no hidden assumptions or missing data required.
-- For ELA/reading questions: If a question asks students to analyze, cite, or refer to a passage/text/excerpt, the FULL passage MUST be included in the "question" field. NEVER say "according to the passage" or "refer to the text" without embedding the actual passage text before the question. Quotations longer than one sentence must include attribution (author or source).
-- For science questions: Use ONE consistent unit system (metric or imperial) per question — do NOT mix systems unless the question is explicitly about unit conversion. All values must be physically plausible (no negative mass, no temperatures below absolute zero, no pH outside 0-14, no percentages above 100% for concentrations/efficiency).
-
-QUESTION TYPE GUIDANCE:
-- For most questions, DO NOT set question_type — the system assigns it automatically from your text and structure.
-- Write geometry dimensions clearly in question text: "Find the area of a triangle with base 8 cm and height 5 cm"
-- Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
-- For multiple choice, include "options" array. For matching, include "terms" and "definitions".
-- For data_table: ONLY use when students must FILL IN values. Include "column_headers", "row_labels", "expected_data" (2D array with ALL correct values — NEVER leave cells empty). For calculation tables where some columns are GIVEN data and others are for the student to CALCULATE, also include "editable_columns" (array of column indices the student fills in). Columns NOT in editable_columns will be pre-filled for the student.
-- ONLY set question_type explicitly for these complex types that need structured data:
-  data_table (include headers, row_labels, expected_data, editable_columns),
-  box_plot (include data array), dot_plot (include data),
-  stem_and_leaf (include data), bar_chart (include chart_data),
-  transformations (include original_vertices, transformation_type, transform_params),
-  fraction_model (include model_type, denominator, correct_numerator),
-  probability_tree, tape_diagram, venn_diagram,
-  protractor (include mode, target_angle),
-  multiselect (include options, correct indices),
-  multi_part (include parts array),
-  grid_match (include row_labels, column_labels, correct matrix),
-  inline_dropdown (include dropdowns array)
-- Students CANNOT draw/sketch. Use interactive components or ask them to upload a photo of handwritten work.
-- NEVER say "View the graph" or "See the diagram" — the system renders visuals from data fields.
-
-Return JSON with this structure:
-{{
-    "title": "Assignment title",
-    "type": "{assignment_type}",
-    "instructions": "Clear student instructions",
-    "time_estimate": "Estimated completion time",
-    "total_points": 100,
-    "sections": [
-        {{
-            "name": "Section name (e.g., Part A: Vocabulary)",
-            "type": "multiple_choice|fill_blank|short_answer|matching|essay|true_false|math_equation|data_table|coordinates",
-            "points": 20,
-            "questions": [
-                {{
-                    "number": 1,
-                    "question": "The question text",
-                    "question_type": "short_answer",  // or "math_equation", "data_table", "coordinates"
-                    "options": ["A) ...", "B) ...", "C) ...", "D) ..."],  // for multiple choice
-                    "answer": "The correct answer",  // for most types
-                    "expected_data": [[1, 2], [3, 4]],  // for data_table type — ALL cells must have real values
-                    "editable_columns": [1],  // for data_table calculation tables — column indices students fill in
-                    "tolerance": 0.05,  // for data_table (optional, default 5%)
-                    "tolerance_km": 50,  // for coordinates (optional, default 50km)
-                    "points": 2
-                }}
-            ]
-        }}
-    ],
-    "answer_key": {{
-        "section_name": ["answer1", "answer2", ...]
-    }},
-    "rubric": {{
-        "criteria": [
-            {{"name": "Criterion", "points": 10, "description": "What earns full points"}}
-        ]
-    }}
-}}
-
-SUBJECT-SPECIFIC GUIDANCE:
-
-For MATH subjects:
-- Include at least one "math_equation" section where students solve and write expressions
-- Write geometry dimensions in text: "Find the area of a triangle with base 8 cm and height 5 cm"
-- Write equations in text: "Graph y = 2x + 1 on the coordinate plane"
-
-For ELA / READING subjects:
-- Passage-based questions MUST embed the full passage in the "question" field BEFORE the question prompt.
-  Example MC question JSON:
-  {{"question": "Read the following passage:\\n\\nThe morning sun crept over the rooftops, casting long shadows across the empty schoolyard. Maria clutched her notebook and hesitated at the gate. Three years in this country and the words still tangled on her tongue like knots in wet rope. But today was different. Today she had a story to tell.\\n\\nThe author uses the simile 'like knots in wet rope' to convey that Maria —", "options": ["A) is frustrated by the rainy weather", "B) struggles to express herself in English", "C) is nervous about her school assignment", "D) feels tangled in a difficult situation"], "answer": "B", "dok": 2, "points": 1}}
-- For vocabulary-in-context questions, include the sentence with the target word:
-  {{"question": "In the sentence 'The committee voted to ratify the new policy despite vocal opposition,' what does the word 'ratify' most likely mean?", "options": ["A) reject", "B) formally approve", "C) discuss publicly", "D) delay indefinitely"], "answer": "B", "dok": 2, "points": 1}}
-- Extended response must give the source text first, then the prompt with a rubric:
-  {{"question": "Read the following excerpt from Frederick Douglass's 'Narrative of the Life of Frederick Douglass':\\n\\n'I did not, when a slave, understand the deep meaning of those rude and apparently incoherent songs. I was myself within the circle; and neither saw nor heard as those without might see and hear.'\\n\\nExplain how Douglass uses contrast to develop his central idea about the experience of slavery. Use at least two pieces of textual evidence to support your analysis.", "answer": "Strong response addresses Douglass's contrast between inside/outside perspective, quotes specific language, and explains how the rhetorical strategy develops the theme of misunderstanding slavery from the outside.", "dok": 3, "points": 4}}
-- For matching sections, use literary/rhetorical terms:
-  {{"question": "Match each literary device to its correct definition.", "terms": ["Metaphor", "Alliteration", "Foreshadowing", "Irony"], "definitions": ["Repetition of initial consonant sounds", "A hint about future events in a story", "A comparison without using like or as", "A contrast between expectation and reality"], "answer": {{"Metaphor": "A comparison without using like or as", "Alliteration": "Repetition of initial consonant sounds", "Foreshadowing": "A hint about future events in a story", "Irony": "A contrast between expectation and reality"}}, "dok": 1, "points": 2}}
-
-For SCIENCE subjects:
-The portal has interactive visual components — use them instead of referencing diagrams/figures.
-NEVER say "refer to the diagram" or "look at the figure." Use structured data fields and the system renders the visual.
-
-- DATA TABLE (question_type: "data_table") — for lab data, measurements, classification, calculations:
-  Calculation table (some columns given, student calculates others):
-  {{"question": "A student measured the time for a ball to roll down ramps of different heights. Complete the data table by calculating average speed (distance ÷ time) for each trial.", "question_type": "data_table", "column_headers": ["Ramp Height (cm)", "Distance (m)", "Time (s)", "Avg Speed (m/s)"], "row_labels": ["Trial 1", "Trial 2", "Trial 3", "Trial 4"], "expected_data": [[10, 2.0, 4.0, 0.50], [20, 2.0, 2.8, 0.71], [30, 2.0, 2.3, 0.87], [40, 2.0, 2.0, 1.00]], "editable_columns": [3], "answer": "speed = distance / time", "dok": 2, "points": 3}}
-
-  Classification table:
-  {{"question": "Classify each substance as an element, compound, or mixture.", "question_type": "data_table", "column_headers": ["Substance", "Classification", "Reasoning"], "row_labels": ["Oxygen (O₂)", "Water (H₂O)", "Salt water", "Iron (Fe)"], "expected_data": [["Oxygen (O₂)", "Element", "Single type of atom"], ["Water (H₂O)", "Compound", "Two elements chemically bonded"], ["Salt water", "Mixture", "Separable by evaporation"], ["Iron (Fe)", "Element", "Single type of atom"]], "answer": "See expected_data", "dok": 2, "points": 3}}
-
-- BAR CHART (question_type: "bar_chart") — for comparing measurements, experiment results:
-  {{"question": "The bar chart shows average monthly rainfall in Jacksonville, FL. Which month had the greatest increase compared to the previous month?", "question_type": "bar_chart", "chart_data": {{"labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], "values": [3.3, 3.0, 3.9, 2.8, 3.6, 5.7], "title": "Average Monthly Rainfall (inches)"}}, "answer": "June (increased 2.1 inches from May)", "dok": 2, "points": 2}}
-
-- DOT PLOT (question_type: "dot_plot") — for frequency distributions, repeated measurements:
-  {{"question": "A student measured 15 leaf lengths (cm): 5, 6, 6, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10. Create a dot plot showing the frequency of each length.", "question_type": "dot_plot", "minVal": 4, "maxVal": 11, "step": 1, "correct_dots": {{"5": 1, "6": 2, "7": 3, "8": 4, "9": 3, "10": 2}}, "answer": "Roughly normal distribution centered at 8 cm", "dok": 2, "points": 2}}
-
-- BOX PLOT (question_type: "box_plot") — for data spread, comparing datasets:
-  {{"question": "Calculate the five-number summary for each class's test scores.", "question_type": "box_plot", "data": [[65, 70, 72, 75, 78, 80, 82, 85, 88, 92], [55, 60, 68, 72, 75, 75, 80, 85, 90, 95]], "data_labels": ["Class A", "Class B"], "expected_values": {{"Class A": {{"min": 65, "q1": 72, "median": 79, "q3": 85, "max": 92}}, "Class B": {{"min": 55, "q1": 68, "median": 75, "q3": 85, "max": 95}}}}, "answer": "Class B has greater spread (range 40 vs 27) but lower median", "dok": 3, "points": 3}}
-
-- COORDINATE PLANE (question_type: "coordinate_plane") — for plotting experimental data:
-  {{"question": "A student recorded distance (m) over time (s): (0,0), (1,2), (2,4), (3,6), (4,8). Plot these points. What relationship do they show?", "question_type": "coordinate_plane", "x_range": [0, 6], "y_range": [0, 10], "points_to_plot": [[0,0], [1,2], [2,4], [3,6], [4,8]], "answer": "Linear/proportional — constant speed of 2 m/s", "dok": 2, "points": 3}}
-
-- FUNCTION GRAPH (question_type: "function_graph") — for graphing physics equations:
-  {{"question": "A ball thrown upward has height h = 20t - 5t². Graph this function. When does it reach maximum height?", "question_type": "function_graph", "x_range": [0, 5], "y_range": [0, 25], "correct_expressions": ["20x - 5x^2"], "answer": "Maximum height at t = 2 seconds (h = 20 m)", "dok": 3, "points": 3}}
-
-- NUMBER LINE (question_type: "number_line") — for pH scale, temperature, ordering:
-  {{"question": "Place these substances on the pH scale: lemon juice (pH 2), pure water (pH 7), baking soda (pH 9), stomach acid (pH 1.5), bleach (pH 13).", "question_type": "number_line", "min_val": 0, "max_val": 14, "points_to_plot": [1.5, 2, 7, 9, 13], "answer": "Stomach acid (1.5), lemon juice (2), water (7), baking soda (9), bleach (13)", "dok": 1, "points": 2}}
-
-- VENN DIAGRAM (question_type: "venn_diagram") — for classification, comparing:
-  {{"question": "Classify these characteristics as Plant Cells Only, Animal Cells Only, or Both: cell wall, cell membrane, chloroplasts, mitochondria, nucleus, large central vacuole, lysosomes, cytoplasm.", "question_type": "venn_diagram", "sets": 2, "labels": ["Plant Cells Only", "Animal Cells Only"], "mode": "element", "answer": "Plant Only: cell wall, chloroplasts, large central vacuole. Animal Only: lysosomes. Both: cell membrane, mitochondria, nucleus, cytoplasm", "dok": 2, "points": 3}}
-
-- Experiment-based MC (describe full setup, no diagram references):
-  {{"question": "A student places three identical plants in separate rooms. Plant A receives 12 hours of sunlight, Plant B receives 6 hours, and Plant C receives 0 hours. All plants receive the same water and soil. After 2 weeks, the student measures each plant's height. What is the independent variable?", "options": ["A) The height of the plants", "B) The amount of water given", "C) The number of hours of sunlight", "D) The type of plant used"], "answer": "C", "dok": 2, "points": 1}}
-
-- Calculation with units (metric preferred for FL science):
-  {{"question": "A block with a mass of 2.5 kg is pushed with a force of 10 N. Using F = ma, calculate the acceleration. Show your work.", "answer": "a = F/m = 10 N / 2.5 kg = 4 m/s²", "dok": 2, "points": 2}}
-
-CRITICAL RULES FOR SCIENCE:
-- Use ONE unit system per question (metric preferred). All values must be physically plausible.
-- NEVER reference a diagram, figure, or image. Use the interactive components above instead.
-- For classification → use data_table or venn_diagram
-- For data analysis → use bar_chart, dot_plot, box_plot, or data_table
-- For graphing relationships → use coordinate_plane or function_graph
-- For ordering/scales → use number_line
-
-For SOCIAL STUDIES / HISTORY subjects:
-- Primary source questions MUST embed the source text, not reference it externally:
-  {{"question": "Read the following excerpt from the Declaration of Independence (1776):\\n\\n'We hold these truths to be self-evident, that all men are created equal, that they are endowed by their Creator with certain unalienable Rights, that among these are Life, Liberty and the pursuit of Happiness. — That to secure these rights, Governments are instituted among Men, deriving their just powers from the consent of the governed.'\\n\\nBased on this excerpt, which Enlightenment idea MOST influenced the founders?", "options": ["A) Divine right of kings", "B) Social contract theory", "C) Mercantilism", "D) Manifest destiny"], "answer": "B", "dok": 2, "points": 1}}
-- Cause-and-effect questions should be specific, not vague:
-  {{"question": "Which event was a DIRECT cause of the United States entering World War I in 1917?", "options": ["A) The assassination of Archduke Franz Ferdinand", "B) Germany's unrestricted submarine warfare against American ships", "C) The Treaty of Versailles", "D) The formation of the League of Nations"], "answer": "B", "dok": 2, "points": 1}}
-- Extended response with document analysis:
-  {{"question": "Read the following quote from President Abraham Lincoln's Gettysburg Address (1863):\\n\\n'Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure.'\\n\\nExplain how Lincoln connects the founding ideals of the United States to the purpose of the Civil War. In your response, identify at least one specific founding ideal Lincoln references and explain why he believed the war was necessary to preserve it.", "answer": "Strong response identifies equality and/or liberty as founding ideals, explains Lincoln frames the Civil War as a test of whether democratic self-government can survive, and connects the 'proposition that all men are created equal' to the broader struggle over slavery and union.", "dok": 3, "points": 4}}
-- Matching for key terms/events:
-  {{"question": "Match each amendment to the right it protects.", "terms": ["1st Amendment", "2nd Amendment", "4th Amendment", "5th Amendment"], "definitions": ["Right to bear arms", "Freedom of speech, religion, and press", "Protection against self-incrimination", "Protection against unreasonable searches"], "answer": {{"1st Amendment": "Freedom of speech, religion, and press", "2nd Amendment": "Right to bear arms", "4th Amendment": "Protection against unreasonable searches", "5th Amendment": "Protection against self-incrimination"}}, "dok": 1, "points": 2}}
-
-For GEOGRAPHY subjects:
-- Include a "coordinates" section for map/location questions
-- Location-based questions should test real places with coordinates:
-  {{"question": "What is the capital city located nearest to the coordinates 30.4°N, 84.3°W?", "answer": "Tallahassee, Florida", "dok": 1, "points": 1}}
-- Map analysis with data_table for comparison:
-  {{"question": "Complete the table comparing physical features of Florida's five geographic regions.", "question_type": "data_table", "column_headers": ["Region", "Major Landform", "Elevation Range", "Key Water Feature"], "row_labels": ["Northwest", "Northeast", "Central", "Southwest", "Southeast"], "expected_data": [["Northwest", "Rolling hills", "50-100 m", "Apalachicola River"], ["Northeast", "Coastal plains", "0-30 m", "St. Johns River"], ["Central", "Lake region", "20-50 m", "Lake Okeechobee"], ["Southwest", "Low coastal plain", "0-15 m", "Everglades"], ["Southeast", "Coastal ridge", "0-5 m", "Biscayne Bay"]], "answer": "Students identify correct landforms, elevation ranges, and water features for each region", "dok": 2, "points": 3}}
-{f'''
-TEACHER ADDITIONAL REQUIREMENTS (MUST FOLLOW — every question/activity must reflect these):
-{config.get('requirements', '').strip()}
-''' if config.get('requirements', '').strip() else ''}
-{f'''
-TEACHER'S ADDITIONAL INSTRUCTIONS (MUST FOLLOW):
-{config.get('globalAINotes', '')}
-''' if config.get('globalAINotes') else ''}
-Make the questions specific to the lesson content. Include a variety of question types appropriate for the assignment type.
-
-"""
+    prompt = _build_assignment_from_lesson_prompt(
+        all_key_points=all_key_points,
+        all_objectives=all_objectives,
+        all_vocabulary=all_vocabulary,
+        assignment_type=assignment_type,
+        config=config,
+        essential_questions=essential_questions,
+        lesson_overview=lesson_overview,
+        lesson_title=lesson_title,
+        ref_docs_block=ref_docs_block,
+        standards_text=standards_text,
+        subject_boundary=subject_boundary,
+        tools_instruction=tools_instruction,
+        type_instruction=type_instruction)
 
     completion = adapter.chat(LLMRequest(
         model="gpt-4o",
