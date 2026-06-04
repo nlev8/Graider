@@ -1569,6 +1569,60 @@ def _validate_question_quality(assignment, subject=None, grade=None, valid_stand
     return warnings
 
 
+def _check_physical_impossibilities(text):
+    """Tier-A science check: flag physically-impossible values — temperatures below absolute
+    zero, negative mass/speed, out-of-range pH, >100% concentration/efficiency/yield. Returns
+    a list of issue dicts (severity 'error'). Extracted verbatim from _check_question_quality
+    (Code Quality 6→7 function-split)."""
+    issues = []
+    _IMPOSSIBLE_CHECKS = [
+        # (pattern to find value+unit, validation function, issue message)
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Cc]elsius|°C)\b'),
+            lambda v: v < -273.15,
+            'Temperature below absolute zero ({val}°C)',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Ff]ahrenheit|°F)\b'),
+            lambda v: v < -459.67,
+            'Temperature below absolute zero ({val}°F)',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:kg|kilograms?|g|grams?|mg|milligrams?|lbs?|pounds?|oz|ounces?)\b', _re.IGNORECASE),
+            lambda v: v < 0,
+            'Negative mass ({val}) — mass cannot be negative',
+        ),
+        (
+            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:m/s|km/h|mph|ft/s)\b', _re.IGNORECASE),
+            lambda v: v < 0,
+            'Negative speed ({val}) — speed is a scalar and cannot be negative',
+        ),
+        (
+            _re.compile(r'\bpH\s+(?:of\s+)?(-?\d+(?:\.\d+)?)\b', _re.IGNORECASE),
+            lambda v: v < 0 or v > 14,
+            'pH value {val} is outside valid range (0-14)',
+        ),
+        (
+            _re.compile(r'(\d+(?:\.\d+)?)\s*%\s*(?:concentration|efficiency|probability|chance|yield)\b', _re.IGNORECASE),
+            lambda v: v > 100,
+            'Percentage value {val}% exceeds 100%',
+        ),
+    ]
+    for pattern, is_invalid, msg_template in _IMPOSSIBLE_CHECKS:
+        match = pattern.search(text)
+        if match:
+            try:
+                val = float(match.group(1))
+                if is_invalid(val):
+                    issues.append({
+                        'issue': msg_template.format(val=match.group(1)),
+                        'severity': 'error',
+                    })
+            except (ValueError, IndexError):
+                pass
+    return issues
+
+
 def _check_question_quality(q, subject=None, grade=None, valid_standard_codes=None):
     """Run Tier A deterministic checks on a single question. Returns list of issues."""
     issues = []
@@ -1766,51 +1820,7 @@ def _check_question_quality(q, subject=None, grade=None, valid_standard_codes=No
         })
 
     # Check 12: Physically impossible values for common quantities
-    _IMPOSSIBLE_CHECKS = [
-        # (pattern to find value+unit, validation function, issue message)
-        (
-            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Cc]elsius|°C)\b'),
-            lambda v: v < -273.15,
-            'Temperature below absolute zero ({val}°C)',
-        ),
-        (
-            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:degrees?\s*[Ff]ahrenheit|°F)\b'),
-            lambda v: v < -459.67,
-            'Temperature below absolute zero ({val}°F)',
-        ),
-        (
-            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:kg|kilograms?|g|grams?|mg|milligrams?|lbs?|pounds?|oz|ounces?)\b', _re.IGNORECASE),
-            lambda v: v < 0,
-            'Negative mass ({val}) — mass cannot be negative',
-        ),
-        (
-            _re.compile(r'(-?\d+(?:\.\d+)?)\s*(?:m/s|km/h|mph|ft/s)\b', _re.IGNORECASE),
-            lambda v: v < 0,
-            'Negative speed ({val}) — speed is a scalar and cannot be negative',
-        ),
-        (
-            _re.compile(r'\bpH\s+(?:of\s+)?(-?\d+(?:\.\d+)?)\b', _re.IGNORECASE),
-            lambda v: v < 0 or v > 14,
-            'pH value {val} is outside valid range (0-14)',
-        ),
-        (
-            _re.compile(r'(\d+(?:\.\d+)?)\s*%\s*(?:concentration|efficiency|probability|chance|yield)\b', _re.IGNORECASE),
-            lambda v: v > 100,
-            'Percentage value {val}% exceeds 100%',
-        ),
-    ]
-    for pattern, is_invalid, msg_template in _IMPOSSIBLE_CHECKS:
-        match = pattern.search(text)
-        if match:
-            try:
-                val = float(match.group(1))
-                if is_invalid(val):
-                    issues.append({
-                        'issue': msg_template.format(val=match.group(1)),
-                        'severity': 'error',
-                    })
-            except (ValueError, IndexError):
-                pass
+    issues.extend(_check_physical_impossibilities(text))
 
     # Check 13: Science question references a diagram/figure/lab setup not provided
     _FIGURE_REF_RE = _re.compile(
