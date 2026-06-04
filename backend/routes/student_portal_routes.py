@@ -1443,6 +1443,273 @@ def set_content_tags(content_id):
         return jsonify({"error": "An internal error occurred"}), 500
 
 
+def _run_personalized_remediation(db, cls_row, target_mode, target_student_ids,
+                                  per_student_segments, standard_code, count,
+                                  difficulty, dok, class_id):
+    """Generate one personalized remediation variant per targeted student
+    (parallel, all-or-nothing) and return the Flask JSON response.
+
+    Extracted verbatim from post_remediate (CQ7 god-function split). The
+    `if should_personalize:` branch now delegates here; behavior is pinned
+    by tests/test_remediation_perstudent.py.
+    """
+    # Fetch student names for tab labels (deterministic ordering).
+    students_rows = db.table('students').select(
+        'id, first_name, last_name'
+    ).in_('id', target_student_ids).execute()
+    students_by_id = {
+        s['id']: s for s in (students_rows.data or []) if s.get('id')
+    }
+
+    grade = cls_row.get('grade_level') or '7'
+    subject = cls_row.get('subject') or 'General'
+    base_prompt = _build_remediation_prompt(
+        grade=grade, subject=subject, standard_code=standard_code,
+        count=count, difficulty=difficulty, dok=dok,
+    )
+
+    # Capture per-request context BEFORE submitting to the worker pool.
+    # Workers must NEVER read Flask globals (Codex round 2 MAJOR).
+    from backend.api_keys import get_api_key as _gak
+    from backend.services.openai_context import build_openai_context
+    from backend.services.assignment_post_processing import _merge_usage
+    api_key = _gak('openai', g.teacher_id)
+    if not api_key or 'your-key-here' in api_key:
+        return error_response("Missing OpenAI API key", 500)
+    _ctx_uid, _ctx_client = build_openai_context(getattr(g, 'user_id', 'local-dev'))
+    captured_teacher_id = g.teacher_id
+    captured_class_id = class_id
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    # Cap concurrency at 5 (Codex MAJOR) to reduce nondeterministic
+    # rate-limit failures under all-or-nothing semantics.
+    max_workers = min(len(target_student_ids), 5)
+    variants = []
+    errors = []
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(
+                _gen_variant_for_student,
+                sid=sid,
+                segment=per_student_segments.get(sid, ""),
+                students_by_id=students_by_id,
+                api_key=api_key,
+                base_prompt=base_prompt,
+                subject=subject,
+                grade=grade,
+                standard_code=standard_code,
+                ctx_uid=_ctx_uid,
+                ctx_client=_ctx_client,
+                teacher_id=captured_teacher_id,
+                class_id=captured_class_id,
+                count=count,
+            ): sid
+            for sid in target_student_ids
+        }
+        for fut in as_completed(futures):
+            sid = futures[fut]
+            try:
+                variants.append(fut.result())
+            except Exception as e:
+                _logger.warning(
+                    "remediation.personalize.variant_failed student=%s: %s", sid, e
+                )
+                errors.append({'student_id': sid, 'error': 'generation failed'})
+
+    if errors:
+        _logger.exception(
+            "remediation.personalize.partial_failure teacher=%s class=%s standard=%s errors=%s",
+            g.teacher_id, class_id, standard_code, errors,
+        )
+        return jsonify({
+            "error": "One or more personalized variants failed to generate",
+            "detail": "Try again. Personalized mode requires all variants to succeed.",
+            "failed_student_ids": [e['student_id'] for e in errors],
+        }), 500
+
+    # Deterministic ordering by student_name (id fallback).
+    variants.sort(key=lambda v: (
+        (v.get('student_name') or '').lower(), v.get('student_id') or '',
+    ))
+
+    # Aggregate usage from workers and record once in parent thread
+    # (Codex round 2 MINOR — cost telemetry thread-safety).
+    from backend.services.assignment_post_processing import _record_planner_cost
+    total_usage = {}
+    for v in variants:
+        v_usage = v.pop('usage', None) or {}
+        total_usage = _merge_usage(total_usage, v_usage)
+    if total_usage:
+        _record_planner_cost(total_usage)
+
+    _logger.info(
+        "remediation.generated mode=personalized teacher=%s class=%s standard=%s n_variants=%d cost_tokens=%s",
+        g.teacher_id, class_id, standard_code, len(variants),
+        (total_usage or {}).get('total_tokens', 0),
+    )
+
+    return jsonify({
+        "mode": "personalized",
+        "count": count,
+        "difficulty": difficulty,
+        "dok": dok,
+        "variants": variants,
+        "target_mode": target_mode,
+        "standard_code": standard_code,
+        "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    }), 200
+
+
+def _run_shared_remediation(cls_row, target_mode, target_student_id,
+                            target_student_ids, standard_code, count,
+                            difficulty, dok, class_id):
+    """Generate a single shared remediation set (one prompt, optional
+    single-student accommodation) and return the Flask JSON response.
+
+    Extracted verbatim from post_remediate (CQ7 god-function split); the
+    route's fall-through shared path now delegates here. Behavior is pinned
+    by tests/test_remediation.py.
+    """
+    # 7) Build remediation prompt via the shared helper (Codex MAJOR — was
+    # previously duplicated inline; now both shared and personalized paths
+    # use the same _build_remediation_prompt single source of truth).
+    # Phase 4.2 #3: count + difficulty parameterize the helper output.
+    grade = cls_row.get('grade_level') or '7'
+    subject = cls_row.get('subject') or 'General'
+    base_prompt = _build_remediation_prompt(
+        grade=grade, subject=subject, standard_code=standard_code,
+        count=count, difficulty=difficulty, dok=dok,
+    )
+
+    accommodation_segment = ""
+    if target_mode == 'single_student':
+        try:
+            from backend.accommodations import build_accommodation_prompt
+            accommodation_segment = build_accommodation_prompt(target_student_id, g.teacher_id) or ""
+        except Exception:
+            _logger.warning(
+                "remediation.accommodations_helper_failed teacher=%s student=%s",
+                g.teacher_id, target_student_id,
+            )
+            accommodation_segment = ""
+    if accommodation_segment:
+        # Phase 4.2 #1: extend accommodation directive to apply to lesson text too.
+        # Best-effort; AI compliance is not contracted (mixed-language output is acceptable).
+        accommodation_segment = (
+            accommodation_segment
+            + "\n\nApply these accommodations to the lesson text as well as the questions."
+        )
+    final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
+
+    # 8) Generate via OpenAIAdapter (matches planner_routes pattern).
+    # Verified imports -- build_openai_context is the pure helper in services; the post-processing
+    # helpers (incl. _extract_usage/_merge_usage) live in assignment_post_processing
+    # and are merely re-imported by planner_routes. Importing direct from the source
+    # avoids an unnecessary circular-import surface.
+    from backend.api_keys import get_api_key as _gak
+    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+    from backend.services.openai_context import build_openai_context
+    from backend.services.assignment_post_processing import (
+        _post_process_assignment, _extract_usage, _merge_usage,
+    )
+    import json as _json
+
+    api_key = _gak('openai', g.teacher_id)
+    if not api_key or 'your-key-here' in api_key:
+        return error_response("Missing OpenAI API key", 500)
+    adapter = OpenAIAdapter(api_key=api_key)
+    _ctx_uid, _ctx_client = build_openai_context(getattr(g, 'user_id', 'local-dev'))
+
+    # Narrow try/except: only the LLM call + JSON parse + post-process.
+    # Anything outside (imports, api_key, adapter ctor, ctx fetch) should
+    # surface its real cause to the caller, not a generic "Generation failed".
+    try:
+        completion = adapter.chat(LLMRequest(
+            model="gpt-4o",
+            system_prompt="You are an expert teacher. Return valid JSON only.",
+            messages=[Message(role="user", content=[TextPart(text=final_prompt)])],
+            response_format=ResponseFormat(type="json_object"),
+            metadata={"feature_label": "remediation"},
+        ))
+        raw_text = completion.content_parts[0].text if completion.content_parts else "{}"
+        assignment = _json.loads(raw_text)
+
+        # Defensive: if the AI returned `{questions: [...]}` instead of sections shape,
+        # wrap it so `_post_process_assignment`'s section iteration runs over the questions.
+        # Phase 4.2 #1: must preserve `lesson` through the wrapper — without this,
+        # AI responses with the {questions, lesson} shape would silently drop lesson.
+        if isinstance(assignment, dict) and 'sections' not in assignment and 'questions' in assignment:
+            assignment = {
+                'title': assignment.get('title', f"Practice - {standard_code}"),
+                'lesson': assignment.get('lesson'),
+                'sections': [{'name': 'Practice', 'questions': assignment.get('questions') or []}],
+            }
+
+        # Capture lesson BEFORE _post_process_assignment runs. The processor
+        # iterates `sections` only (assignment_post_processing.py:2113ish);
+        # it doesn't touch top-level `lesson`. But capturing here makes the
+        # validation order explicit and protects against future processor
+        # changes.
+        raw_lesson = assignment.get('lesson') if isinstance(assignment, dict) else None
+
+        assignment, extra_usage = _post_process_assignment(
+            assignment, count, target_total_points=count * 10,
+            subject=subject, grade=grade,
+            valid_standard_codes=[standard_code],
+            user_id=_ctx_uid, client=_ctx_client,
+        )
+        usage = _merge_usage(_extract_usage(completion, "gpt-4o"), extra_usage)
+    except Exception:
+        _logger.exception("remediation.generation_failed teacher=%s class=%s standard=%s",
+                          g.teacher_id, class_id, standard_code)
+        return error_response("Generation failed", 500)
+
+    # Flatten sections back to a single questions list for the drawer/wire.
+    questions = []
+    for section in (assignment or {}).get('sections', []):
+        for q in section.get('questions', []):
+            questions.append(q)
+    # 422 floor: fewer than 3 valid questions after post-processing.
+    if len(questions) < 3:
+        return error_response("Generation produced too few valid questions", 422)
+
+    # Phase 4.2 #1: validate the lesson and build a clean dict (or None).
+    # Always-present `lesson` key in response (None if validation failed).
+    clean_lesson = _validate_and_clean_lesson(
+        raw_lesson, teacher_id=g.teacher_id, class_id=class_id, standard_code=standard_code,
+    )
+
+    # 9) Audit log.
+    if accommodation_segment:
+        _logger.info(
+            "remediation.accommodations_applied teacher=%s class=%s student=%s",
+            g.teacher_id, class_id, target_student_id,
+        )
+    _logger.info(
+        "remediation.generated teacher=%s class=%s mode=%s standard=%s targets=%d cost_tokens=%s",
+        g.teacher_id, class_id, target_mode, standard_code, len(target_student_ids),
+        (usage or {}).get('total_tokens', 0),
+    )
+
+    # `datetime`/`timezone` are imported at module level (line 12).
+    # Phase 4.2 #1: response ALWAYS includes `lesson` key. None if validation
+    # failed; clean dict {intro, worked_example, key_takeaway} if valid.
+    # Phase 4.2 #2: `mode` field distinguishes shared vs personalized response
+    # shapes. Frontend reads it to decide single-preview vs tab-per-variant.
+    return jsonify({
+        "mode": "shared",
+        "count": count,
+        "difficulty": difficulty,
+        "dok": dok,
+        "questions": questions,
+        "lesson": clean_lesson,
+        "target_mode": target_mode,
+        "target_student_ids": target_student_ids,
+        "standard_code": standard_code,
+        "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    }), 200
+
+
 @student_portal_bp.route('/api/teacher/class/<class_id>/remediate', methods=['POST'])
 @require_teacher
 @handle_route_errors
@@ -1674,250 +1941,15 @@ def post_remediate(class_id):
 
     # If personalized, run the parallel path and return early.
     if should_personalize:
-        # Fetch student names for tab labels (deterministic ordering).
-        students_rows = db.table('students').select(
-            'id, first_name, last_name'
-        ).in_('id', target_student_ids).execute()
-        students_by_id = {
-            s['id']: s for s in (students_rows.data or []) if s.get('id')
-        }
-
-        grade = cls_row.get('grade_level') or '7'
-        subject = cls_row.get('subject') or 'General'
-        base_prompt = _build_remediation_prompt(
-            grade=grade, subject=subject, standard_code=standard_code,
-            count=count, difficulty=difficulty, dok=dok,
+        return _run_personalized_remediation(
+            db, cls_row, target_mode, target_student_ids,
+            per_student_segments, standard_code, count, difficulty, dok, class_id,
         )
 
-        # Capture per-request context BEFORE submitting to the worker pool.
-        # Workers must NEVER read Flask globals (Codex round 2 MAJOR).
-        from backend.api_keys import get_api_key as _gak
-        from backend.services.openai_context import build_openai_context
-        from backend.services.assignment_post_processing import _merge_usage
-        api_key = _gak('openai', g.teacher_id)
-        if not api_key or 'your-key-here' in api_key:
-            return error_response("Missing OpenAI API key", 500)
-        _ctx_uid, _ctx_client = build_openai_context(getattr(g, 'user_id', 'local-dev'))
-        captured_teacher_id = g.teacher_id
-        captured_class_id = class_id
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        # Cap concurrency at 5 (Codex MAJOR) to reduce nondeterministic
-        # rate-limit failures under all-or-nothing semantics.
-        max_workers = min(len(target_student_ids), 5)
-        variants = []
-        errors = []
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(
-                    _gen_variant_for_student,
-                    sid=sid,
-                    segment=per_student_segments.get(sid, ""),
-                    students_by_id=students_by_id,
-                    api_key=api_key,
-                    base_prompt=base_prompt,
-                    subject=subject,
-                    grade=grade,
-                    standard_code=standard_code,
-                    ctx_uid=_ctx_uid,
-                    ctx_client=_ctx_client,
-                    teacher_id=captured_teacher_id,
-                    class_id=captured_class_id,
-                    count=count,
-                ): sid
-                for sid in target_student_ids
-            }
-            for fut in as_completed(futures):
-                sid = futures[fut]
-                try:
-                    variants.append(fut.result())
-                except Exception as e:
-                    _logger.warning(
-                        "remediation.personalize.variant_failed student=%s: %s", sid, e
-                    )
-                    errors.append({'student_id': sid, 'error': 'generation failed'})
-
-        if errors:
-            _logger.exception(
-                "remediation.personalize.partial_failure teacher=%s class=%s standard=%s errors=%s",
-                g.teacher_id, class_id, standard_code, errors,
-            )
-            return jsonify({
-                "error": "One or more personalized variants failed to generate",
-                "detail": "Try again. Personalized mode requires all variants to succeed.",
-                "failed_student_ids": [e['student_id'] for e in errors],
-            }), 500
-
-        # Deterministic ordering by student_name (id fallback).
-        variants.sort(key=lambda v: (
-            (v.get('student_name') or '').lower(), v.get('student_id') or '',
-        ))
-
-        # Aggregate usage from workers and record once in parent thread
-        # (Codex round 2 MINOR — cost telemetry thread-safety).
-        from backend.services.assignment_post_processing import _record_planner_cost
-        total_usage = {}
-        for v in variants:
-            v_usage = v.pop('usage', None) or {}
-            total_usage = _merge_usage(total_usage, v_usage)
-        if total_usage:
-            _record_planner_cost(total_usage)
-
-        _logger.info(
-            "remediation.generated mode=personalized teacher=%s class=%s standard=%s n_variants=%d cost_tokens=%s",
-            g.teacher_id, class_id, standard_code, len(variants),
-            (total_usage or {}).get('total_tokens', 0),
-        )
-
-        return jsonify({
-            "mode": "personalized",
-            "count": count,
-            "difficulty": difficulty,
-            "dok": dok,
-            "variants": variants,
-            "target_mode": target_mode,
-            "standard_code": standard_code,
-            "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        }), 200
-
-    # 7) Build remediation prompt via the shared helper (Codex MAJOR — was
-    # previously duplicated inline; now both shared and personalized paths
-    # use the same _build_remediation_prompt single source of truth).
-    # Phase 4.2 #3: count + difficulty parameterize the helper output.
-    grade = cls_row.get('grade_level') or '7'
-    subject = cls_row.get('subject') or 'General'
-    base_prompt = _build_remediation_prompt(
-        grade=grade, subject=subject, standard_code=standard_code,
-        count=count, difficulty=difficulty, dok=dok,
+    return _run_shared_remediation(
+        cls_row, target_mode, target_student_id, target_student_ids,
+        standard_code, count, difficulty, dok, class_id,
     )
-
-    accommodation_segment = ""
-    if target_mode == 'single_student':
-        try:
-            from backend.accommodations import build_accommodation_prompt
-            accommodation_segment = build_accommodation_prompt(target_student_id, g.teacher_id) or ""
-        except Exception:
-            _logger.warning(
-                "remediation.accommodations_helper_failed teacher=%s student=%s",
-                g.teacher_id, target_student_id,
-            )
-            accommodation_segment = ""
-    if accommodation_segment:
-        # Phase 4.2 #1: extend accommodation directive to apply to lesson text too.
-        # Best-effort; AI compliance is not contracted (mixed-language output is acceptable).
-        accommodation_segment = (
-            accommodation_segment
-            + "\n\nApply these accommodations to the lesson text as well as the questions."
-        )
-    final_prompt = base_prompt + ("\n\n" + accommodation_segment if accommodation_segment else "")
-
-    # 8) Generate via OpenAIAdapter (matches planner_routes pattern).
-    # Verified imports -- build_openai_context is the pure helper in services; the post-processing
-    # helpers (incl. _extract_usage/_merge_usage) live in assignment_post_processing
-    # and are merely re-imported by planner_routes. Importing direct from the source
-    # avoids an unnecessary circular-import surface.
-    from backend.api_keys import get_api_key as _gak
-    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
-    from backend.services.openai_context import build_openai_context
-    from backend.services.assignment_post_processing import (
-        _post_process_assignment, _extract_usage, _merge_usage,
-    )
-    import json as _json
-
-    api_key = _gak('openai', g.teacher_id)
-    if not api_key or 'your-key-here' in api_key:
-        return error_response("Missing OpenAI API key", 500)
-    adapter = OpenAIAdapter(api_key=api_key)
-    _ctx_uid, _ctx_client = build_openai_context(getattr(g, 'user_id', 'local-dev'))
-
-    # Narrow try/except: only the LLM call + JSON parse + post-process.
-    # Anything outside (imports, api_key, adapter ctor, ctx fetch) should
-    # surface its real cause to the caller, not a generic "Generation failed".
-    try:
-        completion = adapter.chat(LLMRequest(
-            model="gpt-4o",
-            system_prompt="You are an expert teacher. Return valid JSON only.",
-            messages=[Message(role="user", content=[TextPart(text=final_prompt)])],
-            response_format=ResponseFormat(type="json_object"),
-            metadata={"feature_label": "remediation"},
-        ))
-        raw_text = completion.content_parts[0].text if completion.content_parts else "{}"
-        assignment = _json.loads(raw_text)
-
-        # Defensive: if the AI returned `{questions: [...]}` instead of sections shape,
-        # wrap it so `_post_process_assignment`'s section iteration runs over the questions.
-        # Phase 4.2 #1: must preserve `lesson` through the wrapper — without this,
-        # AI responses with the {questions, lesson} shape would silently drop lesson.
-        if isinstance(assignment, dict) and 'sections' not in assignment and 'questions' in assignment:
-            assignment = {
-                'title': assignment.get('title', f"Practice - {standard_code}"),
-                'lesson': assignment.get('lesson'),
-                'sections': [{'name': 'Practice', 'questions': assignment.get('questions') or []}],
-            }
-
-        # Capture lesson BEFORE _post_process_assignment runs. The processor
-        # iterates `sections` only (assignment_post_processing.py:2113ish);
-        # it doesn't touch top-level `lesson`. But capturing here makes the
-        # validation order explicit and protects against future processor
-        # changes.
-        raw_lesson = assignment.get('lesson') if isinstance(assignment, dict) else None
-
-        assignment, extra_usage = _post_process_assignment(
-            assignment, count, target_total_points=count * 10,
-            subject=subject, grade=grade,
-            valid_standard_codes=[standard_code],
-            user_id=_ctx_uid, client=_ctx_client,
-        )
-        usage = _merge_usage(_extract_usage(completion, "gpt-4o"), extra_usage)
-    except Exception:
-        _logger.exception("remediation.generation_failed teacher=%s class=%s standard=%s",
-                          g.teacher_id, class_id, standard_code)
-        return error_response("Generation failed", 500)
-
-    # Flatten sections back to a single questions list for the drawer/wire.
-    questions = []
-    for section in (assignment or {}).get('sections', []):
-        for q in section.get('questions', []):
-            questions.append(q)
-    # 422 floor: fewer than 3 valid questions after post-processing.
-    if len(questions) < 3:
-        return error_response("Generation produced too few valid questions", 422)
-
-    # Phase 4.2 #1: validate the lesson and build a clean dict (or None).
-    # Always-present `lesson` key in response (None if validation failed).
-    clean_lesson = _validate_and_clean_lesson(
-        raw_lesson, teacher_id=g.teacher_id, class_id=class_id, standard_code=standard_code,
-    )
-
-    # 9) Audit log.
-    if accommodation_segment:
-        _logger.info(
-            "remediation.accommodations_applied teacher=%s class=%s student=%s",
-            g.teacher_id, class_id, target_student_id,
-        )
-    _logger.info(
-        "remediation.generated teacher=%s class=%s mode=%s standard=%s targets=%d cost_tokens=%s",
-        g.teacher_id, class_id, target_mode, standard_code, len(target_student_ids),
-        (usage or {}).get('total_tokens', 0),
-    )
-
-    # `datetime`/`timezone` are imported at module level (line 12).
-    # Phase 4.2 #1: response ALWAYS includes `lesson` key. None if validation
-    # failed; clean dict {intro, worked_example, key_takeaway} if valid.
-    # Phase 4.2 #2: `mode` field distinguishes shared vs personalized response
-    # shapes. Frontend reads it to decide single-preview vs tab-per-variant.
-    return jsonify({
-        "mode": "shared",
-        "count": count,
-        "difficulty": difficulty,
-        "dok": dok,
-        "questions": questions,
-        "lesson": clean_lesson,
-        "target_mode": target_mode,
-        "target_student_ids": target_student_ids,
-        "standard_code": standard_code,
-        "generated_at": datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-    }), 200
 
 
 # Module-level remediation-effectiveness mastery readers (Code Quality 6→7 function-split:
