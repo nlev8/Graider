@@ -1072,72 +1072,16 @@ def _finalize_grading_result(
     return result
 
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
-    """
-    Use OpenAI GPT to grade a student assignment.
-
-    FERPA COMPLIANCE: Student name is NOT sent to OpenAI.
-    We use "Student" as a placeholder to protect privacy.
-
-    Supports both text and image inputs.
-
-    Parameters:
-    - student_name: Name of the student (kept local, not sent to API)
-    - assignment_data: dict with "type" ("text" or "image") and "content"
-    - custom_ai_instructions: Additional grading instructions from the teacher
-    - grade_level: The student's grade level (e.g., '6', '7', '8')
-    - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
-    - ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
-    - assignment_template: The original assignment template with all questions (for context)
-
-    Returns dict with:
-    - score: numeric grade (0-100)
-    - letter_grade: A, B, C, D, or F
-    - feedback: detailed feedback for the student
-    - breakdown: points for each rubric category
-    - authenticity_flag: 'clean', 'review', or 'flagged'
-    - authenticity_reason: Explanation for flagged or review status
-    """
-    # Resolve provider + SDK client + concrete model (early-returns an ERROR dict on
-    # missing SDK / unconfigured key).
-    provider, client, actual_model, _client_err = _resolve_grading_client(ai_model)
-    if _client_err:
-        return _client_err
-
-    content = assignment_data.get("content", "")
-
-    # Strip embedded answer key from generated worksheets (handles -- and --- variants)
-    if content and "GRAIDER_ANSWER_KEY_START" in content:
-        content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
-        assignment_data = {**assignment_data, "content": content}
-        _logger.info(f"  🧹 Stripped embedded answer key from document")
-
-    # Check for empty/blank student submissions before sending to API
-    if assignment_data.get("type") == "text" and content:
-        blank_result = _detect_blank_submission(content)
-        if blank_result is not None:
-            return blank_result
-
-    # FERPA: Use anonymous placeholder instead of real student name
-    
-    # Build personalization context (teacher instructions, history, accommodations)
-    custom_section, history_context, accommodation_context = _build_personalization_context(
-        custom_ai_instructions, student_id)
-
-    # Check if this is a fill-in-the-blank assignment
-    is_fitb = _detect_fitb_assignment(content, custom_ai_instructions)
-
-    # PRE-EXTRACT student responses to prevent AI hallucination
-    is_fitb, extraction_result, extracted_responses_text, early_result = _pre_extract_responses(
-        is_fitb, assignment_data, content, custom_markers, exclude_markers,
-        assignment_template, marker_config, extraction_mode)
-    if early_result is not None:
-        return early_result
-
-    # Analyze current submission's writing style for AI detection
-    writing_style_context, current_writing_style, style_comparison = _analyze_submission_writing_style(
-        content, assignment_data, student_id)
-
+def _assemble_single_pass_prompt(grade_level, extracted_responses_text, assignment_template,
+                                 marker_config, effort_points, rubric_prompt, extraction_mode,
+                                 grading_style, is_fitb, custom_markers, student_id,
+                                 custom_ai_instructions, subject, accommodation_context,
+                                 custom_section, history_context, writing_style_context):
+    """Assemble the single-pass grade_assignment prompt: age-range mapping, extracted-response
+    and assignment-template sections, rubric / extraction-mode / grading-style / authenticity
+    instruction blocks, ELL designation, and the final teacher-override repetition, then call
+    _build_grading_prompt. Returns (prompt_text, extracted_responses_section, ell_language).
+    Extracted verbatim from grade_assignment (Code Quality 6→7 function-split)."""
     # Map grade level to age range for context
     grade_age_map = {
         'K': '5-6', '1': '6-7', '2': '7-8', '3': '8-9', '4': '9-10', '5': '10-11',
@@ -1222,6 +1166,129 @@ in your scoring or feedback. The teacher knows their students better than any ru
         teacher_override_section=teacher_override_section,
         writing_style_context=writing_style_context,
     )
+    return prompt_text, extracted_responses_section, ell_language
+
+
+def _recover_grading_json_decode_error(response_text, e):
+    """Recover from a malformed-JSON grade_assignment response: debug-log + dump, then regex-
+    salvage score/letter_grade/feedback if possible, else return the generic ERROR result.
+    Extracted verbatim (de-indented) from grade_assignment (Code Quality 6→7 function-split)."""
+    _logger.info(f"  ⚠️  Error parsing AI response: {e}")
+    # Try to show response content for debugging
+    try:
+        raw_preview = response_text[:800] if len(response_text) > 800 else response_text
+        _logger.info(f"  ⚠️  Raw response preview:\n{raw_preview}")
+        # Write full response to temp file for debugging
+        import tempfile
+        debug_file = tempfile.NamedTemporaryFile(mode='w', suffix='_graider_debug.json', delete=False)
+        debug_file.write(response_text)
+        debug_file.close()
+        _logger.info(f"  ⚠️  Full response saved to: {debug_file.name}")
+    except Exception:
+        _logger.info(f"  ⚠️  Could not display response")
+
+    # Try to extract key fields with regex as fallback
+    try:
+        score_match = re.search(r'"score":\s*(\d+)', response_text)
+        grade_match = re.search(r'"letter_grade":\s*"([A-F])"', response_text)
+        feedback_match = re.search(r'"feedback":\s*"([^"]{20,500})', response_text)
+
+        if score_match and grade_match:
+            _logger.info(f"  ✅ Recovered score/grade from malformed JSON")
+            return {
+                "score": int(score_match.group(1)),
+                "letter_grade": grade_match.group(1),
+                "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
+                "feedback": feedback_match.group(1) + "..." if feedback_match else "Grading completed but response was malformed.",
+                "student_responses": [],
+                "unanswered_questions": [],
+                "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
+                "plagiarism_detection": {"flag": "none", "reason": ""},
+                "skills_demonstrated": {"strengths": [], "developing": []},
+                "json_recovery": True
+            }
+    except Exception as e:
+        _logger.warning("malformed-JSON regex recovery failed: %s", type(e).__name__)
+
+    return {
+        "score": 0,
+        "letter_grade": "ERROR",
+        "breakdown": {},
+        "feedback": f"Error grading - AI returned invalid JSON. Please review manually."
+    }
+
+
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
+    """
+    Use OpenAI GPT to grade a student assignment.
+
+    FERPA COMPLIANCE: Student name is NOT sent to OpenAI.
+    We use "Student" as a placeholder to protect privacy.
+
+    Supports both text and image inputs.
+
+    Parameters:
+    - student_name: Name of the student (kept local, not sent to API)
+    - assignment_data: dict with "type" ("text" or "image") and "content"
+    - custom_ai_instructions: Additional grading instructions from the teacher
+    - grade_level: The student's grade level (e.g., '6', '7', '8')
+    - subject: The subject being graded (e.g., 'Social Studies', 'English/ELA')
+    - ai_model: OpenAI model to use ('gpt-4o' or 'gpt-4o-mini')
+    - assignment_template: The original assignment template with all questions (for context)
+
+    Returns dict with:
+    - score: numeric grade (0-100)
+    - letter_grade: A, B, C, D, or F
+    - feedback: detailed feedback for the student
+    - breakdown: points for each rubric category
+    - authenticity_flag: 'clean', 'review', or 'flagged'
+    - authenticity_reason: Explanation for flagged or review status
+    """
+    # Resolve provider + SDK client + concrete model (early-returns an ERROR dict on
+    # missing SDK / unconfigured key).
+    provider, client, actual_model, _client_err = _resolve_grading_client(ai_model)
+    if _client_err:
+        return _client_err
+
+    content = assignment_data.get("content", "")
+
+    # Strip embedded answer key from generated worksheets (handles -- and --- variants)
+    if content and "GRAIDER_ANSWER_KEY_START" in content:
+        content = content.split("GRAIDER_ANSWER_KEY_START")[0].rstrip().rstrip('-')
+        assignment_data = {**assignment_data, "content": content}
+        _logger.info(f"  🧹 Stripped embedded answer key from document")
+
+    # Check for empty/blank student submissions before sending to API
+    if assignment_data.get("type") == "text" and content:
+        blank_result = _detect_blank_submission(content)
+        if blank_result is not None:
+            return blank_result
+
+    # FERPA: Use anonymous placeholder instead of real student name
+    
+    # Build personalization context (teacher instructions, history, accommodations)
+    custom_section, history_context, accommodation_context = _build_personalization_context(
+        custom_ai_instructions, student_id)
+
+    # Check if this is a fill-in-the-blank assignment
+    is_fitb = _detect_fitb_assignment(content, custom_ai_instructions)
+
+    # PRE-EXTRACT student responses to prevent AI hallucination
+    is_fitb, extraction_result, extracted_responses_text, early_result = _pre_extract_responses(
+        is_fitb, assignment_data, content, custom_markers, exclude_markers,
+        assignment_template, marker_config, extraction_mode)
+    if early_result is not None:
+        return early_result
+
+    # Analyze current submission's writing style for AI detection
+    writing_style_context, current_writing_style, style_comparison = _analyze_submission_writing_style(
+        content, assignment_data, student_id)
+
+    prompt_text, extracted_responses_section, ell_language = _assemble_single_pass_prompt(
+        grade_level, extracted_responses_text, assignment_template, marker_config, effort_points,
+        rubric_prompt, extraction_mode, grading_style, is_fitb, custom_markers, student_id,
+        custom_ai_instructions, subject, accommodation_context, custom_section, history_context,
+        writing_style_context)
 
     # FERPA: strip student PII from the assembled prompt before any external LLM call. Covers the
     # image-path message construction (which uses prompt_text directly); the text path's full_prompt
@@ -1424,49 +1491,7 @@ in your scoring or feedback. The teacher knows their students better than any ru
         )
 
     except json.JSONDecodeError as e:
-        _logger.info(f"  ⚠️  Error parsing AI response: {e}")
-        # Try to show response content for debugging
-        try:
-            raw_preview = response_text[:800] if len(response_text) > 800 else response_text
-            _logger.info(f"  ⚠️  Raw response preview:\n{raw_preview}")
-            # Write full response to temp file for debugging
-            import tempfile
-            debug_file = tempfile.NamedTemporaryFile(mode='w', suffix='_graider_debug.json', delete=False)
-            debug_file.write(response_text)
-            debug_file.close()
-            _logger.info(f"  ⚠️  Full response saved to: {debug_file.name}")
-        except Exception:
-            _logger.info(f"  ⚠️  Could not display response")
-
-        # Try to extract key fields with regex as fallback
-        try:
-            score_match = re.search(r'"score":\s*(\d+)', response_text)
-            grade_match = re.search(r'"letter_grade":\s*"([A-F])"', response_text)
-            feedback_match = re.search(r'"feedback":\s*"([^"]{20,500})', response_text)
-
-            if score_match and grade_match:
-                _logger.info(f"  ✅ Recovered score/grade from malformed JSON")
-                return {
-                    "score": int(score_match.group(1)),
-                    "letter_grade": grade_match.group(1),
-                    "breakdown": {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0},
-                    "feedback": feedback_match.group(1) + "..." if feedback_match else "Grading completed but response was malformed.",
-                    "student_responses": [],
-                    "unanswered_questions": [],
-                    "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
-                    "plagiarism_detection": {"flag": "none", "reason": ""},
-                    "skills_demonstrated": {"strengths": [], "developing": []},
-                    "json_recovery": True
-                }
-        except Exception as e:
-            _logger.warning("malformed-JSON regex recovery failed: %s", type(e).__name__)
-
-        return {
-            "score": 0,
-            "letter_grade": "ERROR",
-            "breakdown": {},
-            "feedback": f"Error grading - AI returned invalid JSON. Please review manually."
-        }
+        return _recover_grading_json_decode_error(response_text, e)
     except Exception as e:
         _logger.info(f"  ⚠️  API error: {e}")
         import traceback

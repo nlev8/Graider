@@ -5,6 +5,7 @@ ladders/tables in grade_assignment / grade_multipass / grade_with_ensemble. Thes
 exact thresholds + cap tables so the dedup is provably behavior-preserving (the integration
 behavior is also pinned by tests/test_grader_golden.py + test_grading_factors.py).
 """
+import json
 import os
 import sys
 
@@ -20,10 +21,12 @@ from backend.services.grading_pipeline import (
     _detect_fitb_assignment,
     _finalize_grading_result,
     _letter_grade,
+    _assemble_single_pass_prompt,
     _load_ell_language,
     _multipass_grade_questions_parallel,
     _multipass_perform_extraction,
     _pre_extract_responses,
+    _recover_grading_json_decode_error,
 )
 
 
@@ -335,3 +338,48 @@ def test_multipass_grade_questions_parallel_contract(monkeypatch):
     assert out[1]["excellent"] is False
     # both questions were dispatched to the (mocked) per-question grader
     assert sorted(seen) == ["1) Q one", "2) Q two"]
+
+
+def test_assemble_single_pass_prompt_contract():
+    """Pin the prep helper extracted from grade_assignment (Code Quality 6→7 function-split):
+    returns (prompt_text, extracted_responses_section, ell_language); the responses section wraps
+    the extracted text in '---' fences and ell_language is None for an unknown student. Full
+    prompt wording is pinned by tests/test_grader_prompt_snapshots.py + the grade_assignment golden.
+    """
+    prompt_text, responses_section, ell_language = _assemble_single_pass_prompt(
+        grade_level="6", extracted_responses_text="Q1: the Louisiana Purchase",
+        assignment_template=None, marker_config=None, effort_points=15, rubric_prompt=None,
+        extraction_mode="structured", grading_style="standard", is_fitb=False, custom_markers=None,
+        student_id=None, custom_ai_instructions="", subject="Social Studies",
+        accommodation_context="", custom_section="", history_context="", writing_style_context="",
+    )
+    assert isinstance(prompt_text, str) and len(prompt_text) > 0
+    # extracted_responses_section wraps the text in --- fences (the exact f-string in the helper)
+    assert "Q1: the Louisiana Purchase" in responses_section
+    assert responses_section.count("---") == 2
+    # unknown student ⇒ no ELL designation (file-less path returns None)
+    assert ell_language is None
+
+
+def test_recover_grading_json_decode_error_paths():
+    """Pin the malformed-JSON recovery helper extracted from grade_assignment's except handler.
+    This path is NOT exercised by the golden net, so this test closes that coverage gap:
+    regex-salvages score/letter_grade/feedback when present, else returns the generic ERROR dict.
+    """
+    err = json.JSONDecodeError("Expecting value", "doc", 0)
+
+    # (a) salvageable: score + letter_grade (+ long-enough feedback) recovered via regex
+    text = ('{"score": 85, "letter_grade": "B", '
+            '"feedback": "This is a sufficiently long feedback string for the student to read."}')
+    rec = _recover_grading_json_decode_error(text, err)
+    assert rec["score"] == 85
+    assert rec["letter_grade"] == "B"
+    assert rec["json_recovery"] is True
+    assert "sufficiently long feedback" in rec["feedback"]
+
+    # (b) unsalvageable: no score/grade ⇒ generic ERROR result (no json_recovery key)
+    bad = _recover_grading_json_decode_error("this is not json at all", err)
+    assert bad["score"] == 0
+    assert bad["letter_grade"] == "ERROR"
+    assert "json_recovery" not in bad
+    assert "invalid JSON" in bad["feedback"]
