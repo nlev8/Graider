@@ -356,6 +356,279 @@ def _apply_table_header_style(row, style):
                     run.font.color.rgb = text_color
 
 
+def _process_visual_block(doc, block, block_type):
+    """Render a single visualization content block (math, number_line, coordinate_plane,
+    graph, box_plot, shape, function_graph, circle, polygon, histogram, pie_chart, dot_plot,
+    stem_and_leaf, venn_diagram, protractor, …) into the docx, swallowing per-block render
+    failures to a placeholder + Sentry. Extracted verbatim (de-indented) from
+    create_document_docx (Code Quality 6→7 function-split)."""
+    if block_type == "math":
+        try:
+            from backend.services.visualization import render_latex, add_image_to_docx
+            latex = block.get("latex", "")
+            font_size = block.get("font_size", 20)
+            img = render_latex(latex, font_size=font_size)
+            add_image_to_docx(doc, img, width_inches=4)
+        except Exception as e:
+            doc.add_paragraph("[Math image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "number_line":
+        try:
+            from backend.services.visualization import create_number_line, add_image_to_docx
+            img = create_number_line(
+                min_val=block.get("min", -10),
+                max_val=block.get("max", 10),
+                points=block.get("points"),
+                labels=block.get("labels"),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=6)
+        except Exception as e:
+            doc.add_paragraph("[Number line image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "coordinate_plane":
+        try:
+            from backend.services.visualization import create_coordinate_plane, add_image_to_docx
+            img = create_coordinate_plane(
+                x_range=tuple(block.get("x_range", [-10, 10])),
+                y_range=tuple(block.get("y_range", [-10, 10])),
+                points=[tuple(p) for p in block.get("points", [])] if block.get("points") else None,
+                labels=block.get("labels"),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=5)
+        except Exception as e:
+            doc.add_paragraph("[Coordinate plane image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "graph":
+        try:
+            from backend.services.visualization import (
+                create_bar_chart, create_line_graph, create_scatter_plot, add_image_to_docx
+            )
+            graph_type = block.get("graph_type", "bar")
+            if graph_type == "bar":
+                img = create_bar_chart(
+                    categories=block.get("categories", []),
+                    values=block.get("values", []),
+                    title=block.get("title"),
+                    x_label=block.get("x_label"),
+                    y_label=block.get("y_label"),
+                    blank=block.get("blank", False),
+                )
+            elif graph_type == "line":
+                img = create_line_graph(
+                    x_data=block.get("x_data", []),
+                    y_data=block.get("y_data", []),
+                    title=block.get("title"),
+                    x_label=block.get("x_label"),
+                    y_label=block.get("y_label"),
+                    blank=block.get("blank", False),
+                )
+            elif graph_type == "scatter":
+                img = create_scatter_plot(
+                    x_data=block.get("x_data", []),
+                    y_data=block.get("y_data", []),
+                    title=block.get("title"),
+                    x_label=block.get("x_label"),
+                    y_label=block.get("y_label"),
+                    show_trend=block.get("show_trend", False),
+                    blank=block.get("blank", False),
+                )
+            else:
+                doc.add_paragraph(f"[Unknown graph type: {graph_type}]")
+                return
+            add_image_to_docx(doc, img, width_inches=5)
+        except Exception as e:
+            doc.add_paragraph("[Graph image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "box_plot":
+        try:
+            from backend.services.visualization import create_box_plot, add_image_to_docx
+            img = create_box_plot(
+                data=block.get("data", []),
+                labels=block.get("labels"),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=5)
+        except Exception as e:
+            doc.add_paragraph("[Box plot image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "shape":
+        try:
+            from backend.services.visualization import create_triangle, create_rectangle, add_image_to_docx
+            shape_type = block.get("shape_type", "triangle")
+            if shape_type == "triangle":
+                img = create_triangle(
+                    base=block.get("base", 6),
+                    height=block.get("height", 4),
+                    title=block.get("title"),
+                    blank=block.get("blank", False),
+                )
+            elif shape_type == "rectangle":
+                img = create_rectangle(
+                    width=block.get("width", 6),
+                    height=block.get("height", 4),
+                    title=block.get("title"),
+                    blank=block.get("blank", False),
+                )
+            else:
+                doc.add_paragraph(f"[Unknown shape type: {shape_type}]")
+                return
+            add_image_to_docx(doc, img, width_inches=4)
+        except Exception as e:
+            doc.add_paragraph("[Shape image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "function_graph":
+        try:
+            from backend.services.visualization import create_function_graph, add_image_to_docx
+            img = create_function_graph(
+                expressions=block.get("expressions", []),
+                x_range=tuple(block.get("x_range", (-10, 10))),
+                y_range=tuple(block["y_range"]) if block.get("y_range") else None,
+                title=block.get("title"),
+                show_grid=block.get("show_grid", True),
+                labels=block.get("labels"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=5)
+        except Exception as e:
+            doc.add_paragraph("[Function graph image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "circle":
+        try:
+            from backend.services.visualization import create_circle, add_image_to_docx
+            img = create_circle(
+                radius=block.get("radius", 5),
+                center=tuple(block.get("center", (0, 0))),
+                show_radius=block.get("show_radius", True),
+                show_diameter=block.get("show_diameter", False),
+                show_area=block.get("show_area", False),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=4)
+        except Exception as e:
+            doc.add_paragraph("[Circle image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "polygon":
+        try:
+            from backend.services.visualization import create_polygon, add_image_to_docx
+            img = create_polygon(
+                sides=block.get("sides", 5),
+                side_length=block.get("side_length", 4),
+                show_labels=block.get("show_labels", True),
+                show_dimensions=block.get("show_dimensions", True),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=4)
+        except Exception as e:
+            doc.add_paragraph("[Polygon image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "histogram":
+        try:
+            from backend.services.visualization import create_histogram, add_image_to_docx
+            img = create_histogram(
+                data=block.get("data", []),
+                bins=block.get("bins", 10),
+                title=block.get("title"),
+                x_label=block.get("x_label"),
+                y_label=block.get("y_label", "Frequency"),
+                show_values=block.get("show_values", True),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=5)
+        except Exception as e:
+            doc.add_paragraph("[Histogram image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "pie_chart":
+        try:
+            from backend.services.visualization import create_pie_chart, add_image_to_docx
+            img = create_pie_chart(
+                categories=block.get("categories", []),
+                values=block.get("values", []),
+                title=block.get("title"),
+                show_percentages=block.get("show_percentages", True),
+                explode=block.get("explode"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=5)
+        except Exception as e:
+            doc.add_paragraph("[Pie chart image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "dot_plot":
+        try:
+            from backend.services.visualization import create_dot_plot, add_image_to_docx
+            img = create_dot_plot(
+                categories=block.get("categories"),
+                dots=block.get("dots"),
+                min_val=block.get("min_val", 0),
+                max_val=block.get("max_val", 10),
+                step=block.get("step", 1),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=5)
+        except Exception as e:
+            doc.add_paragraph("[Dot plot image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "stem_and_leaf":
+        try:
+            from backend.services.visualization import create_stem_and_leaf, add_image_to_docx
+            img = create_stem_and_leaf(
+                data=block.get("data", []),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=4)
+        except Exception as e:
+            doc.add_paragraph("[Stem-and-leaf plot generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type == "venn_diagram":
+        try:
+            from backend.services.visualization import create_venn_diagram, add_image_to_docx
+            img = create_venn_diagram(
+                sets=block.get("sets", 2),
+                labels=block.get("labels"),
+                regions=block.get("regions"),
+                title=block.get("title"),
+                blank=block.get("blank", False),
+            )
+            add_image_to_docx(doc, img, width_inches=4.5)
+        except Exception as e:
+            doc.add_paragraph("[Venn diagram generation failed]")
+            sentry_sdk.capture_exception(e)
+
+    elif block_type in ("protractor", "angle_protractor"):
+        try:
+            from backend.services.visualization import create_protractor, add_image_to_docx
+            img = create_protractor(
+                given_angle=block.get("given_angle", 45),
+                show_answer=not block.get("blank", False),
+                title=block.get("title"),
+            )
+            add_image_to_docx(doc, img, width_inches=3.5)
+        except Exception as e:
+            doc.add_paragraph("[Protractor image generation failed]")
+            sentry_sdk.capture_exception(e)
+
+
 def create_document_docx(filepath, title, content_blocks, style):
     """Build a .docx file from structured content blocks with style applied.
 
@@ -432,271 +705,8 @@ def create_document_docx(filepath, title, content_blocks, style):
 
             doc.add_paragraph()  # spacing after table
 
-        elif block_type == "math":
-            try:
-                from backend.services.visualization import render_latex, add_image_to_docx
-                latex = block.get("latex", "")
-                font_size = block.get("font_size", 20)
-                img = render_latex(latex, font_size=font_size)
-                add_image_to_docx(doc, img, width_inches=4)
-            except Exception as e:
-                doc.add_paragraph("[Math image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "number_line":
-            try:
-                from backend.services.visualization import create_number_line, add_image_to_docx
-                img = create_number_line(
-                    min_val=block.get("min", -10),
-                    max_val=block.get("max", 10),
-                    points=block.get("points"),
-                    labels=block.get("labels"),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=6)
-            except Exception as e:
-                doc.add_paragraph("[Number line image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "coordinate_plane":
-            try:
-                from backend.services.visualization import create_coordinate_plane, add_image_to_docx
-                img = create_coordinate_plane(
-                    x_range=tuple(block.get("x_range", [-10, 10])),
-                    y_range=tuple(block.get("y_range", [-10, 10])),
-                    points=[tuple(p) for p in block.get("points", [])] if block.get("points") else None,
-                    labels=block.get("labels"),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=5)
-            except Exception as e:
-                doc.add_paragraph("[Coordinate plane image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "graph":
-            try:
-                from backend.services.visualization import (
-                    create_bar_chart, create_line_graph, create_scatter_plot, add_image_to_docx
-                )
-                graph_type = block.get("graph_type", "bar")
-                if graph_type == "bar":
-                    img = create_bar_chart(
-                        categories=block.get("categories", []),
-                        values=block.get("values", []),
-                        title=block.get("title"),
-                        x_label=block.get("x_label"),
-                        y_label=block.get("y_label"),
-                        blank=block.get("blank", False),
-                    )
-                elif graph_type == "line":
-                    img = create_line_graph(
-                        x_data=block.get("x_data", []),
-                        y_data=block.get("y_data", []),
-                        title=block.get("title"),
-                        x_label=block.get("x_label"),
-                        y_label=block.get("y_label"),
-                        blank=block.get("blank", False),
-                    )
-                elif graph_type == "scatter":
-                    img = create_scatter_plot(
-                        x_data=block.get("x_data", []),
-                        y_data=block.get("y_data", []),
-                        title=block.get("title"),
-                        x_label=block.get("x_label"),
-                        y_label=block.get("y_label"),
-                        show_trend=block.get("show_trend", False),
-                        blank=block.get("blank", False),
-                    )
-                else:
-                    doc.add_paragraph(f"[Unknown graph type: {graph_type}]")
-                    continue
-                add_image_to_docx(doc, img, width_inches=5)
-            except Exception as e:
-                doc.add_paragraph("[Graph image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "box_plot":
-            try:
-                from backend.services.visualization import create_box_plot, add_image_to_docx
-                img = create_box_plot(
-                    data=block.get("data", []),
-                    labels=block.get("labels"),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=5)
-            except Exception as e:
-                doc.add_paragraph("[Box plot image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "shape":
-            try:
-                from backend.services.visualization import create_triangle, create_rectangle, add_image_to_docx
-                shape_type = block.get("shape_type", "triangle")
-                if shape_type == "triangle":
-                    img = create_triangle(
-                        base=block.get("base", 6),
-                        height=block.get("height", 4),
-                        title=block.get("title"),
-                        blank=block.get("blank", False),
-                    )
-                elif shape_type == "rectangle":
-                    img = create_rectangle(
-                        width=block.get("width", 6),
-                        height=block.get("height", 4),
-                        title=block.get("title"),
-                        blank=block.get("blank", False),
-                    )
-                else:
-                    doc.add_paragraph(f"[Unknown shape type: {shape_type}]")
-                    continue
-                add_image_to_docx(doc, img, width_inches=4)
-            except Exception as e:
-                doc.add_paragraph("[Shape image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "function_graph":
-            try:
-                from backend.services.visualization import create_function_graph, add_image_to_docx
-                img = create_function_graph(
-                    expressions=block.get("expressions", []),
-                    x_range=tuple(block.get("x_range", (-10, 10))),
-                    y_range=tuple(block["y_range"]) if block.get("y_range") else None,
-                    title=block.get("title"),
-                    show_grid=block.get("show_grid", True),
-                    labels=block.get("labels"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=5)
-            except Exception as e:
-                doc.add_paragraph("[Function graph image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "circle":
-            try:
-                from backend.services.visualization import create_circle, add_image_to_docx
-                img = create_circle(
-                    radius=block.get("radius", 5),
-                    center=tuple(block.get("center", (0, 0))),
-                    show_radius=block.get("show_radius", True),
-                    show_diameter=block.get("show_diameter", False),
-                    show_area=block.get("show_area", False),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=4)
-            except Exception as e:
-                doc.add_paragraph("[Circle image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "polygon":
-            try:
-                from backend.services.visualization import create_polygon, add_image_to_docx
-                img = create_polygon(
-                    sides=block.get("sides", 5),
-                    side_length=block.get("side_length", 4),
-                    show_labels=block.get("show_labels", True),
-                    show_dimensions=block.get("show_dimensions", True),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=4)
-            except Exception as e:
-                doc.add_paragraph("[Polygon image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "histogram":
-            try:
-                from backend.services.visualization import create_histogram, add_image_to_docx
-                img = create_histogram(
-                    data=block.get("data", []),
-                    bins=block.get("bins", 10),
-                    title=block.get("title"),
-                    x_label=block.get("x_label"),
-                    y_label=block.get("y_label", "Frequency"),
-                    show_values=block.get("show_values", True),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=5)
-            except Exception as e:
-                doc.add_paragraph("[Histogram image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "pie_chart":
-            try:
-                from backend.services.visualization import create_pie_chart, add_image_to_docx
-                img = create_pie_chart(
-                    categories=block.get("categories", []),
-                    values=block.get("values", []),
-                    title=block.get("title"),
-                    show_percentages=block.get("show_percentages", True),
-                    explode=block.get("explode"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=5)
-            except Exception as e:
-                doc.add_paragraph("[Pie chart image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "dot_plot":
-            try:
-                from backend.services.visualization import create_dot_plot, add_image_to_docx
-                img = create_dot_plot(
-                    categories=block.get("categories"),
-                    dots=block.get("dots"),
-                    min_val=block.get("min_val", 0),
-                    max_val=block.get("max_val", 10),
-                    step=block.get("step", 1),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=5)
-            except Exception as e:
-                doc.add_paragraph("[Dot plot image generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "stem_and_leaf":
-            try:
-                from backend.services.visualization import create_stem_and_leaf, add_image_to_docx
-                img = create_stem_and_leaf(
-                    data=block.get("data", []),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=4)
-            except Exception as e:
-                doc.add_paragraph("[Stem-and-leaf plot generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type == "venn_diagram":
-            try:
-                from backend.services.visualization import create_venn_diagram, add_image_to_docx
-                img = create_venn_diagram(
-                    sets=block.get("sets", 2),
-                    labels=block.get("labels"),
-                    regions=block.get("regions"),
-                    title=block.get("title"),
-                    blank=block.get("blank", False),
-                )
-                add_image_to_docx(doc, img, width_inches=4.5)
-            except Exception as e:
-                doc.add_paragraph("[Venn diagram generation failed]")
-                sentry_sdk.capture_exception(e)
-
-        elif block_type in ("protractor", "angle_protractor"):
-            try:
-                from backend.services.visualization import create_protractor, add_image_to_docx
-                img = create_protractor(
-                    given_angle=block.get("given_angle", 45),
-                    show_answer=not block.get("blank", False),
-                    title=block.get("title"),
-                )
-                add_image_to_docx(doc, img, width_inches=3.5)
-            except Exception as e:
-                doc.add_paragraph("[Protractor image generation failed]")
-                sentry_sdk.capture_exception(e)
+        else:
+            _process_visual_block(doc, block, block_type)
 
     doc.save(filepath)
 
