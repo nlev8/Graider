@@ -120,7 +120,7 @@ def test_per_question_scores_emit_dok_at_every_write_site():
     published_content.content.questions[i].dok to
     student_submissions.results.questions[i].dok.
 
-    There are three write sites in grade_portal_submission_sync:
+    There are three write sites (in the score-calculation loop):
       1. WRITTEN_TYPES branch (AI grading result)
       2. WRITTEN_TYPES error branch (grading error fallback)
       3. Instant grading branch (MC/TF/matching)
@@ -128,10 +128,15 @@ def test_per_question_scores_emit_dok_at_every_write_site():
     Without this passthrough, the SubmissionDetail per-question response
     has no DOK to surface (Codex round 1 MAJOR — caught that the original
     spec missed the upstream writer).
+
+    CQ7 god-function split: the score-calculation loop (and thus all three
+    per_question_scores.append sites) was extracted from
+    grade_portal_submission_sync into the module-level helper
+    _finalize_portal_grading. This test now inspects the helper's source.
     """
     import inspect
-    from backend.services.portal_grading import grade_portal_submission_sync
-    src = inspect.getsource(grade_portal_submission_sync)
+    from backend.services.portal_grading import _finalize_portal_grading
+    src = inspect.getsource(_finalize_portal_grading)
 
     # The function appends per_question_scores in 3 places (AI, error, instant).
     # Pin the count so a future refactor doesn't silently drop a write site.
