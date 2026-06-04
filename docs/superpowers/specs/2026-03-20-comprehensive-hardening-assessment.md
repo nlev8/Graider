@@ -1311,3 +1311,68 @@ e2e" — a 30-second `gh run list` + reading `e2e-nightly.yml` disproved it. Bot
 claim ("Test Coverage 6→7" mid-sprint, asserted without checking the e2e criterion) and the
 over-correction ("held at 6", trusting the legs) were measurement errors fixed by the same
 discipline: verify, don't assert and don't merely concur. **Honest current baseline: 7.35.**
+
+---
+
+# 2026-06-04 App.jsx Decomposition Sprint — file-LOC half of Code Quality 6→7 CLOSED; function-LOC half still OPEN (honest: Code Quality stays 6)
+
+**What shipped.** An 18-slice, behavior-preserving decomposition of `frontend/src/App.jsx`,
+the repo's last source file over 3,000 LOC. **App.jsx 4,811 → 2,931 LOC (−1,880, −39%)**,
+extracting **15 custom hooks** (`useTheme`, `useToasts`, `useAuthSession`, `useBillingRedirect`,
+`useAssignmentAutoSave`, `useGradingStatusPoll`, `useGradingToast`, `useEditedResultsAutoSave`,
+`useAssessmentAuthoring`, `useAssignmentBuilderActions`, `useTeacherDashboardActions`,
+`useResultsCurveAndEmail`, `useMarkerEditing`, `useDocImport`, `useSavedAssessmentActions`)
+and **3 pure-utils modules** (`utils/htmlHighlight.js`, `utils/markerHelpers.js`,
+`utils/assessmentDistribution.js`). PRs #647–#664.
+
+**Method (per slice).** Programmatic byte-verbatim extraction → `renderHook`/unit characterization
+test → full `npx vitest` + `npm run build` → a **4-agent adversarial verification workflow**
+(missed-free-variable hunter, byte-verbatim md5 diff, consumer-coverage/TDZ check, closure-hazard)
+→ dual-gate CI (9 checks) → manual merge. Every moved block was proven byte-identical by md5,
+not eyeball.
+
+**The bug the workflow caught that build + unit-tests + CI all missed.** Slice 15
+(`useMarkerEditing`) introduced a temporal-dead-zone `ReferenceError` — the factory hook was
+*called during render* and passed `applyAllHighlights`, a `const` declared later in App, throwing
+at mount and **white-screening the teacher dashboard**. The build passed (TDZ is a runtime error),
+the hook's own unit test passed (mounts in isolation), and all 9 CI checks passed (nothing
+rendered `<App/>`). Only the workflow's "mount the real `<App/>`" verifier surfaced it. Fix:
+place each factory call *after* its `const` deps. New permanent net added:
+`frontend/src/__tests__/App.mount.test.jsx` mounts the real shell and fails fast on any
+render-time crash — it has guarded every slice since (and proactively confirmed the slice-16
+`useDocImport` placement).
+
+## The honest score outcome: Code Quality stays at 6 (NOT 7)
+
+The Code Quality **level-7** anchor (`2026-06-02-hardening-rubric-anchors.md` line 101) is
+*"No file >3,000 LOC; **no function >300 LOC**; a Flask-free service layer exists."* This sprint
+closes the **file-LOC half**:
+
+- **No source file >3,000 LOC — NOW MET.** Verified: the largest source file is
+  `frontend/src/tabs/AnalyticsTab.jsx` at 2,954, with `App.jsx` at 2,931 — every file is <3,000.
+
+But the **function-LOC half is still open**, so the dimension does **not** advance:
+
+- **`grade_assignment` = 407 LOC** and **`grade_multipass` = 363 LOC** (both in
+  `backend/services/grading_pipeline.py`) remain **>300 LOC**. Rubric line 107 is explicit:
+  Code Quality "cannot reach 7 until `App.jsx` drops below 3,000 **AND**
+  `grade_assignment`/`grade_multipass` drop below 300."
+
+**Therefore Code Quality remains 6; overall stays 7.35.** The 2026-06-03 re-score named
+"App.jsx <3,000" as *the* 6→7 lever, but the mechanical anchor shows that framing was
+incomplete — it was always App.jsx<3,000 **and** the two grading god-functions. This is the
+same optimism the doc's own history warns about; the rubric anchor caught it before it was
+shipped as a false "6→7" claim.
+
+## Remaining work to actually flip Code Quality 6→7
+
+Split the two grading god-functions in `backend/services/grading_pipeline.py` into named
+pipeline-phase helpers, each <300 LOC, behind the existing golden-net + prompt-snapshot nets
+(the same byte-identical-extraction discipline used for App.jsx, but on the CRITICAL grading
+path so the golden net is mandatory). `grade_assignment` (407) and `grade_multipass` (363)
+are the only two functions >300 LOC blocking the point. Once both are <300, Code Quality 6→7
+is mechanically earned and overall moves ~7.35 → ~7.45.
+
+**Net:** a real, verified milestone (the largest file is no longer a 4.8k-line god-component;
+it's now a thin shell over 15 tested hooks + 3 pure utils) — but an honest one: it is half of
+the 6→7 lever, not the whole of it.
