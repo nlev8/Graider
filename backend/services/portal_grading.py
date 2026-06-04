@@ -461,6 +461,226 @@ def fetch_submission_full_context(path_type, submission_id, teacher_id):
     })
 
 
+def _finalize_portal_grading(all_questions, answers, written_results, ai_notes, ai_model,
+                             history_context, student_info, assessment, teacher_config, teacher_id,
+                             submission_id, repo):
+    """Combine instant + written scores, generate overall feedback, build
+    the result record, persist it to teacher storage + the submission row,
+    update student history, and emit the AUDIT-complete log.
+
+    Extracted verbatim from grade_portal_submission_sync (CQ7 god-function
+    split). Called inside the parent's try/except; raises propagate to the
+    parent's failure handler unchanged. Behavior pinned by
+    tests/test_portal_grading_golden.py.
+    """
+    # Calculate scores: combine instant (MC/TF) + written results
+    total_score = 0
+    total_possible = 0
+    per_question_scores = []
+    written_idx = 0
+
+    for q in all_questions:
+        q_type = q.get("type", "multiple_choice")
+        points = q.get("points", 1)
+        total_possible += points
+        answer_key = q.get("_answer_key", "")
+        student_answer = answers.get(answer_key, "")
+
+        if q_type in WRITTEN_TYPES:
+            # Use AI grading result
+            if written_idx < len(written_results):
+                wr = written_results[written_idx]
+                grade = wr.get("grade", {})
+                earned = grade.get("score", 0)
+                total_score += earned
+                per_question_scores.append({
+                    "question": q.get("question", ""),
+                    "type": q_type,
+                    "points_earned": earned,
+                    "points_possible": points,
+                    "reasoning": grade.get("reasoning", ""),
+                    "quality": grade.get("quality", ""),
+                    "student_answer": student_answer,
+                    "standard": q.get("standard"),
+                    "dok": q.get("dok"),
+                })
+                written_idx += 1
+            else:
+                per_question_scores.append({
+                    "question": q.get("question", ""),
+                    "type": q_type,
+                    "points_earned": 0,
+                    "points_possible": points,
+                    "reasoning": "Grading error",
+                    "student_answer": student_answer,
+                    "standard": q.get("standard"),
+                    "dok": q.get("dok"),
+                })
+        else:
+            # Instant grading (MC/TF/matching) — re-score deterministically
+            correct_answer = q.get("answer", "")
+            is_correct = False
+            earned = 0
+
+            if q_type == "multiple_choice":
+                ca = correct_answer.upper().strip()[:1] if correct_answer else ""
+                sa = ""
+                if isinstance(student_answer, int):
+                    sa = chr(65 + student_answer)
+                elif isinstance(student_answer, str):
+                    sa = student_answer.upper().strip()[:1]
+                is_correct = sa == ca
+                earned = points if is_correct else 0
+
+            elif q_type == "true_false":
+                is_correct = str(student_answer).lower() == str(correct_answer).lower()
+                earned = points if is_correct else 0
+
+            elif q_type == "matching":
+                # Matching uses per-term keys: "{sIdx}-{qIdx}-match-{tIdx}"
+                terms = q.get("terms", [])
+                definitions = q.get("definitions", [])
+                correct_matches = q.get("answer", {})
+                total_matches = len(terms)
+                correct_count = 0
+                base_key = answer_key  # e.g., "0-2"
+                for tIdx in range(total_matches):
+                    match_key = f"{base_key}-match-{tIdx}"
+                    student_match = answers.get(match_key, "")
+                    term = terms[tIdx] if tIdx < len(terms) else ""
+                    correct_letter = None
+                    if term in correct_matches:
+                        correct_def = correct_matches[term]
+                        try:
+                            def_idx = definitions.index(correct_def)
+                            correct_letter = chr(65 + def_idx)
+                        except ValueError:
+                            pass
+                    if correct_letter and student_match.upper() == correct_letter:
+                        correct_count += 1
+                earned = round(points * (correct_count / total_matches)) if total_matches > 0 else 0
+                is_correct = correct_count == total_matches
+
+            total_score += earned
+            per_question_scores.append({
+                "question": q.get("question", ""),
+                "type": q_type,
+                "points_earned": earned,
+                "points_possible": points,
+                "student_answer": student_answer,
+                "correct_answer": correct_answer,
+                "is_correct": is_correct,
+                "standard": q.get("standard"),
+                "dok": q.get("dok"),
+            })
+
+    # Generate overall feedback via Pass 3
+    feedback_text = ""
+    breakdown = {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0}
+    student_responses = []
+    for q in all_questions:
+        answer_key = q.get("_answer_key", "")
+        student_responses.append({
+            "question": q.get("question", ""),
+            "answer": answers.get(answer_key, ""),
+        })
+
+    percentage = round((total_score / total_possible * 100) if total_possible > 0 else 0)
+    letter = _score_to_letter(percentage)
+
+    feedback_result = _safe_generate_feedback(
+        question_results=written_results,
+        total_score=total_score,
+        total_possible=total_possible,
+        letter_grade=letter,
+        grade_level=teacher_config.get("grade_level", ""),
+        subject=teacher_config.get("subject", ""),
+        teacher_instructions=ai_notes,
+        ai_model=ai_model,
+        ai_provider="anthropic" if ai_model.startswith("claude") else "gemini" if ai_model.startswith("gemini") else "openai",
+        student_responses=student_responses,
+        student_history=history_context,
+        grading_style=teacher_config.get("grading_style", "standard"),
+        student_name=student_info.get("student_name", ""),
+    )
+    feedback_text = feedback_result.get("feedback", "") or feedback_text
+    breakdown = feedback_result.get("rubric_breakdown", breakdown)
+
+    # Build result record in analytics-compatible format
+    result_record = build_result_record(
+        student_name=student_info.get("student_name", ""),
+        student_id=student_info.get("student_id", ""),
+        assignment_title=assessment.get("title", ""),
+        score=total_score,
+        total_possible=total_possible,
+        period=teacher_config.get("period", ""),
+        feedback=feedback_text,
+        breakdown=breakdown,
+        per_question_scores=per_question_scores,
+        submission_id=submission_id,
+    )
+
+    # Save to teacher's results storage (for Results tab + Analytics)
+    # Use per-teacher lock to prevent race conditions with concurrent submissions.
+    # Outer try catches load/lock failures; inner _safe_save_results covers save_results.
+    try:
+        from backend.grading.state import load_saved_results, _get_lock
+        with _get_lock(teacher_id):
+            results = load_saved_results(teacher_id)
+            results = _upsert_result_by_submission_id(results, result_record)  # Phase 4.1 PR2: idempotent upsert
+            _safe_save_results(results, teacher_id)
+    except Exception as e:
+        logger.error("Failed to load/lock for result save: %s", str(e))
+        sentry_sdk.capture_exception(e)
+
+    # Update Supabase submission record with full grading (single write includes
+    # status='graded' so teacher dashboards and retry-detection both observe it).
+    standards_mastery = _build_standards_mastery(per_question_scores)
+    repo.update(submission_id, {
+        "results": {
+            "questions": per_question_scores,
+            "score": total_score,
+            "total_points": total_possible,
+            "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
+            "feedback_summary": feedback_text,
+            "breakdown": breakdown,
+            "grading_source": "multipass",
+            "standards_mastery": standards_mastery,
+        },
+        "score": total_score,
+        "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
+        "status": "graded",
+    })
+
+    # Update student history for writing style tracking
+    try:
+        from backend.storage import save_student_history, load_student_history
+        history = load_student_history(teacher_id, student_info.get("student_id")) or {}
+        if not isinstance(history, dict):
+            history = {}
+        scores = history.get("scores", [])
+        scores.append({
+            "assignment": assessment.get("title", ""),
+            "score": round((total_score / total_possible * 100) if total_possible > 0 else 0),
+            "date": datetime.now(timezone.utc).isoformat(),
+        })
+        history["scores"] = scores[-20:]  # Keep last 20
+        save_student_history(teacher_id, student_info.get("student_id"), history)
+    except Exception as e:
+        logger.error("Failed to update student history: %s", str(e))
+
+    # FERPA: hash both submission_id and student_name (Codex MAJOR #14
+    # round-6). AUDIT-tier log so it's prominent in BetterStack; raw IDs
+    # would leak via Sentry breadcrumbs on any subsequent capture.
+    logger.info(
+        "AUDIT: Portal grading complete: submission=%s student=%s score=%d/%d",
+        hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
+        hashlib.sha256(str(student_info.get("student_name", "")).encode()).hexdigest()[:8],
+        total_score,
+        total_possible,
+    )
+
+
 def grade_portal_submission_sync(
     submission_id,
     assessment,
@@ -662,211 +882,10 @@ def grade_portal_submission_sync(
             student_name=student_info.get("student_name", ""),
         )
 
-        # Calculate scores: combine instant (MC/TF) + written results
-        total_score = 0
-        total_possible = 0
-        per_question_scores = []
-        written_idx = 0
-
-        for q in all_questions:
-            q_type = q.get("type", "multiple_choice")
-            points = q.get("points", 1)
-            total_possible += points
-            answer_key = q.get("_answer_key", "")
-            student_answer = answers.get(answer_key, "")
-
-            if q_type in WRITTEN_TYPES:
-                # Use AI grading result
-                if written_idx < len(written_results):
-                    wr = written_results[written_idx]
-                    grade = wr.get("grade", {})
-                    earned = grade.get("score", 0)
-                    total_score += earned
-                    per_question_scores.append({
-                        "question": q.get("question", ""),
-                        "type": q_type,
-                        "points_earned": earned,
-                        "points_possible": points,
-                        "reasoning": grade.get("reasoning", ""),
-                        "quality": grade.get("quality", ""),
-                        "student_answer": student_answer,
-                        "standard": q.get("standard"),
-                        "dok": q.get("dok"),
-                    })
-                    written_idx += 1
-                else:
-                    per_question_scores.append({
-                        "question": q.get("question", ""),
-                        "type": q_type,
-                        "points_earned": 0,
-                        "points_possible": points,
-                        "reasoning": "Grading error",
-                        "student_answer": student_answer,
-                        "standard": q.get("standard"),
-                        "dok": q.get("dok"),
-                    })
-            else:
-                # Instant grading (MC/TF/matching) — re-score deterministically
-                correct_answer = q.get("answer", "")
-                is_correct = False
-                earned = 0
-
-                if q_type == "multiple_choice":
-                    ca = correct_answer.upper().strip()[:1] if correct_answer else ""
-                    sa = ""
-                    if isinstance(student_answer, int):
-                        sa = chr(65 + student_answer)
-                    elif isinstance(student_answer, str):
-                        sa = student_answer.upper().strip()[:1]
-                    is_correct = sa == ca
-                    earned = points if is_correct else 0
-
-                elif q_type == "true_false":
-                    is_correct = str(student_answer).lower() == str(correct_answer).lower()
-                    earned = points if is_correct else 0
-
-                elif q_type == "matching":
-                    # Matching uses per-term keys: "{sIdx}-{qIdx}-match-{tIdx}"
-                    terms = q.get("terms", [])
-                    definitions = q.get("definitions", [])
-                    correct_matches = q.get("answer", {})
-                    total_matches = len(terms)
-                    correct_count = 0
-                    base_key = answer_key  # e.g., "0-2"
-                    for tIdx in range(total_matches):
-                        match_key = f"{base_key}-match-{tIdx}"
-                        student_match = answers.get(match_key, "")
-                        term = terms[tIdx] if tIdx < len(terms) else ""
-                        correct_letter = None
-                        if term in correct_matches:
-                            correct_def = correct_matches[term]
-                            try:
-                                def_idx = definitions.index(correct_def)
-                                correct_letter = chr(65 + def_idx)
-                            except ValueError:
-                                pass
-                        if correct_letter and student_match.upper() == correct_letter:
-                            correct_count += 1
-                    earned = round(points * (correct_count / total_matches)) if total_matches > 0 else 0
-                    is_correct = correct_count == total_matches
-
-                total_score += earned
-                per_question_scores.append({
-                    "question": q.get("question", ""),
-                    "type": q_type,
-                    "points_earned": earned,
-                    "points_possible": points,
-                    "student_answer": student_answer,
-                    "correct_answer": correct_answer,
-                    "is_correct": is_correct,
-                    "standard": q.get("standard"),
-                    "dok": q.get("dok"),
-                })
-
-        # Generate overall feedback via Pass 3
-        feedback_text = ""
-        breakdown = {"content_accuracy": 0, "completeness": 0, "writing_quality": 0, "effort_engagement": 0}
-        student_responses = []
-        for q in all_questions:
-            answer_key = q.get("_answer_key", "")
-            student_responses.append({
-                "question": q.get("question", ""),
-                "answer": answers.get(answer_key, ""),
-            })
-
-        percentage = round((total_score / total_possible * 100) if total_possible > 0 else 0)
-        letter = _score_to_letter(percentage)
-
-        feedback_result = _safe_generate_feedback(
-            question_results=written_results,
-            total_score=total_score,
-            total_possible=total_possible,
-            letter_grade=letter,
-            grade_level=teacher_config.get("grade_level", ""),
-            subject=teacher_config.get("subject", ""),
-            teacher_instructions=ai_notes,
-            ai_model=ai_model,
-            ai_provider="anthropic" if ai_model.startswith("claude") else "gemini" if ai_model.startswith("gemini") else "openai",
-            student_responses=student_responses,
-            student_history=history_context,
-            grading_style=teacher_config.get("grading_style", "standard"),
-            student_name=student_info.get("student_name", ""),
-        )
-        feedback_text = feedback_result.get("feedback", "") or feedback_text
-        breakdown = feedback_result.get("rubric_breakdown", breakdown)
-
-        # Build result record in analytics-compatible format
-        result_record = build_result_record(
-            student_name=student_info.get("student_name", ""),
-            student_id=student_info.get("student_id", ""),
-            assignment_title=assessment.get("title", ""),
-            score=total_score,
-            total_possible=total_possible,
-            period=teacher_config.get("period", ""),
-            feedback=feedback_text,
-            breakdown=breakdown,
-            per_question_scores=per_question_scores,
-            submission_id=submission_id,
-        )
-
-        # Save to teacher's results storage (for Results tab + Analytics)
-        # Use per-teacher lock to prevent race conditions with concurrent submissions.
-        # Outer try catches load/lock failures; inner _safe_save_results covers save_results.
-        try:
-            from backend.grading.state import load_saved_results, _get_lock
-            with _get_lock(teacher_id):
-                results = load_saved_results(teacher_id)
-                results = _upsert_result_by_submission_id(results, result_record)  # Phase 4.1 PR2: idempotent upsert
-                _safe_save_results(results, teacher_id)
-        except Exception as e:
-            logger.error("Failed to load/lock for result save: %s", str(e))
-            sentry_sdk.capture_exception(e)
-
-        # Update Supabase submission record with full grading (single write includes
-        # status='graded' so teacher dashboards and retry-detection both observe it).
-        standards_mastery = _build_standards_mastery(per_question_scores)
-        repo.update(submission_id, {
-            "results": {
-                "questions": per_question_scores,
-                "score": total_score,
-                "total_points": total_possible,
-                "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
-                "feedback_summary": feedback_text,
-                "breakdown": breakdown,
-                "grading_source": "multipass",
-                "standards_mastery": standards_mastery,
-            },
-            "score": total_score,
-            "percentage": round((total_score / total_possible * 100) if total_possible > 0 else 0),
-            "status": "graded",
-        })
-
-        # Update student history for writing style tracking
-        try:
-            from backend.storage import save_student_history, load_student_history
-            history = load_student_history(teacher_id, student_info.get("student_id")) or {}
-            if not isinstance(history, dict):
-                history = {}
-            scores = history.get("scores", [])
-            scores.append({
-                "assignment": assessment.get("title", ""),
-                "score": round((total_score / total_possible * 100) if total_possible > 0 else 0),
-                "date": datetime.now(timezone.utc).isoformat(),
-            })
-            history["scores"] = scores[-20:]  # Keep last 20
-            save_student_history(teacher_id, student_info.get("student_id"), history)
-        except Exception as e:
-            logger.error("Failed to update student history: %s", str(e))
-
-        # FERPA: hash both submission_id and student_name (Codex MAJOR #14
-        # round-6). AUDIT-tier log so it's prominent in BetterStack; raw IDs
-        # would leak via Sentry breadcrumbs on any subsequent capture.
-        logger.info(
-            "AUDIT: Portal grading complete: submission=%s student=%s score=%d/%d",
-            hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
-            hashlib.sha256(str(student_info.get("student_name", "")).encode()).hexdigest()[:8],
-            total_score,
-            total_possible,
+        _finalize_portal_grading(
+            all_questions, answers, written_results, ai_notes, ai_model,
+            history_context, student_info, assessment, teacher_config,
+            teacher_id, submission_id, repo,
         )
 
     except Exception as e:

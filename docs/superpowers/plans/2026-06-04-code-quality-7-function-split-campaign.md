@@ -4,10 +4,10 @@
 function below **300 LOC** (the level-7 anchor: *"No file >3,000 LOC; no function >300 LOC; a
 Flask-free service layer exists"*), behavior-preservingly.
 
-> **Status: IN PROGRESS — 12/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **6 backend
-> functions >300 LOC remain** — ALL the hard giants now: the 4 grading monsters
-> (`_run_grading_thread_inner` 1492, `extract_student_responses` 866, `grade_single_file` 626,
-> `grade_portal_submission_sync` 452) + the intertwined `assistant_chat`/`generate` pair (472/373,
+> **Status: IN PROGRESS — 13/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **5 backend
+> functions >300 LOC remain** — the hardest core: the 3 grading monsters
+> (`_run_grading_thread_inner` 1492, `extract_student_responses` 866, `grade_single_file` 626)
+> + the intertwined `assistant_chat`/`generate` pair (472/373,
 > `generate` is a nested closure). These need fresh-context dedicated sessions + new golden nets.
 > Code Quality stays **6** until ALL are <300 (and a frontend-JS function scan is run).
 
@@ -79,10 +79,11 @@ drift). Then:
 | #681 | `export_generated_assignment` (PDF section loop → `_render_assignment_pdf_sections`) | 439 → 168 | A |
 | #682 | `post_remediate` (personalized + shared paths → 2 helpers) | 471 → 236 | B |
 | #683 | `classlink_callback` 🔐 (student + teacher login tails → 2 helpers) | 318 → 234 | B |
+| #686 | `grade_portal_submission_sync` 🔴 (score+feedback+persist → `_finalize_portal_grading`) | 452 → 251 | B |
 
-### Remaining 6 (the harder half)
+### Remaining 5 (the harder half)
 - **Intertwined assistant route** (do together, last among route handlers): `generate` (373), `assistant_chat` (472). `generate` is a nested closure inside `assistant_chat` (1613–1985 ⊂ 1524–1995).
-- **Grading giants — write a golden net FIRST, then Codex co-planning** (no deterministic net today): `grade_portal_submission_sync` (452 🔴), `extract_student_responses` (866, shared mutable state across marker loops), `grade_single_file` (626, nested closure in `_run_grading_thread_inner`), `_run_grading_thread_inner` (1492, ThreadPoolExecutor orchestrator).
+- **Grading giants — write a golden net FIRST, then Codex co-planning** (no deterministic net today): ~~`grade_portal_submission_sync` (452 🔴)~~ ✅ #686 (golden net pins repo.update payload; extracted score+feedback+persist tail; left the latent `questions` bug #685), `extract_student_responses` (866, shared mutable state across marker loops), `grade_single_file` (626, nested closure in `_run_grading_thread_inner`), `_run_grading_thread_inner` (1492, ThreadPoolExecutor orchestrator).
 
 > The route handlers are doable with the established protocol; the 4 grading giants are the part
 > that genuinely needs fresh context + new nets. Pattern note for routes: helpers MUST be inserted
