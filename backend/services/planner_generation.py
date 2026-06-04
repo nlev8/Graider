@@ -614,54 +614,8 @@ Make the content SPECIFIC and DETAILED with real examples and facts."""
     return {"plan": plan, "method": "AI", "usage": usage}
 
 
-def generate_assessment_content(*, standards, config, assessment_config,
-                                content_only, content_sources, api_key, openai_context):
-    """Generate a standards-aligned assessment. Returns {"assessment", "method":
-    "AI", "usage"[, "warnings"]}; raises on any failure (the route maps it to a
-    500 — NO mock fallback). Preserves the wart that the _post_process_assignment
-    extra usage is discarded. Wave 6 Slice 11c - extracted from planner_routes.
-    """
-    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
-
-    if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
-        raise Exception("Missing or placeholder API Key")
-
-    adapter = OpenAIAdapter(api_key=api_key)
-
-    # Extract assessment configuration
-    assessment_type = assessment_config.get('type', 'quiz')
-    title = assessment_config.get('title', f'{config.get("subject", "Subject")} Assessment')
-    total_questions = assessment_config.get('totalQuestions', 15)
-    total_points = assessment_config.get('totalPoints', 30)
-    question_types = assessment_config.get('questionTypes', {
-        'multiple_choice': 10,
-        'short_answer': 3,
-        'extended_response': 2,
-        'true_false': 0,
-        'matching': 0,
-        'math_equation': 0,
-        'data_table': 0
-    })
-    points_per_type = assessment_config.get('pointsPerType', {
-        'multiple_choice': 1,
-        'short_answer': 2,
-        'extended_response': 4,
-        'true_false': 1,
-        'matching': 1,
-        'math_equation': 2,
-        'data_table': 3
-    })
-    dok_distribution = assessment_config.get('dokDistribution', {
-        '1': 3, '2': 6, '3': 4, '4': 2
-    })
-    target_period = assessment_config.get('targetPeriod', '')
-    section_categories = assessment_config.get('sectionCategories', {})
-
-    # Get global AI notes from config
-    global_ai_notes = config.get('globalAINotes', '')
-
-
-    # Build content sources context
+def _build_assessment_source_content(content_sources, content_only):
+    """Extracted verbatim from generate_assessment_content (Code Quality 6→7 split)."""
     source_content = ""
     if content_sources:
         source_content = "\n=== INSTRUCTIONAL CONTENT TO BASE QUESTIONS ON ===\n"
@@ -712,83 +666,11 @@ def generate_assessment_content(*, standards, config, assessment_config,
             source_content += "but do NOT create questions about topics not covered in the content above.\n\n"
         else:
             source_content += "IMPORTANT: Questions must directly relate to the content above. Reference specific vocabulary, examples, and concepts from the lessons.\n\n"
+    return source_content
 
-    # Build standards context
-    standards_context = []
-    for std in standards:
-        std_info = f"""
-Standard: {std.get('code', 'N/A')}
-Benchmark: {std.get('benchmark', 'N/A')}
-DOK Level: {std.get('dok', 2)}
-Topics: {', '.join(std.get('topics', []))}
-Vocabulary: {', '.join(std.get('vocabulary', [])[:10])}
-Learning Targets: {chr(10).join('- ' + lt for lt in std.get('learning_targets', [])[:3])}
-Sample Assessment: {std.get('sample_assessment', 'N/A')}
-"""
-        standards_context.append(std_info)
 
-    # DOK level descriptions for the prompt
-    dok_descriptions = """
-DOK LEVEL DESCRIPTIONS (Webb's Depth of Knowledge):
-
-DOK 1 - Recall & Reproduction:
-- Recall facts, terms, definitions
-- Identify, recognize, list, name
-- Simple one-step procedures
-- Math example: "What is the value of 3² + 4²?"
-- ELA example: "What is the definition of a metaphor?"
-- Science example: "What is the chemical symbol for water?"
-- Social Studies example: "What year did the Civil War begin?"
-
-DOK 2 - Skills & Concepts:
-- Compare, contrast, classify, organize
-- Make observations, collect data
-- Explain relationships, cause/effect
-- Math example: "Compare the slopes of y = 2x + 1 and y = 3x - 4. Which line is steeper?"
-- ELA example: "How does the author's use of dialogue in paragraph 3 reveal the character's motivation?"
-- Science example: "Based on the data table, describe the relationship between ramp height and average speed."
-- Social Studies example: "Compare the economies of the North and South before the Civil War."
-
-DOK 3 - Strategic Thinking:
-- Analyze, evaluate, synthesize
-- Draw conclusions, cite evidence
-- Develop a logical argument
-- Math example: "A store offers 20% off plus an additional 10% at checkout. A customer claims this is the same as 30% off. Use mathematics to prove or disprove this claim."
-- ELA example: "Using evidence from the text, analyze how the author's word choice creates a tone of urgency in the final paragraph."
-- Science example: "Design an experiment to test whether salt concentration affects the boiling point of water. Identify your variables and explain your procedure."
-- Social Studies example: "Using evidence from both documents, explain how economic differences contributed to sectional tensions leading to the Civil War."
-
-DOK 4 - Extended Thinking:
-- Design, create, connect across content
-- Research, investigate over time
-- Apply concepts to new situations
-- Math example: "Design a budget for a school fundraiser that must raise at least $500. Include revenue projections, expenses, and a break-even analysis with supporting calculations."
-- ELA example: "Write an argumentative essay evaluating whether social media has a net positive or negative effect on teen literacy. Cite at least three sources."
-- Science example: "Propose a solution to reduce nutrient runoff in Florida's waterways. Explain the science behind your solution and predict its environmental impact."
-- Social Studies example: "Analyze how Civil War-era economic patterns continue to influence regional differences in the United States today. Support your argument with historical and modern evidence."
-"""
-
-    # Question type instructions
-    question_type_instructions = """
-QUESTION TYPE GUIDANCE:
-- For most questions, DO NOT set question_type — the system assigns it from your text and structure.
-- Include "options" for multiple choice, "terms"/"definitions" for matching.
-- Write geometry dimensions clearly in text: "Find the area of a triangle with base 8 cm and height 5 cm"
-- Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
-- ONLY set question_type explicitly for complex types needing structured data:
-  data_table (include column_headers, row_labels, expected_data with ALL values, editable_columns for calculation tables),
-  box_plot (include data), dot_plot (include data), stem_and_leaf (include data),
-  bar_chart (include chart_data), transformations, fraction_model, probability_tree,
-  tape_diagram, venn_diagram, protractor,
-  multiselect (include options + correct indices array),
-  multi_part (include parts array with label, question_type, question, options, answer),
-  grid_match (include row_labels, column_labels, correct 2D array),
-  inline_dropdown (include dropdowns array with options + correct index)
-- Every question MUST include: "dok" (1-4), "standard" (code), "points", and answer.
-"""
-
-    # Build subject-specific question examples
-    subject_lower = config.get('subject', '').lower()
+def _subject_question_examples(subject_lower):
+    """Extracted verbatim from generate_assessment_content (Code Quality 6→7 split)."""
     subject_question_examples = ""
     if any(kw in subject_lower for kw in ['ela', 'english', 'reading', 'language arts', 'literature', 'writing']):
         subject_question_examples = """
@@ -919,6 +801,137 @@ Map analysis MC:
 
 CRITICAL: Include real geographic data and coordinates. Use the portal's interactive coordinate_plane or data_table components rather than asking students to draw maps.
 """
+    return subject_question_examples
+
+
+def generate_assessment_content(*, standards, config, assessment_config,
+                                content_only, content_sources, api_key, openai_context):
+    """Generate a standards-aligned assessment. Returns {"assessment", "method":
+    "AI", "usage"[, "warnings"]}; raises on any failure (the route maps it to a
+    500 — NO mock fallback). Preserves the wart that the _post_process_assignment
+    extra usage is discarded. Wave 6 Slice 11c - extracted from planner_routes.
+    """
+    from backend.services.llm_adapter import LLMRequest, Message, OpenAIAdapter, ResponseFormat, TextPart
+
+    if not api_key or api_key.strip() == "" or "your-key-here" in api_key:
+        raise Exception("Missing or placeholder API Key")
+
+    adapter = OpenAIAdapter(api_key=api_key)
+
+    # Extract assessment configuration
+    assessment_type = assessment_config.get('type', 'quiz')
+    title = assessment_config.get('title', f'{config.get("subject", "Subject")} Assessment')
+    total_questions = assessment_config.get('totalQuestions', 15)
+    total_points = assessment_config.get('totalPoints', 30)
+    question_types = assessment_config.get('questionTypes', {
+        'multiple_choice': 10,
+        'short_answer': 3,
+        'extended_response': 2,
+        'true_false': 0,
+        'matching': 0,
+        'math_equation': 0,
+        'data_table': 0
+    })
+    points_per_type = assessment_config.get('pointsPerType', {
+        'multiple_choice': 1,
+        'short_answer': 2,
+        'extended_response': 4,
+        'true_false': 1,
+        'matching': 1,
+        'math_equation': 2,
+        'data_table': 3
+    })
+    dok_distribution = assessment_config.get('dokDistribution', {
+        '1': 3, '2': 6, '3': 4, '4': 2
+    })
+    target_period = assessment_config.get('targetPeriod', '')
+    section_categories = assessment_config.get('sectionCategories', {})
+
+    # Get global AI notes from config
+    global_ai_notes = config.get('globalAINotes', '')
+
+
+    # Build content sources context
+    source_content = _build_assessment_source_content(content_sources, content_only)
+
+    # Build standards context
+    standards_context = []
+    for std in standards:
+        std_info = f"""
+Standard: {std.get('code', 'N/A')}
+Benchmark: {std.get('benchmark', 'N/A')}
+DOK Level: {std.get('dok', 2)}
+Topics: {', '.join(std.get('topics', []))}
+Vocabulary: {', '.join(std.get('vocabulary', [])[:10])}
+Learning Targets: {chr(10).join('- ' + lt for lt in std.get('learning_targets', [])[:3])}
+Sample Assessment: {std.get('sample_assessment', 'N/A')}
+"""
+        standards_context.append(std_info)
+
+    # DOK level descriptions for the prompt
+    dok_descriptions = """
+DOK LEVEL DESCRIPTIONS (Webb's Depth of Knowledge):
+
+DOK 1 - Recall & Reproduction:
+- Recall facts, terms, definitions
+- Identify, recognize, list, name
+- Simple one-step procedures
+- Math example: "What is the value of 3² + 4²?"
+- ELA example: "What is the definition of a metaphor?"
+- Science example: "What is the chemical symbol for water?"
+- Social Studies example: "What year did the Civil War begin?"
+
+DOK 2 - Skills & Concepts:
+- Compare, contrast, classify, organize
+- Make observations, collect data
+- Explain relationships, cause/effect
+- Math example: "Compare the slopes of y = 2x + 1 and y = 3x - 4. Which line is steeper?"
+- ELA example: "How does the author's use of dialogue in paragraph 3 reveal the character's motivation?"
+- Science example: "Based on the data table, describe the relationship between ramp height and average speed."
+- Social Studies example: "Compare the economies of the North and South before the Civil War."
+
+DOK 3 - Strategic Thinking:
+- Analyze, evaluate, synthesize
+- Draw conclusions, cite evidence
+- Develop a logical argument
+- Math example: "A store offers 20% off plus an additional 10% at checkout. A customer claims this is the same as 30% off. Use mathematics to prove or disprove this claim."
+- ELA example: "Using evidence from the text, analyze how the author's word choice creates a tone of urgency in the final paragraph."
+- Science example: "Design an experiment to test whether salt concentration affects the boiling point of water. Identify your variables and explain your procedure."
+- Social Studies example: "Using evidence from both documents, explain how economic differences contributed to sectional tensions leading to the Civil War."
+
+DOK 4 - Extended Thinking:
+- Design, create, connect across content
+- Research, investigate over time
+- Apply concepts to new situations
+- Math example: "Design a budget for a school fundraiser that must raise at least $500. Include revenue projections, expenses, and a break-even analysis with supporting calculations."
+- ELA example: "Write an argumentative essay evaluating whether social media has a net positive or negative effect on teen literacy. Cite at least three sources."
+- Science example: "Propose a solution to reduce nutrient runoff in Florida's waterways. Explain the science behind your solution and predict its environmental impact."
+- Social Studies example: "Analyze how Civil War-era economic patterns continue to influence regional differences in the United States today. Support your argument with historical and modern evidence."
+"""
+
+    # Question type instructions
+    question_type_instructions = """
+QUESTION TYPE GUIDANCE:
+- For most questions, DO NOT set question_type — the system assigns it from your text and structure.
+- Include "options" for multiple choice, "terms"/"definitions" for matching.
+- Write geometry dimensions clearly in text: "Find the area of a triangle with base 8 cm and height 5 cm"
+- Write equations clearly: "Graph y = 2x + 1 on the coordinate plane"
+- ONLY set question_type explicitly for complex types needing structured data:
+  data_table (include column_headers, row_labels, expected_data with ALL values, editable_columns for calculation tables),
+  box_plot (include data), dot_plot (include data), stem_and_leaf (include data),
+  bar_chart (include chart_data), transformations, fraction_model, probability_tree,
+  tape_diagram, venn_diagram, protractor,
+  multiselect (include options + correct indices array),
+  multi_part (include parts array with label, question_type, question, options, answer),
+  grid_match (include row_labels, column_labels, correct 2D array),
+  inline_dropdown (include dropdowns array with options + correct index)
+- Every question MUST include: "dok" (1-4), "standard" (code), "points", and answer.
+"""
+
+    # Build subject-specific question examples
+    subject_lower = config.get('subject', '').lower()
+    subject_question_examples = _subject_question_examples(subject_lower)
+
     # For math or unrecognized subjects, no extra examples needed (math already has them in question_type_instructions)
 
     input_standard_codes = [s.get('code', '') for s in standards if s.get('code')]
