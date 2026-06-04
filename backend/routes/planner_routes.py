@@ -889,6 +889,297 @@ def _save_grading_config_for_export(assignment):
         _logger.warning("Could not save grading config: %s", e)
 
 
+def _render_assignment_pdf_sections(story, sections, include_answers,
+                                    heading_style, normal_style, answer_style):
+    """Render the per-section / per-question flowables for the generated-
+    assignment PDF, appending them to ``story``.
+
+    Extracted verbatim from export_generated_assignment (CQ7 god-function
+    split). Behavior-preserving: the flowable stream is pinned by
+    tests/test_export_generated_assignment_characterization.py.
+    """
+    from reportlab.lib.units import inch
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.colors import black, lightgrey, white as rl_white
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, Flowable
+
+    # Bubble circle for MC/TF answer sheets
+    class _BubbleCircle(Flowable):
+        """Draws a circle bubble — empty (outline) or filled (solid black)."""
+        def __init__(self, filled=False, size=9):
+            Flowable.__init__(self)
+            self.filled = filled
+            self.size = size
+            self.width = size + 4
+            self.height = size + 4
+        def draw(self):
+            r = self.size / 2
+            cx = r + 2
+            cy = r + 2
+            from reportlab.lib.colors import Color
+            self.canv.setStrokeColor(Color(0.3, 0.3, 0.3))
+            self.canv.setLineWidth(1.2)
+            if self.filled:
+                self.canv.setFillColor(black)
+                self.canv.circle(cx, cy, r, fill=1)
+            else:
+                self.canv.setFillColor(rl_white)
+                self.canv.circle(cx, cy, r, fill=1, stroke=1)
+
+    # Helper: convert Unicode subscript/superscript to ReportLab XML tags
+    _sub_map = str.maketrans('₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎', '0123456789+-=()')
+    _sup_map = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾', '0123456789+-=()')
+    def _fix_sub_sup(text):
+        """Replace Unicode sub/superscript chars with ReportLab <sub>/<sup> tags."""
+        if not text:
+            return text
+        import re as _re
+        # Subscripts: ₀-₉ and related
+        def _replace_sub(m):
+            return '<sub>' + m.group(0).translate(_sub_map) + '</sub>'
+        def _replace_sup(m):
+            return '<sup>' + m.group(0).translate(_sup_map) + '</sup>'
+        text = _re.sub('[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+', _replace_sub, text)
+        text = _re.sub('[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]+', _replace_sup, text)
+        return text
+
+    question_num = 1
+
+    # Process sections
+    for section in sections:
+        section_name = section.get('name', 'Section')
+        section_points = section.get('points', 0)
+        section_type = section.get('type', 'short_answer')
+        questions = section.get('questions', [])
+
+        # Section header
+        pts_text = f" ({section_points} points)" if section_points else ""
+        story.append(Paragraph(f"<b>{section_name}</b>{pts_text}", heading_style))
+        story.append(Spacer(1, 0.1*inch))  # Space between section header and questions
+
+        for q in questions:
+            q_number = q.get('number', question_num)
+            q_text = _fix_sub_sup(q.get('question', ''))
+            q_points = q.get('points', 0)
+            q_options = [_fix_sub_sup(o) for o in q.get('options', [])]
+            q_answer = q.get('answer', '')
+            q_type = q.get('question_type', section_type)
+            q_visual = q.get('visual_type', None)  # number_line, coordinate_plane, etc.
+
+            # Question text — detect and render inline markdown tables
+            pts_text = f" ({q_points} pts)" if q_points else ""
+            table_parts = _split_markdown_table(q_text)
+            if table_parts:
+                # Text before table
+                before_text = table_parts['before'].strip()
+                combined_before = f"<b>Question {q_number}:</b> {before_text}{pts_text}" if before_text else f"<b>Question {q_number}:</b>{pts_text}"
+                story.append(Paragraph(combined_before, normal_style))
+                story.append(Spacer(1, 0.05*inch))
+                # Render the table
+                md_table = table_parts['table']
+                t_data = [md_table['headers']] + md_table['rows']
+                col_count = len(md_table['headers'])
+                col_w = min(1.2*inch, (6.5*inch) / max(col_count, 1))
+                from reportlab.lib import colors as rl_colors
+                tbl = Table(t_data, colWidths=[col_w]*col_count)
+                tbl.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), rl_colors.Color(0.9, 0.9, 0.95)),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.Color(0.6, 0.6, 0.6)),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ]))
+                story.append(tbl)
+                # Text after table
+                if table_parts.get('after', '').strip():
+                    story.append(Paragraph(table_parts['after'].strip(), normal_style))
+                story.append(Spacer(1, 0.05*inch))
+            else:
+                story.append(Paragraph(
+                    f"<b>Question {q_number}:</b> {q_text}{pts_text}",
+                    normal_style
+                ))
+                story.append(Spacer(1, 0.05*inch))
+
+            # Multiple choice options with bubble circles
+            if q_options and q_type != 'matching':
+                is_tf = q_type in ('true_false', 'tf')
+                # Determine correct answer index for answer key
+                correct_idx = None
+                if include_answers and q_answer:
+                    if is_tf:
+                        for oi, opt in enumerate(q_options):
+                            if opt.lower().strip() == str(q_answer).lower().strip():
+                                correct_idx = oi
+                                break
+                    else:
+                        from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
+                        letter = _normalize_correct_answer_to_letter(q_answer, q_options)
+                        if letter:
+                            correct_idx = ord(letter) - ord('A')
+
+                for oi, opt in enumerate(q_options):
+                    is_filled = (include_answers and correct_idx is not None and oi == correct_idx)
+                    bubble = _BubbleCircle(filled=is_filled, size=9)
+                    opt_para = Paragraph(opt, normal_style)
+                    row_table = Table(
+                        [[bubble, opt_para]],
+                        colWidths=[0.5*inch, 5.5*inch],
+                    )
+                    row_table.setStyle(TableStyle([
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+                        ('LEFTPADDING', (0, 0), (0, 0), 20),
+                        ('LEFTPADDING', (1, 0), (1, 0), 0),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                        ('TOPPADDING', (0, 0), (-1, -1), 2),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                    ]))
+                    story.append(row_table)
+
+            # Matching question: render terms and definitions columns
+            q_terms = q.get('terms', [])
+            q_definitions = q.get('definitions', [])
+            if (q_type == 'matching' or (q_terms and q_definitions)):
+                q_terms = [_fix_sub_sup(str(t)) for t in q_terms]
+                q_definitions = [_fix_sub_sup(str(d)) for d in q_definitions]
+                from reportlab.lib import colors as rl_colors
+                import random as _random
+                # Shuffle definitions for student version
+                shuffled_defs = list(q_definitions)
+                if not include_answers:
+                    _random.seed(q_number)  # Deterministic shuffle per question
+                    _random.shuffle(shuffled_defs)
+                # Build two-column table: numbered terms | lettered definitions
+                # Use Paragraph objects for definitions so they word-wrap
+                def_style = ParagraphStyle('MatchDef', parent=normal_style, fontSize=10)
+                term_style = ParagraphStyle('MatchTerm', parent=normal_style, fontSize=10)
+                max_rows = max(len(q_terms), len(shuffled_defs))
+                match_data = [['', 'Terms', '', 'Definitions']]
+                for ri in range(max_rows):
+                    term_num = str(ri + 1) + '.' if ri < len(q_terms) else ''
+                    term_text = Paragraph(q_terms[ri], term_style) if ri < len(q_terms) else ''
+                    def_letter = chr(65 + ri) + '.' if ri < len(shuffled_defs) else ''
+                    def_text = Paragraph(shuffled_defs[ri], def_style) if ri < len(shuffled_defs) else ''
+                    match_data.append([term_num, term_text, def_letter, def_text])
+                col_widths = [0.3*inch, 2.2*inch, 0.3*inch, 3.5*inch]
+                match_tbl = Table(match_data, colWidths=col_widths)
+                match_tbl.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), rl_colors.Color(0.9, 0.9, 0.95)),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                    ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.Color(0.6, 0.6, 0.6)),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                story.append(Spacer(1, 0.05*inch))
+                story.append(match_tbl)
+                story.append(Spacer(1, 0.05*inch))
+
+            # Add visual elements based on question type
+            if q_visual or q_type in ['number_line', 'coordinate_plane', 'graph',
+                                      'geometry', 'triangle', 'rectangle', 'regular_polygon',
+                                      'circle', 'trapezoid', 'parallelogram',
+                                      'rectangular_prism', 'cylinder',
+                                      'pythagorean', 'trig', 'angles', 'similarity',
+                                      'box_plot', 'bar_chart', 'function_graph',
+                                      'dot_plot', 'stem_and_leaf', 'unit_circle',
+                                      'transformations', 'fraction_model',
+                                      'probability_tree', 'tape_diagram',
+                                      'venn_diagram', 'protractor', 'angle_protractor',
+                                      'histogram', 'pie_chart']:
+                visual_image = _create_visual_for_question(q, include_answers)
+                if visual_image:
+                    story.append(Spacer(1, 0.1*inch))
+                    story.append(visual_image)
+                    story.append(Spacer(1, 0.1*inch))
+
+            # Answer section
+            if include_answers:
+                # MC/TF: filled bubble already shows the answer — skip text label
+                if q_options and q_type != 'matching':
+                    pass  # Bubble is already filled above
+                elif q_type == 'matching' or (q_terms and q_definitions):
+                    if isinstance(q_answer, dict):
+                        ans_parts = [f"{k} → {v}" for k, v in q_answer.items()]
+                        ans_text = "ANSWERS: " + " | ".join(ans_parts)
+                    else:
+                        ans_text = f"ANSWER: {q_answer}"
+                    story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
+                elif q_type == 'coordinates' and isinstance(q_answer, dict):
+                    ans_text = f"ANSWER: Lat: {q_answer.get('lat', 0)}, Lng: {q_answer.get('lng', 0)}"
+                    story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
+                else:
+                    ans_text = f"ANSWER: {q_answer}"
+                    story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
+
+                if q_type == 'math_equation':
+                    story.append(Paragraph("<i>(Equivalent forms accepted)</i>", normal_style))
+                elif q_type == 'coordinates':
+                    tolerance_km = q.get('tolerance_km', 50)
+                    story.append(Paragraph(f"<i>(Acceptable within {tolerance_km} km)</i>", normal_style))
+            else:
+                # Answer space for students
+                if q_type == 'matching' or (q_terms and q_definitions):
+                    pass  # Match table already has answer blanks
+                elif q_type == 'math_equation':
+                    story.append(Paragraph("Show your work:", normal_style))
+                    for _ in range(3):
+                        story.append(Paragraph("_" * 85, normal_style))
+                    story.append(Paragraph("<b>Final Answer:</b> " + "_" * 50, normal_style))
+                elif q_type == 'coordinates':
+                    story.append(Paragraph(
+                        "<b>Latitude:</b> _______________°  <b>Longitude:</b> _______________°",
+                        normal_style
+                    ))
+                elif q_type == 'data_table':
+                    # Create empty table — handle both normalized and raw AI field names
+                    headers = q.get('headers', q.get('column_headers', ['Column 1', 'Column 2', 'Column 3']))
+                    row_labels = q.get('row_labels', [])
+                    expected = q.get('expected_data', [])
+                    num_rows = q.get('num_rows', len(expected) if expected else 5)
+                    if row_labels:
+                        table_data = [[''] + headers]
+                        for ri in range(num_rows):
+                            label = row_labels[ri] if ri < len(row_labels) else ''
+                            table_data.append([label] + [''] * len(headers))
+                    else:
+                        table_data = [headers] + [[''] * len(headers) for _ in range(num_rows)]
+                    col_count = len(table_data[0])
+                    t = Table(table_data, colWidths=[1.5*inch] * col_count)
+                    t.setStyle(TableStyle([
+                        ('GRID', (0, 0), (-1, -1), 1, black),
+                        ('BACKGROUND', (0, 0), (-1, 0), lightgrey),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                        ('TOPPADDING', (0, 0), (-1, -1), 12),
+                    ]))
+                    story.append(t)
+                elif section_type in ['essay', 'extended_response']:
+                    for _ in range(8):
+                        story.append(Paragraph("_" * 85, normal_style))
+                elif section_type == 'short_answer':
+                    for _ in range(3):
+                        story.append(Paragraph("_" * 85, normal_style))
+                elif section_type in ['multiple_choice', 'true_false']:
+                    pass  # Bubbles are the answer — no separate answer line needed
+                else:
+                    for _ in range(2):
+                        story.append(Paragraph("_" * 85, normal_style))
+
+            story.append(Spacer(1, 0.15*inch))
+            question_num += 1
+
+
 @planner_bp.route('/api/export-generated-assignment', methods=['POST'])
 @require_teacher
 @handle_route_errors
@@ -946,29 +1237,6 @@ def export_generated_assignment():
         from reportlab.lib.colors import white as rl_white
         import io
 
-        # Bubble circle for MC/TF answer sheets
-        class _BubbleCircle(Flowable):
-            """Draws a circle bubble — empty (outline) or filled (solid black)."""
-            def __init__(self, filled=False, size=9):
-                Flowable.__init__(self)
-                self.filled = filled
-                self.size = size
-                self.width = size + 4
-                self.height = size + 4
-            def draw(self):
-                r = self.size / 2
-                cx = r + 2
-                cy = r + 2
-                from reportlab.lib.colors import Color
-                self.canv.setStrokeColor(Color(0.3, 0.3, 0.3))
-                self.canv.setLineWidth(1.2)
-                if self.filled:
-                    self.canv.setFillColor(black)
-                    self.canv.circle(cx, cy, r, fill=1)
-                else:
-                    self.canv.setFillColor(rl_white)
-                    self.canv.circle(cx, cy, r, fill=1, stroke=1)
-
         # Set up styles
         styles = getSampleStyleSheet()
         title_style = ParagraphStyle(
@@ -992,23 +1260,6 @@ def export_generated_assignment():
             'Answer', parent=styles['Normal'],
             fontName='Helvetica-Bold', textColor=green
         )
-
-        # Helper: convert Unicode subscript/superscript to ReportLab XML tags
-        _sub_map = str.maketrans('₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎', '0123456789+-=()')
-        _sup_map = str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾', '0123456789+-=()')
-        def _fix_sub_sup(text):
-            """Replace Unicode sub/superscript chars with ReportLab <sub>/<sup> tags."""
-            if not text:
-                return text
-            import re as _re
-            # Subscripts: ₀-₉ and related
-            def _replace_sub(m):
-                return '<sub>' + m.group(0).translate(_sub_map) + '</sub>'
-            def _replace_sup(m):
-                return '<sup>' + m.group(0).translate(_sup_map) + '</sup>'
-            text = _re.sub('[₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎]+', _replace_sub, text)
-            text = _re.sub('[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾]+', _replace_sup, text)
-            return text
 
         # Build the PDF
         safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()
@@ -1071,241 +1322,10 @@ def export_generated_assignment():
             story.append(Paragraph(f"<b>Instructions:</b> {instructions}", normal_style))
             story.append(Spacer(1, 0.15*inch))
 
-        question_num = 1
-
-        # Process sections
-        for section in sections:
-            section_name = section.get('name', 'Section')
-            section_points = section.get('points', 0)
-            section_type = section.get('type', 'short_answer')
-            questions = section.get('questions', [])
-
-            # Section header
-            pts_text = f" ({section_points} points)" if section_points else ""
-            story.append(Paragraph(f"<b>{section_name}</b>{pts_text}", heading_style))
-            story.append(Spacer(1, 0.1*inch))  # Space between section header and questions
-
-            for q in questions:
-                q_number = q.get('number', question_num)
-                q_text = _fix_sub_sup(q.get('question', ''))
-                q_points = q.get('points', 0)
-                q_options = [_fix_sub_sup(o) for o in q.get('options', [])]
-                q_answer = q.get('answer', '')
-                q_type = q.get('question_type', section_type)
-                q_visual = q.get('visual_type', None)  # number_line, coordinate_plane, etc.
-
-                # Question text — detect and render inline markdown tables
-                pts_text = f" ({q_points} pts)" if q_points else ""
-                table_parts = _split_markdown_table(q_text)
-                if table_parts:
-                    # Text before table
-                    before_text = table_parts['before'].strip()
-                    combined_before = f"<b>Question {q_number}:</b> {before_text}{pts_text}" if before_text else f"<b>Question {q_number}:</b>{pts_text}"
-                    story.append(Paragraph(combined_before, normal_style))
-                    story.append(Spacer(1, 0.05*inch))
-                    # Render the table
-                    md_table = table_parts['table']
-                    t_data = [md_table['headers']] + md_table['rows']
-                    col_count = len(md_table['headers'])
-                    col_w = min(1.2*inch, (6.5*inch) / max(col_count, 1))
-                    from reportlab.lib import colors as rl_colors
-                    tbl = Table(t_data, colWidths=[col_w]*col_count)
-                    tbl.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), rl_colors.Color(0.9, 0.9, 0.95)),
-                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                        ('FONTSIZE', (0, 0), (-1, -1), 9),
-                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.Color(0.6, 0.6, 0.6)),
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('TOPPADDING', (0, 0), (-1, -1), 4),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                    ]))
-                    story.append(tbl)
-                    # Text after table
-                    if table_parts.get('after', '').strip():
-                        story.append(Paragraph(table_parts['after'].strip(), normal_style))
-                    story.append(Spacer(1, 0.05*inch))
-                else:
-                    story.append(Paragraph(
-                        f"<b>Question {q_number}:</b> {q_text}{pts_text}",
-                        normal_style
-                    ))
-                    story.append(Spacer(1, 0.05*inch))
-
-                # Multiple choice options with bubble circles
-                if q_options and q_type != 'matching':
-                    is_tf = q_type in ('true_false', 'tf')
-                    # Determine correct answer index for answer key
-                    correct_idx = None
-                    if include_answers and q_answer:
-                        if is_tf:
-                            for oi, opt in enumerate(q_options):
-                                if opt.lower().strip() == str(q_answer).lower().strip():
-                                    correct_idx = oi
-                                    break
-                        else:
-                            from backend.services.worksheet_generator import _normalize_correct_answer_to_letter
-                            letter = _normalize_correct_answer_to_letter(q_answer, q_options)
-                            if letter:
-                                correct_idx = ord(letter) - ord('A')
-
-                    for oi, opt in enumerate(q_options):
-                        is_filled = (include_answers and correct_idx is not None and oi == correct_idx)
-                        bubble = _BubbleCircle(filled=is_filled, size=9)
-                        opt_para = Paragraph(opt, normal_style)
-                        row_table = Table(
-                            [[bubble, opt_para]],
-                            colWidths=[0.5*inch, 5.5*inch],
-                        )
-                        row_table.setStyle(TableStyle([
-                            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
-                            ('LEFTPADDING', (0, 0), (0, 0), 20),
-                            ('LEFTPADDING', (1, 0), (1, 0), 0),
-                            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                            ('TOPPADDING', (0, 0), (-1, -1), 2),
-                            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-                        ]))
-                        story.append(row_table)
-
-                # Matching question: render terms and definitions columns
-                q_terms = q.get('terms', [])
-                q_definitions = q.get('definitions', [])
-                if (q_type == 'matching' or (q_terms and q_definitions)):
-                    q_terms = [_fix_sub_sup(str(t)) for t in q_terms]
-                    q_definitions = [_fix_sub_sup(str(d)) for d in q_definitions]
-                    from reportlab.lib import colors as rl_colors
-                    import random as _random
-                    # Shuffle definitions for student version
-                    shuffled_defs = list(q_definitions)
-                    if not include_answers:
-                        _random.seed(q_number)  # Deterministic shuffle per question
-                        _random.shuffle(shuffled_defs)
-                    # Build two-column table: numbered terms | lettered definitions
-                    # Use Paragraph objects for definitions so they word-wrap
-                    def_style = ParagraphStyle('MatchDef', parent=normal_style, fontSize=10)
-                    term_style = ParagraphStyle('MatchTerm', parent=normal_style, fontSize=10)
-                    max_rows = max(len(q_terms), len(shuffled_defs))
-                    match_data = [['', 'Terms', '', 'Definitions']]
-                    for ri in range(max_rows):
-                        term_num = str(ri + 1) + '.' if ri < len(q_terms) else ''
-                        term_text = Paragraph(q_terms[ri], term_style) if ri < len(q_terms) else ''
-                        def_letter = chr(65 + ri) + '.' if ri < len(shuffled_defs) else ''
-                        def_text = Paragraph(shuffled_defs[ri], def_style) if ri < len(shuffled_defs) else ''
-                        match_data.append([term_num, term_text, def_letter, def_text])
-                    col_widths = [0.3*inch, 2.2*inch, 0.3*inch, 3.5*inch]
-                    match_tbl = Table(match_data, colWidths=col_widths)
-                    match_tbl.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), rl_colors.Color(0.9, 0.9, 0.95)),
-                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                        ('FONTSIZE', (0, 0), (-1, -1), 10),
-                        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-                        ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
-                        ('GRID', (0, 0), (-1, -1), 0.5, rl_colors.Color(0.6, 0.6, 0.6)),
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('TOPPADDING', (0, 0), (-1, -1), 6),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                    ]))
-                    story.append(Spacer(1, 0.05*inch))
-                    story.append(match_tbl)
-                    story.append(Spacer(1, 0.05*inch))
-
-                # Add visual elements based on question type
-                if q_visual or q_type in ['number_line', 'coordinate_plane', 'graph',
-                                          'geometry', 'triangle', 'rectangle', 'regular_polygon',
-                                          'circle', 'trapezoid', 'parallelogram',
-                                          'rectangular_prism', 'cylinder',
-                                          'pythagorean', 'trig', 'angles', 'similarity',
-                                          'box_plot', 'bar_chart', 'function_graph',
-                                          'dot_plot', 'stem_and_leaf', 'unit_circle',
-                                          'transformations', 'fraction_model',
-                                          'probability_tree', 'tape_diagram',
-                                          'venn_diagram', 'protractor', 'angle_protractor',
-                                          'histogram', 'pie_chart']:
-                    visual_image = _create_visual_for_question(q, include_answers)
-                    if visual_image:
-                        story.append(Spacer(1, 0.1*inch))
-                        story.append(visual_image)
-                        story.append(Spacer(1, 0.1*inch))
-
-                # Answer section
-                if include_answers:
-                    # MC/TF: filled bubble already shows the answer — skip text label
-                    if q_options and q_type != 'matching':
-                        pass  # Bubble is already filled above
-                    elif q_type == 'matching' or (q_terms and q_definitions):
-                        if isinstance(q_answer, dict):
-                            ans_parts = [f"{k} → {v}" for k, v in q_answer.items()]
-                            ans_text = "ANSWERS: " + " | ".join(ans_parts)
-                        else:
-                            ans_text = f"ANSWER: {q_answer}"
-                        story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
-                    elif q_type == 'coordinates' and isinstance(q_answer, dict):
-                        ans_text = f"ANSWER: Lat: {q_answer.get('lat', 0)}, Lng: {q_answer.get('lng', 0)}"
-                        story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
-                    else:
-                        ans_text = f"ANSWER: {q_answer}"
-                        story.append(Paragraph(f"<b>{_fix_sub_sup(str(ans_text))}</b>", answer_style))
-
-                    if q_type == 'math_equation':
-                        story.append(Paragraph("<i>(Equivalent forms accepted)</i>", normal_style))
-                    elif q_type == 'coordinates':
-                        tolerance_km = q.get('tolerance_km', 50)
-                        story.append(Paragraph(f"<i>(Acceptable within {tolerance_km} km)</i>", normal_style))
-                else:
-                    # Answer space for students
-                    if q_type == 'matching' or (q_terms and q_definitions):
-                        pass  # Match table already has answer blanks
-                    elif q_type == 'math_equation':
-                        story.append(Paragraph("Show your work:", normal_style))
-                        for _ in range(3):
-                            story.append(Paragraph("_" * 85, normal_style))
-                        story.append(Paragraph("<b>Final Answer:</b> " + "_" * 50, normal_style))
-                    elif q_type == 'coordinates':
-                        story.append(Paragraph(
-                            "<b>Latitude:</b> _______________°  <b>Longitude:</b> _______________°",
-                            normal_style
-                        ))
-                    elif q_type == 'data_table':
-                        # Create empty table — handle both normalized and raw AI field names
-                        headers = q.get('headers', q.get('column_headers', ['Column 1', 'Column 2', 'Column 3']))
-                        row_labels = q.get('row_labels', [])
-                        expected = q.get('expected_data', [])
-                        num_rows = q.get('num_rows', len(expected) if expected else 5)
-                        if row_labels:
-                            table_data = [[''] + headers]
-                            for ri in range(num_rows):
-                                label = row_labels[ri] if ri < len(row_labels) else ''
-                                table_data.append([label] + [''] * len(headers))
-                        else:
-                            table_data = [headers] + [[''] * len(headers) for _ in range(num_rows)]
-                        col_count = len(table_data[0])
-                        t = Table(table_data, colWidths=[1.5*inch] * col_count)
-                        t.setStyle(TableStyle([
-                            ('GRID', (0, 0), (-1, -1), 1, black),
-                            ('BACKGROUND', (0, 0), (-1, 0), lightgrey),
-                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                            ('FONTSIZE', (0, 0), (-1, -1), 10),
-                            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-                            ('TOPPADDING', (0, 0), (-1, -1), 12),
-                        ]))
-                        story.append(t)
-                    elif section_type in ['essay', 'extended_response']:
-                        for _ in range(8):
-                            story.append(Paragraph("_" * 85, normal_style))
-                    elif section_type == 'short_answer':
-                        for _ in range(3):
-                            story.append(Paragraph("_" * 85, normal_style))
-                    elif section_type in ['multiple_choice', 'true_false']:
-                        pass  # Bubbles are the answer — no separate answer line needed
-                    else:
-                        for _ in range(2):
-                            story.append(Paragraph("_" * 85, normal_style))
-
-                story.append(Spacer(1, 0.15*inch))
-                question_num += 1
+        _render_assignment_pdf_sections(
+            story, sections, include_answers,
+            heading_style, normal_style, answer_style,
+        )
 
         # Rubric for teacher version
         if include_answers and assignment.get('rubric', {}).get('criteria'):
