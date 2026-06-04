@@ -4,7 +4,8 @@
 function below **300 LOC** (the level-7 anchor: *"No file >3,000 LOC; no function >300 LOC; a
 Flask-free service layer exists"*), behavior-preservingly.
 
-> **Status: IN PROGRESS.** Wave 1 complete (4/18). 14 backend functions >300 LOC remain.
+> **Status: IN PROGRESS — 9/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **9 backend
+> functions >300 LOC remain** (the harder half: route control-flow handlers + the grading giants).
 > Code Quality stays **6** until ALL are <300 (and a frontend-JS function scan is run).
 
 ---
@@ -67,6 +68,19 @@ drift). Then:
 | #669 | `create_document_docx` | 343 → 83 | A |
 | #670 | `get_class_remediation_effectiveness` | 312 → 268 | A |
 | #671 | `_create_visual_for_question` | 584 → 65 | A |
+| #673 | `generate_assessment_content` | 440 → 263 | A |
+| #674 | `generate_lesson_plan_content` | 451 → 239 | A |
+| #675 | `generate_assignment_from_lesson_content` | 441 → 258 | A |
+| #676 | `_export_assignment_docx_graider` | 315 → 271 | A |
+| #677 | `_build_system_prompt` | 341 → 184 | A |
+
+### Remaining 9 (the harder half)
+- **Route control-flow handlers** (early returns / branching — extract response/compute blocks, mind the decorator-insertion gotcha): `classlink_callback` (318 🔐 auth), `post_remediate` (471), `export_generated_assignment` (439), `generate` (373), `assistant_chat` (472).
+- **Grading giants — write a golden net FIRST, then Codex co-planning** (no deterministic net today): `grade_portal_submission_sync` (452 🔴), `extract_student_responses` (866, shared mutable state across marker loops), `grade_single_file` (626, nested closure in `_run_grading_thread_inner`), `_run_grading_thread_inner` (1492, ThreadPoolExecutor orchestrator).
+
+> The route handlers are doable with the established protocol; the 4 grading giants are the part
+> that genuinely needs fresh context + new nets. Pattern note for routes: helpers MUST be inserted
+> ABOVE the decorator stack (`@route`/`@require_teacher`/`@handle_route_errors`/`@limiter.limit`).
 
 ### Remaining 14 (sequenced)
 
