@@ -249,6 +249,7 @@
                 <a href="#pricing">Beta</a>
                 <a href="https://gamma.app/docs/Graider-bwyobjv61z0jh6o?mode=doc" target="_blank">Documentation</a>
                 <a href="/blog">Blog</a>
+                <a href="#careers">Careers</a>
             </div>
             <div class="nav-actions">
                 <a href="https://app.graider.live" class="btn btn-ghost">Log In</a>
@@ -271,6 +272,7 @@
         <a href="#pricing" onclick="closeMobileMenu()">Beta</a>
         <a href="https://gamma.app/docs/Graider-bwyobjv61z0jh6o?mode=doc" target="_blank" onclick="closeMobileMenu()">Documentation</a>
         <a href="/blog" onclick="closeMobileMenu()">Blog</a>
+        <a href="#careers" onclick="closeMobileMenu()">Careers</a>
         <div class="mobile-menu-actions">
             <a href="https://app.graider.live" class="btn btn-ghost" onclick="closeMobileMenu();">Log In</a>
             <button class="btn btn-primary" onclick="openLoginModal('signup'); closeMobileMenu();">Get Started</button>
@@ -1049,6 +1051,89 @@
         </div>
     </section>
 
+    <!-- Careers Section -->
+    <style>
+        .careers { padding: var(--space-24) 0; background: var(--gray-50); }
+        .careers-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-8); max-width: 1040px; margin: 0 auto; }
+        .career-card { display: flex; flex-direction: column; padding: var(--space-8); background: white; border-radius: var(--radius-2xl); border: 1px solid var(--gray-100); transition: var(--transition-slow); }
+        .career-card:hover { border-color: var(--primary-200); box-shadow: var(--shadow-lg), 0 0 0 4px rgba(16, 185, 129, 0.05); transform: translateY(-4px); }
+        .career-tag { display: inline-block; align-self: flex-start; padding: var(--space-1) var(--space-3); background: var(--gradient-subtle); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-full); font-size: 0.78rem; font-weight: 600; color: var(--primary-600); margin-bottom: var(--space-3); }
+        .career-card h3 { font-size: 1.5rem; font-weight: 800; color: var(--gray-900); margin-bottom: var(--space-2); letter-spacing: -0.01em; }
+        .career-meta { font-size: 0.9rem; color: var(--gray-600); margin-bottom: var(--space-5); }
+        .career-lede { font-size: 1.02rem; color: var(--gray-700); line-height: 1.6; margin-bottom: var(--space-5); }
+        .career-block { margin-bottom: var(--space-5); }
+        .career-block h4 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary-600); margin-bottom: var(--space-3); }
+        .career-block ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+        .career-block li { position: relative; padding-left: 1.5rem; font-size: 0.95rem; color: var(--gray-600); line-height: 1.55; }
+        .career-block li::before { content: "\2713"; position: absolute; left: 0; top: 0; color: var(--primary-600); font-weight: 700; }
+        .career-apply { margin-top: auto; align-self: flex-start; }
+        .careers-note { text-align: center; font-size: 0.95rem; color: var(--gray-600); margin-top: var(--space-12); }
+        .careers-note a { color: var(--primary-600); font-weight: 600; text-decoration: none; }
+        @media (max-width: 768px) { .careers-grid { grid-template-columns: 1fr; } }
+    </style>
+    <section class="careers" id="careers">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Careers</span>
+                <h2 class="section-title">Help us give teachers their time back</h2>
+                <p class="section-description">
+                    Teachers spend 5&ndash;7 hours a week grading. We're building the tool that gives that time back &mdash; and we're hiring the first people who'll define how Graider grows. Small team, real classrooms, work that ships in weeks.
+                </p>
+            </div>
+            <div class="careers-grid">
+                <article class="career-card" data-animate>
+                    <span class="career-tag">Go-to-Market</span>
+                    <h3>Founding Account Executive</h3>
+                    <p class="career-meta">Full-time &middot; Remote (US) &middot; Base + uncapped commission + early equity</p>
+                    <p class="career-lede">Be our first sales hire &mdash; turn &ldquo;teachers love this&rdquo; into signed schools and districts. You'll own the full cycle and write the playbook, not run it.</p>
+                    <div class="career-block">
+                        <h4>What you'll do</h4>
+                        <ul>
+                            <li>Own the full K-12 cycle: prospect teachers, department heads, and district leaders &rarr; demo &rarr; pilot &rarr; close.</li>
+                            <li>Turn bottom-up teacher love into top-down building &amp; district deals.</li>
+                            <li>Navigate district procurement &mdash; pilots, FERPA reviews, SSO/rostering, budget cycles.</li>
+                            <li>Build the playbook and feed product what districts actually ask for.</li>
+                        </ul>
+                    </div>
+                    <div class="career-block">
+                        <h4>What you bring</h4>
+                        <ul>
+                            <li>3+ years closing SaaS, ideally selling into schools or districts.</li>
+                            <li>A genuine feel for educators &mdash; you earn a skeptical teacher's trust in one demo.</li>
+                            <li>A founder's bias to action and comfort with ambiguity.</li>
+                        </ul>
+                    </div>
+                    <a href="mailto:careers@graider.live?subject=Founding%20Account%20Executive" class="btn btn-primary career-apply">Apply &rarr;</a>
+                </article>
+                <article class="career-card" data-animate>
+                    <span class="career-tag">Engineering</span>
+                    <h3>Full Stack Engineer</h3>
+                    <p class="career-meta">Full-time &middot; Remote (US) &middot; Competitive salary + early equity</p>
+                    <p class="career-lede">Ship across the whole stack &mdash; Python/Flask, React, AI, and the school integrations that make Graider work in a real district. No silos; your code reaches classrooms in weeks.</p>
+                    <div class="career-block">
+                        <h4>What you'll do</h4>
+                        <ul>
+                            <li>Build features end to end across a Flask (Python) backend and a React + Vite frontend on Supabase/Postgres.</li>
+                            <li>Work hands-on with LLM APIs (GPT-4o, Claude, Gemini) &mdash; prompt pipelines, structured output, multi-pass grading.</li>
+                            <li>Extend our K-12 integrations: Clever, ClassLink, OneRoster, and LTI 1.3.</li>
+                            <li>Own correctness on a FERPA-sensitive path &mdash; real tests, golden nets, root-cause fixes.</li>
+                        </ul>
+                    </div>
+                    <div class="career-block">
+                        <h4>What you bring</h4>
+                        <ul>
+                            <li>3+ years building production web apps, comfortable across backend and frontend.</li>
+                            <li>Strong Python and solid React/JavaScript.</li>
+                            <li>You've made flaky third-party APIs reliable and hold a high bar for &ldquo;done.&rdquo;</li>
+                        </ul>
+                    </div>
+                    <a href="mailto:careers@graider.live?subject=Full%20Stack%20Engineer" class="btn btn-primary career-apply">Apply &rarr;</a>
+                </article>
+            </div>
+            <p class="careers-note">Don't see your role? Tell us how you'd help teachers &mdash; <a href="mailto:careers@graider.live">careers@graider.live</a></p>
+        </div>
+    </section>
+
     <!-- CTA Section -->
     <section class="cta">
         <div class="cta-bg">
@@ -1097,6 +1182,7 @@
                     <h4>Product</h4>
                     <a href="#features">Features</a>
                     <a href="#pricing">Beta</a>
+                    <a href="#careers">Careers</a>
                 </div>
                 <div class="footer-links">
                     <h4>Resources</h4>
