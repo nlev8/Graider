@@ -4,11 +4,11 @@
 function below **300 LOC** (the level-7 anchor: *"No file >3,000 LOC; no function >300 LOC; a
 Flask-free service layer exists"*), behavior-preservingly.
 
-> **Status: IN PROGRESS — 13/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **5 backend
-> functions >300 LOC remain** — the hardest core: the 3 grading monsters
-> (`_run_grading_thread_inner` 1492, `extract_student_responses` 866, `grade_single_file` 626)
-> + the intertwined `assistant_chat`/`generate` pair (472/373,
-> `generate` is a nested closure). These need fresh-context dedicated sessions + new golden nets.
+> **Status: IN PROGRESS — 14/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **4 backend
+> functions >300 LOC remain** — the entangled monsters: `_run_grading_thread_inner` (1492) +
+> `grade_single_file` (626, a nested closure inside it), and the intertwined
+> `assistant_chat`/`generate` pair (472/373, `generate` is a nested closure inside `assistant_chat`).
+> Both are PAIRS that must be split together; each needs a fresh-context dedicated session + new golden nets.
 > Code Quality stays **6** until ALL are <300 (and a frontend-JS function scan is run).
 
 ---
@@ -80,10 +80,11 @@ drift). Then:
 | #682 | `post_remediate` (personalized + shared paths → 2 helpers) | 471 → 236 | B |
 | #683 | `classlink_callback` 🔐 (student + teacher login tails → 2 helpers) | 318 → 234 | B |
 | #686 | `grade_portal_submission_sync` 🔴 (score+feedback+persist → `_finalize_portal_grading`) | 452 → 251 | B |
+| #687 | `extract_student_responses` (4 helpers: marker-builder / content-end / per-marker-loop / fallback) | 866 → 255 | B |
 
-### Remaining 5 (the harder half)
+### Remaining 4 (the harder half)
 - **Intertwined assistant route** (do together, last among route handlers): `generate` (373), `assistant_chat` (472). `generate` is a nested closure inside `assistant_chat` (1613–1985 ⊂ 1524–1995).
-- **Grading giants — write a golden net FIRST, then Codex co-planning** (no deterministic net today): ~~`grade_portal_submission_sync` (452 🔴)~~ ✅ #686 (golden net pins repo.update payload; extracted score+feedback+persist tail; left the latent `questions` bug #685), `extract_student_responses` (866, shared mutable state across marker loops), `grade_single_file` (626, nested closure in `_run_grading_thread_inner`), `_run_grading_thread_inner` (1492, ThreadPoolExecutor orchestrator).
+- **Grading giants — write a golden net FIRST, then Codex co-planning** (no deterministic net today): ~~`grade_portal_submission_sync` (452 🔴)~~ ✅ #686, ~~`extract_student_responses` (866)~~ ✅ #687 (4-helper split incl. a nested content-end helper; the 36-test full-output characterization suite was the golden net), `grade_single_file` (626, nested closure in `_run_grading_thread_inner`), `_run_grading_thread_inner` (1492, ThreadPoolExecutor orchestrator). The last two are intertwined — split together.
 
 > The route handlers are doable with the established protocol; the 4 grading giants are the part
 > that genuinely needs fresh context + new nets. Pattern note for routes: helpers MUST be inserted
@@ -94,7 +95,7 @@ drift). Then:
 **Wave 2 — Class B, strong net** (Codex dual review):
 | LOC | Function | File | Helpers | Notes |
 |--|--|--|--|--|
-| 866 | `extract_student_responses` | services/response_extraction.py | 3+ | 18 golden char tests. Dominated by a 640-line `if custom_markers:` block → split the marker-position builder (~903-1067) + per-marker extraction loop (~1121-1447, itself ~327 LOC → sub-split). Shared mutable state (marker_positions, extracted, blank_questions) — careful. |
+| 866 | ~~`extract_student_responses`~~ ✅ #687 | services/response_extraction.py | 4 | DONE. 36-test full-output char net was the golden. Split into marker-builder + content-end (nested) + per-marker-loop + fallback; shared lists passed by ref (.append only; .remove stayed in parent). |
 | 318 | ~~`classlink_callback`~~ ✅ #683 🔐 | routes/classlink_routes.py | 2 | auth; ~141 SSO/security tests. Extracted the 2 post-auth login tails (student/teacher); OIDC validation + require-list left byte-identical inline (Rule #10). |
 | 440 | `generate_assessment_content` | services/planner_generation.py | 8 | char test |
 | 451 | `generate_lesson_plan_content` | services/planner_generation.py | 9 | contract tests |
