@@ -57,6 +57,7 @@ import { AuthLoadingScreen, ApprovalCheckingScreen, NotApprovedScreen } from "./
 import { RUBRIC_PRESETS, getPresetForStateSubject } from "./data/rubricPresets";
 import { checkRequirementsMismatch } from "./utils/standardsMismatch";
 import { normalizeText, buildTextToHtmlMap, htmlToPlainText, highlightTextInHtml, removeHighlightFromHtml, textToRichHtml, removeAllHighlightsFromHtml } from "./utils/htmlHighlight";
+import { getMarkerText, getEndMarker, getMarkerPoints, getMarkerType, calculateTotalPoints } from "./utils/markerHelpers";
 import BuilderTab from "./tabs/BuilderTab";
 import GradeTab from "./tabs/GradeTab";
 import PlannerTab from "./tabs/PlannerTab";
@@ -1878,43 +1879,8 @@ ${signature}`;
   };
 
   // Helper to get marker text (handles both string and object formats)
-  const getMarkerText = (marker) => {
-    return typeof marker === 'string' ? marker : marker.start;
-  };
+  // Marker-accessor helpers extracted to utils/markerHelpers.js (decomp slice 14).
 
-  // Helper to get end marker (if exists)
-  const getEndMarker = (marker) => {
-    return typeof marker === 'object' ? marker.end : null;
-  };
-
-  // Get marker points (default 10 if not specified)
-  const getMarkerPoints = (marker) => {
-    if (typeof marker === 'string') return 10;
-    return marker.points || 10;
-  };
-
-  // Get marker type (default "written")
-  const getMarkerType = (marker) => {
-    if (typeof marker === 'string') return 'written';
-    return marker.type || 'written';
-  };
-
-  // Calculate total points from markers
-  const calculateTotalPoints = (markers, effortPoints = 15) => {
-    const markerTotal = (markers || []).reduce((sum, m) => sum + getMarkerPoints(m), 0);
-    return markerTotal + effortPoints;
-  };
-
-  // Convert old string marker to new format
-  const normalizeMarker = (marker) => {
-    if (typeof marker === 'string') {
-      return { start: marker, points: 10, type: 'written' };
-    }
-    if (marker.start && !marker.points) {
-      return { ...marker, points: 10, type: marker.type || 'written' };
-    }
-    return marker;
-  };
 
   const handleGenerateModelAnswers = async () => {
     const docText = importedDoc.text || (importedDoc.html ? importedDoc.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '');
