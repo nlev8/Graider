@@ -1569,92 +1569,14 @@ def _multipass_perform_extraction(assignment_data, content, custom_markers, excl
     return extraction_result, None
 
 
-def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
-                    grade_level: str = '6', subject: str = 'Social Studies',
-                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
-                    assignment_template: str = None, rubric_prompt: str = None,
-                    custom_markers: list = None, exclude_markers: list = None,
-                    marker_config: list = None, effort_points: int = 15,
-                    extraction_mode: str = 'structured', grading_style: str = 'standard',
-                    token_tracker: 'TokenTracker' = None,
-                    student_history: str = '', rubric_weights: list = None) -> dict:
-    """Multi-pass grading pipeline for consistent, robust scoring.
-
-    Pass 1: Extract responses (reuses existing extraction logic)
-    Pass 2: Grade each question individually (parallel, structured output)
-    Pass 3: Generate feedback (cheaper model)
-    Final: Aggregate scores, apply caps, build result
-    """
-    # Determine provider from model name
-    if ai_model.startswith("claude"):
-        provider = "anthropic"
-    elif ai_model.startswith("gemini"):
-        provider = "gemini"
-    else:
-        provider = "openai"
-
-    tracker = token_tracker or TokenTracker()
-    content = assignment_data.get("content", "")
-
-    # === EXTRACTION ===
-    extraction_result, early_result = _multipass_perform_extraction(
-        assignment_data, content, custom_markers, exclude_markers, assignment_template)
-    if early_result is not None:
-        return early_result
-
-    if not extraction_result or not extraction_result.get("extracted_responses"):
-        # Fall back to single-pass for edge cases
-        _logger.info(f"  ⚠️ Multi-pass: No extracted responses, falling back to single-pass")
-        return grade_assignment(student_name, assignment_data, custom_ai_instructions,
-                               grade_level, subject, ai_model, student_id, assignment_template,
-                               rubric_prompt, custom_markers, exclude_markers, marker_config,
-                               effort_points, extraction_mode, grading_style)
-
-    responses = extraction_result["extracted_responses"]
-
-    # DEBUG: Log extracted responses before filtering
-    _logger.info(f"  🔍 Multi-pass: {len(responses)} extracted responses before filtering:")
-    for i, resp in enumerate(responses):
-        q = resp.get("question", "?")[:80]
-        a = resp.get("answer", "")[:120].replace('\n', ' ')
-        t = resp.get("type", "?")
-        _logger.info(f"      [{i+1}] Q: {q}")
-        _logger.info(f"           A: {a}")
-        _logger.info(f"           Type: {t}")
-
-    # Filter question/prompt text from extracted answers before grading.
-    # If filtering empties a response, move it to blank_questions so completeness caps apply.
-    filtered_out = []
-    for resp in responses:
-        answer = resp.get("answer", "")
-        if answer and resp.get("type") != "fitb":
-            cleaned = filter_questions_from_response(answer)
-            if cleaned and len(cleaned.strip()) >= 3:
-                resp["answer"] = cleaned
-            else:
-                q_label = resp.get("question", "Unknown")
-                _logger.info(f"      ⚠️ Response for '{q_label[:50]}' was only template text — marking blank")
-                extraction_result.setdefault("blank_questions", []).append(q_label)
-                filtered_out.append(resp)
-    if filtered_out:
-        responses = [r for r in responses if r not in filtered_out]
-        extraction_result["extracted_responses"] = responses
-
-    # Build expected answers lookup from gradingNotes within custom_ai_instructions
-    expected_answers = _parse_expected_answers(custom_ai_instructions)
-
-    # NOTE: accommodation context, student history, period differentiation, and rubric
-    # type overrides are ALREADY embedded in custom_ai_instructions by app.py (lines 975-1119).
-    # We pass the full string untruncated to each per-question call.
-
-    # Append the custom rubric prompt (from Settings) so per-question graders see it.
-    # In single-pass, rubric_prompt overrides GRADING_RUBRIC. In multipass, we append it
-    # to the teacher instructions so each per-question call gets the rubric categories/weights.
-    effective_instructions = custom_ai_instructions
-    if rubric_prompt:
-        effective_instructions += "\n\n" + rubric_prompt
-
-    # === PASS 2: PER-QUESTION GRADING (parallel) ===
+def _multipass_grade_questions_parallel(responses, marker_config, effort_points, expected_answers,
+                                        grade_level, subject, effective_instructions, grading_style,
+                                        ai_model, provider, tracker, student_name):
+    """Pass 2 of grade_multipass: grade every extracted response in parallel — 4-strategy
+    expected-answer matching (question-number, term/section text, list index), a SymPy math
+    pre-check for exact-equivalent answers, parallel grade_per_question submission, and a
+    per-question failure fallback. Returns the per-question results list. Extracted verbatim
+    from grade_multipass (Code Quality 6→7 function-split; Wave-8 phase-helper pattern)."""
     total_content_points = 100 - effort_points
     question_meta = _distribute_points(responses, marker_config, total_content_points)
 
@@ -1745,6 +1667,99 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                               "reasoning": "Error during grading", "is_correct": True, "quality": "adequate"},
                     "excellent": False, "improvement_note": ""
                 }
+    return question_results
+
+
+def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instructions: str = '',
+                    grade_level: str = '6', subject: str = 'Social Studies',
+                    ai_model: str = 'gpt-4o-mini', student_id: str = None,
+                    assignment_template: str = None, rubric_prompt: str = None,
+                    custom_markers: list = None, exclude_markers: list = None,
+                    marker_config: list = None, effort_points: int = 15,
+                    extraction_mode: str = 'structured', grading_style: str = 'standard',
+                    token_tracker: 'TokenTracker' = None,
+                    student_history: str = '', rubric_weights: list = None) -> dict:
+    """Multi-pass grading pipeline for consistent, robust scoring.
+
+    Pass 1: Extract responses (reuses existing extraction logic)
+    Pass 2: Grade each question individually (parallel, structured output)
+    Pass 3: Generate feedback (cheaper model)
+    Final: Aggregate scores, apply caps, build result
+    """
+    # Determine provider from model name
+    if ai_model.startswith("claude"):
+        provider = "anthropic"
+    elif ai_model.startswith("gemini"):
+        provider = "gemini"
+    else:
+        provider = "openai"
+
+    tracker = token_tracker or TokenTracker()
+    content = assignment_data.get("content", "")
+
+    # === EXTRACTION ===
+    extraction_result, early_result = _multipass_perform_extraction(
+        assignment_data, content, custom_markers, exclude_markers, assignment_template)
+    if early_result is not None:
+        return early_result
+
+    if not extraction_result or not extraction_result.get("extracted_responses"):
+        # Fall back to single-pass for edge cases
+        _logger.info(f"  ⚠️ Multi-pass: No extracted responses, falling back to single-pass")
+        return grade_assignment(student_name, assignment_data, custom_ai_instructions,
+                               grade_level, subject, ai_model, student_id, assignment_template,
+                               rubric_prompt, custom_markers, exclude_markers, marker_config,
+                               effort_points, extraction_mode, grading_style)
+
+    responses = extraction_result["extracted_responses"]
+
+    # DEBUG: Log extracted responses before filtering
+    _logger.info(f"  🔍 Multi-pass: {len(responses)} extracted responses before filtering:")
+    for i, resp in enumerate(responses):
+        q = resp.get("question", "?")[:80]
+        a = resp.get("answer", "")[:120].replace('\n', ' ')
+        t = resp.get("type", "?")
+        _logger.info(f"      [{i+1}] Q: {q}")
+        _logger.info(f"           A: {a}")
+        _logger.info(f"           Type: {t}")
+
+    # Filter question/prompt text from extracted answers before grading.
+    # If filtering empties a response, move it to blank_questions so completeness caps apply.
+    filtered_out = []
+    for resp in responses:
+        answer = resp.get("answer", "")
+        if answer and resp.get("type") != "fitb":
+            cleaned = filter_questions_from_response(answer)
+            if cleaned and len(cleaned.strip()) >= 3:
+                resp["answer"] = cleaned
+            else:
+                q_label = resp.get("question", "Unknown")
+                _logger.info(f"      ⚠️ Response for '{q_label[:50]}' was only template text — marking blank")
+                extraction_result.setdefault("blank_questions", []).append(q_label)
+                filtered_out.append(resp)
+    if filtered_out:
+        responses = [r for r in responses if r not in filtered_out]
+        extraction_result["extracted_responses"] = responses
+
+    # Build expected answers lookup from gradingNotes within custom_ai_instructions
+    expected_answers = _parse_expected_answers(custom_ai_instructions)
+
+    # NOTE: accommodation context, student history, period differentiation, and rubric
+    # type overrides are ALREADY embedded in custom_ai_instructions by app.py (lines 975-1119).
+    # We pass the full string untruncated to each per-question call.
+
+    # Append the custom rubric prompt (from Settings) so per-question graders see it.
+    # In single-pass, rubric_prompt overrides GRADING_RUBRIC. In multipass, we append it
+    # to the teacher instructions so each per-question call gets the rubric categories/weights.
+    effective_instructions = custom_ai_instructions
+    if rubric_prompt:
+        effective_instructions += "\n\n" + rubric_prompt
+
+    # === PASS 2: PER-QUESTION GRADING (parallel) ===
+    question_results = _multipass_grade_questions_parallel(
+        responses, marker_config, effort_points, expected_answers,
+        grade_level, subject, effective_instructions, grading_style,
+        ai_model, provider, tracker, student_name)
 
     # === TEACHER LENIENCY POST-PROCESSING ===
     _apply_vocab_leniency(effective_instructions, responses, question_results)
