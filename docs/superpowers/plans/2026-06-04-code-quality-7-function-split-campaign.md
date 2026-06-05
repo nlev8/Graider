@@ -86,7 +86,7 @@ drift). Then:
 | #683 | `classlink_callback` 🔐 (student + teacher login tails → 2 helpers) | 318 → 234 | B |
 | #686 | `grade_portal_submission_sync` 🔴 (score+feedback+persist → `_finalize_portal_grading`) | 452 → 251 | B |
 | #687 | `extract_student_responses` (4 helpers: marker-builder / content-end / per-marker-loop / fallback) | 866 → 255 | B |
-| _pending_ | `assistant_chat`/`generate` (lift `generate`→`_run_assistant_stream` + tool loop→`_execute_tool_round`; golden SSE net + 4-lens adversarial review) | 472/373 → 105/273/130 | B |
+| #688 | `assistant_chat`/`generate` (lift `generate`→`_run_assistant_stream` + tool loop→`_execute_tool_round`; golden SSE net + 4-lens adversarial review) | 472/373 → 105/273/130 | B |
 
 ### Remaining 2 (the harder half)
 - ~~**Intertwined assistant route**~~ ✅ DONE (`refactor/cq7-assistant-chat-split`): `generate` (373) lifted to `_run_assistant_stream` (273) + tool loop → `_execute_tool_round` (130); `assistant_chat` 472→105. Golden net + byte-identity + 4-lens adversarial review (all PRESERVED).
