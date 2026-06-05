@@ -5,12 +5,9 @@ The Python venv is at: `/Users/alexc/Downloads/Graider/venv/`
 Activate with: `source venv/bin/activate`
 Always use this venv for running Python commands, installing packages, and starting the backend.
 
-## CRITICAL: Active Frontend
+## Active Frontend
 
-**The active frontend is `frontend/src/App.jsx`** (React + Vite, served via `backend/app.py`).
-
-**`graider_app.py` is the LEGACY frontend** — it contains an old embedded React UI that is NOT in use.
-**NEVER edit `graider_app.py` for UI changes.** All frontend work goes in `frontend/src/`.
+**The active frontend is `frontend/src/App.jsx`** (React + Vite). All frontend work goes in `frontend/src/`.
 
 - Backend entry point: `backend/app.py` (serves the Vite-built frontend from `backend/static/`)
 - Frontend source: `frontend/src/App.jsx` and `frontend/src/` directory
@@ -47,7 +44,7 @@ All changes go through Pull Requests:
 
 **Branch protection on `main` requires 9 status checks (verified via `gh api repos/nlev8/Graider/branches/main/protection/required_status_checks`):**
 
-- `Backend Tests` (pytest with `--cov-fail-under=70`; bumped 32→40 in PR #239 to match measured ~41%, then 40→48 on 2026-05-09 after PRs #266-#277 pushed measured global to 49.91%, then 48→60 on 2026-05-11 after PRs #310-#349 (gap-fill sprint + Gemini quality-review sweep) pushed measured global to 63.25%, then 60→70 on 2026-06-03 after PR #638 (166 behavioral tests on assignment_post_processing/response_extraction/grader_roster) pushed measured global to 70.50%. **Sprint target 50% per audit MAJOR #4 HIT 2026-05-09; 60% floor locked the post-sprint wins; 70% floor locks the 2026-06-03 hardening-sprint coverage.** Bump rule: raise floor only when measured global is at least 0.5% above the new floor. Continue raising as coverage grows.)
+- `Backend Tests` (pytest with `--cov-fail-under=70`; measured global ~70.5% as of 2026-06-03. **Bump rule:** raise the floor only when measured global is ≥0.5% above the new floor. Full bump history lives in git log / the cicd-pipeline plan doc.)
 - `Frontend Build` (Vite build succeeds + frontend test count ≥ floor)
 - `Frontend E2E Smoke` (Playwright `health-check.spec.js` against locally-spawned backend; promoted from `continue-on-error` to required on 2026-05-11 after 15 consecutive green runs — closes audit MAJOR #5 Phase 1)
 - `Migrations Smoke` (Alembic upgrades cleanly against raw `postgres:15-alpine`)
@@ -70,7 +67,6 @@ Graider is an AI-powered grading assistant for educators. It's a Flask applicati
 ### File Structure
 ```
 graider/
-├── graider_app.py          # LEGACY - old embedded React UI, DO NOT EDIT for UI changes
 ├── assignment_grader.py    # Core grading logic, file parsing, OpenAI calls
 ├── email_sender.py         # Email functionality for sending feedback
 ├── .env                    # API keys (never commit)
@@ -163,8 +159,8 @@ The multipass grading pipeline (`grade_multipass` → `grade_per_question` → `
 18. **Writing Style Profile** — Historical patterns for detection
 
 ### Key code locations:
-- Factor accumulation: `backend/app.py` `file_ai_notes` built inline in grading thread
-- Rubric formatting: `backend/app.py` `format_rubric_for_prompt()`
+- Factor accumulation: `backend/grading/pipeline.py` `file_ai_notes` built inline in the grading thread
+- Rubric formatting: `backend/services/rubric_formatting.py` `format_rubric_for_prompt()`
 - Per-question grading: `assignment_grader.py` `grade_per_question()`
 - Feedback generation: `assignment_grader.py` `generate_feedback()`
 - Multipass orchestration: `assignment_grader.py` `grade_multipass()`
@@ -174,25 +170,9 @@ The multipass grading pipeline (`grade_multipass` → `grade_per_question` → `
 
 ## Code Style
 
-### JavaScript (Embedded React)
-
-```javascript
-// GOOD: Single-line style for inline JSX
-<button onClick={() => doSomething()} style={{ padding: '10px' }}>Click</button>
-
-// GOOD: Use String.fromCharCode(10) for newlines in strings
-const nl = String.fromCharCode(10);
-const text = 'Line 1' + nl + 'Line 2';
-
-// BAD: Multi-line strings with \n (causes Babel parse errors)
-const text = 'Line 1\nLine 2';  // NEVER DO THIS
-
-// GOOD: String concatenation for complex strings
-const html = '<h1>' + title + '</h1><p>' + content + '</p>';
-
-// BAD: Template literals with backticks (can break in embedded context)
-const html = `<h1>${title}</h1>`;  // AVOID
-```
+> Note: the active frontend (`frontend/src/`) is a normal Vite/React project — template
+> literals, multi-line strings, and `\n` are all fine. (The old embedded-React string-concat
+> constraints no longer apply; that frontend was removed.)
 
 ### Python (Flask Backend)
 
@@ -219,40 +199,6 @@ grading_state = {
 
 ## Prohibited Patterns
 
-### JavaScript/React
-
-1. **NO multi-line string literals**
-   ```javascript
-   // NEVER DO THIS - causes Babel syntax errors
-   const str = 'line 1
-   line 2';
-
-   // DO THIS INSTEAD
-   const nl = String.fromCharCode(10);
-   const str = 'line 1' + nl + 'line 2';
-   ```
-
-2. **NO template literals with newlines**
-   ```javascript
-   // AVOID - can break in embedded context
-   const html = `
-     <div>
-       ${content}
-     </div>
-   `;
-
-   // DO THIS
-   const html = '<div>' + content + '</div>';
-   ```
-
-3. **NO unclosed JSX tags**
-   - Always verify matching opening/closing tags
-   - Use React Fragments `<>...</>` for adjacent elements
-
-4. **NO Icon components inside button onClick handlers**
-   - Icons in buttons can block click events
-   - Put Icon as child, not in onClick
-
 ### Python
 
 1. **NO hardcoded API keys**
@@ -271,263 +217,38 @@ grading_state = {
 
 ---
 
-## Best Practices
-
-### State Management
-
-```javascript
-// Track loaded assignment by filename, not title
-const [loadedAssignmentName, setLoadedAssignmentName] = useState('');
-
-// Clear state when importing new document
-setLoadedAssignmentName('');
-
-// Compare using filename for highlighting
-background: loadedAssignmentName === name ? 'selected' : 'default'
-```
-
-### API Endpoints
-
-```python
-@app.route('/api/endpoint', methods=['POST'])
-def endpoint():
-    try:
-        data = request.json
-        # Validate input
-        if not data.get('required_field'):
-            return jsonify({"error": "Missing required field"})
-
-        # Process
-        result = process(data)
-        return jsonify({"status": "success", "data": result})
-    except Exception as e:
-        return jsonify({"error": str(e)})
-```
-
-### File Operations
-
-```python
-# Always use expanduser for user config paths
-config_path = os.path.expanduser("~/.graider_settings.json")
-
-# Create directories if needed
-os.makedirs(output_folder, exist_ok=True)
-
-# Use Path for cross-platform compatibility
-from pathlib import Path
-filepath = Path(folder) / filename
-```
-
-### Grading Thread
-
-```python
-def run_grading_thread(folder, config):
-    global grading_state
-    grading_state["is_running"] = True
-
-    try:
-        # Do work
-        for file in files:
-            if grading_state.get("stop_requested"):
-                break
-            # Process file
-            grading_state["log"].append(f"Processing {file}")
-    finally:
-        grading_state["is_running"] = False
-```
-
----
-
-## Common Issues & Fixes
-
-### "Unterminated string constant" Error
-**Cause**: Multi-line strings or escape characters in embedded JavaScript
-**Fix**: Use `String.fromCharCode(10)` for newlines, string concatenation for multi-line
-
-### "Adjacent JSX elements must be wrapped" Error
-**Cause**: Two sibling elements without a parent wrapper
-**Fix**: Wrap in `<div>` or `<>...</>` fragment
-
-### Button onClick not working
-**Cause**: Often Icon component or styling blocking clicks
-**Fix**: Simplify button, test with just `onClick={() => alert('test')}`
-
-### State not updating in UI
-**Cause**: State reference not changing or stale closure
-**Fix**: Spread operator for new object `{...oldState, newField: value}`
-
-### Assignment config not matching files
-**Cause**: Filename sanitization differs from title
-**Fix**: Use `loadedAssignmentName` to track by filename, not title
-
----
-
-## Testing Checklist
-
-Before committing changes:
-
-1. [ ] App starts without Babel errors: `python graider_app.py`
-2. [ ] All tabs render (Home, Results, Builder, Planner, Settings)
-3. [ ] Can import document in Builder
-4. [ ] Can save/load assignment configs
-5. [ ] Grading starts and produces results
-6. [ ] No console errors in browser DevTools
-
----
-
 ## Environment Setup
 
 ```bash
-# Install dependencies
+# Backend
+source venv/bin/activate
 pip install -r requirements.txt
+python backend/app.py            # serves the built SPA from backend/static/
 
-# Create .env file
-echo "OPENAI_API_KEY=sk-your-key-here" > .env
-
-# Run app
-python graider_app.py
-# Opens at http://localhost:3000
+# Frontend (dev)
+cd frontend && npm install
+npm run dev                      # Vite dev server on :5180, proxies /api
+# or: npm run build              # populates backend/static/ for the Flask server
 ```
+
+Required env: see **Environment Variables** below (`FLASK_SECRET_KEY`, `SUPABASE_*` at minimum).
+Verification/testing discipline lives in `.claude/rules/workflow.md`, not here.
 
 ---
 
 ## API Reference
 
-### Grading
-- `POST /api/grade` - Start grading job
-- `GET /api/status` - Get grading status/progress
-- `POST /api/stop-grading` - Stop current grading
+~270 `/api/*` routes are registered across `backend/routes/*.py` (plus `backend/app.py`).
+This file no longer hand-maintains the endpoint list (it drifted to ~32% coverage). To get
+the live, authoritative list:
 
-### Assignments
-- `GET /api/list-assignments` - List saved configs
-- `GET /api/load-assignment?name=X` - Load specific config
-- `POST /api/save-assignment-config` - Save config
-- `DELETE /api/delete-assignment?name=X` - Delete config
+```bash
+grep -rnE "@[a-z_]+\.route\(" backend --include='*.py'
+```
 
-### Settings
-- `GET /api/load-rubric` - Load rubric
-- `POST /api/save-rubric` - Save rubric
-- `GET /api/load-global-settings` - Load global AI notes
-- `POST /api/save-global-settings` - Save global AI notes
-
-### Documents
-- `POST /api/parse-document` - Parse uploaded Word/PDF
-- `POST /api/export-assignment` - Export to Word/PDF
-
-### Lesson Planner
-- `POST /api/get-standards` - Get curriculum standards
-- `POST /api/generate-lesson-plan` - Generate AI lesson plan
-- `POST /api/export-lesson-plan` - Export to Word
-
-### Clever SSO & Roster
-- `GET /api/clever/login-url` — Get Clever OAuth URL
-- `GET /api/clever/callback` — OAuth callback (handles teachers + students)
-- `GET /api/clever/session` — Check Clever session status
-- `POST /api/clever/sync-roster` — Manual roster sync
-- `POST /api/clever/apply-accommodations` — Apply IEP/ELL accommodations
-- `GET /api/clever/district-keys` — Check district API key status
-- `POST /api/clever/district-keys` — Save district API keys (admin only)
-- `POST /api/clever/delete-data` — Delete all Clever-sourced data
-- `POST /api/clever/logout` — Clear Clever session
-- `POST /api/clever/student-token` — Exchange auth code for student session token
-- `GET /api/clever/health` — Health check (config + connectivity status)
-
-### ClassLink SSO
-- `GET /api/classlink/login-url` — Get ClassLink OAuth URL
-- `GET /api/classlink/callback` — OAuth callback (ClassLink redirects here)
-- `GET /api/classlink/session` — Check ClassLink session status
-- `POST /api/classlink/logout` — Clear ClassLink session
-
-### OneRoster Integration (1EdTech)
-- `GET /api/oneroster/config` — Check OneRoster configuration status
-- `POST /api/oneroster/config` — Save OneRoster connection settings
-- `POST /api/oneroster/test` — Test API connectivity
-- `POST /api/oneroster/sync-roster` — Fetch and sync roster from OneRoster API
-- `POST /api/oneroster/apply-accommodations` — Apply IEP/ELL presets from demographics
-- `POST /api/oneroster/delete-data` — Delete all OneRoster-synced data
-
-### LTI 1.3 Integration (1EdTech)
-- `GET /api/lti/jwks` — Tool's public JWKS (for platform verification)
-- `GET,POST /api/lti/login` — OIDC third-party login initiation
-- `POST /api/lti/launch` — Launch callback (platform posts id_token)
-- `GET /api/lti/config` — List registered LTI platforms
-- `POST /api/lti/config` — Register an LTI platform
-- `DELETE /api/lti/config` — Delete a platform registration
-- `GET /api/lti/contexts` — List LTI course contexts with AGS endpoints and student counts
-- `POST /api/lti/sync-grades` — Sync grades to LMS via AGS (auto-matches students by name)
-
-### District Admin Setup
-- `POST /api/district/auth` — Authenticate as district admin (password)
-- `DELETE /api/district/auth` — Clear district admin session
-- `POST /api/district/change-password` — Change district admin password
-- `GET /api/district/config-status` — Public: check if SIS/AI keys configured
-- `GET /api/district/config` — Load full district config (admin auth required)
-- `POST /api/district/config` — Save SIS + AI key config (admin auth required)
-- `POST /api/district/test-connection` — Test SIS connectivity (admin auth required)
-- `POST /api/oneroster/teacher-id` — Save teacher's OneRoster sourcedId (teacher auth)
-
-### School Admin (Principal)
-- `GET /api/admin/status` — Check if current user is a school admin
-- `POST /api/admin/claim` — Claim admin role with invite code
-- `GET /api/admin/teachers` — List teachers at admin's school
-- `GET /api/admin/overview` — School-wide aggregate stats
-- `GET /api/admin/teacher/<id>/summary` — Per-teacher drill-down
-- `GET /api/admin/activity` — Recent activity across admin's teachers
-- `POST /api/district/admin-invite` — Create admin invite code (district admin)
-- `GET /api/district/admins` — List current admins (district admin)
-- `DELETE /api/district/admins` — Revoke admin (district admin)
-- `GET /api/district/teacher-search` — Search teachers by name/email (district admin)
-
-### Student Portal
-- `POST /api/student/login` — Student login (email + class code)
-- `GET /api/student/session` — Validate student session
-- `GET /api/student/dashboard` — Get student's assigned work
-- `GET /api/student/content/<id>` — Get assessment/assignment content
-- `POST /api/student/class-submit/<content_id>` — Submit answers (class-based, authenticated via `X-Student-Token`)
-
-### Classes
-- `POST /api/classes` — Create a class
-- `GET /api/classes` — List teacher's classes
-- `GET /api/classes/<id>/students` — List enrolled students
-- `POST /api/classes/<id>/sync-roster` — Sync roster via CSV
-- `POST /api/publish-to-class` — Publish content to a class
-
-### Portal (Join Code)
-- `POST /api/publish-assessment` — Publish via join code (requires teacher auth)
-- `GET /api/student/join/<code>` — Get assessment by join code
-- `POST /api/student/submit/<code>` — Submit via join code
-- `GET /api/teacher/assessments` — List teacher's published assessments
-- `GET /api/teacher/assessment/<code>/results` — Get submissions for assessment
-- `POST /api/teacher/assessment/<code>/toggle` — Activate/deactivate assessment
-- `DELETE /api/teacher/assessment/<code>` — Delete assessment + submissions
-
-### Resources (Assets)
-- `POST /api/save-resource` — Auto-save generated content (requires teacher auth)
-- `GET /api/list-resources` — List saved resources with optional type filter
-- `POST /api/load-resource` — Load a saved resource by ID
-- `POST /api/delete-resource` — Delete a saved resource
-
-### Behavior Tracking
-- `POST /api/behavior/session` — Start behavior tracking session
-- `GET /api/behavior/data` — Get behavior data
-- `GET /api/behavior/events` — Get behavior events
-- `DELETE /api/behavior/data` — Clear behavior data
-
-### Automations
-- `GET /api/automations` — List automation workflows
-- `POST /api/automations` — Create automation workflow
-- `DELETE /api/automations/<id>` — Delete workflow
-- `POST /api/automations/<id>/run` — Run a workflow
-
-### Slide Deck Generation
-- `POST /api/generate-slides` — Generate slide deck content + AI graphics from lesson plan
-- `POST /api/export-slides` — Export generated slides as PowerPoint (.pptx)
-
-### Surveys
-- `POST /api/survey/create` — Create feedback survey
-- `GET /api/survey/results` — Get survey results
-- `GET /api/survey/list` — List surveys
-- `POST /api/survey/<code>/submit` — Submit survey response
+Or ask GitNexus: `gitnexus_query({query: "<feature> endpoint"})`. Route handlers are grouped
+by domain in `backend/routes/` (clever_routes, classlink_routes, oneroster, lti, district,
+admin, student_account_routes, student_portal_routes, assistant_routes, planner_routes, …).
 
 ---
 
@@ -653,46 +374,19 @@ If the fix genuinely exceeds PR scope (3+ files of unrelated changes, requires a
 
 ### 12. Handoff Discipline (avoid context-fatigue dead-ends)
 
-Long sessions degrade reasoning. `/compact` summarizes facts but inherits the *framing* of the prior conversation — including bad hypotheses and false trails. The fix is a clean handoff to a fresh agent.
-
-**Write `handoff.md` at repo root BEFORE any of these:**
-
-- Running `/clear` or `/compact` when there's an unresolved debug thread
-- A scheduled autonomous loop that may run unattended >2 hours
-- Stopping work mid-investigation to step away
-- You've made **3+ failed attempts** at the same root cause
-
-**The handoff MUST include** (in this order):
-
-1. **Goal** — one sentence stating what we're trying to accomplish
-2. **TL;DR** — 3-5 bullets: what's shipped, what works, what's blocked
-3. **Current state** — files modified, PRs open/merged, follow-up issues filed
-4. **Local repro** — exact shell commands a fresh agent runs to reproduce the failure
-5. **Disproved hypotheses** — things tried that DIDN'T work, with brief reason each was ruled out
-6. **Most likely remaining causes** — ranked
-7. **Concrete next step** — specific code/PR sketch
-8. **References** — PR numbers, issue numbers, CI run IDs, plan docs
-
-Be honest about what you actually tried and what failed. **Do NOT sanitize the failures** — those are the most valuable part of the handoff. The next agent needs them to avoid re-trying the same dead ends.
-
-**Self-trigger heuristic**: if you catch yourself thinking *"let me try X again with a slight variation"* on the same problem for the 3rd time, STOP, write `handoff.md`, and tell the user "I've hit a context-fatigue wall — handoff.md written; recommend `/clear` + fresh session."
-
-**Or invoke explicitly**: `/handoff` slash command auto-generates the file from current session state. Use when the user (or you) recognize the wall before failure mode 3 hits.
-
-`handoff.md` is committable when the handoff itself is documentation of an open investigation (e.g., what shipped tonight at audit MAJOR #5 Stage 3a). Default: leave uncommitted unless it serves as artifact.
+Before `/clear`, `/compact`, an unattended loop, or after 3+ failed attempts at the same root cause:
+write `handoff.md` (or run `/handoff`). Be honest about what you tried and what *failed* — disproved
+hypotheses are the most valuable part. Full required-sections list + self-trigger heuristic: see the
+`/handoff` skill (it's the canonical spec; don't duplicate it here).
 
 ### 13. Review Gates Before Auto-Merge (class the PR first)
 
-Classify every PR **before opening it**, because the class determines whether auto-merge-on-green is safe:
-
-- **Class A — behavior-preserving refactor:** the golden net (results) + prompt-snapshot net (wording) + AST byte-identity vs `main` *prove* behavior is unchanged. Green CI ≈ provably correct → squash-auto-merge on green is earned and fine.
-- **Class B — net-new behavior, OR anything compliance / security / FERPA:** green CI only covers the cases you imagined to test. A code review is a **HARD pre-gate**, not a concurrent advisory.
-
-For Class B the sequence is strict and removes the race structurally: **create PR → review → fix to clean → THEN merge.** Do NOT call `gh pr merge --auto` with a review in flight; for Class B, merge **manually** after the review returns clean. Never let a review run *alongside* an armed auto-merge — it can only catch issues after the merge has already fired.
-
-The tell that forces the classification: **"am I adding logic, or just moving it?"** Adding/changing logic (especially regexes, scoring, redaction, auth) ⇒ Class B ⇒ review gates the merge. Moving code verbatim ⇒ Class A ⇒ nets gate the merge.
-
-> Origin: 2026-05-24, PR #565 (FERPA prompt sanitization). Auto-merge was armed *concurrently* with the code review; the review caught a Critical over-redaction (common-word student names corrupting answers) but only *after* #565 had auto-merged on green. Fixed forward in #566. The error wasn't "no review" — it was that the review wasn't sequenced as a gate.
+Classify every PR before opening it: **Class A** (behavior-preserving refactor, proven by nets) →
+auto-merge on green is earned. **Class B** (net-new behavior OR compliance/security/FERPA) → code
+review is a HARD pre-gate: **create PR → review → fix to clean → THEN merge manually** (never
+`gh pr merge --auto` with a review in flight). The tell: *"am I adding logic, or just moving it?"* —
+adding/changing logic (regexes, scoring, redaction, auth) ⇒ Class B. Full rationale + the PR #565
+origin story: `.claude/rules/workflow.md` ("Class A vs Class B").
 
 ---
 
@@ -711,7 +405,7 @@ Key rule: **Phase 3c should not flag issues that Phase 5 will fix.** Don't warn 
 
 ---
 
-*Last updated: March 20, 2026*
+*Last updated: June 4, 2026*
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
