@@ -204,6 +204,149 @@ def load_support_documents_for_grading(subject: Optional[str] = None) -> str:
 
 
 
+def extract_content_fingerprints(config_data: dict[str, Any]) -> set[str]:
+    """Extract unique phrases from assignment's imported document for content matching."""
+    fingerprints = set()
+    imported_doc = config_data.get('importedDoc') or {}
+    doc_text = imported_doc.get('text', '')
+
+    if doc_text:
+        # Extract significant phrases (questions, numbered items, unique sentences)
+        import re
+        # Get numbered questions/items (e.g., "1.", "1)", "Question 1")
+        numbered = re.findall(r'(?:^|\n)\s*(?:\d+[\.\)]\s*|Question\s*\d+[:\.]?\s*)(.{20,100})', doc_text, re.IGNORECASE)
+        for item in numbered[:10]:  # Limit to first 10
+            clean = re.sub(r'\s+', ' ', item.strip().lower())
+            if len(clean) > 20:
+                fingerprints.add(clean[:50])  # First 50 chars of each
+
+        # Get marker texts as fingerprints
+        for marker in config_data.get('customMarkers', []):
+            if len(marker) > 10:
+                fingerprints.add(marker.lower()[:50])
+
+        # Get unique sentences (not too short, not too long)
+        sentences = re.split(r'[.!?]\s+', doc_text)
+        for sent in sentences[:20]:
+            clean = re.sub(r'\s+', ' ', sent.strip().lower())
+            if 30 < len(clean) < 150:
+                fingerprints.add(clean[:50])
+
+    return fingerprints
+
+
+def fuzzy_match_score(text1: str, text2: str) -> float:
+    """Calculate fuzzy match score between two strings."""
+    if not text1 or not text2:
+        return 0
+
+    t1 = text1.lower().strip()
+    t2 = text2.lower().strip()
+
+    # Exact match
+    if t1 == t2:
+        return 100
+
+    # One contains the other
+    if t1 in t2 or t2 in t1:
+        return 80
+
+    # Word overlap matching
+    import re
+    words1 = set(re.findall(r'\b\w{3,}\b', t1))  # Words 3+ chars
+    words2 = set(re.findall(r'\b\w{3,}\b', t2))
+
+    if not words1 or not words2:
+        return 0
+
+    overlap = len(words1 & words2)
+    total = max(len(words1), len(words2))
+    word_score = (overlap / total) * 60 if total > 0 else 0
+
+    # Abbreviation detection (e.g., "Ch5" matches "Chapter 5")
+    abbrev_patterns = [
+        (r'ch(?:ap(?:ter)?)?[\s\-_]*(\d+)', r'chapter \1'),  # Ch5, Chap5, Chapter5
+        (r'q(?:uiz)?[\s\-_]*(\d+)', r'quiz \1'),  # Q1, Quiz1
+        (r'hw[\s\-_]*(\d+)', r'homework \1'),  # HW1
+        (r'test[\s\-_]*(\d+)', r'test \1'),
+        (r'unit[\s\-_]*(\d+)', r'unit \1'),
+    ]
+
+    for pattern, expansion in abbrev_patterns:
+        t1_expanded = re.sub(pattern, expansion, t1, flags=re.IGNORECASE)
+        t2_expanded = re.sub(pattern, expansion, t2, flags=re.IGNORECASE)
+        if t1_expanded in t2_expanded or t2_expanded in t1_expanded:
+            return 70
+
+    return word_score
+
+
+def calculate_late_penalty(filepath: Any, matched_config: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Calculate late penalty based on file modification time and assignment config.
+
+    Returns dict with penalty info or None if no penalty applies.
+    """
+    if not matched_config:
+        return None
+
+    due_date_str = matched_config.get('dueDate', '')
+    late_penalty_cfg = matched_config.get('latePenalty', {})
+
+    if not due_date_str or not late_penalty_cfg.get('enabled'):
+        return None
+
+    try:
+        due_date = datetime.fromisoformat(due_date_str)
+    except (ValueError, TypeError):
+        return None
+
+    # Get file modification time
+    try:
+        file_mtime = datetime.fromtimestamp(Path(filepath).stat().st_mtime)
+    except (OSError, TypeError):
+        return None
+
+    # Apply grace period
+    grace_hours = late_penalty_cfg.get('gracePeriodHours', 0) or 0
+    from datetime import timedelta
+    effective_due = due_date + timedelta(hours=grace_hours)
+
+    if file_mtime <= effective_due:
+        return {"is_late": False, "days_late": 0, "penalty_percent": 0, "penalty_points": 0}
+
+    # Calculate days late (partial days round up)
+    delta = file_mtime - effective_due
+    days_late = math.ceil(delta.total_seconds() / 86400)
+
+    penalty_type = late_penalty_cfg.get('type', 'points_per_day')
+    amount = late_penalty_cfg.get('amount', 10) or 10
+    max_penalty = late_penalty_cfg.get('maxPenalty', 50) or 50
+    tiers = late_penalty_cfg.get('tiers', [])
+
+    penalty_percent: float = 0
+    penalty_points: float = 0
+
+    if penalty_type == 'points_per_day':
+        penalty_points = min(days_late * amount, max_penalty)
+    elif penalty_type == 'percent_per_day':
+        penalty_percent = min(days_late * amount, max_penalty)
+    elif penalty_type == 'tiered':
+        # Sort tiers by daysLate descending and find the matching bracket
+        sorted_tiers = sorted(tiers, key=lambda t: t.get('daysLate', 0), reverse=True)
+        for tier in sorted_tiers:
+            if days_late >= tier.get('daysLate', 0):
+                penalty_percent = min(tier.get('penalty', 0), max_penalty)
+                break
+
+    return {
+        "is_late": True,
+        "days_late": days_late,
+        "penalty_type": penalty_type,
+        "penalty_percent": penalty_percent,
+        "penalty_points": penalty_points,
+    }
+
+
 def _run_grading_thread_inner(
     assignments_folder: str,
     output_folder: str,
@@ -278,81 +421,6 @@ def _run_grading_thread_inner(
                     # Best-effort: malformed/missing config file just means this
                     # one entry isn't available for matching. Other configs work.
                     _logger.debug("Failed to load assignment config %s: %s", f, e)
-
-    def extract_content_fingerprints(config_data: dict[str, Any]) -> set[str]:
-        """Extract unique phrases from assignment's imported document for content matching."""
-        fingerprints = set()
-        imported_doc = config_data.get('importedDoc') or {}
-        doc_text = imported_doc.get('text', '')
-
-        if doc_text:
-            # Extract significant phrases (questions, numbered items, unique sentences)
-            import re
-            # Get numbered questions/items (e.g., "1.", "1)", "Question 1")
-            numbered = re.findall(r'(?:^|\n)\s*(?:\d+[\.\)]\s*|Question\s*\d+[:\.]?\s*)(.{20,100})', doc_text, re.IGNORECASE)
-            for item in numbered[:10]:  # Limit to first 10
-                clean = re.sub(r'\s+', ' ', item.strip().lower())
-                if len(clean) > 20:
-                    fingerprints.add(clean[:50])  # First 50 chars of each
-
-            # Get marker texts as fingerprints
-            for marker in config_data.get('customMarkers', []):
-                if len(marker) > 10:
-                    fingerprints.add(marker.lower()[:50])
-
-            # Get unique sentences (not too short, not too long)
-            sentences = re.split(r'[.!?]\s+', doc_text)
-            for sent in sentences[:20]:
-                clean = re.sub(r'\s+', ' ', sent.strip().lower())
-                if 30 < len(clean) < 150:
-                    fingerprints.add(clean[:50])
-
-        return fingerprints
-
-    def fuzzy_match_score(text1: str, text2: str) -> float:
-        """Calculate fuzzy match score between two strings."""
-        if not text1 or not text2:
-            return 0
-
-        t1 = text1.lower().strip()
-        t2 = text2.lower().strip()
-
-        # Exact match
-        if t1 == t2:
-            return 100
-
-        # One contains the other
-        if t1 in t2 or t2 in t1:
-            return 80
-
-        # Word overlap matching
-        import re
-        words1 = set(re.findall(r'\b\w{3,}\b', t1))  # Words 3+ chars
-        words2 = set(re.findall(r'\b\w{3,}\b', t2))
-
-        if not words1 or not words2:
-            return 0
-
-        overlap = len(words1 & words2)
-        total = max(len(words1), len(words2))
-        word_score = (overlap / total) * 60 if total > 0 else 0
-
-        # Abbreviation detection (e.g., "Ch5" matches "Chapter 5")
-        abbrev_patterns = [
-            (r'ch(?:ap(?:ter)?)?[\s\-_]*(\d+)', r'chapter \1'),  # Ch5, Chap5, Chapter5
-            (r'q(?:uiz)?[\s\-_]*(\d+)', r'quiz \1'),  # Q1, Quiz1
-            (r'hw[\s\-_]*(\d+)', r'homework \1'),  # HW1
-            (r'test[\s\-_]*(\d+)', r'test \1'),
-            (r'unit[\s\-_]*(\d+)', r'unit \1'),
-        ]
-
-        for pattern, expansion in abbrev_patterns:
-            t1_expanded = re.sub(pattern, expansion, t1, flags=re.IGNORECASE)
-            t2_expanded = re.sub(pattern, expansion, t2, flags=re.IGNORECASE)
-            if t1_expanded in t2_expanded or t2_expanded in t1_expanded:
-                return 70
-
-        return word_score
 
     def find_matching_config(filename: str, file_content: Optional[str] = None) -> Optional[dict[str, Any]]:
         """Find matching config for a filename, with alias and fuzzy matching."""
@@ -469,71 +537,6 @@ def _run_grading_thread_inner(
             grading_state["log"].append(f"Auto-matched via {match_reason}")
 
         return best_match
-
-    def calculate_late_penalty(filepath: Any, matched_config: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
-        """Calculate late penalty based on file modification time and assignment config.
-
-        Returns dict with penalty info or None if no penalty applies.
-        """
-        if not matched_config:
-            return None
-
-        due_date_str = matched_config.get('dueDate', '')
-        late_penalty_cfg = matched_config.get('latePenalty', {})
-
-        if not due_date_str or not late_penalty_cfg.get('enabled'):
-            return None
-
-        try:
-            due_date = datetime.fromisoformat(due_date_str)
-        except (ValueError, TypeError):
-            return None
-
-        # Get file modification time
-        try:
-            file_mtime = datetime.fromtimestamp(Path(filepath).stat().st_mtime)
-        except (OSError, TypeError):
-            return None
-
-        # Apply grace period
-        grace_hours = late_penalty_cfg.get('gracePeriodHours', 0) or 0
-        from datetime import timedelta
-        effective_due = due_date + timedelta(hours=grace_hours)
-
-        if file_mtime <= effective_due:
-            return {"is_late": False, "days_late": 0, "penalty_percent": 0, "penalty_points": 0}
-
-        # Calculate days late (partial days round up)
-        delta = file_mtime - effective_due
-        days_late = math.ceil(delta.total_seconds() / 86400)
-
-        penalty_type = late_penalty_cfg.get('type', 'points_per_day')
-        amount = late_penalty_cfg.get('amount', 10) or 10
-        max_penalty = late_penalty_cfg.get('maxPenalty', 50) or 50
-        tiers = late_penalty_cfg.get('tiers', [])
-
-        penalty_percent: float = 0
-        penalty_points: float = 0
-
-        if penalty_type == 'points_per_day':
-            penalty_points = min(days_late * amount, max_penalty)
-        elif penalty_type == 'percent_per_day':
-            penalty_percent = min(days_late * amount, max_penalty)
-        elif penalty_type == 'tiered':
-            # Sort tiers by daysLate descending and find the matching bracket
-            sorted_tiers = sorted(tiers, key=lambda t: t.get('daysLate', 0), reverse=True)
-            for tier in sorted_tiers:
-                if days_late >= tier.get('daysLate', 0):
-                    penalty_percent = min(tier.get('penalty', 0), max_penalty)
-                    break
-
-        return {
-            "is_late": True,
-            "days_late": days_late,
-            "penalty_type": penalty_type,
-            "penalty_percent": penalty_percent,
-            "penalty_points": penalty_points,
-        }
 
     # Extract custom markers, notes, and response sections from selected config (fallback)
     fallback_markers = []
