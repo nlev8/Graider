@@ -116,28 +116,35 @@ def test_pipeline_lazy_imports_all_resolve():
         source = open(pipeline.__file__).read()
         tree = ast.parse(source)
 
-        # Find _run_grading_thread_inner
-        target_fn = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "_run_grading_thread_inner":
-                target_fn = node
-                break
-        assert target_fn is not None, "_run_grading_thread_inner not found in pipeline.py"
+        # CQ7 PR-3a lifted grade_single_file + find_matching_config OUT of
+        # _run_grading_thread_inner to module level; PR-3b then decomposed
+        # grade_single_file's body into _resolve_student / _build_file_ai_notes /
+        # _dispatch_grade / _assemble_post_grade. Walk ALL of them so the lazy
+        # function-local `from assignment_grader import ...` imports inside each
+        # stay covered — they would otherwise fall outside this guard and go BLIND.
+        WALK_FNS = {"_run_grading_thread_inner", "grade_single_file", "find_matching_config",
+                    "_resolve_student", "_resolve_student_period", "_build_file_ai_notes",
+                    "_dispatch_grade", "_assemble_post_grade"}
+        target_fns = [node for node in ast.walk(tree)
+                      if isinstance(node, ast.FunctionDef) and node.name in WALK_FNS]
+        found = {fn.name for fn in target_fns}
+        assert WALK_FNS <= found, f"missing functions in pipeline.py: {WALK_FNS - found}"
 
         # Collect every module name referenced by Import/ImportFrom inside
-        # the function (including nested functions).
+        # those functions (including any nested functions).
         modules_to_resolve = set()
-        for node in ast.walk(target_fn):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    modules_to_resolve.add(alias.name)
-            elif isinstance(node, ast.ImportFrom):
-                if node.level > 0:
-                    # Relative import (e.g., `from .foo import bar`) —
-                    # skip; these are relative to the containing package.
-                    continue
-                if node.module:
-                    modules_to_resolve.add(node.module)
+        for target_fn in target_fns:
+            for node in ast.walk(target_fn):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        modules_to_resolve.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level > 0:
+                        # Relative import (e.g., `from .foo import bar`) —
+                        # skip; these are relative to the containing package.
+                        continue
+                    if node.module:
+                        modules_to_resolve.add(node.module)
 
         unresolved = []
         for mod in sorted(modules_to_resolve):
@@ -239,7 +246,20 @@ def test_pipeline_global_refs_all_resolve():
                     refs.update(collect_global_refs(const))
             return refs
 
-        needed = collect_global_refs(pipeline._run_grading_thread_inner.__code__)
+        # CQ7 PR-3a lifted grade_single_file + find_matching_config to module
+        # level; PR-3b decomposed gsf into 4 helpers. Include them all so their
+        # LOAD_GLOBALs (and any forgotten capture that became an unresolved global)
+        # stay covered — otherwise the guard goes BLIND on the most-refactored code.
+        needed = set()
+        for fn in (pipeline._run_grading_thread_inner,
+                   pipeline.grade_single_file,
+                   pipeline.find_matching_config,
+                   pipeline._resolve_student,
+                   pipeline._resolve_student_period,
+                   pipeline._build_file_ai_notes,
+                   pipeline._dispatch_grade,
+                   pipeline._assemble_post_grade):
+            needed |= collect_global_refs(fn.__code__)
         module_names = set(dir(pipeline))
         builtin_names = set(dir(builtins))
 
@@ -298,8 +318,9 @@ def test_master_csv_load_failure_alerts_to_sentry():
 
 def test_baseline_deviation_failure_alerts_to_sentry():
     """Contract test: if detect_baseline_deviation fails inside
-    _run_grading_thread_inner, sentry_sdk.capture_exception MUST be called
-    so missed cheating-signal detection is visible.
+    grade_single_file (lifted out of _run_grading_thread_inner to module
+    level in CQ7 PR-3a), sentry_sdk.capture_exception MUST be called so
+    missed cheating-signal detection is visible.
 
     detect_baseline_deviation flags anomalous grades (significant deviation,
     sudden 20-point improvements, new skills, per-category jumps —
@@ -313,10 +334,21 @@ def test_baseline_deviation_failure_alerts_to_sentry():
     import inspect
     from backend.grading import pipeline
 
-    src = inspect.getsource(pipeline._run_grading_thread_inner)
+    # detect_baseline_deviation moved into grade_single_file (CQ7 PR-3a) and then
+    # into _assemble_post_grade when gsf's body was decomposed (CQ7 PR-3b);
+    # inspect the helper that now contains the call + its except handler.
+    src = inspect.getsource(pipeline._assemble_post_grade)
     deviation_idx = src.find('detect_baseline_deviation')
     assert deviation_idx > 0, "detect_baseline_deviation call must exist"
-    deviation_block = src[deviation_idx:deviation_idx + 1500]
+    # Bound the window to the baseline-deviation block ONLY. The adjacent
+    # add_assignment_to_history block ALSO calls sentry_sdk.capture_exception; a
+    # fixed 1500-char window would latch onto THAT capture and silently pass even
+    # if the baseline-deviation alert (the missed-cheating-signal path) were
+    # dropped. Stop the window at the history block. (Pre-existing weak guard
+    # from before the PR-3a/3b lifts — tightened here, in-scope since this test is
+    # already being re-pointed.)
+    _hist = src.find('add_assignment_to_history', deviation_idx)
+    deviation_block = src[deviation_idx:_hist if _hist > deviation_idx else deviation_idx + 1500]
     assert 'sentry_sdk.capture_exception' in deviation_block, (
         "detect_baseline_deviation failure MUST call sentry_sdk.capture_exception. "
         "Pre-PR it was a silent `except: pass`; if you removed the alert call, "
