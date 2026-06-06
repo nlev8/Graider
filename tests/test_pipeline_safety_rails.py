@@ -116,28 +116,32 @@ def test_pipeline_lazy_imports_all_resolve():
         source = open(pipeline.__file__).read()
         tree = ast.parse(source)
 
-        # Find _run_grading_thread_inner
-        target_fn = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "_run_grading_thread_inner":
-                target_fn = node
-                break
-        assert target_fn is not None, "_run_grading_thread_inner not found in pipeline.py"
+        # CQ7 PR-3a lifted grade_single_file + find_matching_config OUT of
+        # _run_grading_thread_inner to module level. Walk all three so the lazy
+        # imports inside the lifted bodies (notably grade_single_file's
+        # function-local `from assignment_grader import ...`) stay covered — they
+        # would otherwise fall outside this guard's traversal and go BLIND.
+        WALK_FNS = {"_run_grading_thread_inner", "grade_single_file", "find_matching_config"}
+        target_fns = [node for node in ast.walk(tree)
+                      if isinstance(node, ast.FunctionDef) and node.name in WALK_FNS]
+        found = {fn.name for fn in target_fns}
+        assert WALK_FNS <= found, f"missing functions in pipeline.py: {WALK_FNS - found}"
 
         # Collect every module name referenced by Import/ImportFrom inside
-        # the function (including nested functions).
+        # those functions (including any nested functions).
         modules_to_resolve = set()
-        for node in ast.walk(target_fn):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    modules_to_resolve.add(alias.name)
-            elif isinstance(node, ast.ImportFrom):
-                if node.level > 0:
-                    # Relative import (e.g., `from .foo import bar`) —
-                    # skip; these are relative to the containing package.
-                    continue
-                if node.module:
-                    modules_to_resolve.add(node.module)
+        for target_fn in target_fns:
+            for node in ast.walk(target_fn):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        modules_to_resolve.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level > 0:
+                        # Relative import (e.g., `from .foo import bar`) —
+                        # skip; these are relative to the containing package.
+                        continue
+                    if node.module:
+                        modules_to_resolve.add(node.module)
 
         unresolved = []
         for mod in sorted(modules_to_resolve):
@@ -239,7 +243,15 @@ def test_pipeline_global_refs_all_resolve():
                     refs.update(collect_global_refs(const))
             return refs
 
-        needed = collect_global_refs(pipeline._run_grading_thread_inner.__code__)
+        # CQ7 PR-3a lifted grade_single_file + find_matching_config to module
+        # level; include them so their LOAD_GLOBALs (and any forgotten capture
+        # that became an unresolved global) stay covered — otherwise the guard
+        # goes BLIND on the most-refactored code.
+        needed = set()
+        for fn in (pipeline._run_grading_thread_inner,
+                   pipeline.grade_single_file,
+                   pipeline.find_matching_config):
+            needed |= collect_global_refs(fn.__code__)
         module_names = set(dir(pipeline))
         builtin_names = set(dir(builtins))
 
@@ -298,8 +310,9 @@ def test_master_csv_load_failure_alerts_to_sentry():
 
 def test_baseline_deviation_failure_alerts_to_sentry():
     """Contract test: if detect_baseline_deviation fails inside
-    _run_grading_thread_inner, sentry_sdk.capture_exception MUST be called
-    so missed cheating-signal detection is visible.
+    grade_single_file (lifted out of _run_grading_thread_inner to module
+    level in CQ7 PR-3a), sentry_sdk.capture_exception MUST be called so
+    missed cheating-signal detection is visible.
 
     detect_baseline_deviation flags anomalous grades (significant deviation,
     sudden 20-point improvements, new skills, per-category jumps —
@@ -313,7 +326,9 @@ def test_baseline_deviation_failure_alerts_to_sentry():
     import inspect
     from backend.grading import pipeline
 
-    src = inspect.getsource(pipeline._run_grading_thread_inner)
+    # detect_baseline_deviation moved into grade_single_file when it was lifted
+    # to module level (CQ7 PR-3a); inspect the lifted function, not the orchestrator.
+    src = inspect.getsource(pipeline.grade_single_file)
     deviation_idx = src.find('detect_baseline_deviation')
     assert deviation_idx > 0, "detect_baseline_deviation call must exist"
     deviation_block = src[deviation_idx:deviation_idx + 1500]
