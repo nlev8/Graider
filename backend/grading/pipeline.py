@@ -347,6 +347,123 @@ def calculate_late_penalty(filepath: Any, matched_config: Optional[dict[str, Any
     }
 
 
+def find_matching_config(filename: str, all_configs: dict[str, Any], grading_state: dict[str, Any], file_content: Optional[str] = None) -> Optional[dict[str, Any]]:
+    """Find matching config for a filename, with alias and fuzzy matching."""
+    filename_lower = filename.lower()
+
+    # Extract assignment part from filename.
+    # Filenames follow pattern: FirstName_LastName_Assignment Title.ext
+    # or FirstName_LastName_Assignment Title - Details (N).ext
+    # Strip the student name prefix first, then use the full remaining
+    # assignment title (which may itself contain ' - ').
+    assignment_candidates = []
+
+    # Strategy 1: Strip student name prefix (underscore-separated)
+    if '_' in filename_lower:
+        parts = filename_lower.split('_')
+        if len(parts) > 2:
+            full_assignment = '_'.join(parts[2:])
+            full_assignment = os.path.splitext(full_assignment)[0]
+            assignment_candidates.append(full_assignment)
+            # Also strip trailing " (N)" version numbers
+            import re
+            stripped = re.sub(r'\s*\(\d+\)\s*$', '', full_assignment).strip()
+            if stripped != full_assignment:
+                assignment_candidates.append(stripped)
+
+    # Strategy 2: Split on ' - ' (legacy: assumes student_name - assignment)
+    if ' - ' in filename_lower:
+        after_dash = filename_lower.split(' - ', 1)[1]
+        after_dash = os.path.splitext(after_dash)[0]
+        if after_dash not in assignment_candidates:
+            assignment_candidates.append(after_dash)
+
+    # Strategy 3: Full filename as fallback
+    fallback = os.path.splitext(filename_lower)[0]
+    if fallback not in assignment_candidates:
+        assignment_candidates.append(fallback)
+
+    # Use the first candidate as primary (best quality extraction)
+    assignment_part = assignment_candidates[0] if assignment_candidates else fallback
+
+    best_match = None
+    best_score: float = 0
+    match_reason = ""
+
+    for config_name, config_data in all_configs.items():
+        config_title = config_data.get('title', '').lower()
+        aliases = [a.lower() for a in config_data.get('aliases', [])]
+
+        # Try all assignment candidates (full title, stripped version, dash-split, etc.)
+        for candidate in assignment_candidates:
+            # 1. Exact name/title match (highest priority)
+            if config_name == candidate or config_title == candidate:
+                return config_data  # type: ignore[no-any-return]  # config_data is Any from json.load
+
+            # 2. Substring match on name/title
+            if config_name in candidate or candidate in config_name:
+                score = len(config_name) + 50
+                if score > best_score:
+                    best_score = score
+                    best_match = config_data
+                    match_reason = f"name match: {config_name}"
+
+            if config_title and (config_title in candidate or candidate in config_title):
+                score = len(config_title) + 50
+                if score > best_score:
+                    best_score = score
+                    best_match = config_data
+                    match_reason = f"title match: {config_title}"
+
+            # 3. Alias matching (check all aliases)
+            for alias in aliases:
+                if alias in candidate or candidate in alias:
+                    score = len(alias) + 40
+                    if score > best_score:
+                        best_score = score
+                        best_match = config_data
+                        match_reason = f"alias match: {alias}"
+
+                # Fuzzy match on alias
+                fuzzy = fuzzy_match_score(alias, candidate)
+                if fuzzy > 50 and fuzzy + 20 > best_score:
+                    best_score = fuzzy + 20
+                    best_match = config_data
+                    match_reason = f"fuzzy alias: {alias}"
+
+            # 4. Fuzzy matching on name/title
+            fuzzy_name = fuzzy_match_score(config_name, candidate)
+            if fuzzy_name > 50 and fuzzy_name > best_score:
+                best_score = fuzzy_name
+                best_match = config_data
+                match_reason = f"fuzzy name: {config_name}"
+
+            fuzzy_title = fuzzy_match_score(config_title, candidate)
+            if fuzzy_title > 50 and fuzzy_title > best_score:
+                best_score = fuzzy_title
+                best_match = config_data
+                match_reason = f"fuzzy title: {config_title}"
+
+    # 5. Content fingerprinting (if no good match found and file content provided)
+    if best_score < 50 and file_content:
+        file_content_lower = file_content.lower()
+        for config_name, config_data in all_configs.items():
+            fingerprints = extract_content_fingerprints(config_data)
+            if fingerprints:
+                matches = sum(1 for fp in fingerprints if fp in file_content_lower)
+                if matches >= 2:  # At least 2 fingerprint matches
+                    content_score = min(matches * 15, 80)  # Cap at 80
+                    if content_score > best_score:
+                        best_score = content_score
+                        best_match = config_data
+                        match_reason = f"content fingerprint: {matches} matches"
+
+    if best_match and match_reason:
+        grading_state["log"].append(f"Auto-matched via {match_reason}")
+
+    return best_match
+
+
 def _run_grading_thread_inner(
     assignments_folder: str,
     output_folder: str,
@@ -421,122 +538,6 @@ def _run_grading_thread_inner(
                     # Best-effort: malformed/missing config file just means this
                     # one entry isn't available for matching. Other configs work.
                     _logger.debug("Failed to load assignment config %s: %s", f, e)
-
-    def find_matching_config(filename: str, file_content: Optional[str] = None) -> Optional[dict[str, Any]]:
-        """Find matching config for a filename, with alias and fuzzy matching."""
-        filename_lower = filename.lower()
-
-        # Extract assignment part from filename.
-        # Filenames follow pattern: FirstName_LastName_Assignment Title.ext
-        # or FirstName_LastName_Assignment Title - Details (N).ext
-        # Strip the student name prefix first, then use the full remaining
-        # assignment title (which may itself contain ' - ').
-        assignment_candidates = []
-
-        # Strategy 1: Strip student name prefix (underscore-separated)
-        if '_' in filename_lower:
-            parts = filename_lower.split('_')
-            if len(parts) > 2:
-                full_assignment = '_'.join(parts[2:])
-                full_assignment = os.path.splitext(full_assignment)[0]
-                assignment_candidates.append(full_assignment)
-                # Also strip trailing " (N)" version numbers
-                import re
-                stripped = re.sub(r'\s*\(\d+\)\s*$', '', full_assignment).strip()
-                if stripped != full_assignment:
-                    assignment_candidates.append(stripped)
-
-        # Strategy 2: Split on ' - ' (legacy: assumes student_name - assignment)
-        if ' - ' in filename_lower:
-            after_dash = filename_lower.split(' - ', 1)[1]
-            after_dash = os.path.splitext(after_dash)[0]
-            if after_dash not in assignment_candidates:
-                assignment_candidates.append(after_dash)
-
-        # Strategy 3: Full filename as fallback
-        fallback = os.path.splitext(filename_lower)[0]
-        if fallback not in assignment_candidates:
-            assignment_candidates.append(fallback)
-
-        # Use the first candidate as primary (best quality extraction)
-        assignment_part = assignment_candidates[0] if assignment_candidates else fallback
-
-        best_match = None
-        best_score: float = 0
-        match_reason = ""
-
-        for config_name, config_data in all_configs.items():
-            config_title = config_data.get('title', '').lower()
-            aliases = [a.lower() for a in config_data.get('aliases', [])]
-
-            # Try all assignment candidates (full title, stripped version, dash-split, etc.)
-            for candidate in assignment_candidates:
-                # 1. Exact name/title match (highest priority)
-                if config_name == candidate or config_title == candidate:
-                    return config_data  # type: ignore[no-any-return]  # config_data is Any from json.load
-
-                # 2. Substring match on name/title
-                if config_name in candidate or candidate in config_name:
-                    score = len(config_name) + 50
-                    if score > best_score:
-                        best_score = score
-                        best_match = config_data
-                        match_reason = f"name match: {config_name}"
-
-                if config_title and (config_title in candidate or candidate in config_title):
-                    score = len(config_title) + 50
-                    if score > best_score:
-                        best_score = score
-                        best_match = config_data
-                        match_reason = f"title match: {config_title}"
-
-                # 3. Alias matching (check all aliases)
-                for alias in aliases:
-                    if alias in candidate or candidate in alias:
-                        score = len(alias) + 40
-                        if score > best_score:
-                            best_score = score
-                            best_match = config_data
-                            match_reason = f"alias match: {alias}"
-
-                    # Fuzzy match on alias
-                    fuzzy = fuzzy_match_score(alias, candidate)
-                    if fuzzy > 50 and fuzzy + 20 > best_score:
-                        best_score = fuzzy + 20
-                        best_match = config_data
-                        match_reason = f"fuzzy alias: {alias}"
-
-                # 4. Fuzzy matching on name/title
-                fuzzy_name = fuzzy_match_score(config_name, candidate)
-                if fuzzy_name > 50 and fuzzy_name > best_score:
-                    best_score = fuzzy_name
-                    best_match = config_data
-                    match_reason = f"fuzzy name: {config_name}"
-
-                fuzzy_title = fuzzy_match_score(config_title, candidate)
-                if fuzzy_title > 50 and fuzzy_title > best_score:
-                    best_score = fuzzy_title
-                    best_match = config_data
-                    match_reason = f"fuzzy title: {config_title}"
-
-        # 5. Content fingerprinting (if no good match found and file content provided)
-        if best_score < 50 and file_content:
-            file_content_lower = file_content.lower()
-            for config_name, config_data in all_configs.items():
-                fingerprints = extract_content_fingerprints(config_data)
-                if fingerprints:
-                    matches = sum(1 for fp in fingerprints if fp in file_content_lower)
-                    if matches >= 2:  # At least 2 fingerprint matches
-                        content_score = min(matches * 15, 80)  # Cap at 80
-                        if content_score > best_score:
-                            best_score = content_score
-                            best_match = config_data
-                            match_reason = f"content fingerprint: {matches} matches"
-
-        if best_match and match_reason:
-            grading_state["log"].append(f"Auto-matched via {match_reason}")
-
-        return best_match
 
     # Extract custom markers, notes, and response sections from selected config (fallback)
     fallback_markers = []
@@ -815,7 +816,7 @@ def _run_grading_thread_inner(
                 # Match assignment config
                 _logger.debug("  Matching config for: %s", filepath.name)
                 _logger.debug("  Available configs: %s", list(all_configs.keys()))
-                matched_config = find_matching_config(filepath.name)
+                matched_config = find_matching_config(filepath.name, all_configs, grading_state)
                 _logger.debug("  Match result: %s", ('FOUND - ' + matched_config.get('title', '?')) if matched_config else 'NONE')
                 if not matched_config:
                     try:
@@ -823,7 +824,7 @@ def _run_grading_thread_inner(
                         if temp_file_data and temp_file_data.get("type") == "text":
                             file_text = temp_file_data.get("content", "")
                             if file_text:
-                                matched_config = find_matching_config(filepath.name, file_text)
+                                matched_config = find_matching_config(filepath.name, all_configs, grading_state, file_text)
                     except Exception as e:
                         # Best-effort: content-based matching failed. The
                         # surrounding flow will then use whatever fallback
