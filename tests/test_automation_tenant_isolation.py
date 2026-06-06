@@ -131,3 +131,42 @@ def test_stop_run_cannot_stop_other_tenant_run(client):
         assert ar._run_state["status"] == "running", "teacher B stopped teacher A's run"
     finally:
         ar._run_state.update({"status": "idle", "teacher_id": None, "process": None, "log": []})
+
+
+def test_stop_run_cannot_reset_other_tenant_terminal_state(client):
+    """A done/error run owned by A must not be resettable by B (Codex round-3 #3)."""
+    import backend.routes.automation_routes as ar
+    try:
+        ar._run_state.update({"status": "done", "teacher_id": "teacher-A", "process": None, "log": []})
+        r = client.post('/api/automations/run/stop', headers=_hdr('teacher-B'))
+        assert r.status_code == 404
+        assert ar._run_state["status"] == "done", "teacher B reset teacher A's terminal state"
+    finally:
+        ar._run_state.update({"status": "idle", "teacher_id": None, "process": None, "log": []})
+
+
+def test_picker_events_do_not_leak_other_tenant(client):
+    """Picker is a single global subprocess; B must not drain A's selector events."""
+    import backend.routes.automation_routes as ar
+    try:
+        ar._picker_state.update({"status": "picking", "teacher_id": "teacher-A",
+                                 "events": [{"selector": "#secret"}], "process": None})
+        st = client.get('/api/automations/picker/events', headers=_hdr('teacher-B')).get_json()
+        assert st["status"] == "idle"
+        assert st["events"] == []
+        # A's events must remain undrained
+        assert ar._picker_state["events"] == [{"selector": "#secret"}]
+    finally:
+        ar._picker_state.update({"status": "idle", "teacher_id": None, "events": [], "process": None})
+
+
+def test_stop_picker_cannot_stop_other_tenant(client):
+    import backend.routes.automation_routes as ar
+    try:
+        ar._picker_state.update({"status": "picking", "teacher_id": "teacher-A",
+                                 "events": [], "process": None})
+        r = client.post('/api/automations/picker/stop', headers=_hdr('teacher-B'))
+        assert r.status_code == 404
+        assert ar._picker_state["status"] == "picking", "teacher B stopped teacher A's picker"
+    finally:
+        ar._picker_state.update({"status": "idle", "teacher_id": None, "events": [], "process": None})

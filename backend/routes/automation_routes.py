@@ -383,7 +383,7 @@ def stop_run():
     # Tenant isolation (audit #8 / Codex): don't let one teacher stop another
     # teacher's run (DoS). Only the owner of an active run may stop it; an idle
     # state is a harmless no-op for anyone.
-    if _run_state.get("status") == "running" and _run_state.get("teacher_id") != g.teacher_id:
+    if _run_state.get("status") != "idle" and _run_state.get("teacher_id") not in (None, g.teacher_id):
         return jsonify({"error": "No running automation"}), 404
     proc = _run_state.get("process")
     if proc and proc.poll() is None:
@@ -410,7 +410,10 @@ def start_picker():
     start_url = data.get("url", "https://vportal.volusia.k12.fl.us/")
     auto_login = data.get("login", False)
 
-    _picker_state.update({"status": "picking", "events": [], "process": None})
+    # Tenant isolation (audit #8 / Codex): single global picker subprocess —
+    # record the owner so events/stop can be gated to the teacher who started it.
+    _picker_state.update({"status": "picking", "events": [], "process": None,
+                          "teacher_id": g.teacher_id})
 
     cmd = ["node", PICKER_SCRIPT, "--url", start_url]
     if auto_login:
@@ -448,6 +451,11 @@ def start_picker():
 @handle_route_errors
 def picker_events():
     """Drain and return accumulated picker events."""
+    # Tenant isolation (audit #8 / Codex): only the teacher who started the picker
+    # may drain its events — otherwise another tenant could read A's selector
+    # events and starve A of them (the buffer is drained on read).
+    if _picker_state.get("teacher_id") != g.teacher_id:
+        return jsonify({"status": "idle", "events": []})
     events = list(_picker_state.get("events", []))
     _picker_state["events"] = []
     return jsonify({"status": _picker_state.get("status", "idle"), "events": events})
@@ -458,6 +466,10 @@ def picker_events():
 @handle_route_errors
 def stop_picker():
     """Close picker browser."""
+    # Tenant isolation (audit #8 / Codex): only the owner may stop an active
+    # picker (don't let one tenant kill another's picker browser).
+    if _picker_state.get("status") == "picking" and _picker_state.get("teacher_id") != g.teacher_id:
+        return jsonify({"error": "No active picker"}), 404
     proc = _picker_state.get("process")
     if proc and proc.poll() is None:
         proc.terminate()

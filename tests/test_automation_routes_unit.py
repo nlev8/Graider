@@ -76,6 +76,7 @@ def flask_app(tmp_path, monkeypatch):
     })
     auto_mod._picker_state.update({
         "process": None, "status": "idle", "events": [],
+        "teacher_id": "teacher-alice",  # audit #8: picker events/stop gate on owner
     })
 
     app = Flask(__name__)
@@ -111,6 +112,7 @@ def flask_app(tmp_path, monkeypatch):
     })
     auto_mod._picker_state.update({
         "process": None, "status": "idle", "events": [],
+        "teacher_id": "teacher-alice",  # audit #8: picker events/stop gate on owner
     })
 
 
