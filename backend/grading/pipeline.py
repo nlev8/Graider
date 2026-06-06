@@ -792,6 +792,224 @@ def _resolve_student(
     return student_info, parsed
 
 
+def _dispatch_grade(
+    *,
+    ai_model: str,
+    assignment_template_local: Any,
+    custom_rubric: Any | None,
+    effort_points: Any | int,
+    ensemble_models: list[str] | None,
+    extraction_mode: str,
+    file_ai_notes: str,
+    file_exclude_markers: Any,
+    file_markers: Any,
+    grade_data: dict[str, Any],
+    grade_level: str,
+    grading_style: str,
+    history_context: str,
+    marker_config: Any | None,
+    rubric_prompt: Any,
+    rubric_type: Any | str,
+    rubric_weights: list[Any] | None,
+    student_info: Any,
+    subject: str,
+    trusted_students: list[str] | None,
+) -> Any:
+    from assignment_grader import (  # function-local: preserves test patchability
+        grade_assignment,
+        grade_multipass,
+        grade_with_ensemble,
+        grade_with_parallel_detection,
+    )
+    student_id = student_info.get('student_id', '')
+    # Debug: Show what we're checking
+    _logger.debug("  Checking trust: student_id='%s', trusted_list=%s", student_id, trusted_students)
+    is_trusted = trusted_students and student_id in trusted_students
+    if is_trusted:
+        _logger.info("  Trusted student - skipping AI/copy detection")
+
+    # FITB: Skip AI/plagiarism detection - answers are factual, not creative writing
+    is_fitb = rubric_type == 'fill-in-blank'
+    if is_fitb:
+        _logger.info("  FITB assignment - skipping AI/copy detection")
+
+    # Skip detection for trusted students or FITB assignments
+    skip_detection = is_trusted or is_fitb
+
+    # Per-assignment custom rubric overrides global rubric weights
+    file_rubric_weights = rubric_weights
+    if rubric_type == 'custom' and custom_rubric and len(custom_rubric) == 4:
+        file_rubric_weights = [cat.get('weight', 0) for cat in custom_rubric]
+        if file_rubric_weights != [40, 25, 20, 15]:
+            _logger.info("  Using per-assignment custom rubric weights: %s", file_rubric_weights)
+        else:
+            file_rubric_weights = None  # Default weights, no override needed
+
+    # file_rubric_weights / marker_config are Optional[list] but grading functions
+    # declare list[Any] — None means "use defaults", handled gracefully at runtime.
+    if ensemble_models and len(ensemble_models) >= 2:
+        grade_result = grade_with_ensemble(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ensemble_models, student_info.get('student_id'),
+            assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+    elif is_trusted:
+        # Trusted student: Use full multi-pass pipeline, skip detection only
+        grade_result = grade_multipass(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ai_model, student_info.get('student_id'),
+            assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+            student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
+        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
+    elif skip_detection:
+        # FITB only: Use single-pass (genuinely needs it)
+        grade_result = grade_assignment(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
+            rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style=grading_style,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
+        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
+    else:
+        grade_result = grade_with_parallel_detection(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
+            rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+            student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+    return grade_result
+
+
+def _assemble_post_grade(
+    *,
+    config_mismatch: bool,
+    config_mismatch_reason: str,
+    file_data: dict[Any, Any],
+    file_markers: Any,
+    file_notes: Any,
+    file_sections: Any,
+    filepath: Any,
+    grade_result: Any,
+    matched_config: dict[str, Any] | None,
+    matched_title: Any,
+    period_class_level_map: dict[str, str],
+    student_info: Any,
+    student_period: str,
+) -> dict[str, Any]:
+    has_config = matched_config is not None
+    has_custom_markers = len(file_markers) > 0
+    has_grading_notes = bool(file_notes.strip()) if file_notes else False
+    has_response_sections = len(file_sections) > 0
+    is_verified = has_config or has_custom_markers or has_grading_notes or has_response_sections
+    marker_status = "verified" if is_verified else "unverified"
+
+    # Check baseline deviation
+    baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        try:
+            baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
+        except Exception as e:
+            # Behavior-critical: baseline deviation detection flags
+            # anomalous grades (potential cheating signal). Silent
+            # failure means anomalies go unflagged. The grading
+            # itself proceeds with the "normal" default, but the
+            # detector failure must be visible in Sentry so it
+            # gets fixed instead of degrading silently.
+            # Per Codex review: hash the student_id for log
+            # correlation; raw IDs are PII for log streams (the
+            # repo's Sentry scrubber treats them as sensitive).
+            import hashlib
+            sid_hash = hashlib.sha256(str(student_info['student_id']).encode()).hexdigest()[:12]
+            _logger.error("detect_baseline_deviation failed for sid_hash=%s: %s", sid_hash, e)
+            sentry_sdk.capture_exception(e)
+
+    # Save to student history
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        try:
+            grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
+                           "assignment": matched_title, "period": student_period}
+            add_assignment_to_history(student_info['student_id'], grade_record_hist)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+
+    # Get class level for logging
+    class_level = period_class_level_map.get(student_period, 'standard') if student_period else 'standard'
+    level_indicator = "🎯" if class_level == "advanced" else "💚" if class_level == "support" else ""
+
+    log_messages = [f"  Score: {grade_result['score']} ({grade_result['letter_grade']}) {level_indicator}{class_level.upper() if class_level != 'standard' else ''}".strip()]
+    if config_mismatch:
+        log_messages.append(f"  ⚠️  CONFIG MISMATCH - may have wrong rubric!")
+    if marker_status == "unverified":
+        log_messages.append(f"  ⚠️  UNVERIFIED: No assignment config")
+    if baseline_deviation.get('flag') != 'normal':
+        log_messages.append(f"  ⚠️  Baseline deviation: {baseline_deviation.get('flag')}")
+    if grade_result.get('ai_detection', {}).get('flag') in ['possible', 'likely']:
+        log_messages.append(f"  🤖 AI detected: {grade_result['ai_detection']['flag']}")
+    if grade_result.get('plagiarism_detection', {}).get('flag') in ['possible', 'likely']:
+        log_messages.append(f"  📋 Plagiarism detected: {grade_result['plagiarism_detection']['flag']}")
+
+    return {
+        "success": True,
+        "student_info": student_info,
+        "filepath": filepath,
+        "matched_title": matched_title,
+        "matched_config": matched_config,
+        "student_period": student_period,
+        "is_completion_only": False,
+        "grade_result": grade_result,
+        "file_data": file_data,
+        "marker_status": marker_status,
+        "baseline_deviation": baseline_deviation,
+        "config_mismatch": config_mismatch,
+        "config_mismatch_reason": config_mismatch_reason,
+        "log_messages": log_messages
+    }
+
+
+def _resolve_student_period(
+    *,
+    class_period: str,
+    student_info: Any,
+    student_period_map: dict[str, str],
+) -> str:
+    student_name_lower = student_info['student_name'].lower()
+    student_period = student_period_map.get(student_name_lower, None)
+
+    # If no exact match, try fuzzy matching on period map
+    if not student_period:
+        first_name_lower = student_info.get('first_name', '').lower() or student_name_lower.split()[0] if student_name_lower else ''
+        last_name_lower = student_info.get('last_name', '').lower() or (student_name_lower.split()[-1] if len(student_name_lower.split()) > 1 else '')
+
+        for period_key, period_val in student_period_map.items():
+            period_parts = period_key.split()
+            if len(period_parts) >= 2:
+                # period_key format: "firstname middlename lastname" or "firstname lastname"
+                period_first = period_parts[0]
+                period_last = period_parts[-1]
+
+                # Match first name
+                if period_first == first_name_lower or period_first.startswith(first_name_lower) or first_name_lower.startswith(period_first):
+                    # Match last name (handle initials and compound names)
+                    if (period_last == last_name_lower or
+                        period_last.startswith(last_name_lower) or
+                        last_name_lower.startswith(period_last) or
+                        (len(last_name_lower) == 1 and period_last.startswith(last_name_lower))):
+                        student_period = period_val
+                        break
+
+    if not student_period:
+        student_period = class_period
+    return student_period
+
+
 def grade_single_file(
     filepath: Any, file_index: int, total_files: int, *,
     ai_model: str,
@@ -941,33 +1159,11 @@ def grade_single_file(
                 _logger.info("  Auto-detected Cornell Notes from filename")
 
         # Get student's period - try exact match first, then fuzzy match
-        student_name_lower = student_info['student_name'].lower()
-        student_period = student_period_map.get(student_name_lower, None)
-
-        # If no exact match, try fuzzy matching on period map
-        if not student_period:
-            first_name_lower = student_info.get('first_name', '').lower() or student_name_lower.split()[0] if student_name_lower else ''
-            last_name_lower = student_info.get('last_name', '').lower() or (student_name_lower.split()[-1] if len(student_name_lower.split()) > 1 else '')
-
-            for period_key, period_val in student_period_map.items():
-                period_parts = period_key.split()
-                if len(period_parts) >= 2:
-                    # period_key format: "firstname middlename lastname" or "firstname lastname"
-                    period_first = period_parts[0]
-                    period_last = period_parts[-1]
-
-                    # Match first name
-                    if period_first == first_name_lower or period_first.startswith(first_name_lower) or first_name_lower.startswith(period_first):
-                        # Match last name (handle initials and compound names)
-                        if (period_last == last_name_lower or
-                            period_last.startswith(last_name_lower) or
-                            last_name_lower.startswith(period_last) or
-                            (len(last_name_lower) == 1 and period_last.startswith(last_name_lower))):
-                            student_period = period_val
-                            break
-
-        if not student_period:
-            student_period = class_period
+        student_period = _resolve_student_period(
+            class_period=class_period,
+            student_info=student_info,
+            student_period_map=student_period_map,
+        )
 
         # Handle completion-only assignments
         if is_completion_only:
@@ -1044,70 +1240,28 @@ def grade_single_file(
             }
 
         # Check if student is trusted (skip AI/plagiarism detection)
-        student_id = student_info.get('student_id', '')
-        # Debug: Show what we're checking
-        _logger.debug("  Checking trust: student_id='%s', trusted_list=%s", student_id, trusted_students)
-        is_trusted = trusted_students and student_id in trusted_students
-        if is_trusted:
-            _logger.info("  Trusted student - skipping AI/copy detection")
-
-        # FITB: Skip AI/plagiarism detection - answers are factual, not creative writing
-        is_fitb = rubric_type == 'fill-in-blank'
-        if is_fitb:
-            _logger.info("  FITB assignment - skipping AI/copy detection")
-
-        # Skip detection for trusted students or FITB assignments
-        skip_detection = is_trusted or is_fitb
-
-        # Per-assignment custom rubric overrides global rubric weights
-        file_rubric_weights = rubric_weights
-        if rubric_type == 'custom' and custom_rubric and len(custom_rubric) == 4:
-            file_rubric_weights = [cat.get('weight', 0) for cat in custom_rubric]
-            if file_rubric_weights != [40, 25, 20, 15]:
-                _logger.info("  Using per-assignment custom rubric weights: %s", file_rubric_weights)
-            else:
-                file_rubric_weights = None  # Default weights, no override needed
-
-        # file_rubric_weights / marker_config are Optional[list] but grading functions
-        # declare list[Any] — None means "use defaults", handled gracefully at runtime.
-        if ensemble_models and len(ensemble_models) >= 2:
-            grade_result = grade_with_ensemble(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ensemble_models, student_info.get('student_id'),
-                assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-                rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
-        elif is_trusted:
-            # Trusted student: Use full multi-pass pipeline, skip detection only
-            grade_result = grade_multipass(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ai_model, student_info.get('student_id'),
-                assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-                student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
-            grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
-            grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
-        elif skip_detection:
-            # FITB only: Use single-pass (genuinely needs it)
-            grade_result = grade_assignment(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
-                rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style=grading_style,  # type: ignore[arg-type]
-                rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
-            grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
-            grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
-        else:
-            grade_result = grade_with_parallel_detection(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
-                rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-                student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
+        grade_result = _dispatch_grade(
+            ai_model=ai_model,
+            assignment_template_local=assignment_template_local,
+            custom_rubric=custom_rubric,
+            effort_points=effort_points,
+            ensemble_models=ensemble_models,
+            extraction_mode=extraction_mode,
+            file_ai_notes=file_ai_notes,
+            file_exclude_markers=file_exclude_markers,
+            file_markers=file_markers,
+            grade_data=grade_data,
+            grade_level=grade_level,
+            grading_style=grading_style,
+            history_context=history_context,
+            marker_config=marker_config,
+            rubric_prompt=rubric_prompt,
+            rubric_type=rubric_type,
+            rubric_weights=rubric_weights,
+            student_info=student_info,
+            subject=subject,
+            trusted_students=trusted_students,
+        )
 
         # Check for errors
         if grade_result.get('letter_grade') == 'ERROR':
@@ -1115,74 +1269,21 @@ def grade_single_file(
                     "filepath": filepath, "is_api_error": True}
 
         # Determine marker status
-        has_config = matched_config is not None
-        has_custom_markers = len(file_markers) > 0
-        has_grading_notes = bool(file_notes.strip()) if file_notes else False
-        has_response_sections = len(file_sections) > 0
-        is_verified = has_config or has_custom_markers or has_grading_notes or has_response_sections
-        marker_status = "verified" if is_verified else "unverified"
-
-        # Check baseline deviation
-        baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            try:
-                baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
-            except Exception as e:
-                # Behavior-critical: baseline deviation detection flags
-                # anomalous grades (potential cheating signal). Silent
-                # failure means anomalies go unflagged. The grading
-                # itself proceeds with the "normal" default, but the
-                # detector failure must be visible in Sentry so it
-                # gets fixed instead of degrading silently.
-                # Per Codex review: hash the student_id for log
-                # correlation; raw IDs are PII for log streams (the
-                # repo's Sentry scrubber treats them as sensitive).
-                import hashlib
-                sid_hash = hashlib.sha256(str(student_info['student_id']).encode()).hexdigest()[:12]
-                _logger.error("detect_baseline_deviation failed for sid_hash=%s: %s", sid_hash, e)
-                sentry_sdk.capture_exception(e)
-
-        # Save to student history
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            try:
-                grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
-                               "assignment": matched_title, "period": student_period}
-                add_assignment_to_history(student_info['student_id'], grade_record_hist)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
-
-        # Get class level for logging
-        class_level = period_class_level_map.get(student_period, 'standard') if student_period else 'standard'
-        level_indicator = "🎯" if class_level == "advanced" else "💚" if class_level == "support" else ""
-
-        log_messages = [f"  Score: {grade_result['score']} ({grade_result['letter_grade']}) {level_indicator}{class_level.upper() if class_level != 'standard' else ''}".strip()]
-        if config_mismatch:
-            log_messages.append(f"  ⚠️  CONFIG MISMATCH - may have wrong rubric!")
-        if marker_status == "unverified":
-            log_messages.append(f"  ⚠️  UNVERIFIED: No assignment config")
-        if baseline_deviation.get('flag') != 'normal':
-            log_messages.append(f"  ⚠️  Baseline deviation: {baseline_deviation.get('flag')}")
-        if grade_result.get('ai_detection', {}).get('flag') in ['possible', 'likely']:
-            log_messages.append(f"  🤖 AI detected: {grade_result['ai_detection']['flag']}")
-        if grade_result.get('plagiarism_detection', {}).get('flag') in ['possible', 'likely']:
-            log_messages.append(f"  📋 Plagiarism detected: {grade_result['plagiarism_detection']['flag']}")
-
-        return {
-            "success": True,
-            "student_info": student_info,
-            "filepath": filepath,
-            "matched_title": matched_title,
-            "matched_config": matched_config,
-            "student_period": student_period,
-            "is_completion_only": False,
-            "grade_result": grade_result,
-            "file_data": file_data,
-            "marker_status": marker_status,
-            "baseline_deviation": baseline_deviation,
-            "config_mismatch": config_mismatch,
-            "config_mismatch_reason": config_mismatch_reason,
-            "log_messages": log_messages
-        }
+        return _assemble_post_grade(
+            config_mismatch=config_mismatch,
+            config_mismatch_reason=config_mismatch_reason,
+            file_data=file_data,
+            file_markers=file_markers,
+            file_notes=file_notes,
+            file_sections=file_sections,
+            filepath=filepath,
+            grade_result=grade_result,
+            matched_config=matched_config,
+            matched_title=matched_title,
+            period_class_level_map=period_class_level_map,
+            student_info=student_info,
+            student_period=student_period,
+        )
 
     except Exception as e:
         _logger.error("Grading failed for %s: %s", filepath, str(e))
