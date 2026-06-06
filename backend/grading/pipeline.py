@@ -1290,6 +1290,64 @@ def grade_single_file(
         return {"success": False, "error": "Grading failed for this file", "filepath": filepath}
 
 
+def _export_results(
+    *,
+    all_grades: list[Any],
+    grading_state: dict[str, Any],
+    output_folder: str,
+    school_name: str,
+    subject: str,
+    teacher_name: str,
+) -> None:
+    from assignment_grader import (  # function-local: preserves test patchability
+        ASSIGNMENT_NAME,
+        export_detailed_report,
+        export_focus_csv,
+        save_emails_to_folder,
+        save_to_master_csv,
+    )
+    if len(all_grades) > 0:
+        grading_state["log"].append("")
+        grading_state["log"].append("Exporting results...")
+
+        # Focus CSVs (by assignment)
+        export_focus_csv(all_grades, output_folder, ASSIGNMENT_NAME)
+        grading_state["log"].append("  Focus CSVs created")
+
+        # Detailed report
+        export_detailed_report(all_grades, output_folder, ASSIGNMENT_NAME)
+        grading_state["log"].append("  Detailed report created")
+
+        # Email files
+        save_emails_to_folder(all_grades, output_folder, teacher_name, subject, school_name)
+        grading_state["log"].append("  Email files created")
+
+        # Master tracking CSV
+        save_to_master_csv(all_grades, output_folder)
+        grading_state["log"].append("  Master grades updated")
+
+        # Audit trail JSON
+        audit_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        audit_path = os.path.join(output_folder, f"Audit_{ASSIGNMENT_NAME}_{audit_timestamp}.json")
+        audit_data = []
+        for r in grading_state["results"]:
+            audit_data.append({
+                "student_name": r["student_name"],
+                "student_id": r["student_id"],
+                "score": r["score"],
+                "letter_grade": r["letter_grade"],
+                "ai_input": r.get("ai_input", ""),
+                "ai_response": r.get("ai_response", "")
+            })
+        try:
+            with open(audit_path, 'w') as fh:
+                json.dump(audit_data, fh, indent=2)
+            grading_state["log"].append("  Audit trail saved")
+        except Exception as e:
+            grading_state["log"].append(f"  Audit trail error: {str(e)}")
+            sentry_sdk.capture_exception(e)
+
+
 def _run_grading_thread_inner(
     assignments_folder: str,
     output_folder: str,
@@ -1392,8 +1450,7 @@ def _run_grading_thread_inner(
         from assignment_grader import (
             load_roster, parse_filename, read_assignment_file,
             extract_student_work, grade_assignment, grade_multipass, grade_with_parallel_detection,
-            grade_with_ensemble, export_focus_csv, export_detailed_report,
-            save_emails_to_folder, save_to_master_csv, ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
+            grade_with_ensemble, STUDENT_WORK_MARKERS
         )
 
         if all_configs:
@@ -1855,46 +1912,14 @@ def _run_grading_thread_inner(
             return
 
         # Export CSVs and emails
-        if len(all_grades) > 0:
-            grading_state["log"].append("")
-            grading_state["log"].append("Exporting results...")
-
-            # Focus CSVs (by assignment)
-            export_focus_csv(all_grades, output_folder, ASSIGNMENT_NAME)
-            grading_state["log"].append("  Focus CSVs created")
-
-            # Detailed report
-            export_detailed_report(all_grades, output_folder, ASSIGNMENT_NAME)
-            grading_state["log"].append("  Detailed report created")
-
-            # Email files
-            save_emails_to_folder(all_grades, output_folder, teacher_name, subject, school_name)
-            grading_state["log"].append("  Email files created")
-
-            # Master tracking CSV
-            save_to_master_csv(all_grades, output_folder)
-            grading_state["log"].append("  Master grades updated")
-
-            # Audit trail JSON
-            audit_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            audit_path = os.path.join(output_folder, f"Audit_{ASSIGNMENT_NAME}_{audit_timestamp}.json")
-            audit_data = []
-            for r in grading_state["results"]:
-                audit_data.append({
-                    "student_name": r["student_name"],
-                    "student_id": r["student_id"],
-                    "score": r["score"],
-                    "letter_grade": r["letter_grade"],
-                    "ai_input": r.get("ai_input", ""),
-                    "ai_response": r.get("ai_response", "")
-                })
-            try:
-                with open(audit_path, 'w') as fh:
-                    json.dump(audit_data, fh, indent=2)
-                grading_state["log"].append("  Audit trail saved")
-            except Exception as e:
-                grading_state["log"].append(f"  Audit trail error: {str(e)}")
-                sentry_sdk.capture_exception(e)
+        _export_results(
+            all_grades=all_grades,
+            grading_state=grading_state,
+            output_folder=output_folder,
+            school_name=school_name,
+            subject=subject,
+            teacher_name=teacher_name,
+        )
 
         grading_state["log"].append("")
         grading_state["log"].append("=" * 50)
