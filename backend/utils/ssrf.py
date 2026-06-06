@@ -67,6 +67,24 @@ def validate_outbound_url(
             raise SSRFValidationError(f"URL targets a non-public IP ({literal_ip}): {url!r}")
         return url
 
+    # Catch ALTERNATE IPv4 encodings that ipaddress.ip_address() does NOT parse
+    # but the OS resolver treats as a literal IPv4 — decimal-integer, hex (0x..),
+    # octal, and short dotted forms. e.g. https://2130706433/ -> 127.0.0.1 and
+    # https://0xA9FEA9FE/ -> 169.254.169.254 (Codex SSRF probe, audit #9/#11/#14).
+    # socket.inet_aton parses exactly these numeric forms and raises OSError for a
+    # genuine DNS hostname, so this stays network-free.
+    try:
+        packed = socket.inet_aton(host)
+    except OSError:
+        packed = None
+    if packed is not None:
+        numeric_ip = ipaddress.IPv4Address(packed)
+        if _ip_is_blocked(numeric_ip):
+            raise SSRFValidationError(
+                f"URL targets a non-public IP ({numeric_ip}, via numeric encoding): {url!r}"
+            )
+        return url
+
     # Hostname: optionally resolve and check every returned address.
     if resolve:
         try:

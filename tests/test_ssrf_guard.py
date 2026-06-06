@@ -23,6 +23,13 @@ from backend.utils.ssrf import SSRFValidationError, validate_outbound_url
     "ftp://sis.example.com/api",                    # non-https scheme
     "",                                             # empty
     "https:///nohost",                              # no host
+    # Alternate IPv4 encodings the OS resolver maps to internal IPs (Codex probe):
+    "https://2130706433/x",                         # decimal-integer 127.0.0.1
+    "https://0x7f000001/x",                         # hex 127.0.0.1
+    "https://2852039166/x",                         # decimal 169.254.169.254 (metadata)
+    "https://0xA9FEA9FE/x",                         # hex 169.254.169.254 (metadata)
+    "https://0251.0376.0251.0376/x",                # octal-dotted 169.254.169.254
+    "https://127.1/x",                              # short-form loopback
 ])
 def test_rejects_internal_and_bad_urls(url):
     with pytest.raises(SSRFValidationError):
