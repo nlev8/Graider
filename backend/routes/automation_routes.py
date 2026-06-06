@@ -30,6 +30,21 @@ TEMPLATES_DIR = os.path.join(PROJECT_ROOT, "backend", "automation", "templates")
 
 os.makedirs(AUTOMATIONS_DIR, exist_ok=True)
 
+
+def _teacher_automations_dir(teacher_id):
+    """Per-tenant automations dir (audit #8). Mirrors storage._tenant_home:
+    'local-dev' (or falsy) keeps the historical flat layout; any real teacher_id
+    gets an isolated subdir. Without this, automation CRUD/run was unscoped — and
+    because a workflow's id is derived from its NAME (predictable + collision-prone),
+    two teachers' same-named workflows would also overwrite each other in one global
+    file. `teacher_id` is sanitized so it can't escape the automations root."""
+    base = AUTOMATIONS_DIR
+    if teacher_id and teacher_id != 'local-dev':
+        safe_tid = re.sub(r'[^a-zA-Z0-9_-]', '_', str(teacher_id))
+        base = os.path.join(AUTOMATIONS_DIR, safe_tid)
+    os.makedirs(base, exist_ok=True)
+    return base
+
 # ── Run state ────────────────────────────────────────────────
 _run_state = {
     "process": None,
@@ -128,12 +143,13 @@ def _read_picker_output(proc):
 @handle_route_errors
 def list_automations():
     """List all saved workflow files."""
+    tdir = _teacher_automations_dir(g.teacher_id)
     workflows = []
-    for filename in sorted(os.listdir(AUTOMATIONS_DIR)):
+    for filename in sorted(os.listdir(tdir)):
         if not filename.endswith('.json'):
             continue
         try:
-            with open(os.path.join(AUTOMATIONS_DIR, filename), 'r') as f:
+            with open(os.path.join(tdir, filename), 'r') as f:
                 wf = json.load(f)
             workflows.append({
                 "id": wf.get("id", filename.replace('.json', '')),
@@ -153,7 +169,7 @@ def list_automations():
 def get_automation(workflow_id):
     """Load a specific workflow JSON."""
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
-    filepath = os.path.join(AUTOMATIONS_DIR, safe_id + ".json")
+    filepath = os.path.join(_teacher_automations_dir(g.teacher_id), safe_id + ".json")
     if not os.path.exists(filepath):
         return jsonify({"error": "Workflow not found"}), 404
     with open(filepath, 'r') as f:
@@ -178,7 +194,7 @@ def save_automation():
     for i, step in enumerate(data.get("steps", [])):
         step.setdefault("id", "step-" + str(i + 1))
 
-    filepath = os.path.join(AUTOMATIONS_DIR, wf_id + ".json")
+    filepath = os.path.join(_teacher_automations_dir(g.teacher_id), wf_id + ".json")
     with open(filepath, 'w') as f:
         json.dump(data, f, indent=2)
     return jsonify({"status": "saved", "id": wf_id})
@@ -190,7 +206,7 @@ def save_automation():
 def delete_automation(workflow_id):
     """Delete a workflow file."""
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
-    filepath = os.path.join(AUTOMATIONS_DIR, safe_id + ".json")
+    filepath = os.path.join(_teacher_automations_dir(g.teacher_id), safe_id + ".json")
     if os.path.exists(filepath):
         os.remove(filepath)
     return jsonify({"status": "deleted"})
@@ -275,7 +291,7 @@ def run_automation(workflow_id):
         return jsonify({"error": "An automation is already running"}), 409
 
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
-    workflow_path = os.path.join(AUTOMATIONS_DIR, safe_id + ".json")
+    workflow_path = os.path.join(_teacher_automations_dir(g.teacher_id), safe_id + ".json")
     if not os.path.exists(workflow_path):
         return jsonify({"error": "Workflow not found"}), 404
 
