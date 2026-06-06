@@ -87,3 +87,19 @@ def test_owner_can_get_own_workflow(client):
     wf_id = _save(client, 'teacher-A', 'My WF')
     ra = client.get(f'/api/automations/{wf_id}', headers=_hdr('teacher-A'))
     assert ra.status_code == 200
+
+
+def test_save_id_traversal_cannot_overwrite_other_tenant(client):
+    """Codex-found bypass: save_automation trusted the client-supplied body 'id'.
+    A crafted id like '../teacher-B/<wf>' would escape the caller's subdir and
+    overwrite another teacher's workflow. The body id must be sanitized like the
+    URL handlers sanitize workflow_id."""
+    _save(client, 'teacher-B', 'Victim WF')  # teacher-B owns id 'victim-wf'
+    client.post('/api/automations',
+                json={'id': '../teacher-B/victim-wf', 'name': 'evil', 'steps': []},
+                headers=_hdr('teacher-A'))
+    lb = client.get('/api/automations', headers=_hdr('teacher-B')).get_json()['workflows']
+    victim = next((w for w in lb if w['id'] == 'victim-wf'), None)
+    assert victim is not None and victim['name'] == 'Victim WF', (
+        "teacher-A overwrote teacher-B's workflow via path traversal in the save body id"
+    )

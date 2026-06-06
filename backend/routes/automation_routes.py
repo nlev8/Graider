@@ -185,7 +185,14 @@ def save_automation():
     if not data or not data.get("name"):
         return jsonify({"error": "Workflow name required"}), 400
 
-    wf_id = data.get("id") or re.sub(r'[^a-z0-9]+', '-', data["name"].lower()).strip('-')
+    raw_id = data.get("id") or re.sub(r'[^a-z0-9]+', '-', data["name"].lower()).strip('-')
+    # Sanitize the (possibly client-supplied) id the SAME way the URL handlers
+    # sanitize workflow_id. Without this a crafted body id like
+    # "../<other-teacher>/<wf>" escapes the per-teacher subdir and overwrites
+    # another tenant's workflow (audit #8 — caught by Codex verification).
+    wf_id = re.sub(r'[^a-z0-9_-]', '', str(raw_id))
+    if not wf_id:
+        return jsonify({"error": "Invalid workflow id"}), 400
     data["id"] = wf_id
     data.setdefault("version", 1)
     data.setdefault("created_at", datetime.now().isoformat())
