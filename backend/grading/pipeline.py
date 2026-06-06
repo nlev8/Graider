@@ -464,6 +464,272 @@ def find_matching_config(filename: str, all_configs: dict[str, Any], grading_sta
     return best_match
 
 
+def _build_file_ai_notes(
+    *,
+    custom_rubric: Any | None,
+    file_notes: Any,
+    filepath: Any,
+    global_ai_notes: str,
+    grading_state: dict[str, Any],
+    matched_config: dict[str, Any] | None,
+    matched_title: Any,
+    output_folder: str,
+    period_class_level_map: dict[str, str],
+    resubmissions: Any,
+    rubric_type: Any | str,
+    student_info: Any,
+    student_period: str,
+    teacher_id: str,
+) -> tuple[str, str]:
+    file_ai_notes = global_ai_notes
+    if global_ai_notes:
+        _logger.info("  Applying Global AI Instructions (%d chars)", len(global_ai_notes))
+    if file_notes:
+        file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
+        _logger.info("  Applying Assignment-Specific Notes (%d chars)", len(file_notes))
+
+    # Inject correction patterns (learn from teacher edits)
+    try:
+        from backend.services.correction_patterns import build_correction_context
+        _question_types = []
+        if matched_config:
+            _section_cats = matched_config.get('sectionCategories', {})
+            _question_types = [k for k, v in _section_cats.items() if v]
+        if not _question_types:
+            _question_types = ['short_answer', 'multiple_choice', 'extended_writing']
+        _correction_ctx = build_correction_context(  # type: ignore[no-untyped-call]
+            teacher_id, matched_config.get('subject', '') if matched_config else '', _question_types
+        )
+        if _correction_ctx:
+            file_ai_notes += "\n\n" + _correction_ctx
+            _logger.info("  Applying Correction Patterns (%d chars)", len(_correction_ctx))
+    except Exception as e:
+        _logger.warning("  Correction patterns skipped: %s", e)
+
+    # Inject model answers from config (if generated)
+    model_answers = matched_config.get('modelAnswers', {}) if matched_config else {}
+    if model_answers:
+        ma_lines = ["\n\nMODEL ANSWERS (compare student responses against these):"]
+        for section_name, answer_text in model_answers.items():
+            ma_lines.append(f"- {section_name}: {answer_text}")
+        file_ai_notes += "\n".join(ma_lines)
+        _logger.info("  Applying Model Answers (%d sections)", len(model_answers))
+
+        # Detect fill-in-the-blank assignments and add special rubric override
+        # Use specific phrases to avoid false positives (e.g., "fill in the Cornell Notes")
+        _fn_lower = file_notes.lower()
+        if ('fill-in-the-blank' in _fn_lower or 'fill in the blank' in _fn_lower
+                or 'fill in blank' in _fn_lower or 'fillintheblank' in _fn_lower.replace(' ', '').replace('-', '')):
+            file_ai_notes += """
+
+FILL-IN-THE-BLANK RUBRIC OVERRIDE:
+This is a fill-in-the-blank assignment. IGNORE the standard rubric categories and use this instead:
+- Content Accuracy (70%): Is each answer correct or essentially correct?
+- Completeness (30%): Did the student attempt all blanks?
+
+CRITICAL GRADING RULES FOR FILL-IN-THE-BLANK:
+- DO NOT penalize for spelling errors if the word is recognizable
+- DO NOT penalize for capitalization
+- DO NOT assess "Writing Quality" or "Critical Thinking" - these don't apply
+- Accept synonyms and reasonable variations
+- If the answer is close enough to understand the intent, mark it CORRECT
+- A student who fills in all blanks with mostly correct answers should get 90+
+- Minor typos like "rebelion" for "rebellion" = FULL CREDIT
+"""
+            _logger.info("  Fill-in-the-blank detected - applying lenient grading override")
+
+    # Apply assignment-specific rubric type (overrides global rubric)
+    if rubric_type and rubric_type != 'standard':
+        if rubric_type == 'fill-in-blank':
+            file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: FILL-IN-THE-BLANK
+IGNORE the standard rubric. Use these categories ONLY:
+- Content Accuracy (70%): Is each answer correct or essentially correct?
+- Completeness (30%): Did the student attempt all blanks?
+
+CRITICAL RULES:
+- DO NOT penalize spelling errors if the word is recognizable
+- DO NOT penalize capitalization
+- Accept synonyms and reasonable variations
+- A student who fills in all blanks with mostly correct answers = 90+
+"""
+            _logger.info("  Rubric Type: Fill-in-the-Blank")
+        elif rubric_type == 'essay':
+            file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: ESSAY/WRITTEN RESPONSE
+Use these categories:
+- Content & Ideas (35%): Are the main points valid and well-supported?
+- Writing Quality (30%): Grammar, spelling, sentence structure, clarity
+- Critical Thinking & Analysis (20%): Depth of analysis, connections made
+- Effort & Engagement (15%): Evidence of genuine effort and thought
+
+Grade writing quality more strictly than fill-in-blank, but still be encouraging.
+"""
+            _logger.info("  Rubric Type: Essay/Written Response")
+        elif rubric_type == 'cornell-notes':
+            file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: CORNELL NOTES
+Use these categories:
+- Content Accuracy (40%): Are the notes factually correct and relevant?
+- Note Structure (25%): Proper Cornell format - questions in cue column, notes in main area
+- Summary Quality (20%): Does the summary synthesize main ideas?
+- Effort & Completeness (15%): Are all sections filled in?
+
+Look for: main ideas captured, good questions, clear summary at bottom.
+"""
+            _logger.info("  Rubric Type: Cornell Notes")
+        elif rubric_type == 'custom' and custom_rubric:
+            rubric_text = "ASSIGNMENT RUBRIC TYPE: CUSTOM\nUse these categories ONLY:\n"
+            for cat in custom_rubric:
+                name = cat.get('name', 'Unknown')
+                weight = cat.get('weight', 0)
+                rubric_text += f"- {name} ({weight}%)\n"
+            file_ai_notes += f"\n{rubric_text}"
+            _logger.info("  Rubric Type: Custom (%d categories)", len(custom_rubric))
+
+    # Add accommodation prompt if student has IEP/504
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        accommodation_prompt = build_accommodation_prompt(student_info['student_id'], teacher_id)
+        if accommodation_prompt:
+            file_ai_notes += f"\n{accommodation_prompt}"
+
+    # Build student history context (passed separately to feedback, NOT mixed into grading instructions)
+    history_context = ""
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        history_context = build_history_context(student_info['student_id'])
+
+    # Add class period context for differentiated grading
+    if student_period:
+        class_level = period_class_level_map.get(student_period, 'standard')
+        file_ai_notes += f"\n\nCLASS PERIOD: {student_period}"
+        file_ai_notes += f"\nCLASS LEVEL: {class_level.upper()}"
+
+        if class_level == 'advanced':
+            file_ai_notes += """
+ADVANCED CLASS - RUBRIC ADJUSTMENT:
+When applying the rubric above, make these automatic adjustments:
+- INCREASE weight of Critical Thinking/Analysis categories by +15%
+- INCREASE weight of Writing Quality/Communication by +10%
+- DECREASE weight of Completion/Effort categories by -15%
+- DECREASE weight of basic Content Accuracy by -10%
+(Percentages are relative shifts - redistribute points accordingly)
+
+ADVANCED CLASS GRADING EXPECTATIONS:
+- Hold students to HIGHER standards than the base rubric suggests
+- Expect detailed, thoughtful responses with deeper analysis
+- Grade more strictly on grammar, vocabulary, and sophistication
+- Look for evidence of critical thinking and connections between concepts
+- Surface-level or simplistic answers should score in the B/C range, not A
+- An "A" (90+) should represent truly exceptional, insightful work
+- Be constructive but maintain high expectations
+"""
+        elif class_level == 'support':
+            file_ai_notes += """
+SUPPORT CLASS - RUBRIC ADJUSTMENT:
+When applying the rubric above, make these automatic adjustments:
+- INCREASE weight of Effort/Engagement categories by +20%
+- INCREASE weight of Completion categories by +15%
+- DECREASE weight of Writing Quality/Grammar by -20%
+- DECREASE weight of Critical Thinking/Analysis by -15%
+(Percentages are relative shifts - redistribute points accordingly)
+
+SUPPORT CLASS GRADING EXPECTATIONS:
+- Be MORE LENIENT and ENCOURAGING than the base rubric suggests
+- Prioritize effort, completion, and basic understanding
+- Be very generous with partial credit for attempts that show learning
+- Do NOT penalize spelling, grammar, or incomplete sentences
+- If student attempted the work and shows basic understanding, lean toward passing
+- Recognize and praise progress and effort in feedback
+- Focus feedback on encouragement and growth, not deficits
+- A student who tries hard and completes work should score B or higher
+"""
+        else:  # standard
+            file_ai_notes += """
+STANDARD CLASS GRADING EXPECTATIONS:
+- Apply the rubric as written without adjustment
+- Balance rigor with encouragement
+- Award credit for demonstrated understanding even if answers aren't perfect
+- Grade fairly according to grade-level expectations
+"""
+
+    # Inject resubmission context so feedback references improvements
+    if filepath.name in resubmissions:
+        sid = student_info.get('student_id', '')
+        prev_r = None
+
+        # Source 1: Current session results (has full breakdown + feedback)
+        for r in grading_state["results"]:
+            if r.get("student_id") == sid and r.get("assignment") == matched_title:
+                prev_r = r
+                break
+
+        # Source 2: Master CSV fallback (prior session)
+        if prev_r is None:
+            try:
+                master_csv = Path(output_folder) / "master_grades.csv"
+                if master_csv.exists():
+                    import csv as csv_mod
+                    with open(master_csv, 'r', encoding='utf-8') as csvf:
+                        reader = csv_mod.DictReader(csvf)
+                        for row in reader:
+                            if (row.get('Student ID', '') == sid and
+                                row.get('Assignment', '').strip().lower() == matched_title.strip().lower()):
+                                prev_r = {
+                                    "score": row.get('Overall Score', '?'),
+                                    "letter_grade": row.get('Letter Grade', '?'),
+                                    "feedback": row.get('Feedback', ''),
+                                    "breakdown": {}
+                                }
+                                break
+            except Exception as e:
+                # Best-effort: prior-session lookup is for resubmission
+                # context. If the master CSV is unreadable, the
+                # primary-session error already alerted via the
+                # already_graded loader above; skip the resubmission
+                # comparison and proceed.
+                _logger.debug("Resubmission CSV fallback failed for sid=%s: %s", sid, e)
+
+        if prev_r:
+            prev_score = prev_r.get("score", "?")
+            prev_grade = prev_r.get("letter_grade", "?")
+            prev_breakdown = prev_r.get("breakdown", {})
+            prev_feedback = str(prev_r.get("feedback", ""))
+            if len(prev_feedback) > 500:
+                prev_feedback = prev_feedback[:500] + "..."
+
+            breakdown_lines = ""
+            if prev_breakdown:
+                breakdown_lines = (
+                    f"- Content Accuracy: {prev_breakdown.get('content_accuracy', '?')}/40\n"
+                    f"- Completeness: {prev_breakdown.get('completeness', '?')}/25\n"
+                    f"- Writing Quality: {prev_breakdown.get('writing_quality', '?')}/20\n"
+                    f"- Effort & Engagement: {prev_breakdown.get('effort_engagement', '?')}/15"
+                )
+
+            resub_context = (
+                "\n\nRESUBMISSION CONTEXT:\n"
+                "This student is resubmitting a previously graded assignment. "
+                "Compare their new work to the previous submission and highlight specific improvements.\n\n"
+                f"Previous submission:\n"
+                f"- Score: {prev_score} ({prev_grade})\n"
+                f"{breakdown_lines}\n"
+                f"- Previous feedback: {prev_feedback}\n\n"
+                "FEEDBACK INSTRUCTIONS FOR RESUBMISSION:\n"
+                "1. Start feedback by acknowledging this is a resubmission and that the student took the initiative to improve their work\n"
+                "2. Specifically call out what improved compared to the previous submission "
+                "(e.g., 'Your definition of X is now much more complete - last time you missed the key detail about Y')\n"
+                "3. If breakdown categories improved, mention which areas showed growth\n"
+                "4. If some areas still need work, note them as 'still developing' rather than as failures\n"
+                "5. End with encouragement about their growth mindset and willingness to revise\n"
+            )
+            file_ai_notes += resub_context
+            _logger.info("  Injected resubmission context (prev score: %s)", prev_score)
+    return file_ai_notes, history_context
+
+
 def grade_single_file(
     filepath: Any, file_index: int, total_files: int, *,
     ai_model: str,
@@ -712,252 +978,22 @@ def grade_single_file(
             }
 
         # Build AI notes
-        file_ai_notes = global_ai_notes
-        if global_ai_notes:
-            _logger.info("  Applying Global AI Instructions (%d chars)", len(global_ai_notes))
-        if file_notes:
-            file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
-            _logger.info("  Applying Assignment-Specific Notes (%d chars)", len(file_notes))
-
-        # Inject correction patterns (learn from teacher edits)
-        try:
-            from backend.services.correction_patterns import build_correction_context
-            _question_types = []
-            if matched_config:
-                _section_cats = matched_config.get('sectionCategories', {})
-                _question_types = [k for k, v in _section_cats.items() if v]
-            if not _question_types:
-                _question_types = ['short_answer', 'multiple_choice', 'extended_writing']
-            _correction_ctx = build_correction_context(  # type: ignore[no-untyped-call]
-                teacher_id, matched_config.get('subject', '') if matched_config else '', _question_types
-            )
-            if _correction_ctx:
-                file_ai_notes += "\n\n" + _correction_ctx
-                _logger.info("  Applying Correction Patterns (%d chars)", len(_correction_ctx))
-        except Exception as e:
-            _logger.warning("  Correction patterns skipped: %s", e)
-
-        # Inject model answers from config (if generated)
-        model_answers = matched_config.get('modelAnswers', {}) if matched_config else {}
-        if model_answers:
-            ma_lines = ["\n\nMODEL ANSWERS (compare student responses against these):"]
-            for section_name, answer_text in model_answers.items():
-                ma_lines.append(f"- {section_name}: {answer_text}")
-            file_ai_notes += "\n".join(ma_lines)
-            _logger.info("  Applying Model Answers (%d sections)", len(model_answers))
-
-            # Detect fill-in-the-blank assignments and add special rubric override
-            # Use specific phrases to avoid false positives (e.g., "fill in the Cornell Notes")
-            _fn_lower = file_notes.lower()
-            if ('fill-in-the-blank' in _fn_lower or 'fill in the blank' in _fn_lower
-                    or 'fill in blank' in _fn_lower or 'fillintheblank' in _fn_lower.replace(' ', '').replace('-', '')):
-                file_ai_notes += """
-
-FILL-IN-THE-BLANK RUBRIC OVERRIDE:
-This is a fill-in-the-blank assignment. IGNORE the standard rubric categories and use this instead:
-- Content Accuracy (70%): Is each answer correct or essentially correct?
-- Completeness (30%): Did the student attempt all blanks?
-
-CRITICAL GRADING RULES FOR FILL-IN-THE-BLANK:
-- DO NOT penalize for spelling errors if the word is recognizable
-- DO NOT penalize for capitalization
-- DO NOT assess "Writing Quality" or "Critical Thinking" - these don't apply
-- Accept synonyms and reasonable variations
-- If the answer is close enough to understand the intent, mark it CORRECT
-- A student who fills in all blanks with mostly correct answers should get 90+
-- Minor typos like "rebelion" for "rebellion" = FULL CREDIT
-"""
-                _logger.info("  Fill-in-the-blank detected - applying lenient grading override")
-
-        # Apply assignment-specific rubric type (overrides global rubric)
-        if rubric_type and rubric_type != 'standard':
-            if rubric_type == 'fill-in-blank':
-                file_ai_notes += """
-
-ASSIGNMENT RUBRIC TYPE: FILL-IN-THE-BLANK
-IGNORE the standard rubric. Use these categories ONLY:
-- Content Accuracy (70%): Is each answer correct or essentially correct?
-- Completeness (30%): Did the student attempt all blanks?
-
-CRITICAL RULES:
-- DO NOT penalize spelling errors if the word is recognizable
-- DO NOT penalize capitalization
-- Accept synonyms and reasonable variations
-- A student who fills in all blanks with mostly correct answers = 90+
-"""
-                _logger.info("  Rubric Type: Fill-in-the-Blank")
-            elif rubric_type == 'essay':
-                file_ai_notes += """
-
-ASSIGNMENT RUBRIC TYPE: ESSAY/WRITTEN RESPONSE
-Use these categories:
-- Content & Ideas (35%): Are the main points valid and well-supported?
-- Writing Quality (30%): Grammar, spelling, sentence structure, clarity
-- Critical Thinking & Analysis (20%): Depth of analysis, connections made
-- Effort & Engagement (15%): Evidence of genuine effort and thought
-
-Grade writing quality more strictly than fill-in-blank, but still be encouraging.
-"""
-                _logger.info("  Rubric Type: Essay/Written Response")
-            elif rubric_type == 'cornell-notes':
-                file_ai_notes += """
-
-ASSIGNMENT RUBRIC TYPE: CORNELL NOTES
-Use these categories:
-- Content Accuracy (40%): Are the notes factually correct and relevant?
-- Note Structure (25%): Proper Cornell format - questions in cue column, notes in main area
-- Summary Quality (20%): Does the summary synthesize main ideas?
-- Effort & Completeness (15%): Are all sections filled in?
-
-Look for: main ideas captured, good questions, clear summary at bottom.
-"""
-                _logger.info("  Rubric Type: Cornell Notes")
-            elif rubric_type == 'custom' and custom_rubric:
-                rubric_text = "ASSIGNMENT RUBRIC TYPE: CUSTOM\nUse these categories ONLY:\n"
-                for cat in custom_rubric:
-                    name = cat.get('name', 'Unknown')
-                    weight = cat.get('weight', 0)
-                    rubric_text += f"- {name} ({weight}%)\n"
-                file_ai_notes += f"\n{rubric_text}"
-                _logger.info("  Rubric Type: Custom (%d categories)", len(custom_rubric))
-
-        # Add accommodation prompt if student has IEP/504
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            accommodation_prompt = build_accommodation_prompt(student_info['student_id'], teacher_id)
-            if accommodation_prompt:
-                file_ai_notes += f"\n{accommodation_prompt}"
-
-        # Build student history context (passed separately to feedback, NOT mixed into grading instructions)
-        history_context = ""
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            history_context = build_history_context(student_info['student_id'])
-
-        # Add class period context for differentiated grading
-        if student_period:
-            class_level = period_class_level_map.get(student_period, 'standard')
-            file_ai_notes += f"\n\nCLASS PERIOD: {student_period}"
-            file_ai_notes += f"\nCLASS LEVEL: {class_level.upper()}"
-
-            if class_level == 'advanced':
-                file_ai_notes += """
-ADVANCED CLASS - RUBRIC ADJUSTMENT:
-When applying the rubric above, make these automatic adjustments:
-- INCREASE weight of Critical Thinking/Analysis categories by +15%
-- INCREASE weight of Writing Quality/Communication by +10%
-- DECREASE weight of Completion/Effort categories by -15%
-- DECREASE weight of basic Content Accuracy by -10%
-(Percentages are relative shifts - redistribute points accordingly)
-
-ADVANCED CLASS GRADING EXPECTATIONS:
-- Hold students to HIGHER standards than the base rubric suggests
-- Expect detailed, thoughtful responses with deeper analysis
-- Grade more strictly on grammar, vocabulary, and sophistication
-- Look for evidence of critical thinking and connections between concepts
-- Surface-level or simplistic answers should score in the B/C range, not A
-- An "A" (90+) should represent truly exceptional, insightful work
-- Be constructive but maintain high expectations
-"""
-            elif class_level == 'support':
-                file_ai_notes += """
-SUPPORT CLASS - RUBRIC ADJUSTMENT:
-When applying the rubric above, make these automatic adjustments:
-- INCREASE weight of Effort/Engagement categories by +20%
-- INCREASE weight of Completion categories by +15%
-- DECREASE weight of Writing Quality/Grammar by -20%
-- DECREASE weight of Critical Thinking/Analysis by -15%
-(Percentages are relative shifts - redistribute points accordingly)
-
-SUPPORT CLASS GRADING EXPECTATIONS:
-- Be MORE LENIENT and ENCOURAGING than the base rubric suggests
-- Prioritize effort, completion, and basic understanding
-- Be very generous with partial credit for attempts that show learning
-- Do NOT penalize spelling, grammar, or incomplete sentences
-- If student attempted the work and shows basic understanding, lean toward passing
-- Recognize and praise progress and effort in feedback
-- Focus feedback on encouragement and growth, not deficits
-- A student who tries hard and completes work should score B or higher
-"""
-            else:  # standard
-                file_ai_notes += """
-STANDARD CLASS GRADING EXPECTATIONS:
-- Apply the rubric as written without adjustment
-- Balance rigor with encouragement
-- Award credit for demonstrated understanding even if answers aren't perfect
-- Grade fairly according to grade-level expectations
-"""
-
-        # Inject resubmission context so feedback references improvements
-        if filepath.name in resubmissions:
-            sid = student_info.get('student_id', '')
-            prev_r = None
-
-            # Source 1: Current session results (has full breakdown + feedback)
-            for r in grading_state["results"]:
-                if r.get("student_id") == sid and r.get("assignment") == matched_title:
-                    prev_r = r
-                    break
-
-            # Source 2: Master CSV fallback (prior session)
-            if prev_r is None:
-                try:
-                    master_csv = Path(output_folder) / "master_grades.csv"
-                    if master_csv.exists():
-                        import csv as csv_mod
-                        with open(master_csv, 'r', encoding='utf-8') as csvf:
-                            reader = csv_mod.DictReader(csvf)
-                            for row in reader:
-                                if (row.get('Student ID', '') == sid and
-                                    row.get('Assignment', '').strip().lower() == matched_title.strip().lower()):
-                                    prev_r = {
-                                        "score": row.get('Overall Score', '?'),
-                                        "letter_grade": row.get('Letter Grade', '?'),
-                                        "feedback": row.get('Feedback', ''),
-                                        "breakdown": {}
-                                    }
-                                    break
-                except Exception as e:
-                    # Best-effort: prior-session lookup is for resubmission
-                    # context. If the master CSV is unreadable, the
-                    # primary-session error already alerted via the
-                    # already_graded loader above; skip the resubmission
-                    # comparison and proceed.
-                    _logger.debug("Resubmission CSV fallback failed for sid=%s: %s", sid, e)
-
-            if prev_r:
-                prev_score = prev_r.get("score", "?")
-                prev_grade = prev_r.get("letter_grade", "?")
-                prev_breakdown = prev_r.get("breakdown", {})
-                prev_feedback = str(prev_r.get("feedback", ""))
-                if len(prev_feedback) > 500:
-                    prev_feedback = prev_feedback[:500] + "..."
-
-                breakdown_lines = ""
-                if prev_breakdown:
-                    breakdown_lines = (
-                        f"- Content Accuracy: {prev_breakdown.get('content_accuracy', '?')}/40\n"
-                        f"- Completeness: {prev_breakdown.get('completeness', '?')}/25\n"
-                        f"- Writing Quality: {prev_breakdown.get('writing_quality', '?')}/20\n"
-                        f"- Effort & Engagement: {prev_breakdown.get('effort_engagement', '?')}/15"
-                    )
-
-                resub_context = (
-                    "\n\nRESUBMISSION CONTEXT:\n"
-                    "This student is resubmitting a previously graded assignment. "
-                    "Compare their new work to the previous submission and highlight specific improvements.\n\n"
-                    f"Previous submission:\n"
-                    f"- Score: {prev_score} ({prev_grade})\n"
-                    f"{breakdown_lines}\n"
-                    f"- Previous feedback: {prev_feedback}\n\n"
-                    "FEEDBACK INSTRUCTIONS FOR RESUBMISSION:\n"
-                    "1. Start feedback by acknowledging this is a resubmission and that the student took the initiative to improve their work\n"
-                    "2. Specifically call out what improved compared to the previous submission "
-                    "(e.g., 'Your definition of X is now much more complete - last time you missed the key detail about Y')\n"
-                    "3. If breakdown categories improved, mention which areas showed growth\n"
-                    "4. If some areas still need work, note them as 'still developing' rather than as failures\n"
-                    "5. End with encouragement about their growth mindset and willingness to revise\n"
-                )
-                file_ai_notes += resub_context
-                _logger.info("  Injected resubmission context (prev score: %s)", prev_score)
+        file_ai_notes, history_context = _build_file_ai_notes(
+            custom_rubric=custom_rubric,
+            file_notes=file_notes,
+            filepath=filepath,
+            global_ai_notes=global_ai_notes,
+            grading_state=grading_state,
+            matched_config=matched_config,
+            matched_title=matched_title,
+            output_folder=output_folder,
+            period_class_level_map=period_class_level_map,
+            resubmissions=resubmissions,
+            rubric_type=rubric_type,
+            student_info=student_info,
+            student_period=student_period,
+            teacher_id=teacher_id,
+        )
 
         # Read file
         file_data = read_assignment_file(filepath)
