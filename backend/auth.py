@@ -7,11 +7,60 @@ import json
 import os
 import logging
 import secrets
+import time
 import jwt
 from jwt import PyJWKClient
 from flask import request, jsonify, g, session
 
 logger = logging.getLogger(__name__)
+
+# VB8 #18: absolute (not sliding) cap on an SSO session's total lifetime.
+# PERMANENT_SESSION_LIFETIME (8h) is an IDLE timeout that resets on every
+# request — an actively-used session can therefore live indefinitely. This
+# is the hard upper bound from initial SSO login, after which the session is
+# rejected regardless of activity and the user must re-authenticate via the
+# IdP. 12h comfortably covers a single school day while bounding a stolen
+# cookie's useful window.
+SSO_ABSOLUTE_SESSION_LIFETIME = 12 * 60 * 60  # seconds
+
+
+def establish_sso_session():
+    """Reset the Flask session for a fresh SSO login (Clever/ClassLink).
+
+    Centralizes the security-relevant steps every SSO callback must perform:
+      1. session.clear()       — drop any pre-existing/anonymous session data.
+      2. rotate the server-side session id — anti-fixation: a sid an attacker
+         planted in the victim's browser before login can no longer address
+         the now-authenticated session. (No-op for the default signed-cookie
+         backend, which has no server-side sid to fixate.)
+      3. session.permanent = True — apply PERMANENT_SESSION_LIFETIME (idle cap).
+      4. stamp sso_login_ts — the absolute-lifetime anchor enforced in
+         check_auth via SSO_ABSOLUTE_SESSION_LIFETIME.
+    """
+    session.clear()
+    # Rotate server-side sid if the backend uses one (flask_session). The
+    # default SecureCookieSession has no `sid`, so guard with hasattr.
+    if hasattr(session, "sid"):
+        try:
+            session.sid = secrets.token_urlsafe(32)
+        except (AttributeError, TypeError):
+            # Read-only/unsupported sid — non-fatal; clear() already dropped
+            # any fixated data, so the residual risk is acceptable.
+            logger.warning("SSO session sid rotation unsupported on this backend")
+    session.permanent = True
+    session["sso_login_ts"] = time.time()
+
+
+def _sso_session_within_absolute_cap():
+    """True iff the current SSO session's absolute lifetime has not elapsed.
+
+    Fail-safe: a session with NO sso_login_ts (e.g. minted before VB8 #18, or
+    tampered to drop the field) is treated as EXPIRED so the cap cannot be
+    bypassed by omitting the stamp."""
+    ts = session.get("sso_login_ts")
+    if not isinstance(ts, (int, float)):
+        return False
+    return (time.time() - ts) <= SSO_ABSOLUTE_SESSION_LIFETIME
 
 from backend.supabase_client import get_supabase as _get_supabase
 from backend.utils.supabase_users import list_all_users
@@ -92,6 +141,28 @@ def save_classlink_link(guid, supabase_user_id):
     logger.info("Linked ClassLink GUID to Supabase user %s", supabase_user_id)
 
 
+def _is_sso_provisioned_user(user):
+    """Return True if a Supabase user was itself provisioned via SSO
+    (Clever/ClassLink), i.e. user_metadata.auth_source is set to one of our
+    SSO sources.
+
+    SECURITY (VB8 #13 — account takeover): an SSO login asserts only an email
+    address; the email is NOT a proof of ownership of a *pre-existing*
+    password (non-SSO) account. Auto-linking an SSO login to ANY account that
+    happens to share the asserted email lets an attacker who can name a
+    victim's email in an SSO IdP take over the victim's password account. We
+    therefore only auto-link by email when the matched account is itself an
+    SSO-provisioned account (no password the attacker could be hijacking).
+    First-time provisioning (zero matches → create) is unaffected; password
+    accounts simply fall through to the isolated legacy namespace (Clever) or
+    fail closed (ClassLink), never silently merged."""
+    meta = getattr(user, "user_metadata", None) or {}
+    try:
+        return meta.get("auth_source") in ("clever", "classlink")
+    except AttributeError:
+        return False
+
+
 def resolve_classlink_user_id(guid, email, name=None):
     """Resolve a ClassLink tenant-scoped GUID to a real Supabase Auth user UUID.
 
@@ -126,6 +197,14 @@ def resolve_classlink_user_id(guid, email, name=None):
 
         matches = _email_matches()
         if len(matches) == 1:
+            # VB8 #13: only auto-link to an SSO-provisioned account. A match
+            # against a non-SSO (password) account is an unverified-email
+            # takeover vector — fail closed (do not merge).
+            if not _is_sso_provisioned_user(matches[0]):
+                logger.warning(
+                    "ClassLink resolve: email matches a non-SSO account — "
+                    "refusing to auto-link (takeover guard); failing closed")
+                return None
             save_classlink_link(guid, matches[0].id)
             return matches[0].id
         if len(matches) > 1:
@@ -151,7 +230,10 @@ def resolve_classlink_user_id(guid, email, name=None):
             # Concurrency: a parallel first-login may have created the user already.
             logger.warning("ClassLink resolve: create_user failed (%s); re-resolving by email", type(create_err).__name__)
             recheck = _email_matches()
-            if len(recheck) == 1:
+            # Re-resolve only auto-links to an SSO-provisioned account
+            # (the racer is our own create, which sets auth_source=classlink);
+            # a non-SSO match here is still a takeover vector (VB8 #13).
+            if len(recheck) == 1 and _is_sso_provisioned_user(recheck[0]):
                 save_classlink_link(guid, recheck[0].id)
                 return recheck[0].id
             return None
@@ -219,6 +301,15 @@ def resolve_clever_user_id_or_create(clever_id, email, name=None):
 
         matches = _email_matches()
         if len(matches) == 1:
+            # VB8 #13: only auto-link to an SSO-provisioned account. A single
+            # match against a non-SSO (password) account is an unverified-email
+            # takeover vector — fail OPEN to the isolated clever:{id} namespace
+            # (never merge into the victim's password account).
+            if not _is_sso_provisioned_user(matches[0]):
+                logger.warning(
+                    "Clever resolve: email matches a non-SSO account — refusing "
+                    "to auto-link (takeover guard); failing open to legacy")
+                return legacy, "unverified_email_legacy"
             save_clever_link(clever_id, matches[0].id)
             return matches[0].id, "matched"
         if len(matches) > 1:
@@ -248,7 +339,10 @@ def resolve_clever_user_id_or_create(clever_id, email, name=None):
             logger.warning("Clever resolve: create_user failed (%s); re-resolving by email",
                            type(create_err).__name__)
             recheck = _email_matches()
-            if len(recheck) == 1:
+            # Re-resolve only auto-links to an SSO-provisioned account
+            # (the racer is our own create, which sets auth_source=clever);
+            # a non-SSO match here is still a takeover vector (VB8 #13).
+            if len(recheck) == 1 and _is_sso_provisioned_user(recheck[0]):
                 save_clever_link(clever_id, recheck[0].id)
                 return recheck[0].id, "matched"
             return legacy, "create_failed_legacy"
@@ -333,6 +427,11 @@ def validate_token(token):
             return None
         except jwt.InvalidTokenError as e:
             logger.warning("ES256 validation failed, trying HS256: %s", type(e).__name__)
+        except jwt.PyJWKClientError as e:
+            # VB8 #16: JWKS fetch/network failure (e.g. WAF 401, TLS, DNS) is a
+            # PyJWTError but NOT an InvalidTokenError, so it would otherwise
+            # escape and 500 the auth hook. Fall through to the HS256 fallback.
+            logger.warning("JWKS fetch failed, trying HS256: %s", type(e).__name__)
 
     # Fallback: HS256 with legacy secret
     try:
@@ -396,12 +495,19 @@ def init_auth(app):
         # fall back to the cheap resolver for pre-existing sessions.
         clever_user = session.get('clever_user') if hasattr(session, 'get') else None
         if clever_user and not has_bearer:
-            g.user_id = clever_user.get('user_id') or resolve_clever_user_id(clever_user['clever_id'])
-            g.teacher_id = g.user_id
-            g.user_email = clever_user.get('email', '')
-            g.auth_source = 'clever'
-            g.district_id = clever_user.get('district', '')
-            return None
+            # VB8 #18: absolute-lifetime cap. Past the cap (or a legacy session
+            # with no stamp), drop the SSO session and fall through to the
+            # standard 401 — the user must re-authenticate via Clever.
+            if not _sso_session_within_absolute_cap():
+                logger.info("Clever SSO session past absolute cap — clearing")
+                session.clear()
+            else:
+                g.user_id = clever_user.get('user_id') or resolve_clever_user_id(clever_user['clever_id'])
+                g.teacher_id = g.user_id
+                g.user_email = clever_user.get('email', '')
+                g.auth_source = 'clever'
+                g.district_id = clever_user.get('district', '')
+                return None
 
         # ClassLink SSO session — `user_id` is the resolved Supabase Auth UUID
         # (set at the OAuth callback by resolve_classlink_user_id); the
@@ -409,12 +515,17 @@ def init_auth(app):
         # verbatim into g.user_id/g.teacher_id.
         classlink_user = session.get('classlink_user') if hasattr(session, 'get') else None
         if classlink_user and not has_bearer:
-            g.user_id = classlink_user.get('user_id', '')
-            g.teacher_id = g.user_id
-            g.user_email = classlink_user.get('email', '')
-            g.auth_source = 'classlink'
-            g.district_id = classlink_user.get('tenant_id', '')
-            return None
+            # VB8 #18: absolute-lifetime cap (see Clever branch above).
+            if not _sso_session_within_absolute_cap():
+                logger.info("ClassLink SSO session past absolute cap — clearing")
+                session.clear()
+            else:
+                g.user_id = classlink_user.get('user_id', '')
+                g.teacher_id = g.user_id
+                g.user_email = classlink_user.get('email', '')
+                g.auth_source = 'classlink'
+                g.district_id = classlink_user.get('tenant_id', '')
+                return None
 
         # Skip non-API routes (static files, index.html, etc.)
         if not request.path.startswith('/api/'):

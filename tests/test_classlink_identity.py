@@ -24,9 +24,13 @@ def test_storage_maps_classlink_link_prefix(tmp_path, monkeypatch):
 
 
 class _FakeUser:
-    def __init__(self, uid, email):
+    def __init__(self, uid, email, auth_source="classlink"):
         self.id = uid
         self.email = email
+        # VB8 #13: auto-link by email is gated on the matched account being
+        # SSO-provisioned. Default to an SSO account so existing link tests
+        # exercise the link path; pass auth_source=None for a password account.
+        self.user_metadata = {"auth_source": auth_source} if auth_source else {}
 
 
 class _FakeCreateResult:
@@ -61,6 +65,17 @@ def test_resolve_single_email_match_links(monkeypatch):
     uid = auth.resolve_classlink_user_id("classlink:2284:x", "a@b.com")
     assert uid == "uuid-match"
     assert store["classlink:2284:x"] == "uuid-match"
+
+
+def test_resolve_single_match_non_sso_account_fails_closed(monkeypatch):
+    # VB8 #13 account-takeover guard: a single email match against a
+    # password (non-SSO) account MUST NOT auto-link — fail closed.
+    store = _patch_links(monkeypatch)
+    monkeypatch.setattr(auth, "_get_supabase", lambda: object())
+    monkeypatch.setattr(auth, "list_all_users",
+                        lambda _sb: [_FakeUser("uuid-victim", "a@b.com", auth_source=None)])
+    assert auth.resolve_classlink_user_id("classlink:2284:x", "a@b.com") is None
+    assert store == {}
 
 
 def test_resolve_multiple_matches_fails_closed(monkeypatch):

@@ -141,6 +141,34 @@ class TestValidateIdTokenClaims:
         mock_decode = patch("backend.lti.jwt.decode", return_value=claims)
         return mock_pyjwk, mock_decode
 
+    def test_requires_oidc_core_claims_present(self):
+        # VB8 #17/#22: the LTI id_token decode must REQUIRE the OIDC Core §2
+        # REQUIRED id_token claims to be PRESENT (exp, iat, sub — aud + iss are
+        # already enforced via audience=/issuer=). This brings the LTI path to
+        # parity with the ClassLink path. Per workflow Rule #10 we require ONLY
+        # the spec-required set (no over-required nbf).
+        from backend.lti import validate_launch_jwt
+        from backend.lti import (
+            _CLAIM_MESSAGE_TYPE, _CLAIM_VERSION, _CLAIM_DEPLOYMENT_ID,
+        )
+        claims = {
+            _CLAIM_MESSAGE_TYPE: "LtiResourceLinkRequest",
+            _CLAIM_VERSION: "1.3.0",
+            _CLAIM_DEPLOYMENT_ID: "deploy-1",
+        }
+        with patch("jwt.PyJWKClient"), \
+             patch("backend.lti.jwt.decode", return_value=claims) as mock_decode:
+            validate_launch_jwt("token", _platform_config())
+            options = mock_decode.call_args.kwargs.get("options", {})
+            require = options.get("require", [])
+            for required_claim in ("exp", "iat", "sub", "aud", "iss"):
+                assert required_claim in require, (
+                    f"OIDC Core §2 required claim {required_claim!r} must be in "
+                    f"options['require']; got {require!r}"
+                )
+            # Rule #10: do NOT over-require nbf (OPTIONAL per OIDC Core §2).
+            assert "nbf" not in require
+
     def test_unexpected_message_type(self):
         from backend.lti import validate_launch_jwt
         from backend.lti import (

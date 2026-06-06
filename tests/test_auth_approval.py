@@ -19,6 +19,8 @@ Both auth_source values are tested independently.
 """
 from __future__ import annotations
 
+import time
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -60,6 +62,7 @@ class TestApprovalStatusSSOShortCircuit:
                 'type': 'teacher',
                 'tenant_id': 'dist-1',
             }
+            sess['sso_login_ts'] = time.time()  # VB8 #18 absolute-cap anchor
 
         def _supabase_must_not_be_called():
             raise AssertionError(
@@ -109,6 +112,7 @@ class TestApprovalStatusSSOShortCircuit:
                     'email': 'teacher2@school.edu',
                     'district': 'dist-2',
                 }
+                sess['sso_login_ts'] = time.time()  # VB8 #18 absolute-cap anchor
 
             resp = app_client.get("/api/auth/approval-status")
 

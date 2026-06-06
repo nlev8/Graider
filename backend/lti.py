@@ -232,6 +232,12 @@ def validate_launch_jwt(id_token, platform_config):
             algorithms=["RS256"],
             audience=client_id,
             issuer=issuer,
+            # VB8 #17/#22: require the OIDC Core §2 REQUIRED id_token claims to
+            # be PRESENT (parity with the ClassLink path). Per workflow Rule #10
+            # this list contains ONLY the spec-required set — iss, sub, aud, exp,
+            # iat (OIDC Core §2: https://openid.net/specs/openid-connect-core-1_0.html#IDToken).
+            # nbf is OPTIONAL per spec and is intentionally NOT required.
+            options={"require": ["exp", "iat", "sub", "aud", "iss"]},
         )
     except jwt.ExpiredSignatureError:
         raise ValueError("id_token has expired")

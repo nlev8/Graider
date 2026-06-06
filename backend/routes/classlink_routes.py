@@ -24,7 +24,7 @@ from flask import Blueprint, request, redirect, jsonify, session, g
 import urllib.parse
 from urllib.parse import urlencode
 
-from backend.auth import resolve_classlink_user_id
+from backend.auth import establish_sso_session, resolve_classlink_user_id
 from backend.routes.sso_admin import apply_sso_admin_designation
 from backend.supabase_client import get_supabase
 from backend.utils.audit import audit_log
@@ -412,9 +412,9 @@ def _handle_classlink_teacher_login(email, first_name, last_name, guid,
     only AFTER full id_token validation. Behavior pinned by
     tests/test_classlink_sso.py.
     """
-    # Teacher/admin login
-    session.clear()
-    session.permanent = True
+    # Teacher/admin login — clear + rotate sid + mark permanent + stamp the
+    # absolute-lifetime anchor (VB8 #18).
+    establish_sso_session()
 
     # Resolve the tenant-scoped GUID to a real Supabase Auth UUID (link-or-create).
     graider_uuid = resolve_classlink_user_id(
