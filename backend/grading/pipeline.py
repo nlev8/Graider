@@ -730,6 +730,68 @@ STANDARD CLASS GRADING EXPECTATIONS:
     return file_ai_notes, history_context
 
 
+def _resolve_student(
+    *,
+    filepath: Any,
+    grading_state: dict[str, Any],
+    roster: dict[Any, Any],
+) -> tuple[Any, Any]:
+    from assignment_grader import (  # function-local: preserves test patchability
+        parse_filename,
+    )
+    parsed = parse_filename(filepath.name)
+    student_name = f"{parsed['first_name']} {parsed['last_name']}"
+    lookup_key = parsed['lookup_key']
+
+    # Lookup student in roster
+    if lookup_key in roster:
+        student_info = roster[lookup_key].copy()
+    else:
+        # Try fuzzy matching for partial/hyphenated last names
+        student_info = None
+        first_name_lower = parsed['first_name'].lower()
+        last_name_lower = parsed['last_name'].lower()
+        # Strip apostrophes/special chars for comparison (Da'Jaun → dajaun)
+        first_name_norm = first_name_lower.replace("'", "").replace("\u2019", "")
+        last_name_norm = last_name_lower.replace("'", "").replace("\u2019", "")
+        # Normalize spaces/hyphens (Salvador Guzman → salvadorguzman)
+        last_name_collapsed = last_name_norm.replace(" ", "").replace("-", "")
+
+        for roster_key, roster_data in roster.items():
+            if isinstance(roster_data, dict):
+                roster_first = roster_data.get('first_name', '').lower()
+                roster_last = roster_data.get('last_name', '').lower()
+                roster_first_norm = roster_first.replace("'", "").replace("\u2019", "")
+                roster_last_norm = roster_last.replace("'", "").replace("\u2019", "")
+                roster_last_collapsed = roster_last_norm.replace(" ", "").replace("-", "")
+
+                # Match first name (strip apostrophes for comparison)
+                if (roster_first_norm != first_name_norm
+                        and not roster_first_norm.startswith(first_name_norm)):
+                    continue
+
+                # Check various last name matching patterns
+                roster_last_parts_hyphen = roster_last_norm.split('-')
+                roster_last_parts_space = roster_last_norm.split(' ')
+                if (
+                    roster_last_norm.startswith(last_name_norm) or  # "k" matches "kolas"
+                    roster_last_parts_hyphen[0] == last_name_norm or  # "kolas" matches "kolas-nowicki"
+                    last_name_norm in roster_last_parts_hyphen or  # "nowicki" matches "kolas-nowicki"
+                    roster_last_parts_space[0] == last_name_norm or  # "maloney" matches "maloney fox"
+                    last_name_norm in roster_last_parts_space or  # "fox" matches "maloney fox"
+                    roster_last_collapsed == last_name_collapsed  # "salvador guzman" matches "salvador-guzman"
+                ):
+                    student_info = roster_data.copy()
+                    student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
+                    grading_state["log"].append(f"  📎 Matched '{parsed['first_name']} {parsed['last_name']}' to '{student_name}'")
+                    break
+
+        if not student_info:
+            student_info = {"student_id": "UNKNOWN", "student_name": student_name,
+                           "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
+    return student_info, parsed
+
+
 def grade_single_file(
     filepath: Any, file_index: int, total_files: int, *,
     ai_model: str,
@@ -777,56 +839,11 @@ def grade_single_file(
         read_assignment_file,
     )
     try:
-        parsed = parse_filename(filepath.name)
-        student_name = f"{parsed['first_name']} {parsed['last_name']}"
-        lookup_key = parsed['lookup_key']
-
-        # Lookup student in roster
-        if lookup_key in roster:
-            student_info = roster[lookup_key].copy()
-        else:
-            # Try fuzzy matching for partial/hyphenated last names
-            student_info = None
-            first_name_lower = parsed['first_name'].lower()
-            last_name_lower = parsed['last_name'].lower()
-            # Strip apostrophes/special chars for comparison (Da'Jaun → dajaun)
-            first_name_norm = first_name_lower.replace("'", "").replace("\u2019", "")
-            last_name_norm = last_name_lower.replace("'", "").replace("\u2019", "")
-            # Normalize spaces/hyphens (Salvador Guzman → salvadorguzman)
-            last_name_collapsed = last_name_norm.replace(" ", "").replace("-", "")
-
-            for roster_key, roster_data in roster.items():
-                if isinstance(roster_data, dict):
-                    roster_first = roster_data.get('first_name', '').lower()
-                    roster_last = roster_data.get('last_name', '').lower()
-                    roster_first_norm = roster_first.replace("'", "").replace("\u2019", "")
-                    roster_last_norm = roster_last.replace("'", "").replace("\u2019", "")
-                    roster_last_collapsed = roster_last_norm.replace(" ", "").replace("-", "")
-
-                    # Match first name (strip apostrophes for comparison)
-                    if (roster_first_norm != first_name_norm
-                            and not roster_first_norm.startswith(first_name_norm)):
-                        continue
-
-                    # Check various last name matching patterns
-                    roster_last_parts_hyphen = roster_last_norm.split('-')
-                    roster_last_parts_space = roster_last_norm.split(' ')
-                    if (
-                        roster_last_norm.startswith(last_name_norm) or  # "k" matches "kolas"
-                        roster_last_parts_hyphen[0] == last_name_norm or  # "kolas" matches "kolas-nowicki"
-                        last_name_norm in roster_last_parts_hyphen or  # "nowicki" matches "kolas-nowicki"
-                        roster_last_parts_space[0] == last_name_norm or  # "maloney" matches "maloney fox"
-                        last_name_norm in roster_last_parts_space or  # "fox" matches "maloney fox"
-                        roster_last_collapsed == last_name_collapsed  # "salvador guzman" matches "salvador-guzman"
-                    ):
-                        student_info = roster_data.copy()
-                        student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
-                        grading_state["log"].append(f"  📎 Matched '{parsed['first_name']} {parsed['last_name']}' to '{student_name}'")
-                        break
-
-            if not student_info:
-                student_info = {"student_id": "UNKNOWN", "student_name": student_name,
-                               "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
+        student_info, parsed = _resolve_student(
+            filepath=filepath,
+            grading_state=grading_state,
+            roster=roster,
+        )
 
         # Match assignment config
         _logger.debug("  Matching config for: %s", filepath.name)
