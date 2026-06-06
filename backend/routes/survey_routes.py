@@ -3,7 +3,7 @@ Parent Survey Routes for Graider.
 Teachers create a survey link, parents click it and rate 4-5 questions.
 Responses stored in published_assessments with content_type="survey".
 """
-import random
+import secrets
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, make_response
 from backend.supabase_client_scoped import get_request_supabase as get_supabase
@@ -45,7 +45,9 @@ def _generate_survey_code():
     """Generate a unique 6-character survey code."""
     chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
     while True:
-        code = ''.join(random.choices(chars, k=6))
+        # VB9 #21: survey codes gate parent-survey access — use a CSPRNG
+        # (secrets) so codes are unpredictable, not Mersenne-Twister random.
+        code = ''.join(secrets.choice(chars) for _ in range(6))
         db = get_supabase()
         result = db.table('published_assessments').select('id').eq('join_code', code).execute()
         if len(result.data) == 0:

@@ -6,9 +6,66 @@ became _logger calls on extraction — return values are unchanged).
 """
 import logging
 import re
+import zipfile
 from pathlib import Path
 
 _logger = logging.getLogger(__name__)
+
+# VB9 #25 — zip-bomb guard for zip-based office docs (.docx is a ZIP/OPC
+# package). A malicious doc can declare members that decompress to gigabytes
+# from a few KB, exhausting memory when python-docx parses them. We inspect
+# the ZIP central directory (cheap — never decompresses) and reject before
+# opening. A normal .docx is ~1-2 MB uncompressed across ~15-20 members; its
+# largest member (styles.xml) is ~350 KB at roughly a 30:1 ratio. The caps
+# below leave generous headroom for legitimate documents while stopping a
+# bomb cold.
+_ZIP_MAX_TOTAL_UNCOMPRESSED = 100 * 1024 * 1024   # 100 MB total expansion
+_ZIP_MAX_MEMBER_COUNT = 2000                        # member-count fan-out cap
+_ZIP_MAX_COMPRESSION_RATIO = 200                    # per-member uncompressed:compressed
+
+
+def _is_zip_bomb(filepath) -> bool:
+    """Return True if a zip-based file (e.g. .docx) looks like a zip bomb.
+
+    Inspects only the central directory metadata (file_size / compress_size),
+    so it costs O(members) and never decompresses anything. Conservative: a
+    non-zip file (shouldn't happen for .docx) returns False so the normal
+    parser surfaces its own error.
+    """
+    try:
+        with zipfile.ZipFile(filepath) as zf:
+            infos = zf.infolist()
+            if len(infos) > _ZIP_MAX_MEMBER_COUNT:
+                _logger.warning(
+                    "Rejected zip-based doc: %d members exceeds cap %d",
+                    len(infos), _ZIP_MAX_MEMBER_COUNT,
+                )
+                return True
+            total_uncompressed = 0
+            for info in infos:
+                total_uncompressed += info.file_size
+                if total_uncompressed > _ZIP_MAX_TOTAL_UNCOMPRESSED:
+                    _logger.warning(
+                        "Rejected zip-based doc: uncompressed size exceeds cap %d bytes",
+                        _ZIP_MAX_TOTAL_UNCOMPRESSED,
+                    )
+                    return True
+                # Per-member ratio catches a single hyper-compressible member.
+                if info.compress_size > 0:
+                    ratio = info.file_size / info.compress_size
+                    if ratio > _ZIP_MAX_COMPRESSION_RATIO:
+                        _logger.warning(
+                            "Rejected zip-based doc: member %r ratio %.0f:1 exceeds cap %d:1",
+                            info.filename, ratio, _ZIP_MAX_COMPRESSION_RATIO,
+                        )
+                        return True
+            return False
+    except zipfile.BadZipFile:
+        # Not a valid zip — let the downstream parser report the real error.
+        return False
+    except Exception as e:
+        _logger.warning("Zip-bomb inspection failed (%s); treating as unsafe", type(e).__name__)
+        return True
 
 
 def parse_filename(filename: str) -> dict:
@@ -128,6 +185,10 @@ def read_docx_file(filepath: str) -> str:
         from docx.text.paragraph import Paragraph
     except ImportError:
         _logger.error("python-docx not installed. Run: pip install python-docx")
+        return None
+
+    # VB9 #25: reject zip bombs before python-docx expands the package.
+    if _is_zip_bomb(filepath):
         return None
 
     try:
@@ -493,6 +554,10 @@ def read_docx_file_structured(filepath: str) -> dict:
         from docx.text.paragraph import Paragraph
         from docx.shared import Pt
     except ImportError:
+        return {"is_graider_table": False, "plain_text": None, "tables": []}
+
+    # VB9 #25: reject zip bombs before python-docx expands the package.
+    if _is_zip_bomb(filepath):
         return {"is_graider_table": False, "plain_text": None, "tables": []}
 
     try:
