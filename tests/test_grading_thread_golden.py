@@ -645,3 +645,64 @@ def test_api_error_stops_grading(env):
     assert "Error" in state["error"]
     assert state["complete"] is True
     assert state["is_running"] is False
+
+
+# ===========================================================================
+# Scenario 9 — config_mismatch threads from the shell config block through to
+# _assemble_post_grade. The other golden scenarios never set config_mismatch=True
+# (the missing-config case returns BEFORE assembly), so this is the only coverage
+# of the cross-seam config_mismatch / config_mismatch_reason thread that the
+# PR-3b decomposition introduced (config produced inline; consumed in the helper).
+# ===========================================================================
+def test_config_mismatch_threads_through_to_assembly(env):
+    # A submitted file whose title matches NO saved config, but the fallback
+    # assignment_config supplies markers (so it is NOT skipped) → config_mismatch=True.
+    # The fallback keeps Cornell's markers/importedDoc; the submission content is
+    # deliberately unrelated (Rome) so neither filename NOR content fingerprinting
+    # matches the (renamed) config → matched_config stays None.
+    mismatch_config = {**CORNELL_CONFIG, "title": "Photosynthesis Quiz Unit 4"}
+    rome_submission = (
+        "QUESTIONS:\n1) Why did the Roman Republic fall?\n"
+        "Power struggles and civil wars weakened it.\n\n"
+        "SUMMARY:\nThe Republic gave way to the Empire under Augustus.\n\n"
+        "VOCABULARY:\nSenate - the governing council of Rome.\n"
+    )
+
+    # Capture the EXACT config_mismatch / config_mismatch_reason values that the
+    # shell threads into _assemble_post_grade — so the test is mutation-sensitive
+    # for BOTH the boolean AND the reason string (not just the boolean via logs).
+    import backend.grading.pipeline as _pl
+    captured = {}
+    real_assemble = _pl._assemble_post_grade
+
+    def _capture_assemble(**kw):
+        captured["config_mismatch"] = kw.get("config_mismatch")
+        captured["config_mismatch_reason"] = kw.get("config_mismatch_reason")
+        return real_assemble(**kw)
+
+    with patch("backend.grading.pipeline._assemble_post_grade", side_effect=_capture_assemble):
+        state, called = run_thread(
+            env, "golden-cfg-mismatch",
+            config=mismatch_config,
+            submissions=[("Maria_Garcia_Ancient Rome Essay.txt", rome_submission)],
+            roster=[("Maria", "Garcia", "STU001", "mg@school.com", "3")],
+        )
+
+    # A result IS produced (fallback markers prevent the skip).
+    r = find_result(state, "Maria_Garcia_Ancient Rome Essay.txt")
+    assert r is not None, f"no result; results={state['results']}"
+
+    # Producer — the shell config block set config_mismatch_reason and logged it:
+    assert any("CONFIG MISMATCH:" in line and "Ancient Rome Essay" in line
+               for line in state["log"]), state["log"]
+    # Consumer — _assemble_post_grade's log_messages appends the "wrong rubric"
+    # warning ONLY when the config_mismatch param it received is True. Its presence
+    # proves the BOOLEAN was threaded shell-block → helper param correctly.
+    assert any("CONFIG MISMATCH - may have wrong rubric" in line
+               for line in state["log"]), state["log"]
+    # Both halves of the thread reached _assemble_post_grade with the right values
+    # (mutation-sensitive for the reason STRING, not just the boolean):
+    assert captured.get("config_mismatch") is True, captured
+    assert captured.get("config_mismatch_reason"), captured
+    assert "Ancient Rome Essay" in captured["config_mismatch_reason"], captured
+    assert "Photosynthesis Quiz Unit 4" in captured["config_mismatch_reason"], captured

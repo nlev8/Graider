@@ -464,6 +464,552 @@ def find_matching_config(filename: str, all_configs: dict[str, Any], grading_sta
     return best_match
 
 
+def _build_file_ai_notes(
+    *,
+    custom_rubric: Any | None,
+    file_notes: Any,
+    filepath: Any,
+    global_ai_notes: str,
+    grading_state: dict[str, Any],
+    matched_config: dict[str, Any] | None,
+    matched_title: Any,
+    output_folder: str,
+    period_class_level_map: dict[str, str],
+    resubmissions: Any,
+    rubric_type: Any | str,
+    student_info: Any,
+    student_period: str,
+    teacher_id: str,
+) -> tuple[str, str]:
+    file_ai_notes = global_ai_notes
+    if global_ai_notes:
+        _logger.info("  Applying Global AI Instructions (%d chars)", len(global_ai_notes))
+    if file_notes:
+        file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
+        _logger.info("  Applying Assignment-Specific Notes (%d chars)", len(file_notes))
+
+    # Inject correction patterns (learn from teacher edits)
+    try:
+        from backend.services.correction_patterns import build_correction_context
+        _question_types = []
+        if matched_config:
+            _section_cats = matched_config.get('sectionCategories', {})
+            _question_types = [k for k, v in _section_cats.items() if v]
+        if not _question_types:
+            _question_types = ['short_answer', 'multiple_choice', 'extended_writing']
+        _correction_ctx = build_correction_context(  # type: ignore[no-untyped-call]
+            teacher_id, matched_config.get('subject', '') if matched_config else '', _question_types
+        )
+        if _correction_ctx:
+            file_ai_notes += "\n\n" + _correction_ctx
+            _logger.info("  Applying Correction Patterns (%d chars)", len(_correction_ctx))
+    except Exception as e:
+        _logger.warning("  Correction patterns skipped: %s", e)
+
+    # Inject model answers from config (if generated)
+    model_answers = matched_config.get('modelAnswers', {}) if matched_config else {}
+    if model_answers:
+        ma_lines = ["\n\nMODEL ANSWERS (compare student responses against these):"]
+        for section_name, answer_text in model_answers.items():
+            ma_lines.append(f"- {section_name}: {answer_text}")
+        file_ai_notes += "\n".join(ma_lines)
+        _logger.info("  Applying Model Answers (%d sections)", len(model_answers))
+
+        # Detect fill-in-the-blank assignments and add special rubric override
+        # Use specific phrases to avoid false positives (e.g., "fill in the Cornell Notes")
+        _fn_lower = file_notes.lower()
+        if ('fill-in-the-blank' in _fn_lower or 'fill in the blank' in _fn_lower
+                or 'fill in blank' in _fn_lower or 'fillintheblank' in _fn_lower.replace(' ', '').replace('-', '')):
+            file_ai_notes += """
+
+FILL-IN-THE-BLANK RUBRIC OVERRIDE:
+This is a fill-in-the-blank assignment. IGNORE the standard rubric categories and use this instead:
+- Content Accuracy (70%): Is each answer correct or essentially correct?
+- Completeness (30%): Did the student attempt all blanks?
+
+CRITICAL GRADING RULES FOR FILL-IN-THE-BLANK:
+- DO NOT penalize for spelling errors if the word is recognizable
+- DO NOT penalize for capitalization
+- DO NOT assess "Writing Quality" or "Critical Thinking" - these don't apply
+- Accept synonyms and reasonable variations
+- If the answer is close enough to understand the intent, mark it CORRECT
+- A student who fills in all blanks with mostly correct answers should get 90+
+- Minor typos like "rebelion" for "rebellion" = FULL CREDIT
+"""
+            _logger.info("  Fill-in-the-blank detected - applying lenient grading override")
+
+    # Apply assignment-specific rubric type (overrides global rubric)
+    if rubric_type and rubric_type != 'standard':
+        if rubric_type == 'fill-in-blank':
+            file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: FILL-IN-THE-BLANK
+IGNORE the standard rubric. Use these categories ONLY:
+- Content Accuracy (70%): Is each answer correct or essentially correct?
+- Completeness (30%): Did the student attempt all blanks?
+
+CRITICAL RULES:
+- DO NOT penalize spelling errors if the word is recognizable
+- DO NOT penalize capitalization
+- Accept synonyms and reasonable variations
+- A student who fills in all blanks with mostly correct answers = 90+
+"""
+            _logger.info("  Rubric Type: Fill-in-the-Blank")
+        elif rubric_type == 'essay':
+            file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: ESSAY/WRITTEN RESPONSE
+Use these categories:
+- Content & Ideas (35%): Are the main points valid and well-supported?
+- Writing Quality (30%): Grammar, spelling, sentence structure, clarity
+- Critical Thinking & Analysis (20%): Depth of analysis, connections made
+- Effort & Engagement (15%): Evidence of genuine effort and thought
+
+Grade writing quality more strictly than fill-in-blank, but still be encouraging.
+"""
+            _logger.info("  Rubric Type: Essay/Written Response")
+        elif rubric_type == 'cornell-notes':
+            file_ai_notes += """
+
+ASSIGNMENT RUBRIC TYPE: CORNELL NOTES
+Use these categories:
+- Content Accuracy (40%): Are the notes factually correct and relevant?
+- Note Structure (25%): Proper Cornell format - questions in cue column, notes in main area
+- Summary Quality (20%): Does the summary synthesize main ideas?
+- Effort & Completeness (15%): Are all sections filled in?
+
+Look for: main ideas captured, good questions, clear summary at bottom.
+"""
+            _logger.info("  Rubric Type: Cornell Notes")
+        elif rubric_type == 'custom' and custom_rubric:
+            rubric_text = "ASSIGNMENT RUBRIC TYPE: CUSTOM\nUse these categories ONLY:\n"
+            for cat in custom_rubric:
+                name = cat.get('name', 'Unknown')
+                weight = cat.get('weight', 0)
+                rubric_text += f"- {name} ({weight}%)\n"
+            file_ai_notes += f"\n{rubric_text}"
+            _logger.info("  Rubric Type: Custom (%d categories)", len(custom_rubric))
+
+    # Add accommodation prompt if student has IEP/504
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        accommodation_prompt = build_accommodation_prompt(student_info['student_id'], teacher_id)
+        if accommodation_prompt:
+            file_ai_notes += f"\n{accommodation_prompt}"
+
+    # Build student history context (passed separately to feedback, NOT mixed into grading instructions)
+    history_context = ""
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        history_context = build_history_context(student_info['student_id'])
+
+    # Add class period context for differentiated grading
+    if student_period:
+        class_level = period_class_level_map.get(student_period, 'standard')
+        file_ai_notes += f"\n\nCLASS PERIOD: {student_period}"
+        file_ai_notes += f"\nCLASS LEVEL: {class_level.upper()}"
+
+        if class_level == 'advanced':
+            file_ai_notes += """
+ADVANCED CLASS - RUBRIC ADJUSTMENT:
+When applying the rubric above, make these automatic adjustments:
+- INCREASE weight of Critical Thinking/Analysis categories by +15%
+- INCREASE weight of Writing Quality/Communication by +10%
+- DECREASE weight of Completion/Effort categories by -15%
+- DECREASE weight of basic Content Accuracy by -10%
+(Percentages are relative shifts - redistribute points accordingly)
+
+ADVANCED CLASS GRADING EXPECTATIONS:
+- Hold students to HIGHER standards than the base rubric suggests
+- Expect detailed, thoughtful responses with deeper analysis
+- Grade more strictly on grammar, vocabulary, and sophistication
+- Look for evidence of critical thinking and connections between concepts
+- Surface-level or simplistic answers should score in the B/C range, not A
+- An "A" (90+) should represent truly exceptional, insightful work
+- Be constructive but maintain high expectations
+"""
+        elif class_level == 'support':
+            file_ai_notes += """
+SUPPORT CLASS - RUBRIC ADJUSTMENT:
+When applying the rubric above, make these automatic adjustments:
+- INCREASE weight of Effort/Engagement categories by +20%
+- INCREASE weight of Completion categories by +15%
+- DECREASE weight of Writing Quality/Grammar by -20%
+- DECREASE weight of Critical Thinking/Analysis by -15%
+(Percentages are relative shifts - redistribute points accordingly)
+
+SUPPORT CLASS GRADING EXPECTATIONS:
+- Be MORE LENIENT and ENCOURAGING than the base rubric suggests
+- Prioritize effort, completion, and basic understanding
+- Be very generous with partial credit for attempts that show learning
+- Do NOT penalize spelling, grammar, or incomplete sentences
+- If student attempted the work and shows basic understanding, lean toward passing
+- Recognize and praise progress and effort in feedback
+- Focus feedback on encouragement and growth, not deficits
+- A student who tries hard and completes work should score B or higher
+"""
+        else:  # standard
+            file_ai_notes += """
+STANDARD CLASS GRADING EXPECTATIONS:
+- Apply the rubric as written without adjustment
+- Balance rigor with encouragement
+- Award credit for demonstrated understanding even if answers aren't perfect
+- Grade fairly according to grade-level expectations
+"""
+
+    # Inject resubmission context so feedback references improvements
+    if filepath.name in resubmissions:
+        sid = student_info.get('student_id', '')
+        prev_r = None
+
+        # Source 1: Current session results (has full breakdown + feedback)
+        for r in grading_state["results"]:
+            if r.get("student_id") == sid and r.get("assignment") == matched_title:
+                prev_r = r
+                break
+
+        # Source 2: Master CSV fallback (prior session)
+        if prev_r is None:
+            try:
+                master_csv = Path(output_folder) / "master_grades.csv"
+                if master_csv.exists():
+                    import csv as csv_mod
+                    with open(master_csv, 'r', encoding='utf-8') as csvf:
+                        reader = csv_mod.DictReader(csvf)
+                        for row in reader:
+                            if (row.get('Student ID', '') == sid and
+                                row.get('Assignment', '').strip().lower() == matched_title.strip().lower()):
+                                prev_r = {
+                                    "score": row.get('Overall Score', '?'),
+                                    "letter_grade": row.get('Letter Grade', '?'),
+                                    "feedback": row.get('Feedback', ''),
+                                    "breakdown": {}
+                                }
+                                break
+            except Exception as e:
+                # Best-effort: prior-session lookup is for resubmission
+                # context. If the master CSV is unreadable, the
+                # primary-session error already alerted via the
+                # already_graded loader above; skip the resubmission
+                # comparison and proceed.
+                _logger.debug("Resubmission CSV fallback failed for sid=%s: %s", sid, e)
+
+        if prev_r:
+            prev_score = prev_r.get("score", "?")
+            prev_grade = prev_r.get("letter_grade", "?")
+            prev_breakdown = prev_r.get("breakdown", {})
+            prev_feedback = str(prev_r.get("feedback", ""))
+            if len(prev_feedback) > 500:
+                prev_feedback = prev_feedback[:500] + "..."
+
+            breakdown_lines = ""
+            if prev_breakdown:
+                breakdown_lines = (
+                    f"- Content Accuracy: {prev_breakdown.get('content_accuracy', '?')}/40\n"
+                    f"- Completeness: {prev_breakdown.get('completeness', '?')}/25\n"
+                    f"- Writing Quality: {prev_breakdown.get('writing_quality', '?')}/20\n"
+                    f"- Effort & Engagement: {prev_breakdown.get('effort_engagement', '?')}/15"
+                )
+
+            resub_context = (
+                "\n\nRESUBMISSION CONTEXT:\n"
+                "This student is resubmitting a previously graded assignment. "
+                "Compare their new work to the previous submission and highlight specific improvements.\n\n"
+                f"Previous submission:\n"
+                f"- Score: {prev_score} ({prev_grade})\n"
+                f"{breakdown_lines}\n"
+                f"- Previous feedback: {prev_feedback}\n\n"
+                "FEEDBACK INSTRUCTIONS FOR RESUBMISSION:\n"
+                "1. Start feedback by acknowledging this is a resubmission and that the student took the initiative to improve their work\n"
+                "2. Specifically call out what improved compared to the previous submission "
+                "(e.g., 'Your definition of X is now much more complete - last time you missed the key detail about Y')\n"
+                "3. If breakdown categories improved, mention which areas showed growth\n"
+                "4. If some areas still need work, note them as 'still developing' rather than as failures\n"
+                "5. End with encouragement about their growth mindset and willingness to revise\n"
+            )
+            file_ai_notes += resub_context
+            _logger.info("  Injected resubmission context (prev score: %s)", prev_score)
+    return file_ai_notes, history_context
+
+
+def _resolve_student(
+    *,
+    filepath: Any,
+    grading_state: dict[str, Any],
+    roster: dict[Any, Any],
+) -> tuple[Any, Any]:
+    from assignment_grader import (  # function-local: preserves test patchability
+        parse_filename,
+    )
+    parsed = parse_filename(filepath.name)
+    student_name = f"{parsed['first_name']} {parsed['last_name']}"
+    lookup_key = parsed['lookup_key']
+
+    # Lookup student in roster
+    if lookup_key in roster:
+        student_info = roster[lookup_key].copy()
+    else:
+        # Try fuzzy matching for partial/hyphenated last names
+        student_info = None
+        first_name_lower = parsed['first_name'].lower()
+        last_name_lower = parsed['last_name'].lower()
+        # Strip apostrophes/special chars for comparison (Da'Jaun → dajaun)
+        first_name_norm = first_name_lower.replace("'", "").replace("\u2019", "")
+        last_name_norm = last_name_lower.replace("'", "").replace("\u2019", "")
+        # Normalize spaces/hyphens (Salvador Guzman → salvadorguzman)
+        last_name_collapsed = last_name_norm.replace(" ", "").replace("-", "")
+
+        for roster_key, roster_data in roster.items():
+            if isinstance(roster_data, dict):
+                roster_first = roster_data.get('first_name', '').lower()
+                roster_last = roster_data.get('last_name', '').lower()
+                roster_first_norm = roster_first.replace("'", "").replace("\u2019", "")
+                roster_last_norm = roster_last.replace("'", "").replace("\u2019", "")
+                roster_last_collapsed = roster_last_norm.replace(" ", "").replace("-", "")
+
+                # Match first name (strip apostrophes for comparison)
+                if (roster_first_norm != first_name_norm
+                        and not roster_first_norm.startswith(first_name_norm)):
+                    continue
+
+                # Check various last name matching patterns
+                roster_last_parts_hyphen = roster_last_norm.split('-')
+                roster_last_parts_space = roster_last_norm.split(' ')
+                if (
+                    roster_last_norm.startswith(last_name_norm) or  # "k" matches "kolas"
+                    roster_last_parts_hyphen[0] == last_name_norm or  # "kolas" matches "kolas-nowicki"
+                    last_name_norm in roster_last_parts_hyphen or  # "nowicki" matches "kolas-nowicki"
+                    roster_last_parts_space[0] == last_name_norm or  # "maloney" matches "maloney fox"
+                    last_name_norm in roster_last_parts_space or  # "fox" matches "maloney fox"
+                    roster_last_collapsed == last_name_collapsed  # "salvador guzman" matches "salvador-guzman"
+                ):
+                    student_info = roster_data.copy()
+                    student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
+                    grading_state["log"].append(f"  📎 Matched '{parsed['first_name']} {parsed['last_name']}' to '{student_name}'")
+                    break
+
+        if not student_info:
+            student_info = {"student_id": "UNKNOWN", "student_name": student_name,
+                           "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
+    return student_info, parsed
+
+
+def _dispatch_grade(
+    *,
+    ai_model: str,
+    assignment_template_local: Any,
+    custom_rubric: Any | None,
+    effort_points: Any | int,
+    ensemble_models: list[str] | None,
+    extraction_mode: str,
+    file_ai_notes: str,
+    file_exclude_markers: Any,
+    file_markers: Any,
+    grade_data: dict[str, Any],
+    grade_level: str,
+    grading_style: str,
+    history_context: str,
+    marker_config: Any | None,
+    rubric_prompt: Any,
+    rubric_type: Any | str,
+    rubric_weights: list[Any] | None,
+    student_info: Any,
+    subject: str,
+    trusted_students: list[str] | None,
+) -> Any:
+    from assignment_grader import (  # function-local: preserves test patchability
+        grade_assignment,
+        grade_multipass,
+        grade_with_ensemble,
+        grade_with_parallel_detection,
+    )
+    student_id = student_info.get('student_id', '')
+    # Debug: Show what we're checking
+    _logger.debug("  Checking trust: student_id='%s', trusted_list=%s", student_id, trusted_students)
+    is_trusted = trusted_students and student_id in trusted_students
+    if is_trusted:
+        _logger.info("  Trusted student - skipping AI/copy detection")
+
+    # FITB: Skip AI/plagiarism detection - answers are factual, not creative writing
+    is_fitb = rubric_type == 'fill-in-blank'
+    if is_fitb:
+        _logger.info("  FITB assignment - skipping AI/copy detection")
+
+    # Skip detection for trusted students or FITB assignments
+    skip_detection = is_trusted or is_fitb
+
+    # Per-assignment custom rubric overrides global rubric weights
+    file_rubric_weights = rubric_weights
+    if rubric_type == 'custom' and custom_rubric and len(custom_rubric) == 4:
+        file_rubric_weights = [cat.get('weight', 0) for cat in custom_rubric]
+        if file_rubric_weights != [40, 25, 20, 15]:
+            _logger.info("  Using per-assignment custom rubric weights: %s", file_rubric_weights)
+        else:
+            file_rubric_weights = None  # Default weights, no override needed
+
+    # file_rubric_weights / marker_config are Optional[list] but grading functions
+    # declare list[Any] — None means "use defaults", handled gracefully at runtime.
+    if ensemble_models and len(ensemble_models) >= 2:
+        grade_result = grade_with_ensemble(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ensemble_models, student_info.get('student_id'),
+            assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+    elif is_trusted:
+        # Trusted student: Use full multi-pass pipeline, skip detection only
+        grade_result = grade_multipass(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ai_model, student_info.get('student_id'),
+            assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+            student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
+        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
+    elif skip_detection:
+        # FITB only: Use single-pass (genuinely needs it)
+        grade_result = grade_assignment(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
+            rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style=grading_style,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+        grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
+        grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
+    else:
+        grade_result = grade_with_parallel_detection(
+            student_info['student_name'], grade_data, file_ai_notes,
+            grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
+            rubric_prompt, file_markers, file_exclude_markers,
+            marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
+            student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+        )
+    return grade_result
+
+
+def _assemble_post_grade(
+    *,
+    config_mismatch: bool,
+    config_mismatch_reason: str,
+    file_data: dict[Any, Any],
+    file_markers: Any,
+    file_notes: Any,
+    file_sections: Any,
+    filepath: Any,
+    grade_result: Any,
+    matched_config: dict[str, Any] | None,
+    matched_title: Any,
+    period_class_level_map: dict[str, str],
+    student_info: Any,
+    student_period: str,
+) -> dict[str, Any]:
+    has_config = matched_config is not None
+    has_custom_markers = len(file_markers) > 0
+    has_grading_notes = bool(file_notes.strip()) if file_notes else False
+    has_response_sections = len(file_sections) > 0
+    is_verified = has_config or has_custom_markers or has_grading_notes or has_response_sections
+    marker_status = "verified" if is_verified else "unverified"
+
+    # Check baseline deviation
+    baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        try:
+            baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
+        except Exception as e:
+            # Behavior-critical: baseline deviation detection flags
+            # anomalous grades (potential cheating signal). Silent
+            # failure means anomalies go unflagged. The grading
+            # itself proceeds with the "normal" default, but the
+            # detector failure must be visible in Sentry so it
+            # gets fixed instead of degrading silently.
+            # Per Codex review: hash the student_id for log
+            # correlation; raw IDs are PII for log streams (the
+            # repo's Sentry scrubber treats them as sensitive).
+            import hashlib
+            sid_hash = hashlib.sha256(str(student_info['student_id']).encode()).hexdigest()[:12]
+            _logger.error("detect_baseline_deviation failed for sid_hash=%s: %s", sid_hash, e)
+            sentry_sdk.capture_exception(e)
+
+    # Save to student history
+    if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
+        try:
+            grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
+                           "assignment": matched_title, "period": student_period}
+            add_assignment_to_history(student_info['student_id'], grade_record_hist)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+
+    # Get class level for logging
+    class_level = period_class_level_map.get(student_period, 'standard') if student_period else 'standard'
+    level_indicator = "🎯" if class_level == "advanced" else "💚" if class_level == "support" else ""
+
+    log_messages = [f"  Score: {grade_result['score']} ({grade_result['letter_grade']}) {level_indicator}{class_level.upper() if class_level != 'standard' else ''}".strip()]
+    if config_mismatch:
+        log_messages.append(f"  ⚠️  CONFIG MISMATCH - may have wrong rubric!")
+    if marker_status == "unverified":
+        log_messages.append(f"  ⚠️  UNVERIFIED: No assignment config")
+    if baseline_deviation.get('flag') != 'normal':
+        log_messages.append(f"  ⚠️  Baseline deviation: {baseline_deviation.get('flag')}")
+    if grade_result.get('ai_detection', {}).get('flag') in ['possible', 'likely']:
+        log_messages.append(f"  🤖 AI detected: {grade_result['ai_detection']['flag']}")
+    if grade_result.get('plagiarism_detection', {}).get('flag') in ['possible', 'likely']:
+        log_messages.append(f"  📋 Plagiarism detected: {grade_result['plagiarism_detection']['flag']}")
+
+    return {
+        "success": True,
+        "student_info": student_info,
+        "filepath": filepath,
+        "matched_title": matched_title,
+        "matched_config": matched_config,
+        "student_period": student_period,
+        "is_completion_only": False,
+        "grade_result": grade_result,
+        "file_data": file_data,
+        "marker_status": marker_status,
+        "baseline_deviation": baseline_deviation,
+        "config_mismatch": config_mismatch,
+        "config_mismatch_reason": config_mismatch_reason,
+        "log_messages": log_messages
+    }
+
+
+def _resolve_student_period(
+    *,
+    class_period: str,
+    student_info: Any,
+    student_period_map: dict[str, str],
+) -> str:
+    student_name_lower = student_info['student_name'].lower()
+    student_period = student_period_map.get(student_name_lower, None)
+
+    # If no exact match, try fuzzy matching on period map
+    if not student_period:
+        first_name_lower = student_info.get('first_name', '').lower() or student_name_lower.split()[0] if student_name_lower else ''
+        last_name_lower = student_info.get('last_name', '').lower() or (student_name_lower.split()[-1] if len(student_name_lower.split()) > 1 else '')
+
+        for period_key, period_val in student_period_map.items():
+            period_parts = period_key.split()
+            if len(period_parts) >= 2:
+                # period_key format: "firstname middlename lastname" or "firstname lastname"
+                period_first = period_parts[0]
+                period_last = period_parts[-1]
+
+                # Match first name
+                if period_first == first_name_lower or period_first.startswith(first_name_lower) or first_name_lower.startswith(period_first):
+                    # Match last name (handle initials and compound names)
+                    if (period_last == last_name_lower or
+                        period_last.startswith(last_name_lower) or
+                        last_name_lower.startswith(period_last) or
+                        (len(last_name_lower) == 1 and period_last.startswith(last_name_lower))):
+                        student_period = period_val
+                        break
+
+    if not student_period:
+        student_period = class_period
+    return student_period
+
+
 def grade_single_file(
     filepath: Any, file_index: int, total_files: int, *,
     ai_model: str,
@@ -511,56 +1057,11 @@ def grade_single_file(
         read_assignment_file,
     )
     try:
-        parsed = parse_filename(filepath.name)
-        student_name = f"{parsed['first_name']} {parsed['last_name']}"
-        lookup_key = parsed['lookup_key']
-
-        # Lookup student in roster
-        if lookup_key in roster:
-            student_info = roster[lookup_key].copy()
-        else:
-            # Try fuzzy matching for partial/hyphenated last names
-            student_info = None
-            first_name_lower = parsed['first_name'].lower()
-            last_name_lower = parsed['last_name'].lower()
-            # Strip apostrophes/special chars for comparison (Da'Jaun → dajaun)
-            first_name_norm = first_name_lower.replace("'", "").replace("\u2019", "")
-            last_name_norm = last_name_lower.replace("'", "").replace("\u2019", "")
-            # Normalize spaces/hyphens (Salvador Guzman → salvadorguzman)
-            last_name_collapsed = last_name_norm.replace(" ", "").replace("-", "")
-
-            for roster_key, roster_data in roster.items():
-                if isinstance(roster_data, dict):
-                    roster_first = roster_data.get('first_name', '').lower()
-                    roster_last = roster_data.get('last_name', '').lower()
-                    roster_first_norm = roster_first.replace("'", "").replace("\u2019", "")
-                    roster_last_norm = roster_last.replace("'", "").replace("\u2019", "")
-                    roster_last_collapsed = roster_last_norm.replace(" ", "").replace("-", "")
-
-                    # Match first name (strip apostrophes for comparison)
-                    if (roster_first_norm != first_name_norm
-                            and not roster_first_norm.startswith(first_name_norm)):
-                        continue
-
-                    # Check various last name matching patterns
-                    roster_last_parts_hyphen = roster_last_norm.split('-')
-                    roster_last_parts_space = roster_last_norm.split(' ')
-                    if (
-                        roster_last_norm.startswith(last_name_norm) or  # "k" matches "kolas"
-                        roster_last_parts_hyphen[0] == last_name_norm or  # "kolas" matches "kolas-nowicki"
-                        last_name_norm in roster_last_parts_hyphen or  # "nowicki" matches "kolas-nowicki"
-                        roster_last_parts_space[0] == last_name_norm or  # "maloney" matches "maloney fox"
-                        last_name_norm in roster_last_parts_space or  # "fox" matches "maloney fox"
-                        roster_last_collapsed == last_name_collapsed  # "salvador guzman" matches "salvador-guzman"
-                    ):
-                        student_info = roster_data.copy()
-                        student_name = f"{roster_data.get('first_name', parsed['first_name'])} {roster_data.get('last_name', parsed['last_name'])}"
-                        grading_state["log"].append(f"  📎 Matched '{parsed['first_name']} {parsed['last_name']}' to '{student_name}'")
-                        break
-
-            if not student_info:
-                student_info = {"student_id": "UNKNOWN", "student_name": student_name,
-                               "first_name": parsed['first_name'], "last_name": parsed['last_name'], "email": ""}
+        student_info, parsed = _resolve_student(
+            filepath=filepath,
+            grading_state=grading_state,
+            roster=roster,
+        )
 
         # Match assignment config
         _logger.debug("  Matching config for: %s", filepath.name)
@@ -658,33 +1159,11 @@ def grade_single_file(
                 _logger.info("  Auto-detected Cornell Notes from filename")
 
         # Get student's period - try exact match first, then fuzzy match
-        student_name_lower = student_info['student_name'].lower()
-        student_period = student_period_map.get(student_name_lower, None)
-
-        # If no exact match, try fuzzy matching on period map
-        if not student_period:
-            first_name_lower = student_info.get('first_name', '').lower() or student_name_lower.split()[0] if student_name_lower else ''
-            last_name_lower = student_info.get('last_name', '').lower() or (student_name_lower.split()[-1] if len(student_name_lower.split()) > 1 else '')
-
-            for period_key, period_val in student_period_map.items():
-                period_parts = period_key.split()
-                if len(period_parts) >= 2:
-                    # period_key format: "firstname middlename lastname" or "firstname lastname"
-                    period_first = period_parts[0]
-                    period_last = period_parts[-1]
-
-                    # Match first name
-                    if period_first == first_name_lower or period_first.startswith(first_name_lower) or first_name_lower.startswith(period_first):
-                        # Match last name (handle initials and compound names)
-                        if (period_last == last_name_lower or
-                            period_last.startswith(last_name_lower) or
-                            last_name_lower.startswith(period_last) or
-                            (len(last_name_lower) == 1 and period_last.startswith(last_name_lower))):
-                            student_period = period_val
-                            break
-
-        if not student_period:
-            student_period = class_period
+        student_period = _resolve_student_period(
+            class_period=class_period,
+            student_info=student_info,
+            student_period_map=student_period_map,
+        )
 
         # Handle completion-only assignments
         if is_completion_only:
@@ -712,252 +1191,22 @@ def grade_single_file(
             }
 
         # Build AI notes
-        file_ai_notes = global_ai_notes
-        if global_ai_notes:
-            _logger.info("  Applying Global AI Instructions (%d chars)", len(global_ai_notes))
-        if file_notes:
-            file_ai_notes += f"\n\nASSIGNMENT-SPECIFIC INSTRUCTIONS:\n{file_notes}"
-            _logger.info("  Applying Assignment-Specific Notes (%d chars)", len(file_notes))
-
-        # Inject correction patterns (learn from teacher edits)
-        try:
-            from backend.services.correction_patterns import build_correction_context
-            _question_types = []
-            if matched_config:
-                _section_cats = matched_config.get('sectionCategories', {})
-                _question_types = [k for k, v in _section_cats.items() if v]
-            if not _question_types:
-                _question_types = ['short_answer', 'multiple_choice', 'extended_writing']
-            _correction_ctx = build_correction_context(  # type: ignore[no-untyped-call]
-                teacher_id, matched_config.get('subject', '') if matched_config else '', _question_types
-            )
-            if _correction_ctx:
-                file_ai_notes += "\n\n" + _correction_ctx
-                _logger.info("  Applying Correction Patterns (%d chars)", len(_correction_ctx))
-        except Exception as e:
-            _logger.warning("  Correction patterns skipped: %s", e)
-
-        # Inject model answers from config (if generated)
-        model_answers = matched_config.get('modelAnswers', {}) if matched_config else {}
-        if model_answers:
-            ma_lines = ["\n\nMODEL ANSWERS (compare student responses against these):"]
-            for section_name, answer_text in model_answers.items():
-                ma_lines.append(f"- {section_name}: {answer_text}")
-            file_ai_notes += "\n".join(ma_lines)
-            _logger.info("  Applying Model Answers (%d sections)", len(model_answers))
-
-            # Detect fill-in-the-blank assignments and add special rubric override
-            # Use specific phrases to avoid false positives (e.g., "fill in the Cornell Notes")
-            _fn_lower = file_notes.lower()
-            if ('fill-in-the-blank' in _fn_lower or 'fill in the blank' in _fn_lower
-                    or 'fill in blank' in _fn_lower or 'fillintheblank' in _fn_lower.replace(' ', '').replace('-', '')):
-                file_ai_notes += """
-
-FILL-IN-THE-BLANK RUBRIC OVERRIDE:
-This is a fill-in-the-blank assignment. IGNORE the standard rubric categories and use this instead:
-- Content Accuracy (70%): Is each answer correct or essentially correct?
-- Completeness (30%): Did the student attempt all blanks?
-
-CRITICAL GRADING RULES FOR FILL-IN-THE-BLANK:
-- DO NOT penalize for spelling errors if the word is recognizable
-- DO NOT penalize for capitalization
-- DO NOT assess "Writing Quality" or "Critical Thinking" - these don't apply
-- Accept synonyms and reasonable variations
-- If the answer is close enough to understand the intent, mark it CORRECT
-- A student who fills in all blanks with mostly correct answers should get 90+
-- Minor typos like "rebelion" for "rebellion" = FULL CREDIT
-"""
-                _logger.info("  Fill-in-the-blank detected - applying lenient grading override")
-
-        # Apply assignment-specific rubric type (overrides global rubric)
-        if rubric_type and rubric_type != 'standard':
-            if rubric_type == 'fill-in-blank':
-                file_ai_notes += """
-
-ASSIGNMENT RUBRIC TYPE: FILL-IN-THE-BLANK
-IGNORE the standard rubric. Use these categories ONLY:
-- Content Accuracy (70%): Is each answer correct or essentially correct?
-- Completeness (30%): Did the student attempt all blanks?
-
-CRITICAL RULES:
-- DO NOT penalize spelling errors if the word is recognizable
-- DO NOT penalize capitalization
-- Accept synonyms and reasonable variations
-- A student who fills in all blanks with mostly correct answers = 90+
-"""
-                _logger.info("  Rubric Type: Fill-in-the-Blank")
-            elif rubric_type == 'essay':
-                file_ai_notes += """
-
-ASSIGNMENT RUBRIC TYPE: ESSAY/WRITTEN RESPONSE
-Use these categories:
-- Content & Ideas (35%): Are the main points valid and well-supported?
-- Writing Quality (30%): Grammar, spelling, sentence structure, clarity
-- Critical Thinking & Analysis (20%): Depth of analysis, connections made
-- Effort & Engagement (15%): Evidence of genuine effort and thought
-
-Grade writing quality more strictly than fill-in-blank, but still be encouraging.
-"""
-                _logger.info("  Rubric Type: Essay/Written Response")
-            elif rubric_type == 'cornell-notes':
-                file_ai_notes += """
-
-ASSIGNMENT RUBRIC TYPE: CORNELL NOTES
-Use these categories:
-- Content Accuracy (40%): Are the notes factually correct and relevant?
-- Note Structure (25%): Proper Cornell format - questions in cue column, notes in main area
-- Summary Quality (20%): Does the summary synthesize main ideas?
-- Effort & Completeness (15%): Are all sections filled in?
-
-Look for: main ideas captured, good questions, clear summary at bottom.
-"""
-                _logger.info("  Rubric Type: Cornell Notes")
-            elif rubric_type == 'custom' and custom_rubric:
-                rubric_text = "ASSIGNMENT RUBRIC TYPE: CUSTOM\nUse these categories ONLY:\n"
-                for cat in custom_rubric:
-                    name = cat.get('name', 'Unknown')
-                    weight = cat.get('weight', 0)
-                    rubric_text += f"- {name} ({weight}%)\n"
-                file_ai_notes += f"\n{rubric_text}"
-                _logger.info("  Rubric Type: Custom (%d categories)", len(custom_rubric))
-
-        # Add accommodation prompt if student has IEP/504
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            accommodation_prompt = build_accommodation_prompt(student_info['student_id'], teacher_id)
-            if accommodation_prompt:
-                file_ai_notes += f"\n{accommodation_prompt}"
-
-        # Build student history context (passed separately to feedback, NOT mixed into grading instructions)
-        history_context = ""
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            history_context = build_history_context(student_info['student_id'])
-
-        # Add class period context for differentiated grading
-        if student_period:
-            class_level = period_class_level_map.get(student_period, 'standard')
-            file_ai_notes += f"\n\nCLASS PERIOD: {student_period}"
-            file_ai_notes += f"\nCLASS LEVEL: {class_level.upper()}"
-
-            if class_level == 'advanced':
-                file_ai_notes += """
-ADVANCED CLASS - RUBRIC ADJUSTMENT:
-When applying the rubric above, make these automatic adjustments:
-- INCREASE weight of Critical Thinking/Analysis categories by +15%
-- INCREASE weight of Writing Quality/Communication by +10%
-- DECREASE weight of Completion/Effort categories by -15%
-- DECREASE weight of basic Content Accuracy by -10%
-(Percentages are relative shifts - redistribute points accordingly)
-
-ADVANCED CLASS GRADING EXPECTATIONS:
-- Hold students to HIGHER standards than the base rubric suggests
-- Expect detailed, thoughtful responses with deeper analysis
-- Grade more strictly on grammar, vocabulary, and sophistication
-- Look for evidence of critical thinking and connections between concepts
-- Surface-level or simplistic answers should score in the B/C range, not A
-- An "A" (90+) should represent truly exceptional, insightful work
-- Be constructive but maintain high expectations
-"""
-            elif class_level == 'support':
-                file_ai_notes += """
-SUPPORT CLASS - RUBRIC ADJUSTMENT:
-When applying the rubric above, make these automatic adjustments:
-- INCREASE weight of Effort/Engagement categories by +20%
-- INCREASE weight of Completion categories by +15%
-- DECREASE weight of Writing Quality/Grammar by -20%
-- DECREASE weight of Critical Thinking/Analysis by -15%
-(Percentages are relative shifts - redistribute points accordingly)
-
-SUPPORT CLASS GRADING EXPECTATIONS:
-- Be MORE LENIENT and ENCOURAGING than the base rubric suggests
-- Prioritize effort, completion, and basic understanding
-- Be very generous with partial credit for attempts that show learning
-- Do NOT penalize spelling, grammar, or incomplete sentences
-- If student attempted the work and shows basic understanding, lean toward passing
-- Recognize and praise progress and effort in feedback
-- Focus feedback on encouragement and growth, not deficits
-- A student who tries hard and completes work should score B or higher
-"""
-            else:  # standard
-                file_ai_notes += """
-STANDARD CLASS GRADING EXPECTATIONS:
-- Apply the rubric as written without adjustment
-- Balance rigor with encouragement
-- Award credit for demonstrated understanding even if answers aren't perfect
-- Grade fairly according to grade-level expectations
-"""
-
-        # Inject resubmission context so feedback references improvements
-        if filepath.name in resubmissions:
-            sid = student_info.get('student_id', '')
-            prev_r = None
-
-            # Source 1: Current session results (has full breakdown + feedback)
-            for r in grading_state["results"]:
-                if r.get("student_id") == sid and r.get("assignment") == matched_title:
-                    prev_r = r
-                    break
-
-            # Source 2: Master CSV fallback (prior session)
-            if prev_r is None:
-                try:
-                    master_csv = Path(output_folder) / "master_grades.csv"
-                    if master_csv.exists():
-                        import csv as csv_mod
-                        with open(master_csv, 'r', encoding='utf-8') as csvf:
-                            reader = csv_mod.DictReader(csvf)
-                            for row in reader:
-                                if (row.get('Student ID', '') == sid and
-                                    row.get('Assignment', '').strip().lower() == matched_title.strip().lower()):
-                                    prev_r = {
-                                        "score": row.get('Overall Score', '?'),
-                                        "letter_grade": row.get('Letter Grade', '?'),
-                                        "feedback": row.get('Feedback', ''),
-                                        "breakdown": {}
-                                    }
-                                    break
-                except Exception as e:
-                    # Best-effort: prior-session lookup is for resubmission
-                    # context. If the master CSV is unreadable, the
-                    # primary-session error already alerted via the
-                    # already_graded loader above; skip the resubmission
-                    # comparison and proceed.
-                    _logger.debug("Resubmission CSV fallback failed for sid=%s: %s", sid, e)
-
-            if prev_r:
-                prev_score = prev_r.get("score", "?")
-                prev_grade = prev_r.get("letter_grade", "?")
-                prev_breakdown = prev_r.get("breakdown", {})
-                prev_feedback = str(prev_r.get("feedback", ""))
-                if len(prev_feedback) > 500:
-                    prev_feedback = prev_feedback[:500] + "..."
-
-                breakdown_lines = ""
-                if prev_breakdown:
-                    breakdown_lines = (
-                        f"- Content Accuracy: {prev_breakdown.get('content_accuracy', '?')}/40\n"
-                        f"- Completeness: {prev_breakdown.get('completeness', '?')}/25\n"
-                        f"- Writing Quality: {prev_breakdown.get('writing_quality', '?')}/20\n"
-                        f"- Effort & Engagement: {prev_breakdown.get('effort_engagement', '?')}/15"
-                    )
-
-                resub_context = (
-                    "\n\nRESUBMISSION CONTEXT:\n"
-                    "This student is resubmitting a previously graded assignment. "
-                    "Compare their new work to the previous submission and highlight specific improvements.\n\n"
-                    f"Previous submission:\n"
-                    f"- Score: {prev_score} ({prev_grade})\n"
-                    f"{breakdown_lines}\n"
-                    f"- Previous feedback: {prev_feedback}\n\n"
-                    "FEEDBACK INSTRUCTIONS FOR RESUBMISSION:\n"
-                    "1. Start feedback by acknowledging this is a resubmission and that the student took the initiative to improve their work\n"
-                    "2. Specifically call out what improved compared to the previous submission "
-                    "(e.g., 'Your definition of X is now much more complete - last time you missed the key detail about Y')\n"
-                    "3. If breakdown categories improved, mention which areas showed growth\n"
-                    "4. If some areas still need work, note them as 'still developing' rather than as failures\n"
-                    "5. End with encouragement about their growth mindset and willingness to revise\n"
-                )
-                file_ai_notes += resub_context
-                _logger.info("  Injected resubmission context (prev score: %s)", prev_score)
+        file_ai_notes, history_context = _build_file_ai_notes(
+            custom_rubric=custom_rubric,
+            file_notes=file_notes,
+            filepath=filepath,
+            global_ai_notes=global_ai_notes,
+            grading_state=grading_state,
+            matched_config=matched_config,
+            matched_title=matched_title,
+            output_folder=output_folder,
+            period_class_level_map=period_class_level_map,
+            resubmissions=resubmissions,
+            rubric_type=rubric_type,
+            student_info=student_info,
+            student_period=student_period,
+            teacher_id=teacher_id,
+        )
 
         # Read file
         file_data = read_assignment_file(filepath)
@@ -991,70 +1240,28 @@ STANDARD CLASS GRADING EXPECTATIONS:
             }
 
         # Check if student is trusted (skip AI/plagiarism detection)
-        student_id = student_info.get('student_id', '')
-        # Debug: Show what we're checking
-        _logger.debug("  Checking trust: student_id='%s', trusted_list=%s", student_id, trusted_students)
-        is_trusted = trusted_students and student_id in trusted_students
-        if is_trusted:
-            _logger.info("  Trusted student - skipping AI/copy detection")
-
-        # FITB: Skip AI/plagiarism detection - answers are factual, not creative writing
-        is_fitb = rubric_type == 'fill-in-blank'
-        if is_fitb:
-            _logger.info("  FITB assignment - skipping AI/copy detection")
-
-        # Skip detection for trusted students or FITB assignments
-        skip_detection = is_trusted or is_fitb
-
-        # Per-assignment custom rubric overrides global rubric weights
-        file_rubric_weights = rubric_weights
-        if rubric_type == 'custom' and custom_rubric and len(custom_rubric) == 4:
-            file_rubric_weights = [cat.get('weight', 0) for cat in custom_rubric]
-            if file_rubric_weights != [40, 25, 20, 15]:
-                _logger.info("  Using per-assignment custom rubric weights: %s", file_rubric_weights)
-            else:
-                file_rubric_weights = None  # Default weights, no override needed
-
-        # file_rubric_weights / marker_config are Optional[list] but grading functions
-        # declare list[Any] — None means "use defaults", handled gracefully at runtime.
-        if ensemble_models and len(ensemble_models) >= 2:
-            grade_result = grade_with_ensemble(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ensemble_models, student_info.get('student_id'),
-                assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-                rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
-        elif is_trusted:
-            # Trusted student: Use full multi-pass pipeline, skip detection only
-            grade_result = grade_multipass(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ai_model, student_info.get('student_id'),
-                assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-                student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
-            grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
-            grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
-        elif skip_detection:
-            # FITB only: Use single-pass (genuinely needs it)
-            grade_result = grade_assignment(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
-                rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style=grading_style,  # type: ignore[arg-type]
-                rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
-            grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
-            grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
-        else:
-            grade_result = grade_with_parallel_detection(
-                student_info['student_name'], grade_data, file_ai_notes,
-                grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
-                rubric_prompt, file_markers, file_exclude_markers,
-                marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-                student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
-            )
+        grade_result = _dispatch_grade(
+            ai_model=ai_model,
+            assignment_template_local=assignment_template_local,
+            custom_rubric=custom_rubric,
+            effort_points=effort_points,
+            ensemble_models=ensemble_models,
+            extraction_mode=extraction_mode,
+            file_ai_notes=file_ai_notes,
+            file_exclude_markers=file_exclude_markers,
+            file_markers=file_markers,
+            grade_data=grade_data,
+            grade_level=grade_level,
+            grading_style=grading_style,
+            history_context=history_context,
+            marker_config=marker_config,
+            rubric_prompt=rubric_prompt,
+            rubric_type=rubric_type,
+            rubric_weights=rubric_weights,
+            student_info=student_info,
+            subject=subject,
+            trusted_students=trusted_students,
+        )
 
         # Check for errors
         if grade_result.get('letter_grade') == 'ERROR':
@@ -1062,74 +1269,21 @@ STANDARD CLASS GRADING EXPECTATIONS:
                     "filepath": filepath, "is_api_error": True}
 
         # Determine marker status
-        has_config = matched_config is not None
-        has_custom_markers = len(file_markers) > 0
-        has_grading_notes = bool(file_notes.strip()) if file_notes else False
-        has_response_sections = len(file_sections) > 0
-        is_verified = has_config or has_custom_markers or has_grading_notes or has_response_sections
-        marker_status = "verified" if is_verified else "unverified"
-
-        # Check baseline deviation
-        baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            try:
-                baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
-            except Exception as e:
-                # Behavior-critical: baseline deviation detection flags
-                # anomalous grades (potential cheating signal). Silent
-                # failure means anomalies go unflagged. The grading
-                # itself proceeds with the "normal" default, but the
-                # detector failure must be visible in Sentry so it
-                # gets fixed instead of degrading silently.
-                # Per Codex review: hash the student_id for log
-                # correlation; raw IDs are PII for log streams (the
-                # repo's Sentry scrubber treats them as sensitive).
-                import hashlib
-                sid_hash = hashlib.sha256(str(student_info['student_id']).encode()).hexdigest()[:12]
-                _logger.error("detect_baseline_deviation failed for sid_hash=%s: %s", sid_hash, e)
-                sentry_sdk.capture_exception(e)
-
-        # Save to student history
-        if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-            try:
-                grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
-                               "assignment": matched_title, "period": student_period}
-                add_assignment_to_history(student_info['student_id'], grade_record_hist)
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
-
-        # Get class level for logging
-        class_level = period_class_level_map.get(student_period, 'standard') if student_period else 'standard'
-        level_indicator = "🎯" if class_level == "advanced" else "💚" if class_level == "support" else ""
-
-        log_messages = [f"  Score: {grade_result['score']} ({grade_result['letter_grade']}) {level_indicator}{class_level.upper() if class_level != 'standard' else ''}".strip()]
-        if config_mismatch:
-            log_messages.append(f"  ⚠️  CONFIG MISMATCH - may have wrong rubric!")
-        if marker_status == "unverified":
-            log_messages.append(f"  ⚠️  UNVERIFIED: No assignment config")
-        if baseline_deviation.get('flag') != 'normal':
-            log_messages.append(f"  ⚠️  Baseline deviation: {baseline_deviation.get('flag')}")
-        if grade_result.get('ai_detection', {}).get('flag') in ['possible', 'likely']:
-            log_messages.append(f"  🤖 AI detected: {grade_result['ai_detection']['flag']}")
-        if grade_result.get('plagiarism_detection', {}).get('flag') in ['possible', 'likely']:
-            log_messages.append(f"  📋 Plagiarism detected: {grade_result['plagiarism_detection']['flag']}")
-
-        return {
-            "success": True,
-            "student_info": student_info,
-            "filepath": filepath,
-            "matched_title": matched_title,
-            "matched_config": matched_config,
-            "student_period": student_period,
-            "is_completion_only": False,
-            "grade_result": grade_result,
-            "file_data": file_data,
-            "marker_status": marker_status,
-            "baseline_deviation": baseline_deviation,
-            "config_mismatch": config_mismatch,
-            "config_mismatch_reason": config_mismatch_reason,
-            "log_messages": log_messages
-        }
+        return _assemble_post_grade(
+            config_mismatch=config_mismatch,
+            config_mismatch_reason=config_mismatch_reason,
+            file_data=file_data,
+            file_markers=file_markers,
+            file_notes=file_notes,
+            file_sections=file_sections,
+            filepath=filepath,
+            grade_result=grade_result,
+            matched_config=matched_config,
+            matched_title=matched_title,
+            period_class_level_map=period_class_level_map,
+            student_info=student_info,
+            student_period=student_period,
+        )
 
     except Exception as e:
         _logger.error("Grading failed for %s: %s", filepath, str(e))

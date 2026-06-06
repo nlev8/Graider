@@ -117,11 +117,14 @@ def test_pipeline_lazy_imports_all_resolve():
         tree = ast.parse(source)
 
         # CQ7 PR-3a lifted grade_single_file + find_matching_config OUT of
-        # _run_grading_thread_inner to module level. Walk all three so the lazy
-        # imports inside the lifted bodies (notably grade_single_file's
-        # function-local `from assignment_grader import ...`) stay covered — they
-        # would otherwise fall outside this guard's traversal and go BLIND.
-        WALK_FNS = {"_run_grading_thread_inner", "grade_single_file", "find_matching_config"}
+        # _run_grading_thread_inner to module level; PR-3b then decomposed
+        # grade_single_file's body into _resolve_student / _build_file_ai_notes /
+        # _dispatch_grade / _assemble_post_grade. Walk ALL of them so the lazy
+        # function-local `from assignment_grader import ...` imports inside each
+        # stay covered — they would otherwise fall outside this guard and go BLIND.
+        WALK_FNS = {"_run_grading_thread_inner", "grade_single_file", "find_matching_config",
+                    "_resolve_student", "_resolve_student_period", "_build_file_ai_notes",
+                    "_dispatch_grade", "_assemble_post_grade"}
         target_fns = [node for node in ast.walk(tree)
                       if isinstance(node, ast.FunctionDef) and node.name in WALK_FNS]
         found = {fn.name for fn in target_fns}
@@ -244,13 +247,18 @@ def test_pipeline_global_refs_all_resolve():
             return refs
 
         # CQ7 PR-3a lifted grade_single_file + find_matching_config to module
-        # level; include them so their LOAD_GLOBALs (and any forgotten capture
-        # that became an unresolved global) stay covered — otherwise the guard
-        # goes BLIND on the most-refactored code.
+        # level; PR-3b decomposed gsf into 4 helpers. Include them all so their
+        # LOAD_GLOBALs (and any forgotten capture that became an unresolved global)
+        # stay covered — otherwise the guard goes BLIND on the most-refactored code.
         needed = set()
         for fn in (pipeline._run_grading_thread_inner,
                    pipeline.grade_single_file,
-                   pipeline.find_matching_config):
+                   pipeline.find_matching_config,
+                   pipeline._resolve_student,
+                   pipeline._resolve_student_period,
+                   pipeline._build_file_ai_notes,
+                   pipeline._dispatch_grade,
+                   pipeline._assemble_post_grade):
             needed |= collect_global_refs(fn.__code__)
         module_names = set(dir(pipeline))
         builtin_names = set(dir(builtins))
@@ -326,12 +334,21 @@ def test_baseline_deviation_failure_alerts_to_sentry():
     import inspect
     from backend.grading import pipeline
 
-    # detect_baseline_deviation moved into grade_single_file when it was lifted
-    # to module level (CQ7 PR-3a); inspect the lifted function, not the orchestrator.
-    src = inspect.getsource(pipeline.grade_single_file)
+    # detect_baseline_deviation moved into grade_single_file (CQ7 PR-3a) and then
+    # into _assemble_post_grade when gsf's body was decomposed (CQ7 PR-3b);
+    # inspect the helper that now contains the call + its except handler.
+    src = inspect.getsource(pipeline._assemble_post_grade)
     deviation_idx = src.find('detect_baseline_deviation')
     assert deviation_idx > 0, "detect_baseline_deviation call must exist"
-    deviation_block = src[deviation_idx:deviation_idx + 1500]
+    # Bound the window to the baseline-deviation block ONLY. The adjacent
+    # add_assignment_to_history block ALSO calls sentry_sdk.capture_exception; a
+    # fixed 1500-char window would latch onto THAT capture and silently pass even
+    # if the baseline-deviation alert (the missed-cheating-signal path) were
+    # dropped. Stop the window at the history block. (Pre-existing weak guard
+    # from before the PR-3a/3b lifts — tightened here, in-scope since this test is
+    # already being re-pointed.)
+    _hist = src.find('add_assignment_to_history', deviation_idx)
+    deviation_block = src[deviation_idx:_hist if _hist > deviation_idx else deviation_idx + 1500]
     assert 'sentry_sdk.capture_exception' in deviation_block, (
         "detect_baseline_deviation failure MUST call sentry_sdk.capture_exception. "
         "Pre-PR it was a silent `except: pass`; if you removed the alert call, "
