@@ -1897,10 +1897,8 @@ def _run_grading_thread_inner(
         all_grades: list[Any] = []
 
         # ═══════════════════════════════════════════════════════════
-        # PARALLEL GRADING HELPER FUNCTION
-        # ═══════════════════════════════════════════════════════════
-        # ═══════════════════════════════════════════════════════════
-        # PARALLEL GRADING EXECUTION
+        # PARALLEL GRADING — build per-file kwargs here, then run the
+        # executor loop (extracted to _grade_all_files in CQ7 PR-4)
         # ═══════════════════════════════════════════════════════════
         PARALLEL_WORKERS = 3  # Conservative: 3 students at once (6 API calls with detection)
 
