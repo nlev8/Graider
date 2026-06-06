@@ -4,12 +4,17 @@
 function below **300 LOC** (the level-7 anchor: *"No file >3,000 LOC; no function >300 LOC; a
 Flask-free service layer exists"*), behavior-preservingly.
 
-> **Status: IN PROGRESS — 14/18 done.** Waves 1–2 + the easy half of Wave 3 complete. **4 backend
-> functions >300 LOC remain** — the entangled monsters: `_run_grading_thread_inner` (1492) +
-> `grade_single_file` (626, a nested closure inside it), and the intertwined
-> `assistant_chat`/`generate` pair (472/373, `generate` is a nested closure inside `assistant_chat`).
-> Both are PAIRS that must be split together; each needs a fresh-context dedicated session + new golden nets.
-> Code Quality stays **6** until ALL are <300 (and a frontend-JS function scan is run).
+> **Status: IN PROGRESS — 16/18 done.** Waves 1–2 + Wave 3 + the assistant route pair complete.
+> **2 backend functions >300 LOC remain** — the entangled grading monster:
+> `_run_grading_thread_inner` (1492) + `grade_single_file` (626, a nested closure inside it). These are a
+> PAIR that must be split together; needs a fresh-context dedicated session + new golden net (ThreadPoolExecutor
+> entanglement, 10+ closure captures). Code Quality stays **6** until BOTH are <300 (and a frontend-JS
+> function scan is run).
+>
+> The `assistant_chat`/`generate` pair was split on branch `refactor/cq7-assistant-chat-split`: `generate()`
+> lifted to module-level `_run_assistant_stream` (273) + per-round tool loop extracted to `_execute_tool_round`
+> (130); `assistant_chat` 472→105. Golden net `tests/test_assistant_chat_golden.py` (5 SSE scenarios), byte-identity
+> vs main proven, 4-lens adversarial review all PRESERVED (zero critical/important).
 
 ---
 
@@ -81,9 +86,10 @@ drift). Then:
 | #683 | `classlink_callback` 🔐 (student + teacher login tails → 2 helpers) | 318 → 234 | B |
 | #686 | `grade_portal_submission_sync` 🔴 (score+feedback+persist → `_finalize_portal_grading`) | 452 → 251 | B |
 | #687 | `extract_student_responses` (4 helpers: marker-builder / content-end / per-marker-loop / fallback) | 866 → 255 | B |
+| #688 | `assistant_chat`/`generate` (lift `generate`→`_run_assistant_stream` + tool loop→`_execute_tool_round`; golden SSE net + 4-lens adversarial review) | 472/373 → 105/273/130 | B |
 
-### Remaining 4 (the harder half)
-- **Intertwined assistant route** (do together, last among route handlers): `generate` (373), `assistant_chat` (472). `generate` is a nested closure inside `assistant_chat` (1613–1985 ⊂ 1524–1995).
+### Remaining 2 (the harder half)
+- ~~**Intertwined assistant route**~~ ✅ DONE (`refactor/cq7-assistant-chat-split`): `generate` (373) lifted to `_run_assistant_stream` (273) + tool loop → `_execute_tool_round` (130); `assistant_chat` 472→105. Golden net + byte-identity + 4-lens adversarial review (all PRESERVED).
 - **Grading giants — write a golden net FIRST, then Codex co-planning** (no deterministic net today): ~~`grade_portal_submission_sync` (452 🔴)~~ ✅ #686, ~~`extract_student_responses` (866)~~ ✅ #687 (4-helper split incl. a nested content-end helper; the 36-test full-output characterization suite was the golden net), `grade_single_file` (626, nested closure in `_run_grading_thread_inner`), `_run_grading_thread_inner` (1492, ThreadPoolExecutor orchestrator). The last two are intertwined — split together.
 
 > The route handlers are doable with the established protocol; the 4 grading giants are the part
@@ -105,10 +111,11 @@ drift). Then:
 ~~`_export_assignment_docx_graider` (315)~~ ✅ #676, `grade_portal_submission_sync` (452 🔴 grading),
 ~~`generate_assignment_from_lesson_content` (441)~~ ✅ #675,
 ~~`export_generated_assignment` (439)~~ ✅ #681 (golden flowable-signature net, Class A),
-`assistant_chat` (472).
+~~`assistant_chat` (472)~~ ✅ `refactor/cq7-assistant-chat-split`.
 
 **Wave 4 — Class B, netless giants** (write golden net FIRST + Codex co-planning):
-`generate` (373), `_build_system_prompt` (341), `grade_single_file` (626 🔴 nested closure inside
+~~`generate` (373)~~ ✅ (lifted to `_run_assistant_stream`, same branch as `assistant_chat`),
+~~`_build_system_prompt` (341)~~ ✅ #677, `grade_single_file` (626 🔴 nested closure inside
 `_run_grading_thread_inner`, ThreadPoolExecutor entanglement), `_run_grading_thread_inner` (1492 🔴
 the monster — partial safety-rail net only).
 
