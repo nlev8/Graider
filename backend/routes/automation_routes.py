@@ -468,7 +468,7 @@ def stop_picker():
     """Close picker browser."""
     # Tenant isolation (audit #8 / Codex): only the owner may stop an active
     # picker (don't let one tenant kill another's picker browser).
-    if _picker_state.get("status") == "picking" and _picker_state.get("teacher_id") != g.teacher_id:
+    if _picker_state.get("status") != "idle" and _picker_state.get("teacher_id") not in (None, g.teacher_id):
         return jsonify({"error": "No active picker"}), 404
     proc = _picker_state.get("process")
     if proc and proc.poll() is None:

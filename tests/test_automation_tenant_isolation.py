@@ -170,3 +170,17 @@ def test_stop_picker_cannot_stop_other_tenant(client):
         assert ar._picker_state["status"] == "picking", "teacher B stopped teacher A's picker"
     finally:
         ar._picker_state.update({"status": "idle", "teacher_id": None, "events": [], "process": None})
+
+
+def test_stop_picker_cannot_touch_other_tenant_nonpicking_state(client):
+    """stop_picker must protect ANY non-idle owned state (Codex round-4): a
+    terminal/stamped picker state owned by A must not be resettable by B."""
+    import backend.routes.automation_routes as ar
+    try:
+        ar._picker_state.update({"status": "done", "teacher_id": "teacher-A",
+                                 "events": [], "process": None})
+        r = client.post('/api/automations/picker/stop', headers=_hdr('teacher-B'))
+        assert r.status_code == 404
+        assert ar._picker_state["status"] == "done", "teacher B reset teacher A's picker state"
+    finally:
+        ar._picker_state.update({"status": "idle", "teacher_id": None, "events": [], "process": None})
