@@ -20,7 +20,7 @@ import threading
 import concurrent.futures
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import logging
 import sentry_sdk
 
@@ -1348,6 +1348,241 @@ def _export_results(
             sentry_sdk.capture_exception(e)
 
 
+def _grade_all_files(
+    *,
+    PARALLEL_WORKERS: int,
+    _update_state: Callable[..., None],
+    ai_model: str,
+    all_grades: list[Any],
+    grading_lock: threading.Lock,
+    grading_period: str,
+    grading_state: dict[str, Any],
+    gsf_kwargs: dict[str, Any],
+    new_files: list[Any],
+    resubmissions: set[Any],
+    selected_files: list[str] | None,
+) -> bool:
+    completed = 0
+    api_error_occurred = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
+        # Submit files in batches for responsive stop and ordered results
+        file_index = 0
+        stop_break = False
+        while file_index < len(new_files) and not stop_break:
+            if grading_state.get("stop_requested", False):
+                grading_state["log"].append("")
+                grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
+                break
+
+            # Submit next batch
+            batch_end = min(file_index + PARALLEL_WORKERS, len(new_files))
+            future_to_file = {}
+            for i in range(file_index, batch_end):
+                filepath = new_files[i]
+                future = executor.submit(grade_single_file, filepath, i + 1, len(new_files), **gsf_kwargs)
+                future_to_file[future] = (filepath, i + 1)
+
+            # Wait for batch to complete, check stop between results
+            for future in concurrent.futures.as_completed(future_to_file):
+                if grading_state.get("stop_requested", False):
+                    for fut in future_to_file:
+                        fut.cancel()
+                    grading_state["log"].append("")
+                    grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
+                    stop_break = True
+                    break
+
+                filepath, file_num = future_to_file[future]
+
+                try:
+                    result = future.result()
+                except Exception as e:
+                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                    grading_state["log"].append(f"  ❌ Error: {str(e)}")
+                    continue
+
+                # Update progress
+                completed += 1
+                _update_state(progress=completed, current_file=filepath.name)
+
+                # Handle failed grading
+                if not result.get("success"):
+                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                    if result.get("is_config_missing"):
+                        grading_state["log"].append(f"  ⏭️  {result.get('error', 'No config')}")
+                    else:
+                        grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
+
+                    # Stop on API errors
+                    if result.get("is_api_error"):
+                        api_error_occurred = True
+                        err_msg = result.get('error', '')
+                        err_lower = err_msg.lower() if err_msg else ''
+                        is_network = any(kw in err_lower for kw in ['connection', 'timeout', 'unreachable', 'refused'])
+                        grading_state["log"].append("")
+                        grading_state["log"].append("=" * 50)
+                        if is_network:
+                            grading_state["log"].append("⚠️  GRADING STOPPED - NETWORK ERROR")
+                            grading_state["log"].append("Unable to connect to the AI provider. This may be due to")
+                            grading_state["log"].append("network restrictions. Contact your IT department to allow")
+                            grading_state["log"].append("access to OpenAI/Anthropic services.")
+                        else:
+                            grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
+                        grading_state["log"].append("=" * 50)
+                        _update_state(error=f"{'Network' if is_network else 'API'} Error: {err_msg}")
+                        for fut in future_to_file:
+                            fut.cancel()
+                        stop_break = True
+                        break
+                    continue
+
+                # Log success
+                student_info = result["student_info"]
+                grade_result = result["grade_result"]
+
+                grading_state["log"].append(f"[{file_num}/{len(new_files)}] {student_info['student_name']}")
+                for msg in result.get("log_messages", []):
+                    grading_state["log"].append(msg)
+
+                # Build grade record for export
+                file_data = result.get("file_data", {})
+                if file_data.get("type") == "text":
+                    student_content = file_data.get("content", "")[:5000]
+                    full_content = file_data.get("content", "")[:10000]
+                else:
+                    student_content = "[Image file]"
+                    full_content = "[Image file]"
+
+                grade_record = {
+                    **student_info,
+                    **grade_result,
+                    "filename": filepath.name,
+                    "assignment": result["matched_title"],
+                    "period": result["student_period"],
+                    "grading_period": grading_period,
+                    "has_markers": False,
+                    "config_mismatch": result.get("config_mismatch", False),
+                    "config_mismatch_reason": result.get("config_mismatch_reason", ""),
+                    "ai_model": ai_model,
+                    "email_approval": "pending"
+                }
+
+                # Resubmission handling: only replace if new score >= old score
+                new_score = int(float(grade_result.get('score', 0) or 0))
+
+                # Late penalty calculation
+                matched_config = result.get("matched_config")
+                late_info = calculate_late_penalty(filepath, matched_config) if matched_config else None
+                original_score = new_score
+                if late_info and late_info.get('is_late'):
+                    penalty_type = late_info.get('penalty_type', 'points_per_day')
+                    if penalty_type == 'points_per_day':
+                        new_score = max(0, new_score - late_info['penalty_points'])
+                    else:
+                        new_score = max(0, new_score - round(original_score * late_info['penalty_percent'] / 100))
+                    penalty_applied = original_score - new_score
+                    grading_state["log"].append(
+                        f"  Late penalty: -{penalty_applied} pts ({late_info['days_late']} day{'s' if late_info['days_late'] != 1 else ''} late)"
+                    )
+
+                # Only treat as resubmission if no explicit file selection
+                # (explicit selection = teacher re-grade, not student resubmission)
+                is_resub = filepath.name in resubmissions and selected_files is None
+                previous_result = None
+                previous_score = None
+
+                if is_resub:
+                    sid = student_info.get('student_id', '')
+                    assign = result["matched_title"]
+                    for r in grading_state["results"]:
+                        if r.get("student_id") == sid and r.get("assignment") == assign:
+                            previous_result = r
+                            previous_score = int(float(r.get("score", 0) or 0))
+                            break
+
+                    if previous_score is not None and new_score < previous_score:
+                        grading_state["log"].append(f"  ↳ Kept original grade ({previous_score}) — resubmission scored lower ({new_score})")
+                        if previous_result:
+                            previous_result["is_resubmission"] = True
+                            previous_result["resubmission_score"] = new_score
+                            previous_result["kept_higher"] = True
+                        continue
+
+                all_grades.append(grade_record)
+
+                # Add to results for UI (remove any existing result for same file first - for regrading)
+                new_result = {
+                    "student_name": student_info['student_name'],
+                    "student_id": student_info.get('student_id', ''),
+                    "student_email": student_info.get('email', ''),
+                    "filename": filepath.name,
+                    "filepath": str(filepath),
+                    "assignment": result["matched_title"],
+                    "period": result["student_period"],
+                    "score": new_score,
+                    "letter_grade": grade_result.get('letter_grade', 'N/A'),
+                    "feedback": grade_result.get('feedback', ''),
+                    "student_content": student_content,
+                    "full_content": full_content,
+                    "breakdown": grade_result.get('breakdown', {}),
+                    "student_responses": grade_result.get('student_responses', []),
+                    "unanswered_questions": grade_result.get('unanswered_questions', []),
+                    "ai_detection": grade_result.get('ai_detection', {}),
+                    "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
+                    "baseline_deviation": result.get("baseline_deviation", {}),
+                    "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
+                    "marker_status": result.get("marker_status", "unverified"),
+                    "is_resubmission": is_resub,
+                    "previous_score": previous_score,
+                    "kept_higher": False,
+                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
+                    "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
+                    "token_usage": grade_result.get('token_usage', {}),
+                    "email_approval": "pending",
+                    "original_score": original_score if (late_info and late_info.get('is_late')) else None,
+                    "late_penalty": {"days_late": late_info['days_late'], "penalty_applied": original_score - new_score, "penalty_type": late_info.get('penalty_type', '')} if (late_info and late_info.get('is_late')) else None,
+                }
+                with grading_lock:
+                    from backend.staging import canonicalize_filename as _canon_dedup
+                    canon_name = filepath.name
+                    grading_state["results"] = [r for r in grading_state["results"]
+                                                if r.get("filename") != canon_name
+                                                and _canon_dedup(r.get("filename", "")) != canon_name]  # type: ignore[no-untyped-call]
+                    if is_resub and previous_result:
+                        sid = student_info.get('student_id', '')
+                        assign = result["matched_title"]
+                        grading_state["results"] = [r for r in grading_state["results"] if not (r.get("student_id") == sid and r.get("assignment") == assign)]
+                    grading_state["results"].append(new_result)
+
+                # Accumulate session cost (lock for compound read-modify-write)
+                usage = grade_result.get('token_usage', {})
+                if usage:
+                    with grading_lock:
+                        grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
+                        grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
+                        grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
+                        grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
+
+                # Warn when approaching cost limit
+                cost_limit = grading_state.get("cost_limit", 0)
+                if cost_limit > 0 and not grading_state.get("cost_warning_sent"):
+                    warning_pct = grading_state.get("cost_warning_pct", 80) / 100
+                    if grading_state["session_cost"]["total_cost"] >= cost_limit * warning_pct:
+                        _update_state(cost_warning_sent=True)
+                        grading_state["log"].append(f"  ⚠️ Approaching cost limit: ${grading_state['session_cost']['total_cost']:.4f} of ${cost_limit:.2f}")
+
+                # Auto-stop if cost limit exceeded
+                if cost_limit > 0 and grading_state["session_cost"]["total_cost"] >= cost_limit:
+                    _update_state(stop_requested=True, cost_limit_hit=True)
+                    grading_state["log"].append("")
+                    grading_state["log"].append(f"Cost limit reached (${grading_state['session_cost']['total_cost']:.4f} >= ${cost_limit:.2f}). Auto-stopping...")
+
+            # Advance to next batch
+            file_index = batch_end
+    return api_error_occurred
+
+
 def _run_grading_thread_inner(
     assignments_folder: str,
     output_folder: str,
@@ -1637,7 +1872,7 @@ def _run_grading_thread_inner(
             _update_state(complete=True, is_running=False)
             return
 
-        all_grades = []
+        all_grades: list[Any] = []
 
         # ═══════════════════════════════════════════════════════════
         # PARALLEL GRADING HELPER FUNCTION
@@ -1649,9 +1884,6 @@ def _run_grading_thread_inner(
 
         grading_state["log"].append(f"⚡ Parallel grading enabled ({PARALLEL_WORKERS} workers)")
         grading_state["log"].append("")
-
-        completed = 0
-        api_error_occurred = False
 
         gsf_kwargs: dict[str, Any] = dict(
             ai_model=ai_model,
@@ -1685,222 +1917,19 @@ def _run_grading_thread_inner(
             teacher_id=teacher_id,
             trusted_students=trusted_students,
         )
-        with concurrent.futures.ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
-            # Submit files in batches for responsive stop and ordered results
-            file_index = 0
-            stop_break = False
-            while file_index < len(new_files) and not stop_break:
-                if grading_state.get("stop_requested", False):
-                    grading_state["log"].append("")
-                    grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
-                    break
-
-                # Submit next batch
-                batch_end = min(file_index + PARALLEL_WORKERS, len(new_files))
-                future_to_file = {}
-                for i in range(file_index, batch_end):
-                    filepath = new_files[i]
-                    future = executor.submit(grade_single_file, filepath, i + 1, len(new_files), **gsf_kwargs)
-                    future_to_file[future] = (filepath, i + 1)
-
-                # Wait for batch to complete, check stop between results
-                for future in concurrent.futures.as_completed(future_to_file):
-                    if grading_state.get("stop_requested", False):
-                        for fut in future_to_file:
-                            fut.cancel()
-                        grading_state["log"].append("")
-                        grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
-                        stop_break = True
-                        break
-
-                    filepath, file_num = future_to_file[future]
-
-                    try:
-                        result = future.result()
-                    except Exception as e:
-                        grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
-                        grading_state["log"].append(f"  ❌ Error: {str(e)}")
-                        continue
-
-                    # Update progress
-                    completed += 1
-                    _update_state(progress=completed, current_file=filepath.name)
-
-                    # Handle failed grading
-                    if not result.get("success"):
-                        grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
-                        if result.get("is_config_missing"):
-                            grading_state["log"].append(f"  ⏭️  {result.get('error', 'No config')}")
-                        else:
-                            grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
-
-                        # Stop on API errors
-                        if result.get("is_api_error"):
-                            api_error_occurred = True
-                            err_msg = result.get('error', '')
-                            err_lower = err_msg.lower() if err_msg else ''
-                            is_network = any(kw in err_lower for kw in ['connection', 'timeout', 'unreachable', 'refused'])
-                            grading_state["log"].append("")
-                            grading_state["log"].append("=" * 50)
-                            if is_network:
-                                grading_state["log"].append("⚠️  GRADING STOPPED - NETWORK ERROR")
-                                grading_state["log"].append("Unable to connect to the AI provider. This may be due to")
-                                grading_state["log"].append("network restrictions. Contact your IT department to allow")
-                                grading_state["log"].append("access to OpenAI/Anthropic services.")
-                            else:
-                                grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
-                            grading_state["log"].append("=" * 50)
-                            _update_state(error=f"{'Network' if is_network else 'API'} Error: {err_msg}")
-                            for fut in future_to_file:
-                                fut.cancel()
-                            stop_break = True
-                            break
-                        continue
-
-                    # Log success
-                    student_info = result["student_info"]
-                    grade_result = result["grade_result"]
-
-                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {student_info['student_name']}")
-                    for msg in result.get("log_messages", []):
-                        grading_state["log"].append(msg)
-
-                    # Build grade record for export
-                    file_data = result.get("file_data", {})
-                    if file_data.get("type") == "text":
-                        student_content = file_data.get("content", "")[:5000]
-                        full_content = file_data.get("content", "")[:10000]
-                    else:
-                        student_content = "[Image file]"
-                        full_content = "[Image file]"
-
-                    grade_record = {
-                        **student_info,
-                        **grade_result,
-                        "filename": filepath.name,
-                        "assignment": result["matched_title"],
-                        "period": result["student_period"],
-                        "grading_period": grading_period,
-                        "has_markers": False,
-                        "config_mismatch": result.get("config_mismatch", False),
-                        "config_mismatch_reason": result.get("config_mismatch_reason", ""),
-                        "ai_model": ai_model,
-                        "email_approval": "pending"
-                    }
-
-                    # Resubmission handling: only replace if new score >= old score
-                    new_score = int(float(grade_result.get('score', 0) or 0))
-
-                    # Late penalty calculation
-                    matched_config = result.get("matched_config")
-                    late_info = calculate_late_penalty(filepath, matched_config) if matched_config else None
-                    original_score = new_score
-                    if late_info and late_info.get('is_late'):
-                        penalty_type = late_info.get('penalty_type', 'points_per_day')
-                        if penalty_type == 'points_per_day':
-                            new_score = max(0, new_score - late_info['penalty_points'])
-                        else:
-                            new_score = max(0, new_score - round(original_score * late_info['penalty_percent'] / 100))
-                        penalty_applied = original_score - new_score
-                        grading_state["log"].append(
-                            f"  Late penalty: -{penalty_applied} pts ({late_info['days_late']} day{'s' if late_info['days_late'] != 1 else ''} late)"
-                        )
-
-                    # Only treat as resubmission if no explicit file selection
-                    # (explicit selection = teacher re-grade, not student resubmission)
-                    is_resub = filepath.name in resubmissions and selected_files is None
-                    previous_result = None
-                    previous_score = None
-
-                    if is_resub:
-                        sid = student_info.get('student_id', '')
-                        assign = result["matched_title"]
-                        for r in grading_state["results"]:
-                            if r.get("student_id") == sid and r.get("assignment") == assign:
-                                previous_result = r
-                                previous_score = int(float(r.get("score", 0) or 0))
-                                break
-
-                        if previous_score is not None and new_score < previous_score:
-                            grading_state["log"].append(f"  ↳ Kept original grade ({previous_score}) — resubmission scored lower ({new_score})")
-                            if previous_result:
-                                previous_result["is_resubmission"] = True
-                                previous_result["resubmission_score"] = new_score
-                                previous_result["kept_higher"] = True
-                            continue
-
-                    all_grades.append(grade_record)
-
-                    # Add to results for UI (remove any existing result for same file first - for regrading)
-                    new_result = {
-                        "student_name": student_info['student_name'],
-                        "student_id": student_info.get('student_id', ''),
-                        "student_email": student_info.get('email', ''),
-                        "filename": filepath.name,
-                        "filepath": str(filepath),
-                        "assignment": result["matched_title"],
-                        "period": result["student_period"],
-                        "score": new_score,
-                        "letter_grade": grade_result.get('letter_grade', 'N/A'),
-                        "feedback": grade_result.get('feedback', ''),
-                        "student_content": student_content,
-                        "full_content": full_content,
-                        "breakdown": grade_result.get('breakdown', {}),
-                        "student_responses": grade_result.get('student_responses', []),
-                        "unanswered_questions": grade_result.get('unanswered_questions', []),
-                        "ai_detection": grade_result.get('ai_detection', {}),
-                        "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
-                        "baseline_deviation": result.get("baseline_deviation", {}),
-                        "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
-                        "marker_status": result.get("marker_status", "unverified"),
-                        "is_resubmission": is_resub,
-                        "previous_score": previous_score,
-                        "kept_higher": False,
-                        "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
-                        "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
-                        "token_usage": grade_result.get('token_usage', {}),
-                        "email_approval": "pending",
-                        "original_score": original_score if (late_info and late_info.get('is_late')) else None,
-                        "late_penalty": {"days_late": late_info['days_late'], "penalty_applied": original_score - new_score, "penalty_type": late_info.get('penalty_type', '')} if (late_info and late_info.get('is_late')) else None,
-                    }
-                    with grading_lock:
-                        from backend.staging import canonicalize_filename as _canon_dedup
-                        canon_name = filepath.name
-                        grading_state["results"] = [r for r in grading_state["results"]
-                                                    if r.get("filename") != canon_name
-                                                    and _canon_dedup(r.get("filename", "")) != canon_name]  # type: ignore[no-untyped-call]
-                        if is_resub and previous_result:
-                            sid = student_info.get('student_id', '')
-                            assign = result["matched_title"]
-                            grading_state["results"] = [r for r in grading_state["results"] if not (r.get("student_id") == sid and r.get("assignment") == assign)]
-                        grading_state["results"].append(new_result)
-
-                    # Accumulate session cost (lock for compound read-modify-write)
-                    usage = grade_result.get('token_usage', {})
-                    if usage:
-                        with grading_lock:
-                            grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
-                            grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
-                            grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
-                            grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
-
-                    # Warn when approaching cost limit
-                    cost_limit = grading_state.get("cost_limit", 0)
-                    if cost_limit > 0 and not grading_state.get("cost_warning_sent"):
-                        warning_pct = grading_state.get("cost_warning_pct", 80) / 100
-                        if grading_state["session_cost"]["total_cost"] >= cost_limit * warning_pct:
-                            _update_state(cost_warning_sent=True)
-                            grading_state["log"].append(f"  ⚠️ Approaching cost limit: ${grading_state['session_cost']['total_cost']:.4f} of ${cost_limit:.2f}")
-
-                    # Auto-stop if cost limit exceeded
-                    if cost_limit > 0 and grading_state["session_cost"]["total_cost"] >= cost_limit:
-                        _update_state(stop_requested=True, cost_limit_hit=True)
-                        grading_state["log"].append("")
-                        grading_state["log"].append(f"Cost limit reached (${grading_state['session_cost']['total_cost']:.4f} >= ${cost_limit:.2f}). Auto-stopping...")
-
-                # Advance to next batch
-                file_index = batch_end
+        api_error_occurred = _grade_all_files(
+            PARALLEL_WORKERS=PARALLEL_WORKERS,
+            _update_state=_update_state,
+            ai_model=ai_model,
+            all_grades=all_grades,
+            grading_lock=grading_lock,
+            grading_period=grading_period,
+            grading_state=grading_state,
+            gsf_kwargs=gsf_kwargs,
+            new_files=new_files,
+            resubmissions=resubmissions,
+            selected_files=selected_files,
+        )
 
         # Handle API error - stop and save
         if api_error_occurred:
