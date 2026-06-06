@@ -1,13 +1,80 @@
 """Student-text preparation for the grading pipeline: FERPA PII sanitization
-(before any external-AI call) + AI-detection preprocessing. Pure logic
-(re / hashlib — no LLM / network / Flask) extracted from
-assignment_grader.py. Wave 7 Slice 2 (grading-engine decomposition).
+(before any external-AI call) + AI-detection preprocessing + prompt-injection
+isolation of untrusted student answer text. Pure logic (re / hashlib — no LLM /
+network / Flask) extracted from assignment_grader.py. Wave 7 Slice 2
+(grading-engine decomposition).
 """
 import hashlib
 import logging
 import re
 
 _logger = logging.getLogger(__name__)
+
+# Security (audit #10 — prompt injection): explicit, hard-to-forge fence around the
+# untrusted student answer when it is interpolated into a grading prompt. The model is
+# told everything between the two fence lines is untrusted student-authored content and
+# must NOT be treated as instructions. The random-looking suffix makes the marker
+# impractical for a student to reproduce verbatim; on top of that
+# `neutralize_untrusted_student_text` strips any copy of the fence the student does manage
+# to include, so the region cannot be closed early.
+STUDENT_ANSWER_FENCE = "-----UNTRUSTED-STUDENT-ANSWER-7f3a9c2e-----"
+
+# Line-leading tokens a student might forge to mimic the prompt's own structure / role
+# markers. Matched case-insensitively at the start of a (left-stripped) line; any match is
+# defanged by `neutralize_untrusted_student_text` so the line can no longer be parsed as a
+# control header. Kept in sync with the section headers / role labels grade_per_question
+# (and the feedback/single-pass prompts) emit, plus the standard chat role labels.
+_INJECTION_MARKER_RE = re.compile(
+    r"""^(?:
+        system | assistant | user | developer            # chat role labels
+        | teacher'?s\s+grading\s+instructions             # grade_per_question teacher block
+        | teacher'?s\s+instructions                       # feedback prompt teacher block
+        | question | student\s+answer | expected\s+answer # grade_per_question fields
+        | points\s+possible | rules | context             # grade_per_question fields
+        | grading\s+approach | section\s+type | section   # grade_per_question fields
+        | default\s+score\s+anchors                       # grade_per_question anchors
+        | universal\s+rules | feedback\s+structure        # feedback prompt headers
+        | score | rubric\s+breakdown                      # feedback prompt fields
+    )\s*:?\s*\-*\s*""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def neutralize_untrusted_student_text(text: str) -> str:
+    """Security (audit #10): structurally neutralize prompt-injection attempts in untrusted
+    student answer text BEFORE it is interpolated (fenced) into a grading prompt.
+
+    This is the programmatic safety net (Dev Principle #3 — not prompt-wording-only). It does
+    NOT change a legitimate answer's content; it only defangs sequences that mimic the prompt's
+    own control structure so a student cannot escalate their text into instructions:
+
+    - Strips any copy of `STUDENT_ANSWER_FENCE` (so the student cannot close their own region).
+    - Prefixes a `> ` quote-marker to any line that begins with a forged role label
+      ("SYSTEM:", "ASSISTANT:", …) or a forged section header ("TEACHER'S GRADING
+      INSTRUCTIONS", "POINTS POSSIBLE:", "RULES:", …). The marker text is preserved (so a
+      legitimate answer that merely mentions one of these words is not corrupted) but the line
+      no longer LEADS with the token, so it cannot be parsed as a control header.
+
+    Idempotent and safe on empty / None input.
+    """
+    if not text:
+        return ""
+
+    # Remove any forged copy of the fence first (case-sensitive: the real marker is fixed).
+    neutralized = text.replace(STUDENT_ANSWER_FENCE, "")
+
+    out_lines = []
+    for line in neutralized.split("\n"):
+        stripped = line.lstrip()
+        if _INJECTION_MARKER_RE.match(stripped):
+            # Preserve indentation + content; break the leading control token with a quote
+            # prefix so it reads as quoted untrusted content, not a header/role marker.
+            indent = line[: len(line) - len(stripped)]
+            out_lines.append(f"{indent}> {stripped}")
+        else:
+            out_lines.append(line)
+
+    return "\n".join(out_lines)
 
 # Given names that are ALSO ordinary English words. When such a name part appears in lowercase
 # inside a student answer it is almost certainly the word ("founded in may", "grace under
