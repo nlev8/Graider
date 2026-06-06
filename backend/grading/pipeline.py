@@ -1632,6 +1632,85 @@ def _load_already_graded(
     return already_graded, verified_files
 
 
+def _load_period_maps(
+    *,
+    grading_state: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    student_period_map = {}  # Maps student name -> period name
+    period_class_level_map = {}  # Maps period name -> class level (standard/advanced/support)
+    periods_dir = os.path.expanduser("~/.graider_data/periods")
+    if os.path.exists(periods_dir):
+        import csv
+        for period_file in os.listdir(periods_dir):
+            if period_file.endswith('.csv'):
+                period_name = period_file.replace('.csv', '')
+                class_level = 'standard'  # Default
+
+                # Load class_level from metadata file if it exists
+                meta_path = os.path.join(periods_dir, f"{period_file}.meta.json")
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, 'r') as mf:
+                            meta = json.load(mf)
+                            period_name = meta.get('period_name', period_name)
+                            class_level = meta.get('class_level', 'standard')
+                    except Exception as e:
+                        # Best-effort: malformed metadata falls back to
+                        # defaults (period name from filename, standard
+                        # class level). Less personalization, not broken.
+                        _logger.debug("Failed to load period metadata %s: %s", meta_path, e)
+
+                period_class_level_map[period_name] = class_level
+
+                try:
+                    with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as pf:
+                        reader = csv.DictReader(pf)
+                        for row in reader:
+                            # Try common column names for student name
+                            first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
+                            last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
+                            full_name = row.get('Name', row.get('Student Name', row.get('Student', row.get('name', '')))).strip()
+
+                            if first and last:
+                                student_key = f"{first} {last}".lower()
+                                student_period_map[student_key] = period_name
+                            elif full_name:
+                                # Handle "Last; First" or "Last, First" formats
+                                if '; ' in full_name:
+                                    parts = full_name.split('; ', 1)
+                                    if len(parts) == 2:
+                                        student_key = f"{parts[1]} {parts[0]}".lower()
+                                        student_period_map[student_key] = period_name
+                                elif ', ' in full_name:
+                                    parts = full_name.split(', ', 1)
+                                    if len(parts) == 2:
+                                        last_name = parts[0].strip()
+                                        first_name = parts[1].strip()
+                                        # Full key: "First Middle Last1 Last2"
+                                        student_key = f"{first_name} {last_name}".lower()
+                                        student_period_map[student_key] = period_name
+                                        # Also add short key: "FirstWord LastWord" for filename matching
+                                        first_simple = first_name.split()[0].lower() if first_name else ''
+                                        last_simple = last_name.split()[0].lower() if last_name else ''
+                                        if first_simple and last_simple:
+                                            short_key = f"{first_simple} {last_simple}"
+                                            if short_key != student_key:
+                                                student_period_map[short_key] = period_name
+                                else:
+                                    student_period_map[full_name.lower()] = period_name
+                except Exception as e:
+                    grading_state["log"].append(f"Warning: Could not load period file {period_file}: {e}")
+
+        if student_period_map:
+            grading_state["log"].append(f"Loaded period data for {len(student_period_map)} students")
+            # Log class levels
+            advanced_count = sum(1 for v in period_class_level_map.values() if v == 'advanced')
+            support_count = sum(1 for v in period_class_level_map.values() if v == 'support')
+            if advanced_count or support_count:
+                grading_state["log"].append(f"  Class levels: {advanced_count} advanced, {support_count} support, {len(period_class_level_map) - advanced_count - support_count} standard")
+    return student_period_map, period_class_level_map
+
+
 def _run_grading_thread_inner(
     assignments_folder: str,
     output_folder: str,
@@ -1749,78 +1828,9 @@ def _run_grading_thread_inner(
             grading_state["log"].append(f"Loaded reference documents for AI context")
 
         # Load student-to-period mapping from period CSVs for per-student grading levels
-        student_period_map = {}  # Maps student name -> period name
-        period_class_level_map = {}  # Maps period name -> class level (standard/advanced/support)
-        periods_dir = os.path.expanduser("~/.graider_data/periods")
-        if os.path.exists(periods_dir):
-            import csv
-            for period_file in os.listdir(periods_dir):
-                if period_file.endswith('.csv'):
-                    period_name = period_file.replace('.csv', '')
-                    class_level = 'standard'  # Default
-
-                    # Load class_level from metadata file if it exists
-                    meta_path = os.path.join(periods_dir, f"{period_file}.meta.json")
-                    if os.path.exists(meta_path):
-                        try:
-                            with open(meta_path, 'r') as mf:
-                                meta = json.load(mf)
-                                period_name = meta.get('period_name', period_name)
-                                class_level = meta.get('class_level', 'standard')
-                        except Exception as e:
-                            # Best-effort: malformed metadata falls back to
-                            # defaults (period name from filename, standard
-                            # class level). Less personalization, not broken.
-                            _logger.debug("Failed to load period metadata %s: %s", meta_path, e)
-
-                    period_class_level_map[period_name] = class_level
-
-                    try:
-                        with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as pf:
-                            reader = csv.DictReader(pf)
-                            for row in reader:
-                                # Try common column names for student name
-                                first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
-                                last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
-                                full_name = row.get('Name', row.get('Student Name', row.get('Student', row.get('name', '')))).strip()
-
-                                if first and last:
-                                    student_key = f"{first} {last}".lower()
-                                    student_period_map[student_key] = period_name
-                                elif full_name:
-                                    # Handle "Last; First" or "Last, First" formats
-                                    if '; ' in full_name:
-                                        parts = full_name.split('; ', 1)
-                                        if len(parts) == 2:
-                                            student_key = f"{parts[1]} {parts[0]}".lower()
-                                            student_period_map[student_key] = period_name
-                                    elif ', ' in full_name:
-                                        parts = full_name.split(', ', 1)
-                                        if len(parts) == 2:
-                                            last_name = parts[0].strip()
-                                            first_name = parts[1].strip()
-                                            # Full key: "First Middle Last1 Last2"
-                                            student_key = f"{first_name} {last_name}".lower()
-                                            student_period_map[student_key] = period_name
-                                            # Also add short key: "FirstWord LastWord" for filename matching
-                                            first_simple = first_name.split()[0].lower() if first_name else ''
-                                            last_simple = last_name.split()[0].lower() if last_name else ''
-                                            if first_simple and last_simple:
-                                                short_key = f"{first_simple} {last_simple}"
-                                                if short_key != student_key:
-                                                    student_period_map[short_key] = period_name
-                                    else:
-                                        student_period_map[full_name.lower()] = period_name
-                    except Exception as e:
-                        grading_state["log"].append(f"Warning: Could not load period file {period_file}: {e}")
-
-            if student_period_map:
-                grading_state["log"].append(f"Loaded period data for {len(student_period_map)} students")
-                # Log class levels
-                advanced_count = sum(1 for v in period_class_level_map.values() if v == 'advanced')
-                support_count = sum(1 for v in period_class_level_map.values() if v == 'support')
-                if advanced_count or support_count:
-                    grading_state["log"].append(f"  Class levels: {advanced_count} advanced, {support_count} support, {len(period_class_level_map) - advanced_count - support_count} standard")
+        student_period_map, period_class_level_map = _load_period_maps(
+            grading_state=grading_state,
+        )
 
         os.makedirs(output_folder, exist_ok=True)
 
