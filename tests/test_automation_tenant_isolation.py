@@ -103,3 +103,31 @@ def test_save_id_traversal_cannot_overwrite_other_tenant(client):
     assert victim is not None and victim['name'] == 'Victim WF', (
         "teacher-A overwrote teacher-B's workflow via path traversal in the save body id"
     )
+
+
+def test_run_status_does_not_leak_other_tenant_run(client):
+    """The runner is a single global subprocess; teacher B must not see
+    teacher A's run status/workflow_name/log (audit #8 / Codex residual)."""
+    import backend.routes.automation_routes as ar
+    try:
+        ar._run_state.update({"status": "running", "workflow_name": "A secret wf",
+                              "teacher_id": "teacher-A", "process": None, "log": ["secret"]})
+        st = client.get('/api/automations/run/status', headers=_hdr('teacher-B')).get_json()
+        assert st["status"] == "idle"
+        assert st["workflow_name"] == ""
+        assert st["log"] == []
+    finally:
+        ar._run_state.update({"status": "idle", "teacher_id": None, "process": None, "log": []})
+
+
+def test_stop_run_cannot_stop_other_tenant_run(client):
+    """Teacher B must not be able to kill teacher A's running automation (DoS)."""
+    import backend.routes.automation_routes as ar
+    try:
+        ar._run_state.update({"status": "running", "teacher_id": "teacher-A",
+                              "process": None, "log": []})
+        r = client.post('/api/automations/run/stop', headers=_hdr('teacher-B'))
+        assert r.status_code == 404
+        assert ar._run_state["status"] == "running", "teacher B stopped teacher A's run"
+    finally:
+        ar._run_state.update({"status": "idle", "teacher_id": None, "process": None, "log": []})

@@ -331,6 +331,10 @@ def run_automation(workflow_id):
     _run_state.update({
         "process": None, "status": "running",
         "workflow_name": workflow_id,
+        # Tenant isolation (audit #8 / Codex): the runner is a single global
+        # subprocess, so record who owns the current run. status/stop gate on this
+        # so one teacher can't read or kill another teacher's run.
+        "teacher_id": g.teacher_id,
         "current_step": 0, "total_steps": 0,
         "step_label": "", "message": "Starting automation...",
         "log": [],
@@ -352,6 +356,14 @@ def run_automation(workflow_id):
 @handle_route_errors
 def run_status():
     """Poll current automation run state."""
+    # Tenant isolation (audit #8 / Codex): the runner is a single global
+    # subprocess. Only surface it to the teacher who started it; everyone else
+    # sees idle (no leak of another tenant's workflow_name / progress / log).
+    if _run_state.get("teacher_id") != g.teacher_id:
+        return jsonify({
+            "status": "idle", "workflow_name": "", "current_step": 0,
+            "total_steps": 0, "step_label": "", "message": "", "log": [],
+        })
     return jsonify({
         "status": _run_state.get("status", "idle"),
         "workflow_name": _run_state.get("workflow_name", ""),
@@ -368,6 +380,11 @@ def run_status():
 @handle_route_errors
 def stop_run():
     """Kill running automation subprocess."""
+    # Tenant isolation (audit #8 / Codex): don't let one teacher stop another
+    # teacher's run (DoS). Only the owner of an active run may stop it; an idle
+    # state is a harmless no-op for anyone.
+    if _run_state.get("status") == "running" and _run_state.get("teacher_id") != g.teacher_id:
+        return jsonify({"error": "No running automation"}), 404
     proc = _run_state.get("process")
     if proc and proc.poll() is None:
         proc.terminate()

@@ -70,6 +70,9 @@ def flask_app(tmp_path, monkeypatch):
         "process": None, "status": "idle",
         "workflow_name": "", "current_step": 0, "total_steps": 0,
         "step_label": "", "message": "", "log": [],
+        # audit #8: status/stop gate on the run owner; the test teacher is
+        # "teacher-alice", so simulated "running" states belong to her.
+        "teacher_id": "teacher-alice",
     })
     auto_mod._picker_state.update({
         "process": None, "status": "idle", "events": [],
