@@ -667,12 +667,26 @@ def test_config_mismatch_threads_through_to_assembly(env):
         "SUMMARY:\nThe Republic gave way to the Empire under Augustus.\n\n"
         "VOCABULARY:\nSenate - the governing council of Rome.\n"
     )
-    state, called = run_thread(
-        env, "golden-cfg-mismatch",
-        config=mismatch_config,
-        submissions=[("Maria_Garcia_Ancient Rome Essay.txt", rome_submission)],
-        roster=[("Maria", "Garcia", "STU001", "mg@school.com", "3")],
-    )
+
+    # Capture the EXACT config_mismatch / config_mismatch_reason values that the
+    # shell threads into _assemble_post_grade — so the test is mutation-sensitive
+    # for BOTH the boolean AND the reason string (not just the boolean via logs).
+    import backend.grading.pipeline as _pl
+    captured = {}
+    real_assemble = _pl._assemble_post_grade
+
+    def _capture_assemble(**kw):
+        captured["config_mismatch"] = kw.get("config_mismatch")
+        captured["config_mismatch_reason"] = kw.get("config_mismatch_reason")
+        return real_assemble(**kw)
+
+    with patch("backend.grading.pipeline._assemble_post_grade", side_effect=_capture_assemble):
+        state, called = run_thread(
+            env, "golden-cfg-mismatch",
+            config=mismatch_config,
+            submissions=[("Maria_Garcia_Ancient Rome Essay.txt", rome_submission)],
+            roster=[("Maria", "Garcia", "STU001", "mg@school.com", "3")],
+        )
 
     # A result IS produced (fallback markers prevent the skip).
     r = find_result(state, "Maria_Garcia_Ancient Rome Essay.txt")
@@ -683,6 +697,12 @@ def test_config_mismatch_threads_through_to_assembly(env):
                for line in state["log"]), state["log"]
     # Consumer — _assemble_post_grade's log_messages appends the "wrong rubric"
     # warning ONLY when the config_mismatch param it received is True. Its presence
-    # proves config_mismatch was threaded shell-block → helper param correctly.
+    # proves the BOOLEAN was threaded shell-block → helper param correctly.
     assert any("CONFIG MISMATCH - may have wrong rubric" in line
                for line in state["log"]), state["log"]
+    # Both halves of the thread reached _assemble_post_grade with the right values
+    # (mutation-sensitive for the reason STRING, not just the boolean):
+    assert captured.get("config_mismatch") is True, captured
+    assert captured.get("config_mismatch_reason"), captured
+    assert "Ancient Rome Essay" in captured["config_mismatch_reason"], captured
+    assert "Photosynthesis Quiz Unit 4" in captured["config_mismatch_reason"], captured

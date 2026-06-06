@@ -340,7 +340,15 @@ def test_baseline_deviation_failure_alerts_to_sentry():
     src = inspect.getsource(pipeline._assemble_post_grade)
     deviation_idx = src.find('detect_baseline_deviation')
     assert deviation_idx > 0, "detect_baseline_deviation call must exist"
-    deviation_block = src[deviation_idx:deviation_idx + 1500]
+    # Bound the window to the baseline-deviation block ONLY. The adjacent
+    # add_assignment_to_history block ALSO calls sentry_sdk.capture_exception; a
+    # fixed 1500-char window would latch onto THAT capture and silently pass even
+    # if the baseline-deviation alert (the missed-cheating-signal path) were
+    # dropped. Stop the window at the history block. (Pre-existing weak guard
+    # from before the PR-3a/3b lifts — tightened here, in-scope since this test is
+    # already being re-pointed.)
+    _hist = src.find('add_assignment_to_history', deviation_idx)
+    deviation_block = src[deviation_idx:_hist if _hist > deviation_idx else deviation_idx + 1500]
     assert 'sentry_sdk.capture_exception' in deviation_block, (
         "detect_baseline_deviation failure MUST call sentry_sdk.capture_exception. "
         "Pre-PR it was a silent `except: pass`; if you removed the alert call, "
