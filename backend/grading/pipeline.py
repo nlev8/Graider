@@ -1583,6 +1583,55 @@ def _grade_all_files(
     return api_error_occurred
 
 
+def _load_already_graded(
+    *,
+    grading_state: dict[str, Any],
+    output_folder: str,
+) -> tuple[set[Any], set[Any]]:
+    # Load already graded files from master CSV AND in-memory results
+    already_graded = set()
+
+    # Check master CSV
+    master_file = os.path.join(output_folder, "master_grades.csv")
+    if os.path.exists(master_file):
+        try:
+            from backend.staging import canonicalize_filename as _canon_csv
+            with open(master_file, 'r', encoding='utf-8') as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    filename = row.get('Filename', '')
+                    if filename:
+                        already_graded.add(filename)
+                        already_graded.add(_canon_csv(filename))  # type: ignore[no-untyped-call]
+        except Exception as e:
+            # Behavior-critical: if we can't read the master CSV, the
+            # already_graded set stays empty and previously-graded files
+            # may be regraded (cost + duplicate results). Sentry must see
+            # this so the corrupted CSV gets fixed.
+            _logger.error("Failed to load master_grades.csv for already_graded set: %s", e)
+            sentry_sdk.capture_exception(e)
+
+    # Also check in-memory results (loaded from saved JSON)
+    # Track which files are verified (have markers/config) for skip_verified option
+    # Canonicalize all filenames so they match staged canonical names
+    from backend.staging import canonicalize_filename as _canon
+    verified_files = set()
+    for r in grading_state.get("results", []):
+        if r.get("filename"):
+            already_graded.add(r["filename"])
+            already_graded.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
+            # Track verified status for skip_verified filtering
+            if r.get("marker_status") == "verified":
+                verified_files.add(r["filename"])
+                verified_files.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
+
+    if already_graded:
+        grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
+        if verified_files:
+            grading_state["log"].append(f"  ({len(verified_files)} verified, {len(already_graded) - len(verified_files)} unverified)")
+    return already_graded, verified_files
+
+
 def _run_grading_thread_inner(
     assignments_folder: str,
     output_folder: str,
@@ -1775,47 +1824,10 @@ def _run_grading_thread_inner(
 
         os.makedirs(output_folder, exist_ok=True)
 
-        # Load already graded files from master CSV AND in-memory results
-        already_graded = set()
-
-        # Check master CSV
-        master_file = os.path.join(output_folder, "master_grades.csv")
-        if os.path.exists(master_file):
-            try:
-                from backend.staging import canonicalize_filename as _canon_csv
-                with open(master_file, 'r', encoding='utf-8') as fh:
-                    reader = csv.DictReader(fh)
-                    for row in reader:
-                        filename = row.get('Filename', '')
-                        if filename:
-                            already_graded.add(filename)
-                            already_graded.add(_canon_csv(filename))  # type: ignore[no-untyped-call]
-            except Exception as e:
-                # Behavior-critical: if we can't read the master CSV, the
-                # already_graded set stays empty and previously-graded files
-                # may be regraded (cost + duplicate results). Sentry must see
-                # this so the corrupted CSV gets fixed.
-                _logger.error("Failed to load master_grades.csv for already_graded set: %s", e)
-                sentry_sdk.capture_exception(e)
-
-        # Also check in-memory results (loaded from saved JSON)
-        # Track which files are verified (have markers/config) for skip_verified option
-        # Canonicalize all filenames so they match staged canonical names
-        from backend.staging import canonicalize_filename as _canon
-        verified_files = set()
-        for r in grading_state.get("results", []):
-            if r.get("filename"):
-                already_graded.add(r["filename"])
-                already_graded.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
-                # Track verified status for skip_verified filtering
-                if r.get("marker_status") == "verified":
-                    verified_files.add(r["filename"])
-                    verified_files.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
-
-        if already_graded:
-            grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
-            if verified_files:
-                grading_state["log"].append(f"  ({len(verified_files)} verified, {len(already_graded) - len(verified_files)} unverified)")
+        already_graded, verified_files = _load_already_graded(
+            grading_state=grading_state,
+            output_folder=output_folder,
+        )
 
         grading_state["log"].append("Loading student roster...")
         roster = load_roster(roster_file)

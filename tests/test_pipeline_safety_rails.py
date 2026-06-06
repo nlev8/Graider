@@ -286,8 +286,13 @@ def test_pipeline_global_refs_all_resolve():
 
 def test_master_csv_load_failure_alerts_to_sentry():
     """Contract test: if master_grades.csv load fails inside
-    _run_grading_thread_inner, sentry_sdk.capture_exception MUST be called
+    _load_already_graded, sentry_sdk.capture_exception MUST be called
     so the corrupted CSV / regrade-anomaly is visible.
+
+    CQ7 PR-4 extracted the master_grades.csv block out of
+    _run_grading_thread_inner into the module-level _load_already_graded
+    helper; inspect that helper (which now owns the block + its except
+    handler).
 
     Pre-PR (chore/grading-pipeline-observability) this was a silent
     `except Exception: pass`. The fix lives in the master_grades.csv
@@ -299,9 +304,9 @@ def test_master_csv_load_failure_alerts_to_sentry():
     import inspect
     from backend.grading import pipeline
 
-    src = inspect.getsource(pipeline._run_grading_thread_inner)
+    src = inspect.getsource(pipeline._load_already_graded)
     csv_idx = src.find('master_grades.csv')
-    assert csv_idx > 0, "master_grades.csv block must exist in _run_grading_thread_inner"
+    assert csv_idx > 0, "master_grades.csv block must exist in _load_already_graded"
     # Look at the next ~1500 chars after the master_grades.csv mention —
     # that's the block including its except handler.
     csv_block = src[csv_idx:csv_idx + 1500]
