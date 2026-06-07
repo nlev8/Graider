@@ -296,3 +296,42 @@ class TestDocxZipBombGuard:
         result = read_docx_file(str(ok))
         assert result is not None
         assert "hello world" in result
+
+
+def _forge_central_dir_uncompressed_size(path, member_name, lie=1):
+    """Patch the ZIP central-directory 'uncompressed size' field of `member_name`
+    to a small lie, so a metadata-TRUSTING guard sees the member as tiny while the
+    real local deflate stream still inflates large. Central-dir file header layout:
+    sig(4) … uncompressed-size @+24 (4 LE), filename-length @+28 (2 LE), filename @+46.
+    """
+    data = bytearray(open(path, "rb").read())
+    name = member_name.encode()
+    idx = 0
+    while True:
+        idx = data.find(b"\x50\x4b\x01\x02", idx)
+        assert idx != -1, f"central-dir record for {member_name!r} not found"
+        fn_len = int.from_bytes(data[idx + 28:idx + 30], "little")
+        if bytes(data[idx + 46:idx + 46 + fn_len]) == name:
+            data[idx + 24:idx + 28] = int(lie).to_bytes(4, "little")
+            break
+        idx += 4
+    open(path, "wb").write(bytes(data))
+
+
+def test_zip_bomb_with_forged_metadata_is_rejected(tmp_path, monkeypatch):
+    """Codex VB9 verify (important bypass): a metadata-only guard trusts the
+    central-directory file_size, but python-docx inflates the REAL stream. A docx
+    whose bomb member declares size=1 but actually holds 512 KB must be rejected by
+    the actual-decompression guard. (RED on the metadata-only impl; GREEN now.)"""
+    import backend.services.submission_parsing as sp
+    monkeypatch.setattr(sp, "_ZIP_MAX_TOTAL_UNCOMPRESSED", 128 * 1024)  # 128 KB cap → fast test
+
+    bomb = tmp_path / "forged.docx"
+    _make_valid_docx(bomb)
+    with zipfile.ZipFile(str(bomb), "a", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("word/bomb.bin", b"\x00" * (512 * 1024))  # 512 KB actual
+    _forge_central_dir_uncompressed_size(str(bomb), "word/bomb.bin", lie=1)
+
+    # Declared sizes now sum well under the 128 KB cap (the bomb lies as 1 byte),
+    # so a metadata-only check passes it; the real stream is 512 KB → must reject.
+    assert sp._is_zip_bomb(str(bomb)) is True

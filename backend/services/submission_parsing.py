@@ -21,16 +21,25 @@ _logger = logging.getLogger(__name__)
 # bomb cold.
 _ZIP_MAX_TOTAL_UNCOMPRESSED = 100 * 1024 * 1024   # 100 MB total expansion
 _ZIP_MAX_MEMBER_COUNT = 2000                        # member-count fan-out cap
-_ZIP_MAX_COMPRESSION_RATIO = 200                    # per-member uncompressed:compressed
+_ZIP_READ_CHUNK = 1024 * 1024                       # 1 MB streaming-decompress chunk
 
 
 def _is_zip_bomb(filepath) -> bool:
-    """Return True if a zip-based file (e.g. .docx) looks like a zip bomb.
+    """Return True if a zip-based file (e.g. .docx/.xlsx) is a zip bomb.
 
-    Inspects only the central directory metadata (file_size / compress_size),
-    so it costs O(members) and never decompresses anything. Conservative: a
-    non-zip file (shouldn't happen for .docx) returns False so the normal
-    parser surfaces its own error.
+    Does NOT trust the central-directory metadata (file_size/compress_size): that
+    field is attacker-forgeable, and python-docx / openpyxl inflate the REAL local
+    deflate stream regardless of what the central directory claims (Codex VB9
+    verify: a metadata-only check was bypassable by forging a small file_size while
+    the actual stream inflates to 100s of MB). Defense:
+      1. cap the member count (cheap fan-out guard);
+      2. fast-reject if the DECLARED sizes already exceed the cap; and
+      3. the load-bearing check — actually stream-decompress each member with a
+         hard running cap, aborting before a bomb can exhaust memory. We only ever
+         hold one _ZIP_READ_CHUNK in memory; just the running total accumulates.
+    Conservative: a member that errors mid-decompress, or any inspection failure,
+    is treated as unsafe. A non-zip file returns False so the normal parser
+    surfaces its own error.
     """
     try:
         with zipfile.ZipFile(filepath) as zf:
@@ -41,24 +50,35 @@ def _is_zip_bomb(filepath) -> bool:
                     len(infos), _ZIP_MAX_MEMBER_COUNT,
                 )
                 return True
-            total_uncompressed = 0
+            # Fast path: honest bombs declare their huge size — reject without decompressing.
+            if sum(getattr(i, "file_size", 0) for i in infos) > _ZIP_MAX_TOTAL_UNCOMPRESSED:
+                _logger.warning(
+                    "Rejected zip-based doc: declared uncompressed size exceeds cap %d bytes",
+                    _ZIP_MAX_TOTAL_UNCOMPRESSED,
+                )
+                return True
+            # Load-bearing: actually decompress with a running cap (forged metadata can't fool this).
+            total = 0
             for info in infos:
-                total_uncompressed += info.file_size
-                if total_uncompressed > _ZIP_MAX_TOTAL_UNCOMPRESSED:
+                try:
+                    with zf.open(info) as member:
+                        while True:
+                            chunk = member.read(_ZIP_READ_CHUNK)
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if total > _ZIP_MAX_TOTAL_UNCOMPRESSED:
+                                _logger.warning(
+                                    "Rejected zip-based doc: actual decompressed size exceeds cap %d bytes",
+                                    _ZIP_MAX_TOTAL_UNCOMPRESSED,
+                                )
+                                return True
+                except Exception as e:
                     _logger.warning(
-                        "Rejected zip-based doc: uncompressed size exceeds cap %d bytes",
-                        _ZIP_MAX_TOTAL_UNCOMPRESSED,
+                        "Zip member %r failed to decompress (%s); treating as unsafe",
+                        getattr(info, "filename", "?"), type(e).__name__,
                     )
                     return True
-                # Per-member ratio catches a single hyper-compressible member.
-                if info.compress_size > 0:
-                    ratio = info.file_size / info.compress_size
-                    if ratio > _ZIP_MAX_COMPRESSION_RATIO:
-                        _logger.warning(
-                            "Rejected zip-based doc: member %r ratio %.0f:1 exceeds cap %d:1",
-                            info.filename, ratio, _ZIP_MAX_COMPRESSION_RATIO,
-                        )
-                        return True
             return False
     except zipfile.BadZipFile:
         # Not a valid zip — let the downstream parser report the real error.
