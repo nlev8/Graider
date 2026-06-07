@@ -35,7 +35,16 @@ _INJECTION_MARKER_RE = re.compile(
         | default\s+score\s+anchors                       # grade_per_question anchors
         | universal\s+rules | feedback\s+structure        # feedback prompt headers
         | score | rubric\s+breakdown                      # feedback prompt fields
-    )\s*:?\s*\-*\s*""",
+    )\b\s*[:\-–—]+\s*""",
+    # `\b` + a REQUIRED separator (colon / hyphen / en- or em-dash) IMMEDIATELY
+    # after the token: a forged control header is `TOKEN:` or `TOKEN — …` (the
+    # prompt's own headers + role labels), NOT a prose word. Requiring the
+    # separator right after the token (modulo whitespace) means legitimate answers
+    # that merely START a line with a marker word pass through unchanged —
+    # "Systematic…", "Users of…" (no word boundary), "Question 3:" (a number sits
+    # before the colon), "Context matters…", "Section A …" (no separator). This
+    # fixes the over-defanging the bare-word/optional-colon pattern caused
+    # (Codex VB6 verify, important) while still catching dash-separated forgeries.
     re.IGNORECASE | re.VERBOSE,
 )
 
