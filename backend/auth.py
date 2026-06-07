@@ -226,13 +226,13 @@ def resolve_classlink_user_id(guid, email, name=None):
                 "email_confirm": True,
                 "password": secrets.token_urlsafe(32),
                 "user_metadata": {
-                    "approved": True,
                     "first_name": name.get('first', ''),
                     "last_name": name.get('last', ''),
                 },
-                # SSO provenance lives in app_metadata (service-role-only, NOT
-                # client-settable) so _is_sso_provisioned_user can trust it (VB8 #13).
-                "app_metadata": {"auth_source": "classlink"},
+                # SSO provenance AND approval live in app_metadata (service-role-
+                # only, NOT client-settable) so _is_sso_provisioned_user and the
+                # approval gate can trust them (VB8 #13 + VB10 self-approval).
+                "app_metadata": {"auth_source": "classlink", "approved": True},
             })
             new_id = res.user.id
             save_classlink_link(guid, new_id)
@@ -333,13 +333,13 @@ def resolve_clever_user_id_or_create(clever_id, email, name=None):
                 "email_confirm": True,
                 "password": secrets.token_urlsafe(32),
                 "user_metadata": {
-                    "approved": True,
                     "first_name": name.get('first', ''),
                     "last_name": name.get('last', ''),
                 },
-                # SSO provenance lives in app_metadata (service-role-only, NOT
-                # client-settable) so _is_sso_provisioned_user can trust it (VB8 #13).
-                "app_metadata": {"auth_source": "clever"},
+                # SSO provenance AND approval live in app_metadata (service-role-
+                # only, NOT client-settable) so _is_sso_provisioned_user and the
+                # approval gate can trust them (VB8 #13 + VB10 self-approval).
+                "app_metadata": {"auth_source": "clever", "approved": True},
             })
             new_id = getattr(getattr(res, "user", None), "id", None)
             if not new_id:
@@ -573,14 +573,20 @@ def init_auth(app):
             if getattr(g, 'auth_source', None) in ('clever', 'classlink'):
                 return None
 
-            user_meta = payload.get('user_metadata', {})
-            if not user_meta.get('approved'):
+            # VB10: approval is read from app_metadata, NOT user_metadata.
+            # user_metadata (raw_user_meta_data) is client-settable at signUp
+            # via the PUBLIC anon key (signUp({options:{data:{approved:true}}})),
+            # so trusting it lets a user self-approve and bypass the manual
+            # onboarding gate. app_metadata is service-role-only (set by the
+            # admin approve endpoint), so it's the trustworthy source.
+            app_meta = payload.get('app_metadata', {})
+            if not app_meta.get('approved'):
                 # JWT metadata may be stale — check Supabase admin API as fallback
                 try:
                     sb = _get_supabase()
                     if sb:
                         res = sb.auth.admin.get_user_by_id(g.user_id)
-                        fresh_meta = (res.user.user_metadata or {}) if res and res.user else {}
+                        fresh_meta = (res.user.app_metadata or {}) if res and res.user else {}
                         if fresh_meta.get('approved'):
                             # User is actually approved, JWT is just stale
                             logger.info("User %s approved via admin API fallback (stale JWT)", g.user_email)

@@ -191,9 +191,10 @@ class TestApproveUserRoute:
             )
         body = resp.get_data(as_text=True)
         assert "alice@x.com has been approved" in body
-        # Supabase admin update was called with approved=True
+        # VB10: approval written to app_metadata (service-role-only), not
+        # the client-settable user_metadata.
         mock_sb.auth.admin.update_user_by_id.assert_called_once_with(
-            "u1", {"user_metadata": {"approved": True}},
+            "u1", {"app_metadata": {"approved": True}},
         )
 
     def test_supabase_error_returns_failure_page(self, client, monkeypatch):
@@ -259,7 +260,9 @@ class TestApprovalStatus:
 
         mock_user = MagicMock()
         mock_user.email = "alice@x.com"
-        mock_user.user_metadata = {"approved": True, "first_name": "Alice"}
+        # VB10: approval read from app_metadata; first_name stays in user_metadata.
+        mock_user.app_metadata = {"approved": True}
+        mock_user.user_metadata = {"first_name": "Alice"}
         mock_resp = MagicMock()
         mock_resp.user = mock_user
 
@@ -286,7 +289,9 @@ class TestApprovalStatus:
 
         mock_user = MagicMock()
         mock_user.email = "bob@x.com"
-        mock_user.user_metadata = {"approved": False}
+        # VB10: approval read from app_metadata (empty → not approved).
+        mock_user.app_metadata = {}
+        mock_user.user_metadata = {}
         mock_resp = MagicMock()
         mock_resp.user = mock_user
 

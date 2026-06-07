@@ -192,8 +192,12 @@ export function useAuthSession(isLocalhost) {
       return;
     }
 
-    // Check local JWT metadata first (instant, no API call)
-    if (user.user_metadata && user.user_metadata.approved) {
+    // Check local JWT metadata first (instant, no API call).
+    // VB10: approval is authoritative only in app_metadata (service-role-only).
+    // user_metadata.approved is client-settable at signUp and must NOT be
+    // trusted — the backend gate ignores it, so trusting it here only produces
+    // a misleading UI shell + noisy 403s.
+    if (user.app_metadata && user.app_metadata.approved) {
       setUserApproved(true);
       approvalConfirmedRef.current = true;
       return;

@@ -110,7 +110,8 @@ def test_resolve_creates_user_when_no_match(monkeypatch):
     assert store["classlink:2284:x"] == "uuid-new"
     assert created["email"] == "a@b.com"
     assert created["email_confirm"] is True
-    assert created["user_metadata"]["approved"] is True
+    # VB10: approval lives in app_metadata (service-role-only), alongside auth_source.
+    assert created["app_metadata"]["approved"] is True
     assert created["app_metadata"]["auth_source"] == "classlink"
 
 

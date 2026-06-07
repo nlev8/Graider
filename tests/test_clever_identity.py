@@ -62,7 +62,8 @@ def test_zero_match_creates_and_claims(monkeypatch):
     class _Admin:
         def create_user(self, payload):
             assert payload["app_metadata"]["auth_source"] == "clever"
-            assert payload["user_metadata"]["approved"] is True
+            # VB10: approval lives in app_metadata, not client-settable user_metadata.
+            assert payload["app_metadata"]["approved"] is True
             return _Res()
     sb_obj = type("SB", (), {"auth": type("A", (), {"admin": _Admin()})()})()
     monkeypatch.setattr(auth, "_get_supabase", lambda: sb_obj)

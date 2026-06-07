@@ -72,10 +72,11 @@ def approve_user_route():
     if not hmac.compare_digest(token, expected):
         return _approval_page("Invalid or expired approval link.", success=False)
 
-    # Set approved: true in Supabase user metadata
+    # VB10: write approval to app_metadata (service-role-only), NOT
+    # user_metadata (client-settable at signUp → self-approval bypass).
     try:
         sb = _get_supabase()
-        sb.auth.admin.update_user_by_id(user_id, {"user_metadata": {"approved": True}})
+        sb.auth.admin.update_user_by_id(user_id, {"app_metadata": {"approved": True}})
         logger.info("User approved: %s (%s)", email, user_id)
         return _approval_page(email + " has been approved!", success=True)
     except Exception as e:
@@ -128,9 +129,12 @@ def approval_status():
         sb = _get_supabase()
         res = sb.auth.admin.get_user_by_id(g.user_id)
         meta = res.user.user_metadata or {}
+        # VB10: approval is authoritative only in app_metadata (service-role-
+        # only); user_metadata.approved is client-settable and must be ignored.
+        app_meta = getattr(res.user, "app_metadata", None) or {}
 
         return jsonify({
-            "approved": meta.get("approved", False),
+            "approved": app_meta.get("approved", False),
             "email": res.user.email,
             "first_name": meta.get("first_name", ""),
         })
