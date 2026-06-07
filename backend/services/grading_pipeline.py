@@ -51,7 +51,7 @@ except ImportError:
 try:
     from backend.accommodations import build_accommodation_prompt
 except ImportError:
-    def build_accommodation_prompt(student_id):
+    def build_accommodation_prompt(student_id, teacher_id='local-dev'):
         return ""
 
 _logger = logging.getLogger(__name__)
@@ -639,9 +639,10 @@ Provide your response in the following JSON format ONLY (no other text):
 """
 
 
-def _build_personalization_context(custom_ai_instructions, student_id):
+def _build_personalization_context(custom_ai_instructions, student_id, teacher_id='local-dev'):
     """Build the teacher-instructions / history / accommodation prompt sections for
-    grade_assignment. Returns (custom_section, history_context, accommodation_context)."""
+    grade_assignment. Returns (custom_section, history_context, accommodation_context).
+    VB2b: teacher_id scopes the history read to the owning teacher's tenant."""
     # Build custom instructions section if provided
     custom_section = ''
     if custom_ai_instructions:
@@ -656,7 +657,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     history_context = ''
     if student_id and student_id != "UNKNOWN":
         try:
-            history_context = build_history_context(student_id)
+            history_context = build_history_context(student_id, teacher_id)
         except Exception as e:
             _logger.info(f"  Note: Could not load student history: {e}")
 
@@ -665,7 +666,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     accommodation_context = ''
     if student_id and student_id != "UNKNOWN":
         try:
-            accommodation_context = build_accommodation_prompt(student_id)
+            accommodation_context = build_accommodation_prompt(student_id, teacher_id)
             if accommodation_context:
                 _logger.info(f"  Applying accommodations for student")
         except Exception as e:
@@ -790,12 +791,13 @@ def _detect_blank_submission(content: str) -> dict | None:
     return None
 
 
-def _analyze_submission_writing_style(content, assignment_data, student_id):
+def _analyze_submission_writing_style(content, assignment_data, student_id, teacher_id='local-dev'):
     """Analyze the current submission's writing style vs the student's historical profile for
     AI-use detection. Returns (writing_style_context, current_writing_style, style_comparison):
     a prompt fragment (empty unless a deviation is flagged) plus the raw style dict and the
     comparison dict (both used downstream for profile update + result metadata). Extracted
-    verbatim from grade_assignment (Wave 8)."""
+    verbatim from grade_assignment (Wave 8). VB2b: teacher_id scopes the historical-profile
+    read to the owning teacher's tenant."""
     # Analyze current submission's writing style for AI detection
     writing_style_context = ''
     current_writing_style = None
@@ -804,7 +806,7 @@ def _analyze_submission_writing_style(content, assignment_data, student_id):
         current_writing_style = analyze_writing_style(content)
         if current_writing_style:
             # Get student's historical writing profile
-            historical_profile = get_writing_profile(student_id) if student_id and student_id != "UNKNOWN" else None
+            historical_profile = get_writing_profile(student_id, teacher_id) if student_id and student_id != "UNKNOWN" else None
 
             if historical_profile and historical_profile.get("sample_count", 0) >= 2:
                 # Compare current vs historical style
@@ -1017,6 +1019,7 @@ def _finalize_grading_result(
     current_writing_style,
     style_comparison,
     extracted_responses_section,
+    teacher_id='local-dev',
 ):
     """Finalize a parsed grading result: newline-fix + strip bilingual sections, optional ELL
     translation, single-pass post-processing (caps/weights), best-effort writing-profile update,
@@ -1050,7 +1053,7 @@ def _finalize_grading_result(
         ai_flag = result.get("ai_detection", {}).get("flag", "none")
         if ai_flag not in ["likely", "possible"]:
             try:
-                update_writing_profile(student_id, current_writing_style, student_name)
+                update_writing_profile(student_id, current_writing_style, student_name, teacher_id)
                 _logger.info(f"  📊 Updated writing profile for {student_name}")
             except Exception as e:
                 _logger.info(f"  Note: Could not update writing profile: {e}")
@@ -1218,7 +1221,7 @@ def _recover_grading_json_decode_error(response_text, e):
     }
 
 
-def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None) -> dict:
+def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instructions: str = '', grade_level: str = '6', subject: str = 'Social Studies', ai_model: str = 'gpt-4o-mini', student_id: str = None, assignment_template: str = None, rubric_prompt: str = None, custom_markers: list = None, exclude_markers: list = None, marker_config: list = None, effort_points: int = 15, extraction_mode: str = 'structured', grading_style: str = 'standard', token_tracker: 'TokenTracker' = None, rubric_weights: list = None, teacher_id: str = 'local-dev') -> dict:
     """
     Use OpenAI GPT to grade a student assignment.
 
@@ -1268,7 +1271,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
     
     # Build personalization context (teacher instructions, history, accommodations)
     custom_section, history_context, accommodation_context = _build_personalization_context(
-        custom_ai_instructions, student_id)
+        custom_ai_instructions, student_id, teacher_id)
 
     # Check if this is a fill-in-the-blank assignment
     is_fitb = _detect_fitb_assignment(content, custom_ai_instructions)
@@ -1282,7 +1285,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 
     # Analyze current submission's writing style for AI detection
     writing_style_context, current_writing_style, style_comparison = _analyze_submission_writing_style(
-        content, assignment_data, student_id)
+        content, assignment_data, student_id, teacher_id)
 
     prompt_text, extracted_responses_section, ell_language = _assemble_single_pass_prompt(
         grade_level, extracted_responses_text, assignment_template, marker_config, effort_points,
@@ -1488,6 +1491,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
             current_writing_style=current_writing_style,
             style_comparison=style_comparison,
             extracted_responses_section=extracted_responses_section,
+            teacher_id=teacher_id,
         )
 
     except json.JSONDecodeError as e:
@@ -1703,7 +1707,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                     marker_config: list = None, effort_points: int = 15,
                     extraction_mode: str = 'structured', grading_style: str = 'standard',
                     token_tracker: 'TokenTracker' = None,
-                    student_history: str = '', rubric_weights: list = None) -> dict:
+                    student_history: str = '', rubric_weights: list = None,
+                    teacher_id: str = 'local-dev') -> dict:
     """Multi-pass grading pipeline for consistent, robust scoring.
 
     Pass 1: Extract responses (reuses existing extraction logic)
@@ -1734,7 +1739,8 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
         return grade_assignment(student_name, assignment_data, custom_ai_instructions,
                                grade_level, subject, ai_model, student_id, assignment_template,
                                rubric_prompt, custom_markers, exclude_markers, marker_config,
-                               effort_points, extraction_mode, grading_style)
+                               effort_points, extraction_mode, grading_style,
+                               teacher_id=teacher_id)
 
     responses = extraction_result["extracted_responses"]
 
@@ -1964,7 +1970,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
             ai_flag = result.get("ai_detection", {}).get("flag", "none")
             if ai_flag not in ["likely", "possible"]:
                 try:
-                    update_writing_profile(student_id, current_writing_style, student_name)
+                    update_writing_profile(student_id, current_writing_style, student_name, teacher_id)
                 except Exception as e:
                     _logger.warning("writing profile update failed: %s", type(e).__name__)
 
@@ -1979,7 +1985,8 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                    custom_markers: list = None, exclude_markers: list = None,
                                    marker_config: list = None, effort_points: int = 15,
                                    extraction_mode: str = 'structured', grading_style: str = 'standard',
-                                   student_history: str = '', rubric_weights: list = None) -> dict:
+                                   student_history: str = '', rubric_weights: list = None,
+                                   teacher_id: str = 'local-dev') -> dict:
     """
     Grade assignment with parallel AI/plagiarism detection.
     Runs detection (GPT-4o-mini) and grading simultaneously for speed.
@@ -2031,7 +2038,7 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
         return grade_assignment(student_name, assignment_data, custom_ai_instructions,
                                grade_level, subject, ai_model, student_id, assignment_template, rubric_prompt,
                                custom_markers, exclude_markers, marker_config, effort_points, extraction_mode,
-                               grading_style=grading_style)
+                               grading_style=grading_style, teacher_id=teacher_id)
 
     # Multi-pass grading for all providers
     use_multipass = True
@@ -2054,14 +2061,15 @@ def grade_with_parallel_detection(student_name: str, assignment_data: dict, cust
                                              ai_model, student_id, assignment_template, rubric_prompt,
                                              custom_markers, exclude_markers, marker_config, effort_points,
                                              extraction_mode, grading_style, token_tracker=tracker,
-                                             student_history=student_history, rubric_weights=rubric_weights)
+                                             student_history=student_history, rubric_weights=rubric_weights,
+                                             teacher_id=teacher_id)
         else:
             grading_future = executor.submit(grade_assignment, student_name, assignment_data,
                                              custom_ai_instructions, grade_level, subject,
                                              ai_model, student_id, assignment_template, rubric_prompt,
                                              custom_markers, exclude_markers, marker_config, effort_points,
                                              extraction_mode, grading_style, token_tracker=tracker,
-                                             rubric_weights=rubric_weights)
+                                             rubric_weights=rubric_weights, teacher_id=teacher_id)
 
         # Wait for both to complete
         detection_result = detection_future.result()
@@ -2175,7 +2183,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                         custom_markers: list = None, exclude_markers: list = None,
                         marker_config: list = None, effort_points: int = 15,
                         extraction_mode: str = 'structured', grading_style: str = 'standard',
-                        rubric_weights: list = None) -> dict:
+                        rubric_weights: list = None, teacher_id: str = 'local-dev') -> dict:
     """
     Grade assignment using multiple AI models and combine results.
 
@@ -2198,7 +2206,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                                              grade_level, subject, model, student_id,
                                              assignment_template, rubric_prompt, custom_markers, exclude_markers,
                                              marker_config, effort_points, extraction_mode, grading_style,
-                                             rubric_weights=rubric_weights)
+                                             rubric_weights=rubric_weights, teacher_id=teacher_id)
 
     _logger.info(f"  🎯 Ensemble grading with {len(ensemble_models)} models: {', '.join(ensemble_models)}")
 
@@ -2211,7 +2219,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                 grade_assignment, student_name, assignment_data, custom_ai_instructions,
                 grade_level, subject, model, student_id, assignment_template, rubric_prompt,
                 custom_markers, exclude_markers, marker_config, effort_points, extraction_mode,
-                grading_style, rubric_weights=rubric_weights
+                grading_style, rubric_weights=rubric_weights, teacher_id=teacher_id
             )
             futures[future] = model
 

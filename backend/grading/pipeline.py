@@ -31,11 +31,11 @@ except ImportError:
     try:
         from student_history import add_assignment_to_history, detect_baseline_deviation, build_history_context  # type: ignore[import-not-found,no-redef]
     except ImportError:
-        def add_assignment_to_history(student_id: str, result: dict[str, Any]) -> None:  # type: ignore[misc]
+        def add_assignment_to_history(student_id: str, result: dict[str, Any], teacher_id: str = 'local-dev') -> None:  # type: ignore[misc]
             return None
-        def detect_baseline_deviation(student_id: str, result: dict[str, Any]) -> dict[str, Any]:  # type: ignore[misc]
+        def detect_baseline_deviation(student_id: str, result: dict[str, Any], teacher_id: str = 'local-dev') -> dict[str, Any]:  # type: ignore[misc]
             return {"flag": "normal", "reasons": [], "details": {}}
-        def build_history_context(student_id: str) -> str:
+        def build_history_context(student_id: str, teacher_id: str = 'local-dev') -> str:
             return ""
 
 # accommodation helpers (with fallback stubs matching app.py)
@@ -599,7 +599,7 @@ Look for: main ideas captured, good questions, clear summary at bottom.
     # Build student history context (passed separately to feedback, NOT mixed into grading instructions)
     history_context = ""
     if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-        history_context = build_history_context(student_info['student_id'])
+        history_context = build_history_context(student_info['student_id'], teacher_id)
 
     # Add class period context for differentiated grading
     if student_period:
@@ -814,6 +814,7 @@ def _dispatch_grade(
     student_info: Any,
     subject: str,
     trusted_students: list[str] | None,
+    teacher_id: str = 'local-dev',
 ) -> Any:
     from assignment_grader import (  # function-local: preserves test patchability
         grade_assignment,
@@ -853,7 +854,7 @@ def _dispatch_grade(
             grade_level, subject, ensemble_models, student_info.get('student_id'),
             assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights, teacher_id=teacher_id,  # type: ignore[arg-type]
         )
     elif is_trusted:
         # Trusted student: Use full multi-pass pipeline, skip detection only
@@ -863,6 +864,7 @@ def _dispatch_grade(
             assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
             student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            teacher_id=teacher_id,
         )
         grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
         grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
@@ -873,7 +875,7 @@ def _dispatch_grade(
             grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
             rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style=grading_style,  # type: ignore[arg-type]
-            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights, teacher_id=teacher_id,  # type: ignore[arg-type]
         )
         grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
         grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
@@ -884,6 +886,7 @@ def _dispatch_grade(
             rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
             student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            teacher_id=teacher_id,
         )
     return grade_result
 
@@ -903,6 +906,7 @@ def _assemble_post_grade(
     period_class_level_map: dict[str, str],
     student_info: Any,
     student_period: str,
+    teacher_id: str = 'local-dev',
 ) -> dict[str, Any]:
     has_config = matched_config is not None
     has_custom_markers = len(file_markers) > 0
@@ -915,7 +919,7 @@ def _assemble_post_grade(
     baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
     if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
         try:
-            baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
+            baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result, teacher_id)
         except Exception as e:
             # Behavior-critical: baseline deviation detection flags
             # anomalous grades (potential cheating signal). Silent
@@ -936,7 +940,7 @@ def _assemble_post_grade(
         try:
             grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
                            "assignment": matched_title, "period": student_period}
-            add_assignment_to_history(student_info['student_id'], grade_record_hist)
+            add_assignment_to_history(student_info['student_id'], grade_record_hist, teacher_id)
         except Exception as e:
             sentry_sdk.capture_exception(e)
 
@@ -1261,6 +1265,7 @@ def grade_single_file(
             student_info=student_info,
             subject=subject,
             trusted_students=trusted_students,
+            teacher_id=teacher_id,
         )
 
         # Check for errors
@@ -1283,6 +1288,7 @@ def grade_single_file(
             period_class_level_map=period_class_level_map,
             student_info=student_info,
             student_period=student_period,
+            teacher_id=teacher_id,
         )
 
     except Exception as e:

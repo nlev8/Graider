@@ -70,6 +70,9 @@ def grade_individual():
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
+    # VB2b (audit #3): scope all student-history reads/writes to this teacher.
+    teacher_id = getattr(g, 'teacher_id', None) or getattr(g, 'user_id', 'local-dev')
+
     file = request.files['file']
     student_name = request.form.get('student_name', 'Unknown Student')
     grade_level = request.form.get('grade_level', '7')
@@ -154,11 +157,11 @@ def grade_individual():
         # Build student history context (passed separately to feedback)
         history_context = ""
         if individual_student_id:
-            history_context = build_history_context(individual_student_id)
+            history_context = build_history_context(individual_student_id, teacher_id)
 
         # Grade the assignment (no custom rubric for individual grading yet)
         # Pass None for marker_config and 15 for effort_points (defaults)
-        grade_result = grade_with_parallel_detection(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id, assignment_template, None, None, file_exclude_markers, None, 15, student_history=history_context)
+        grade_result = grade_with_parallel_detection(student_name, grade_data, file_ai_notes, grade_level, subject, ai_model, individual_student_id, assignment_template, None, None, file_exclude_markers, None, 15, student_history=history_context, teacher_id=teacher_id)
 
         if grade_result.get('letter_grade') == 'ERROR':
             return jsonify({"error": grade_result.get('feedback', 'Grading failed')}), 500
@@ -212,7 +215,7 @@ def grade_individual():
         # Save to student history for progress tracking
         if result.get('student_id'):
             try:
-                add_assignment_to_history(result['student_id'], result)
+                add_assignment_to_history(result['student_id'], result, teacher_id)
             except Exception as e:
                 _logger.warning("Could not update student history: %s", e)
                 sentry_sdk.capture_exception(e)

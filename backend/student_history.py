@@ -43,16 +43,36 @@ except ImportError:
 HISTORY_DIR = os.path.expanduser("~/.graider_data/student_history")
 
 
-def ensure_history_dir():
+def _history_dir_for(teacher_id: str = 'local-dev') -> str:
+    """Resolve the on-disk history directory for a teacher.
+
+    VB2b (audit #3): student history must be scoped per teacher. The
+    `local-dev` single-tenant path keeps the historical global directory
+    (`HISTORY_DIR`) verbatim — preserving dev/test behavior and honoring
+    the `HISTORY_DIR` monkeypatch used by the existing test suite. Any
+    real teacher routes to `_tenant_home(teacher_id)/.graider_data/
+    student_history`, the same per-tenant shard the storage layer uses,
+    so two teachers can never read or clobber each other's records.
+    """
+    if not teacher_id or teacher_id == 'local-dev':
+        return HISTORY_DIR
+    try:
+        from backend.storage import _tenant_home
+    except ImportError:
+        from storage import _tenant_home  # type: ignore[no-redef]
+    return os.path.join(_tenant_home(teacher_id), ".graider_data", "student_history")
+
+
+def ensure_history_dir(teacher_id: str = 'local-dev'):
     """Create history directory if it doesn't exist."""
-    os.makedirs(HISTORY_DIR, exist_ok=True)
+    os.makedirs(_history_dir_for(teacher_id), exist_ok=True)
 
 
-def get_student_history_path(student_id: str) -> str:
-    """Get path to student's history file."""
-    ensure_history_dir()
+def get_student_history_path(student_id: str, teacher_id: str = 'local-dev') -> str:
+    """Get path to student's history file (tenant-scoped)."""
+    ensure_history_dir(teacher_id)
     safe_id = str(student_id).replace('/', '_').replace('\\', '_')
-    return os.path.join(HISTORY_DIR, f"{safe_id}.json")
+    return os.path.join(_history_dir_for(teacher_id), f"{safe_id}.json")
 
 
 def load_student_history(student_id: str, teacher_id: str = 'local-dev') -> dict:
@@ -74,8 +94,8 @@ def load_student_history(student_id: str, teacher_id: str = 'local-dev') -> dict
         if data is not None:
             return data
 
-    # Fallback to file
-    path = get_student_history_path(student_id)
+    # Fallback to file (tenant-scoped)
+    path = get_student_history_path(student_id, teacher_id)
     if os.path.exists(path):
         try:
             with open(path, 'r') as f:
@@ -100,8 +120,8 @@ def save_student_history(student_id: str, history: dict, teacher_id: str = 'loca
 
     history["last_updated"] = datetime.now().isoformat()
 
-    # Always write to local file
-    path = get_student_history_path(student_id)
+    # Always write to local file (tenant-scoped)
+    path = get_student_history_path(student_id, teacher_id)
     try:
         with open(path, 'w') as f:
             json.dump(history, f, indent=2)
@@ -114,18 +134,20 @@ def save_student_history(student_id: str, history: dict, teacher_id: str = 'loca
         _storage_save_history(teacher_id=teacher_id, student_id=student_id, history=history)
 
 
-def add_assignment_to_history(student_id: str, result: dict) -> dict:
+def add_assignment_to_history(student_id: str, result: dict, teacher_id: str = 'local-dev') -> dict:
     """
     Add a graded assignment to student's history and analyze patterns.
 
     Args:
         student_id: The student's ID
         result: The grading result dict with score, breakdown, feedback, etc.
+        teacher_id: Owning teacher (VB2b — scopes the read/write to this
+            teacher's tenant so two teachers never share a student's record).
 
     Returns:
         Updated history dict with new patterns detected
     """
-    history = load_student_history(student_id)
+    history = load_student_history(student_id, teacher_id)
     if not history:
         return None
 
@@ -164,7 +186,7 @@ def add_assignment_to_history(student_id: str, result: dict) -> dict:
     # Detect skill-based patterns (beyond rubric)
     history["skill_patterns"] = detect_skill_patterns(history["assignments"])
 
-    save_student_history(student_id, history)
+    save_student_history(student_id, history, teacher_id)
     return history
 
 
@@ -448,7 +470,7 @@ def calculate_student_baseline(assignments: list) -> dict:
     return baseline
 
 
-def detect_baseline_deviation(student_id: str, current_result: dict) -> dict:
+def detect_baseline_deviation(student_id: str, current_result: dict, teacher_id: str = 'local-dev') -> dict:
     """
     Check if current submission deviates significantly from student's baseline.
 
@@ -457,7 +479,7 @@ def detect_baseline_deviation(student_id: str, current_result: dict) -> dict:
         - reasons: List of specific deviations detected
         - details: Detailed deviation metrics
     """
-    history = load_student_history(student_id)
+    history = load_student_history(student_id, teacher_id)
     if not history:
         return {"flag": "normal", "reasons": [], "details": {}}
 
@@ -543,9 +565,9 @@ def detect_baseline_deviation(student_id: str, current_result: dict) -> dict:
     }
 
 
-def get_baseline_summary(student_id: str) -> dict:
+def get_baseline_summary(student_id: str, teacher_id: str = 'local-dev') -> dict:
     """Get a summary of a student's baseline for display purposes."""
-    history = load_student_history(student_id)
+    history = load_student_history(student_id, teacher_id)
     if not history:
         return None
 
@@ -565,14 +587,14 @@ def get_baseline_summary(student_id: str) -> dict:
     }
 
 
-def build_history_context(student_id: str) -> str:
+def build_history_context(student_id: str, teacher_id: str = 'local-dev') -> str:
     """
     Build a context string about student's history for AI prompt.
 
     Returns a concise summary suitable for including in grading prompt.
     Does NOT include any PII - only performance patterns.
     """
-    history = load_student_history(student_id)
+    history = load_student_history(student_id, teacher_id)
     if not history or not history.get("assignments"):
         return ""
 

@@ -76,9 +76,9 @@ except ImportError:
         from student_history import load_student_history, get_baseline_summary
     except ImportError:
         # Fallback if module not available
-        def load_student_history(student_id):
+        def load_student_history(student_id, teacher_id='local-dev'):
             return None
-        def get_baseline_summary(student_id):
+        def get_baseline_summary(student_id, teacher_id='local-dev'):
             return None
 
 roster_bp = Blueprint('roster', __name__)
@@ -90,7 +90,9 @@ _logger = logging.getLogger(__name__)
 @handle_route_errors
 def get_student_history_api(student_id):
     """Get a student's grading history and progress patterns."""
-    history = load_student_history(student_id)
+    # VB2b (audit #3): scope to the requesting teacher's tenant.
+    teacher_id = getattr(g, 'teacher_id', None) or getattr(g, 'user_id', 'local-dev')
+    history = load_student_history(student_id, teacher_id)
     if not history:
         return jsonify({"error": "No history found"}), 404
 
@@ -105,7 +107,8 @@ def get_student_history_api(student_id):
 @handle_route_errors
 def get_student_baseline_api(student_id):
     """Get a student's baseline performance metrics for deviation detection."""
-    baseline = get_baseline_summary(student_id)
+    teacher_id = getattr(g, 'teacher_id', None) or getattr(g, 'user_id', 'local-dev')
+    baseline = get_baseline_summary(student_id, teacher_id)
     if not baseline:
         return jsonify({"error": "Insufficient history for baseline (need 3+ assignments)"}), 404
 
