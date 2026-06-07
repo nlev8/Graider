@@ -17,12 +17,15 @@ import backend.auth as auth
 
 
 class _U:
-    def __init__(self, uid, email, auth_source=None):
+    def __init__(self, uid, email, auth_source=None, forged_user_metadata=False):
         self.id = uid
         self.email = email
-        # Mirror the supabase-py user shape: SSO-provisioned users carry
-        # auth_source in user_metadata (see resolve_*_or_create create paths).
-        self.user_metadata = {"auth_source": auth_source} if auth_source else {}
+        # SSO-provisioned users carry auth_source in APP_metadata (service-role-
+        # only; see resolve_*_or_create create paths). `forged_user_metadata=True`
+        # models an attacker who set auth_source in USER_metadata via the public
+        # anon key — it must NOT be trusted (the reverse-takeover bypass Codex found).
+        self.user_metadata = {"auth_source": auth_source} if (auth_source and forged_user_metadata) else {}
+        self.app_metadata = {"auth_source": auth_source} if (auth_source and not forged_user_metadata) else {}
 
 
 def _patch(monkeypatch, users=None):
@@ -69,3 +72,20 @@ def test_match_against_classlink_account_links(monkeypatch):
     out = auth.resolve_clever_user_id_or_create("clever-id", "teacher@school.edu")
     assert out == ("cl-uuid", "matched")
     assert saved == {"clever-id": "cl-uuid"}
+
+
+def test_forged_user_metadata_auth_source_does_not_link(monkeypatch):
+    """Reverse-takeover bypass (Codex VB8 verify): auth_source in USER_metadata is
+    client-settable via the PUBLIC anon key, so an attacker self-provisions a
+    password account tagged 'clever' for the victim's email. It must NOT be treated
+    as SSO-provisioned — only app_metadata (service-role-set) is trusted — so the
+    real victim's later Clever login does NOT link to the attacker's account."""
+    saved, claimed = _patch(
+        monkeypatch,
+        users=[_U("attacker-uuid", "victim@school.edu",
+                  auth_source="clever", forged_user_metadata=True)],
+    )
+    out = auth.resolve_clever_user_id_or_create("real-clever-id", "victim@school.edu")
+    assert out == ("clever:real-clever-id", "unverified_email_legacy")
+    assert saved == {}   # never linked to the attacker's forged account
+    assert claimed == {}

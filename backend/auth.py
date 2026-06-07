@@ -155,8 +155,17 @@ def _is_sso_provisioned_user(user):
     SSO-provisioned account (no password the attacker could be hijacking).
     First-time provisioning (zero matches → create) is unaffected; password
     accounts simply fall through to the isolated legacy namespace (Clever) or
-    fail closed (ClassLink), never silently merged."""
-    meta = getattr(user, "user_metadata", None) or {}
+    fail closed (ClassLink), never silently merged.
+
+    The provenance marker is read from **app_metadata**, NOT user_metadata:
+    user_metadata (raw_user_meta_data) is client-settable at signUp via the
+    PUBLIC anon key (`signUp({options:{data:{auth_source:'clever'}}})`), so a
+    user_metadata-based check is a REVERSE-takeover bypass — an attacker self-
+    provisions a password account tagged 'clever' for the victim's email, and a
+    later real SSO login links to it (Codex VB8 verify, important). app_metadata
+    (raw_app_meta_data) is settable ONLY by the service role (our admin
+    create_user below), so it is a trustworthy server-set signal."""
+    meta = getattr(user, "app_metadata", None) or {}
     try:
         return meta.get("auth_source") in ("clever", "classlink")
     except AttributeError:
@@ -220,8 +229,10 @@ def resolve_classlink_user_id(guid, email, name=None):
                     "approved": True,
                     "first_name": name.get('first', ''),
                     "last_name": name.get('last', ''),
-                    "auth_source": "classlink",
                 },
+                # SSO provenance lives in app_metadata (service-role-only, NOT
+                # client-settable) so _is_sso_provisioned_user can trust it (VB8 #13).
+                "app_metadata": {"auth_source": "classlink"},
             })
             new_id = res.user.id
             save_classlink_link(guid, new_id)
@@ -325,8 +336,10 @@ def resolve_clever_user_id_or_create(clever_id, email, name=None):
                     "approved": True,
                     "first_name": name.get('first', ''),
                     "last_name": name.get('last', ''),
-                    "auth_source": "clever",
                 },
+                # SSO provenance lives in app_metadata (service-role-only, NOT
+                # client-settable) so _is_sso_provisioned_user can trust it (VB8 #13).
+                "app_metadata": {"auth_source": "clever"},
             })
             new_id = getattr(getattr(res, "user", None), "id", None)
             if not new_id:

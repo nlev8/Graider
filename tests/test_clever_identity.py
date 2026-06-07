@@ -7,11 +7,13 @@ class _U:
     def __init__(self, uid, email, auth_source="clever"):
         self.id = uid
         self.email = email
-        # VB8 #13: auto-link by email is now gated on the matched account being
-        # SSO-provisioned. Default to an SSO account so the existing
-        # link/match/race tests still exercise the link path; pass
+        # VB8 #13: auto-link by email is gated on the matched account being
+        # SSO-provisioned, read from APP_metadata (service-role-only, not the
+        # client-settable user_metadata). Default to an SSO account so the
+        # existing link/match/race tests exercise the link path; pass
         # auth_source=None to model a password (non-SSO) account.
-        self.user_metadata = {"auth_source": auth_source} if auth_source else {}
+        self.user_metadata = {}
+        self.app_metadata = {"auth_source": auth_source} if auth_source else {}
 
 
 def _patch(monkeypatch, links=None, users=None, sb=object()):
@@ -59,7 +61,7 @@ def test_zero_match_creates_and_claims(monkeypatch):
 
     class _Admin:
         def create_user(self, payload):
-            assert payload["user_metadata"]["auth_source"] == "clever"
+            assert payload["app_metadata"]["auth_source"] == "clever"
             assert payload["user_metadata"]["approved"] is True
             return _Res()
     sb_obj = type("SB", (), {"auth": type("A", (), {"admin": _Admin()})()})()
