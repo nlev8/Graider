@@ -239,7 +239,8 @@ def _create_clever_student_session(clever_id, email):
 
     Args:
         clever_id: Clever student ID (stored as student_id_number).
-        email: Student email from Clever (used as fallback lookup).
+        email: Student email from Clever (used ONLY for the redacted
+            not-found log line — NOT as a lookup key; see VB12).
 
     Returns:
         dict with keys 'token', 'student', 'class', or None if not found.
@@ -263,10 +264,12 @@ def _create_clever_student_session(clever_id, email):
         res = sb.table("students").select("*").eq("student_id_number", clever_id).execute()
         student_rows = list(res.data) if res and res.data else []
 
-        # Fallback: look up by email
-        if not student_rows and email:
-            res2 = sb.table("students").select("*").eq("email", email).execute()
-            student_rows = list(res2.data) if res2 and res2.data else []
+        # VB12 (SSO-parity): NO email fallback. The Clever id is the tenant-safe
+        # key; an unscoped global `email` match could land this student in a
+        # DIFFERENT teacher's class when emails are shared/reused across
+        # districts (cross-tenant exposure). The ClassLink path fails closed
+        # here on purpose; Clever now matches it. If the Clever id matches no
+        # row, stop. (`email` is retained only for the redacted not-found log.)
 
         if not student_rows:
             logger.info("Clever student not found: email=%s clever_id_hash=%s",
