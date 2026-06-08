@@ -32,6 +32,15 @@ logger = logging.getLogger(__name__)
 _UNSET = object()  # Sentinel for sb default in repository_for
 
 
+def _escape_ilike(value: str) -> str:
+    """Escape PostgREST ILIKE wildcards so attacker-controlled values match
+    literally, not as patterns (audit #4). Without this, an anonymous caller
+    POSTing student_name='%' would ILIKE-match ANY prior submission under a
+    join code. Mirrors services/assistant_tools_assessments._escape_ilike;
+    duplicated locally to keep this module Flask/route-free."""
+    return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
+
 @dataclass
 class ExistingSubmission:
     """Return type of SubmissionRepository.find_existing_submission.
@@ -238,7 +247,7 @@ class JoinCodeSubmissionRepository(SubmissionRepository):
             result = self._sb.table(self.table_name).select(
                 "id, results, student_name"
             ).eq("join_code", lookup_key).ilike(
-                "student_name", student_info.get("name", "")
+                "student_name", _escape_ilike(student_info.get("name") or "")
             ).execute()
         except Exception as e:
             logger.error("find_existing_submission failed for %s", lookup_key)
@@ -263,7 +272,7 @@ class JoinCodeSubmissionRepository(SubmissionRepository):
             result = self._sb.table(self.table_name).select(
                 "id"
             ).eq("join_code", lookup_key).ilike(
-                "student_name", student_info.get("name", "")
+                "student_name", _escape_ilike(student_info.get("name") or "")
             ).execute()
         except Exception as e:
             logger.error("count_existing_for failed for table %s: %s", self.table_name, e)

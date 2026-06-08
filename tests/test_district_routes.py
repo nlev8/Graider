@@ -42,14 +42,20 @@ class TestDistrictAuth:
             assert data.get("needs_setup") is True
 
     def test_auth_setup_creates_password(self, client):
-        """Setup mode with password creates the admin password."""
+        """Setup mode with a VALID setup token creates the admin password.
+
+        audit #1: self-service bootstrap now requires an out-of-band
+        DISTRICT_SETUP_TOKEN (see TestDistrictBootstrapTokenGate for the
+        refusal cases); this pins the token-gated happy path.
+        """
         with patch("backend.routes.district_routes.storage_load", return_value=None), \
              patch("backend.routes.district_routes.storage_save") as mock_save, \
              patch("backend.routes.district_routes.audit_log"), \
-             patch.dict(os.environ, {}, clear=True):
+             patch.dict(os.environ, {"DISTRICT_SETUP_TOKEN": "setup-tok"}, clear=True):
             resp = client.post("/api/district/auth", json={
                 "setup": True,
-                "password": "securepass123"
+                "password": "securepass123",
+                "setup_token": "setup-tok",
             })
             assert resp.status_code == 200
             data = resp.get_json()
@@ -61,12 +67,14 @@ class TestDistrictAuth:
             assert "hash" in call_args[0][1]
 
     def test_auth_setup_rejects_short_password(self, client):
-        """Setup with password shorter than 8 chars is rejected."""
+        """Setup with a valid token but password shorter than 8 chars is rejected
+        (the token gate passes, then the length check returns 400)."""
         with patch("backend.routes.district_routes.storage_load", return_value=None), \
-             patch.dict(os.environ, {}, clear=True):
+             patch.dict(os.environ, {"DISTRICT_SETUP_TOKEN": "setup-tok"}, clear=True):
             resp = client.post("/api/district/auth", json={
                 "setup": True,
-                "password": "short"
+                "password": "short",
+                "setup_token": "setup-tok",
             })
             assert resp.status_code == 400
 

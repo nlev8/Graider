@@ -48,6 +48,13 @@ EXPECTED_LIMITS = [
         "/api/stripe/webhook",
         "100 per minute",
     ),
+    (
+        # audit #7: district-admin login is a single shared password — needs a
+        # dedicated limit so the global 100/min default can't be used to brute force it.
+        "backend/routes/district_routes.py",
+        "/api/district/auth",
+        "10 per minute",
+    ),
 ]
 
 

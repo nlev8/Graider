@@ -119,12 +119,17 @@ def test_pipeline_lazy_imports_all_resolve():
         # CQ7 PR-3a lifted grade_single_file + find_matching_config OUT of
         # _run_grading_thread_inner to module level; PR-3b then decomposed
         # grade_single_file's body into _resolve_student / _build_file_ai_notes /
-        # _dispatch_grade / _assemble_post_grade. Walk ALL of them so the lazy
-        # function-local `from assignment_grader import ...` imports inside each
-        # stay covered — they would otherwise fall outside this guard and go BLIND.
+        # _dispatch_grade / _assemble_post_grade; PR-4 decomposed the orchestrator
+        # itself into _load_period_maps / _load_already_graded / _grade_all_files /
+        # _export_results. Walk ALL of them so the lazy function-local
+        # `from assignment_grader import ...` imports inside each (e.g. _export_results'
+        # ASSIGNMENT_NAME import) stay covered — they would otherwise fall outside
+        # this guard and go BLIND.
         WALK_FNS = {"_run_grading_thread_inner", "grade_single_file", "find_matching_config",
                     "_resolve_student", "_resolve_student_period", "_build_file_ai_notes",
-                    "_dispatch_grade", "_assemble_post_grade"}
+                    "_dispatch_grade", "_assemble_post_grade",
+                    "_load_period_maps", "_load_already_graded", "_grade_all_files",
+                    "_export_results"}
         target_fns = [node for node in ast.walk(tree)
                       if isinstance(node, ast.FunctionDef) and node.name in WALK_FNS]
         found = {fn.name for fn in target_fns}
@@ -247,9 +252,13 @@ def test_pipeline_global_refs_all_resolve():
             return refs
 
         # CQ7 PR-3a lifted grade_single_file + find_matching_config to module
-        # level; PR-3b decomposed gsf into 4 helpers. Include them all so their
-        # LOAD_GLOBALs (and any forgotten capture that became an unresolved global)
-        # stay covered — otherwise the guard goes BLIND on the most-refactored code.
+        # level; PR-3b decomposed gsf into 4 helpers; PR-4 decomposed the
+        # orchestrator into _load_period_maps / _load_already_graded /
+        # _grade_all_files / _export_results. Include them all so their
+        # LOAD_GLOBALs (and any forgotten capture that became an unresolved global —
+        # exactly the bug class that would surface if a seam's free variable were
+        # not threaded as a param) stay covered — otherwise the guard goes BLIND on
+        # the most-refactored code.
         needed = set()
         for fn in (pipeline._run_grading_thread_inner,
                    pipeline.grade_single_file,
@@ -258,7 +267,11 @@ def test_pipeline_global_refs_all_resolve():
                    pipeline._resolve_student_period,
                    pipeline._build_file_ai_notes,
                    pipeline._dispatch_grade,
-                   pipeline._assemble_post_grade):
+                   pipeline._assemble_post_grade,
+                   pipeline._load_period_maps,
+                   pipeline._load_already_graded,
+                   pipeline._grade_all_files,
+                   pipeline._export_results):
             needed |= collect_global_refs(fn.__code__)
         module_names = set(dir(pipeline))
         builtin_names = set(dir(builtins))
@@ -286,8 +299,13 @@ def test_pipeline_global_refs_all_resolve():
 
 def test_master_csv_load_failure_alerts_to_sentry():
     """Contract test: if master_grades.csv load fails inside
-    _run_grading_thread_inner, sentry_sdk.capture_exception MUST be called
+    _load_already_graded, sentry_sdk.capture_exception MUST be called
     so the corrupted CSV / regrade-anomaly is visible.
+
+    CQ7 PR-4 extracted the master_grades.csv block out of
+    _run_grading_thread_inner into the module-level _load_already_graded
+    helper; inspect that helper (which now owns the block + its except
+    handler).
 
     Pre-PR (chore/grading-pipeline-observability) this was a silent
     `except Exception: pass`. The fix lives in the master_grades.csv
@@ -299,9 +317,9 @@ def test_master_csv_load_failure_alerts_to_sentry():
     import inspect
     from backend.grading import pipeline
 
-    src = inspect.getsource(pipeline._run_grading_thread_inner)
+    src = inspect.getsource(pipeline._load_already_graded)
     csv_idx = src.find('master_grades.csv')
-    assert csv_idx > 0, "master_grades.csv block must exist in _run_grading_thread_inner"
+    assert csv_idx > 0, "master_grades.csv block must exist in _load_already_graded"
     # Look at the next ~1500 chars after the master_grades.csv mention —
     # that's the block including its except handler.
     csv_block = src[csv_idx:csv_idx + 1500]

@@ -9,6 +9,7 @@ import hashlib
 import logging
 import requests
 from flask import Blueprint, request, jsonify, g
+from markupsafe import escape
 
 auth_bp = Blueprint('auth', __name__)
 logger = logging.getLogger(__name__)
@@ -84,7 +85,12 @@ def approve_user_route():
 
 
 def _approval_page(message, success=True):
-    """Return a simple branded HTML page for the approval result."""
+    """Return a simple branded HTML page for the approval result.
+
+    `message` may embed the request-supplied `email` (reflected into the
+    success/error text), so it is HTML-escaped here — the single output
+    point — to prevent reflected XSS (audit #27).
+    """
     color = "#4ade80" if success else "#f87171"
     icon = "&#10003;" if success else "&#10007;"
     return (
@@ -93,7 +99,7 @@ def _approval_page(message, success=True):
         '<div style="background:#1a1a2e;border-radius:16px;padding:40px 32px">'
         '<h1 style="color:#a5b4fc;font-size:2rem;font-weight:800;margin:0 0 24px">Graider</h1>'
         '<div style="font-size:3rem;color:' + color + ';margin:0 0 16px">' + icon + '</div>'
-        '<p style="color:#ffffff;font-size:1.1rem;margin:0">' + message + '</p>'
+        '<p style="color:#ffffff;font-size:1.1rem;margin:0">' + str(escape(message)) + '</p>'
         '</div></div>'
     ), 200, {"Content-Type": "text/html"}
 
@@ -185,7 +191,7 @@ def notify_signup_route():
                     '<a href="' + approve_url + '" style="display:inline-block;'
                     'background:#6366f1;color:#ffffff;text-decoration:none;'
                     'padding:14px 36px;border-radius:12px;font-weight:600;'
-                    'font-size:1rem">Approve ' + first_name + '</a></p>'
+                    'font-size:1rem">Approve ' + str(escape(first_name)) + '</a></p>'
                     '<p style="color:#cbd5e1;font-size:0.8rem">'
                     'This link is single-use and tied to this account.</p>'
                 )
@@ -218,8 +224,10 @@ def notify_signup_route():
                     '<h1 style="color:#a5b4fc;font-size:2rem;font-weight:800;margin:0 0 24px">Graider</h1>'
                     '<h2 style="color:#ffffff;font-size:1.25rem;margin:0 0 16px">New Signup</h2>'
                     '<p style="color:#e2e8f0;font-size:0.95rem;line-height:1.6;margin:0 0 8px">'
-                    '<strong style="color:#ffffff">' + full_name + '</strong></p>'
-                    '<p style="color:#e2e8f0;font-size:0.95rem;margin:0 0 24px">' + email + '</p>'
+                    # request-supplied name/email are HTML-escaped before
+                    # embedding into the admin email body (audit #23).
+                    '<strong style="color:#ffffff">' + str(escape(full_name)) + '</strong></p>'
+                    '<p style="color:#e2e8f0;font-size:0.95rem;margin:0 0 24px">' + str(escape(email)) + '</p>'
                     + approve_html +
                     '<p style="margin:16px 0 0"><a href="' + dashboard_link + '" '
                     'style="color:#a5b4fc;font-size:0.85rem;text-decoration:underline">'

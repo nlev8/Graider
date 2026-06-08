@@ -49,6 +49,13 @@ def flask_app(tmp_path, monkeypatch):
     picker_script = tmp_path / "picker.js"
     automations_dir.mkdir()
     templates_dir.mkdir()
+    # audit #8: handlers now shard the automations dir per-teacher
+    # (_teacher_automations_dir). The test teacher is "teacher-alice" (set in
+    # before_request below), so the dir the handlers actually read/write is the
+    # teacher-scoped subdir. Expose THAT as "automations_dir" so the CRUD tests
+    # set up fixtures where the handlers look.
+    teacher_automations_dir = automations_dir / "teacher-alice"
+    teacher_automations_dir.mkdir()
     # Default: scripts exist so happy-path tests pass; missing-script
     # tests delete them before posting.
     runner_script.write_text("// stub")
@@ -63,9 +70,13 @@ def flask_app(tmp_path, monkeypatch):
         "process": None, "status": "idle",
         "workflow_name": "", "current_step": 0, "total_steps": 0,
         "step_label": "", "message": "", "log": [],
+        # audit #8: status/stop gate on the run owner; the test teacher is
+        # "teacher-alice", so simulated "running" states belong to her.
+        "teacher_id": "teacher-alice",
     })
     auto_mod._picker_state.update({
         "process": None, "status": "idle", "events": [],
+        "teacher_id": "teacher-alice",  # audit #8: picker events/stop gate on owner
     })
 
     app = Flask(__name__)
@@ -81,7 +92,8 @@ def flask_app(tmp_path, monkeypatch):
     yield {
         "app": app,
         "auto_mod": auto_mod,
-        "automations_dir": automations_dir,
+        "automations_dir": teacher_automations_dir,
+        "automations_root": automations_dir,
         "templates_dir": templates_dir,
         "runner_script": runner_script,
         "picker_script": picker_script,
@@ -100,6 +112,7 @@ def flask_app(tmp_path, monkeypatch):
     })
     auto_mod._picker_state.update({
         "process": None, "status": "idle", "events": [],
+        "teacher_id": "teacher-alice",  # audit #8: picker events/stop gate on owner
     })
 
 
