@@ -107,9 +107,9 @@ class TestSubscriptionStatus:
         assert "not configured" in resp.get_json()["error"]
 
     def test_no_customer_returns_status_none(self, client, auth_headers):
-        # _get_user_metadata returns {} → no stripe_customer_id
+        # _get_app_metadata returns {} → no stripe_customer_id
         with patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={},
         ):
             resp = client.get(
@@ -121,7 +121,7 @@ class TestSubscriptionStatus:
         self, client, auth_headers,
     ):
         with patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={"stripe_customer_id": "cus_123"},
         ), patch(
             "backend.routes.stripe_routes.stripe",
@@ -154,7 +154,7 @@ class TestSubscriptionStatus:
                 return super().get(k, default)
         fake_sub = FakeSub(sub)
         with patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={"stripe_customer_id": "cus_123"},
         ), patch(
             "backend.routes.stripe_routes.stripe",
@@ -173,7 +173,7 @@ class TestSubscriptionStatus:
 
     def test_unexpected_exception_returns_500(self, client, auth_headers):
         with patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             side_effect=RuntimeError("supabase down"),
         ):
             resp = client.get(
@@ -326,7 +326,7 @@ class TestCreatePortalSession:
 
     def test_no_customer_returns_400(self, client, auth_headers):
         with patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={},
         ):
             resp = client.post(
@@ -339,7 +339,7 @@ class TestCreatePortalSession:
 
     def test_happy_path_returns_portal_url(self, client, auth_headers):
         with patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={"stripe_customer_id": "cus_777"},
         ), patch(
             "backend.routes.stripe_routes.stripe",
@@ -359,7 +359,7 @@ class TestCreatePortalSession:
 
     def test_stripe_create_failure_returns_500(self, client, auth_headers):
         with patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={"stripe_customer_id": "cus_X"},
         ), patch(
             "backend.routes.stripe_routes.stripe",
@@ -572,7 +572,7 @@ class TestWebhook:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Helpers: _get_user_metadata, _update_user_metadata,
+# Helpers: _get_app_metadata, _update_app_metadata,
 # _get_or_create_customer, _sync_subscription_metadata
 # ──────────────────────────────────────────────────────────────────
 
@@ -584,16 +584,16 @@ class TestGetUserMetadata:
         app = Flask(__name__)
         with app.test_request_context():
             g.user_id = "local-dev"
-            from backend.routes.stripe_routes import _get_user_metadata
-            assert _get_user_metadata("local-dev") == {}
+            from backend.routes.stripe_routes import _get_app_metadata
+            assert _get_app_metadata("local-dev") == {}
 
     def test_clever_user_returns_empty_dict(self, monkeypatch):
         from flask import Flask, g
         app = Flask(__name__)
         with app.test_request_context():
             g.user_id = "clever:abc"
-            from backend.routes.stripe_routes import _get_user_metadata
-            assert _get_user_metadata("clever:abc") == {}
+            from backend.routes.stripe_routes import _get_app_metadata
+            assert _get_app_metadata("clever:abc") == {}
 
     def test_supabase_user_returns_metadata(self):
         from flask import Flask, g
@@ -601,7 +601,7 @@ class TestGetUserMetadata:
         sb = MagicMock()
         sb.auth.admin.get_user_by_id.return_value = SimpleNamespace(
             user=SimpleNamespace(
-                user_metadata={"stripe_customer_id": "cus_x"},
+                app_metadata={"stripe_customer_id": "cus_x"},
             ),
         )
         with app.test_request_context(), patch(
@@ -609,8 +609,8 @@ class TestGetUserMetadata:
             return_value=sb,
         ):
             g.user_id = "real-user"
-            from backend.routes.stripe_routes import _get_user_metadata
-            assert _get_user_metadata("real-user") == {
+            from backend.routes.stripe_routes import _get_app_metadata
+            assert _get_app_metadata("real-user") == {
                 "stripe_customer_id": "cus_x",
             }
 
@@ -625,8 +625,8 @@ class TestUpdateUserMetadata:
             return_value=sb_mock,
         ):
             g.user_id = "local-dev"
-            from backend.routes.stripe_routes import _update_user_metadata
-            _update_user_metadata("local-dev", {"x": "y"})
+            from backend.routes.stripe_routes import _update_app_metadata
+            _update_app_metadata("local-dev", {"x": "y"})
         sb_mock.auth.admin.update_user_by_id.assert_not_called()
 
     def test_clever_no_op(self):
@@ -638,8 +638,8 @@ class TestUpdateUserMetadata:
             return_value=sb_mock,
         ):
             g.user_id = "clever:abc"
-            from backend.routes.stripe_routes import _update_user_metadata
-            _update_user_metadata("clever:abc", {"x": "y"})
+            from backend.routes.stripe_routes import _update_app_metadata
+            _update_app_metadata("clever:abc", {"x": "y"})
         sb_mock.auth.admin.update_user_by_id.assert_not_called()
 
     def test_real_user_updates_metadata(self):
@@ -651,10 +651,10 @@ class TestUpdateUserMetadata:
             return_value=sb,
         ):
             g.user_id = "real-user"
-            from backend.routes.stripe_routes import _update_user_metadata
-            _update_user_metadata("real-user", {"foo": "bar"})
+            from backend.routes.stripe_routes import _update_app_metadata
+            _update_app_metadata("real-user", {"foo": "bar"})
         sb.auth.admin.update_user_by_id.assert_called_once_with(
-            "real-user", {"user_metadata": {"foo": "bar"}},
+            "real-user", {"app_metadata": {"foo": "bar"}},
         )
 
 
@@ -663,7 +663,7 @@ class TestGetOrCreateCustomer:
         from flask import Flask, g
         app = Flask(__name__)
         with app.test_request_context(), patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={"stripe_customer_id": "cus_existing"},
         ):
             g.user_id = "user-1"
@@ -675,7 +675,7 @@ class TestGetOrCreateCustomer:
         app = Flask(__name__)
         existing_customer = MagicMock(); existing_customer.id = "cus_local"
         with app.test_request_context(), patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={},
         ), patch(
             "backend.routes.stripe_routes.stripe",
@@ -692,10 +692,10 @@ class TestGetOrCreateCustomer:
         app = Flask(__name__)
         new_customer = MagicMock(); new_customer.id = "cus_new"
         with app.test_request_context(), patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={},
         ), patch(
-            "backend.routes.stripe_routes._update_user_metadata",
+            "backend.routes.stripe_routes._update_app_metadata",
         ), patch(
             "backend.routes.stripe_routes.stripe",
         ) as mock_stripe:
@@ -711,10 +711,10 @@ class TestGetOrCreateCustomer:
         new_customer = MagicMock(); new_customer.id = "cus_realnew"
         update_mock = MagicMock()
         with app.test_request_context(), patch(
-            "backend.routes.stripe_routes._get_user_metadata",
+            "backend.routes.stripe_routes._get_app_metadata",
             return_value={},
         ), patch(
-            "backend.routes.stripe_routes._update_user_metadata",
+            "backend.routes.stripe_routes._update_app_metadata",
             update_mock,
         ), patch(
             "backend.routes.stripe_routes.stripe",
@@ -731,7 +731,7 @@ class TestGetOrCreateCustomer:
 class TestSyncSubscriptionMetadata:
     def test_finds_user_by_customer_id_and_updates(self):
         # Mock Subscription.retrieve, sb.auth.admin.list_users, and
-        # _update_user_metadata. Verify the update payload carries all
+        # _update_app_metadata. Verify the update payload carries all
         # 4 subscription fields.
         sub_data = {
             "status": "active",
@@ -747,13 +747,14 @@ class TestSyncSubscriptionMetadata:
         class FakeSub(dict):
             pass
 
+        # VB11: webhook matches on app_metadata (service-role-only).
         target = SimpleNamespace(
             id="user-target",
-            user_metadata={"stripe_customer_id": "cus_match"},
+            app_metadata={"stripe_customer_id": "cus_match"},
         )
         other = SimpleNamespace(
             id="user-other",
-            user_metadata={"stripe_customer_id": "cus_other"},
+            app_metadata={"stripe_customer_id": "cus_other"},
         )
 
         sb = MagicMock()
@@ -766,7 +767,7 @@ class TestSyncSubscriptionMetadata:
             "backend.routes.stripe_routes._get_supabase",
             return_value=sb,
         ), patch(
-            "backend.routes.stripe_routes._update_user_metadata",
+            "backend.routes.stripe_routes._update_app_metadata",
             update_mock,
         ):
             mock_stripe.Subscription.retrieve.return_value = FakeSub(sub_data)
@@ -808,7 +809,7 @@ class TestSyncSubscriptionMetadata:
             "backend.routes.stripe_routes._get_supabase",
             return_value=sb,
         ), patch(
-            "backend.routes.stripe_routes._update_user_metadata",
+            "backend.routes.stripe_routes._update_app_metadata",
             update_mock,
         ):
             mock_stripe.Subscription.retrieve.return_value = FakeSub(sub_data)
@@ -859,3 +860,60 @@ class TestRuleEleven:
             f"Bare `logger.` reference reintroduced at: "
             f"{src[max(0, bare_logger.start()-30):bare_logger.start()+30]}"
         )
+
+
+# ──────────────────────────────────────────────────────────────────
+# VB11: Stripe customer binding must come from app_metadata only
+# ──────────────────────────────────────────────────────────────────
+# stripe_customer_id was stored/read in user_metadata, which is
+# client-settable at signUp via the PUBLIC anon key. An attacker who set
+# user_metadata.stripe_customer_id to another user's customer could open
+# that customer's billing portal / read their subscription. Binding must
+# live in app_metadata (service-role-only).
+
+
+class TestCustomerBindingFromAppMetadataOnly:
+    def _sb_with_user(self, *, user_metadata, app_metadata):
+        mock_user = MagicMock()
+        mock_user.user_metadata = user_metadata
+        mock_user.app_metadata = app_metadata
+        res = MagicMock()
+        res.user = mock_user
+        sb = MagicMock()
+        sb.auth.admin.get_user_by_id.return_value = res
+        return sb
+
+    def test_portal_ignores_attacker_user_metadata_customer_id(self, client, auth_headers):
+        # Attacker self-set user_metadata.stripe_customer_id = victim's customer.
+        sb = self._sb_with_user(
+            user_metadata={"stripe_customer_id": "cus_VICTIM"}, app_metadata={},
+        )
+        with patch("backend.routes.stripe_routes._get_supabase", return_value=sb), \
+             patch("backend.routes.stripe_routes.stripe.billing_portal.Session.create") as portal_create:
+            resp = client.post("/api/stripe/create-portal-session", headers=auth_headers)
+        portal_create.assert_not_called()  # must NOT open the victim's portal
+        assert resp.status_code == 400
+
+    def test_portal_uses_app_metadata_customer_id(self, client, auth_headers):
+        sb = self._sb_with_user(
+            user_metadata={}, app_metadata={"stripe_customer_id": "cus_OWN"},
+        )
+        fake_session = MagicMock()
+        fake_session.url = "https://portal.example"
+        with patch("backend.routes.stripe_routes._get_supabase", return_value=sb), \
+             patch("backend.routes.stripe_routes.stripe.billing_portal.Session.create",
+                   return_value=fake_session) as portal_create:
+            resp = client.post("/api/stripe/create-portal-session", headers=auth_headers)
+        assert resp.status_code == 200
+        portal_create.assert_called_once()
+        assert portal_create.call_args.kwargs["customer"] == "cus_OWN"
+
+    def test_subscription_status_ignores_attacker_user_metadata(self, client, auth_headers):
+        sb = self._sb_with_user(
+            user_metadata={"stripe_customer_id": "cus_VICTIM"}, app_metadata={},
+        )
+        with patch("backend.routes.stripe_routes._get_supabase", return_value=sb), \
+             patch("backend.routes.stripe_routes.stripe.Subscription.list") as sub_list:
+            resp = client.get("/api/stripe/subscription-status", headers=auth_headers)
+        sub_list.assert_not_called()  # no customer in app_metadata → never queried
+        assert resp.get_json()["status"] == "none"
