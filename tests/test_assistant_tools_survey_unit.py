@@ -188,13 +188,15 @@ class TestCreateParentSurvey:
             [],                        # clear
             [],                        # insert
         ])
+        # VB9 (audit #21): code generation switched random.choices(k=6) →
+        # secrets.choice() called once per character (6 calls per attempt).
         with patch("backend.services.assistant_tools_survey._get_supabase",
                    return_value=db), \
-             patch("backend.services.assistant_tools_survey.random.choices",
-                   side_effect=[
-                       list("AAAAAA"),  # first attempt — collides
-                       list("BBBBBB"),  # second attempt — clear
-                   ]):
+             patch("backend.services.assistant_tools_survey.secrets.choice",
+                   side_effect=(
+                       list("AAAAAA")   # first attempt — collides
+                       + list("BBBBBB")  # second attempt — clear
+                   )):
             result = create_parent_survey(teacher_id="teach-1")
         # Loop terminates after the second attempt
         assert result["join_code"] == "BBBBBB"

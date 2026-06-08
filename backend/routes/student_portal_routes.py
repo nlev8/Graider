@@ -6,7 +6,7 @@ Uses Supabase for cloud storage - students can submit anytime.
 import json
 import logging
 import os
-import random
+import secrets
 import string
 import uuid
 from datetime import datetime, timezone
@@ -85,7 +85,9 @@ def generate_join_code():
     """Generate a unique 6-character join code (e.g., 'ABC123')."""
     chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
     while True:
-        code = ''.join(random.choices(chars, k=6))
+        # VB9 #21: access codes gate anonymous content access — use a CSPRNG
+        # (secrets) so codes are unpredictable, not Mersenne-Twister random.
+        code = ''.join(secrets.choice(chars) for _ in range(6))
         # Uniqueness check must see ALL existing codes across all teachers,
         # so we stay on service-role here even when USE_PER_USER_JWT=1.
         # Per-user RLS would limit visibility to current teacher's codes
