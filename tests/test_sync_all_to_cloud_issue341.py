@@ -170,9 +170,11 @@ class TestSyncCountersGateOnSbSaveResult:
         ) as f:
             json.dump({"title": "Resource 1"}, f)
 
-        # student history
+        # student history — VB2b: sync now reads the teacher's TENANT dir, so
+        # seed under teach-1's tenant shard (not the global dir).
         hist_dir = os.path.join(
-            isolated_home, ".graider_data", "student_history",
+            isolated_home, ".graider_tenants", "teach-1",
+            ".graider_data", "student_history",
         )
         os.makedirs(hist_dir)
         with open(os.path.join(hist_dir, "sid-1.json"), "w") as f:
@@ -222,3 +224,37 @@ class TestSyncCountersGateOnSbSaveResult:
         assert result["student_history"] == "0 synced", (
             "student_history loop counted a failed save as success"
         )
+
+    def test_sync_does_not_slurp_other_tenants_history(self, isolated_home):
+        """VB2b (Codex-found): sync_all_to_cloud must upload ONLY the calling
+        teacher's tenant history — never the global dir (which on a multi-tenant
+        server holds other tenants' / pre-migration records)."""
+        from backend import storage as st
+        from backend.storage import sync_all_to_cloud
+
+        # Another teacher's history lives in teach-A's tenant dir...
+        other_dir = os.path.join(
+            isolated_home, ".graider_tenants", "teach-A",
+            ".graider_data", "student_history",
+        )
+        os.makedirs(other_dir)
+        with open(os.path.join(other_dir, "victim.json"), "w") as f:
+            json.dump({"assignments": [{"score": 99}]}, f)
+        # ...and stale data sits in the legacy GLOBAL dir.
+        global_dir = os.path.join(isolated_home, ".graider_data", "student_history")
+        os.makedirs(global_dir)
+        with open(os.path.join(global_dir, "global-leak.json"), "w") as f:
+            json.dump({"assignments": [{"score": 1}]}, f)
+
+        saved = []
+        with patch.object(
+            st, "_sb_save_student_history",
+            side_effect=lambda tid, sid, hist: saved.append((tid, sid)) or True,
+        ):
+            sync_all_to_cloud("teach-B")
+
+        # teach-B has no history → nothing uploaded; neither the other tenant's
+        # "victim" nor the global "global-leak" record was touched.
+        synced_ids = {sid for _tid, sid in saved}
+        assert "victim" not in synced_ids, "sync leaked another tenant's history"
+        assert "global-leak" not in synced_ids, "sync slurped the global dir"

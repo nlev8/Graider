@@ -12,7 +12,35 @@ from datetime import datetime
 _logger = logging.getLogger(__name__)
 
 
-def update_writing_profile(student_id: str, current_style: dict, student_name: str = None):
+def _safe_sid(student_id: str) -> str:
+    """Sanitize a student_id for safe use as a filename component.
+
+    VB2b: matches storage.py / student_history.py — strips path separators so
+    a crafted student_id (e.g. '../../other-tenant') can't escape the
+    per-teacher history directory.
+    """
+    return str(student_id).replace('/', '_').replace('\\', '_')
+
+
+def _history_dir_for(teacher_id: str = 'local-dev') -> str:
+    """Resolve the per-teacher writing-profile/history directory.
+
+    VB2b (audit #3): writing profiles live inside the same per-student
+    history files as grade history, so they must be scoped per teacher too.
+    `local-dev` keeps the legacy global path (honors a monkeypatched HOME in
+    tests); any real teacher routes to their `_tenant_home` shard.
+    """
+    if not teacher_id or teacher_id == 'local-dev':
+        return os.path.expanduser("~/.graider_data/student_history")
+    try:
+        from backend.storage import _tenant_home
+    except ImportError:
+        from storage import _tenant_home  # type: ignore[no-redef]
+    return os.path.join(_tenant_home(teacher_id), ".graider_data", "student_history")
+
+
+def update_writing_profile(student_id: str, current_style: dict, student_name: str = None,
+                           teacher_id: str = 'local-dev'):
     """
     Update student's writing profile with new submission data.
     Maintains running averages across assignments.
@@ -20,8 +48,8 @@ def update_writing_profile(student_id: str, current_style: dict, student_name: s
     if not current_style or not student_id:
         return
 
-    history_dir = os.path.expanduser("~/.graider_data/student_history")
-    history_file = os.path.join(history_dir, f"{student_id}.json")
+    history_dir = _history_dir_for(teacher_id)
+    history_file = os.path.join(history_dir, f"{_safe_sid(student_id)}.json")
 
     try:
         if os.path.exists(history_file):
@@ -77,15 +105,15 @@ def update_writing_profile(student_id: str, current_style: dict, student_name: s
         _logger.warning("Could not update writing profile: %s", e)
 
 
-def get_writing_profile(student_id: str) -> dict:
+def get_writing_profile(student_id: str, teacher_id: str = 'local-dev') -> dict:
     """
     Retrieve student's historical writing profile.
     """
     if not student_id:
         return None
 
-    history_dir = os.path.expanduser("~/.graider_data/student_history")
-    history_file = os.path.join(history_dir, f"{student_id}.json")
+    history_dir = _history_dir_for(teacher_id)
+    history_file = os.path.join(history_dir, f"{_safe_sid(student_id)}.json")
 
     try:
         if os.path.exists(history_file):

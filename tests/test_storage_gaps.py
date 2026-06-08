@@ -329,8 +329,10 @@ class TestSyncAllToCloud:
             json.dump({"title": "Resource 1"}, f)
 
         # ── student_history ──
+        # VB2b: sync reads the teacher's TENANT history shard, so seed there.
         hist_dir = os.path.join(
-            isolated_home, ".graider_data", "student_history",
+            isolated_home, ".graider_tenants", "teach-1",
+            ".graider_data", "student_history",
         )
         os.makedirs(hist_dir)
         with open(os.path.join(hist_dir, "sid-1.json"), "w") as f:

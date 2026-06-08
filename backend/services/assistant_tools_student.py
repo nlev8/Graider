@@ -573,10 +573,12 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
         sentry_sdk.capture_exception(e)
 
     # --- Delete student history file ---
+    # VB2b (audit #3): route through the tenant-scoped storage layer so the
+    # assistant can only delete THIS teacher's copy — never the global file
+    # (which would delete/leak across tenants).
     try:
-        history_path = os.path.expanduser(f"~/.graider_data/student_history/{safe_id}.json")
-        if os.path.exists(history_path):
-            os.remove(history_path)
+        from backend.storage import delete_student_history as _storage_delete_history
+        if _storage_delete_history(teacher_id=teacher_id, student_id=safe_id):
             results.append({"source": "student_history", "removed": 1})
     except Exception as e:
         errors.append({"source": "student_history", "error": "Failed to remove student history"})
