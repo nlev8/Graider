@@ -428,9 +428,10 @@ class TestSyncAllToCloud:
         from backend.storage import sync_all_to_cloud
         from backend import storage as st
 
-        # Seed an unreadable history file
+        # Seed an unreadable history file (VB14: under the tenant shard, so the
+        # parse-failure path is actually exercised — sync reads the tenant dir).
         hist_dir = os.path.join(
-            isolated_home, ".graider_data", "student_history",
+            isolated_home, ".graider_tenants", "teach-1", ".graider_data", "student_history",
         )
         os.makedirs(hist_dir)
         bad_path = os.path.join(hist_dir, "sid-bad.json")
@@ -455,8 +456,9 @@ class TestSyncAllToCloud:
 
         # Resources dir present but file is malformed JSON → _file_load
         # returns None, which is falsy and the sync code skips it.
+        # VB14: under the tenant shard so the skip path is actually exercised.
         resources_dir = os.path.join(
-            isolated_home, ".graider_data", "resources",
+            isolated_home, ".graider_tenants", "teach-1", ".graider_data", "resources",
         )
         os.makedirs(resources_dir)
         bad_path = os.path.join(resources_dir, "bad.json")

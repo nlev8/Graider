@@ -139,14 +139,18 @@ class TestSyncCountersGateOnSbSaveResult:
     `_sb_save` returns False."""
 
     def _seed_one_of_each(self, isolated_home):
+        # VB14: sync reads the teacher's TENANT shard — seed everything there so
+        # the "0 synced on _sb_save=False" assertions exercise the real loop
+        # (data IS found), not a trivially-empty tenant.
+        base = os.path.join(isolated_home, ".graider_tenants", "teach-1")
         # assignment
-        assn_dir = os.path.join(isolated_home, ".graider_assignments")
+        assn_dir = os.path.join(base, ".graider_assignments")
         os.makedirs(assn_dir)
         with open(os.path.join(assn_dir, "Quiz1.json"), "w") as f:
             json.dump({"title": "Quiz1"}, f)
 
         # lesson (nested)
-        lessons_dir = os.path.join(isolated_home, ".graider_lessons")
+        lessons_dir = os.path.join(base, ".graider_lessons")
         os.makedirs(os.path.join(lessons_dir, "Unit1"))
         with open(
             os.path.join(lessons_dir, "Unit1", "Lesson1.json"), "w",
@@ -166,7 +170,7 @@ class TestSyncCountersGateOnSbSaveResult:
 
         # resource
         resources_dir = os.path.join(
-            isolated_home, ".graider_data", "resources",
+            base, ".graider_data", "resources",
         )
         os.makedirs(resources_dir)
         with open(
