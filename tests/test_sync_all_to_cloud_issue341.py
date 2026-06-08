@@ -64,8 +64,9 @@ class TestPeriodCsvFormat:
         from backend import storage as st
         from backend.storage import sync_all_to_cloud
 
+        # VB14: sync reads the teacher's TENANT shard, so seed there.
         periods_dir = os.path.join(
-            isolated_home, ".graider_data", "periods",
+            isolated_home, ".graider_tenants", "teach-1", ".graider_data", "periods",
         )
         os.makedirs(periods_dir)
         csv_path = os.path.join(periods_dir, "P1.csv")
@@ -104,8 +105,9 @@ class TestPeriodCsvFormat:
         from backend import storage as st
         from backend.storage import _file_load, sync_all_to_cloud
 
+        # VB14: sync reads the teacher's TENANT shard, so seed there.
         periods_dir = os.path.join(
-            isolated_home, ".graider_data", "periods",
+            isolated_home, ".graider_tenants", "teach-1", ".graider_data", "periods",
         )
         os.makedirs(periods_dir)
         csv_path = os.path.join(periods_dir, "P1.csv")
@@ -123,7 +125,8 @@ class TestPeriodCsvFormat:
             c.args[1] for c in mock_sb_save.call_args_list
             if c.args and c.args[0] == "period:P1.csv"
         )
-        loaded = _file_load("period:P1.csv")
+        # VB14: compare against the tenant-scoped load (what sync now reads).
+        loaded = _file_load("period:P1.csv", "teach-1")
         assert type(synced_payload) is type(loaded), (
             f"sync uploaded {type(synced_payload).__name__} but "
             f"_file_load returns {type(loaded).__name__}"
@@ -151,8 +154,9 @@ class TestSyncCountersGateOnSbSaveResult:
             json.dump({"title": "Lesson1"}, f)
 
         # period meta (period_meta uses .meta.json filenames)
+        # VB14: sync reads the teacher's TENANT shard, so seed there.
         periods_dir = os.path.join(
-            isolated_home, ".graider_data", "periods",
+            isolated_home, ".graider_tenants", "teach-1", ".graider_data", "periods",
         )
         os.makedirs(periods_dir)
         with open(
@@ -258,3 +262,43 @@ class TestSyncCountersGateOnSbSaveResult:
         synced_ids = {sid for _tid, sid in saved}
         assert "victim" not in synced_ids, "sync leaked another tenant's history"
         assert "global-leak" not in synced_ids, "sync slurped the global dir"
+
+
+class TestSyncIsTenantScoped:
+    """VB14: sync_all_to_cloud must upload ONLY the calling teacher's tenant
+    data — never the global ~/.graider_* dir, which on a multi-tenant server
+    holds other tenants' / pre-migration settings, rubric, assignments, etc.
+    (VB2b fixed the student-history loop; this covers the remaining keys.)"""
+
+    def test_sync_uploads_only_callers_tenant_not_global(self, isolated_home):
+        from backend import storage as st
+        from backend.storage import sync_all_to_cloud
+
+        # Stale / other-tenant data sitting in the shared GLOBAL dir:
+        os.makedirs(os.path.join(isolated_home, ".graider_assignments"))
+        with open(os.path.join(isolated_home, ".graider_assignments", "GlobalLeak.json"), "w") as f:
+            json.dump({"title": "GlobalLeak"}, f)
+        with open(os.path.join(isolated_home, ".graider_settings.json"), "w") as f:
+            json.dump({"global_ai_notes": "GLOBAL"}, f)
+
+        # teach-B's OWN tenant data:
+        tdir = os.path.join(isolated_home, ".graider_tenants", "teach-B")
+        os.makedirs(os.path.join(tdir, ".graider_assignments"))
+        with open(os.path.join(tdir, ".graider_assignments", "Own.json"), "w") as f:
+            json.dump({"title": "Own"}, f)
+        with open(os.path.join(tdir, ".graider_settings.json"), "w") as f:
+            json.dump({"global_ai_notes": "TENANT_B"}, f)
+
+        saved = []
+        with patch.object(st, "_sb_save",
+                          side_effect=lambda key, data, tid: saved.append((key, data)) or True), \
+             patch.object(st, "_sb_save_student_history", return_value=True):
+            sync_all_to_cloud("teach-B")
+
+        keys = [k for k, _ in saved]
+        assert "assignment:Own" in keys, "did not sync the caller's own tenant assignment"
+        assert "assignment:GlobalLeak" not in keys, "synced a global/other-tenant assignment"
+        settings = [d for k, d in saved if k == "settings"]
+        assert settings and settings[0].get("global_ai_notes") == "TENANT_B", (
+            "synced the GLOBAL settings instead of the caller's tenant settings"
+        )

@@ -281,25 +281,30 @@ class TestSyncAllToCloud:
         from backend.storage import sync_all_to_cloud
         from backend import storage as st
 
+        # VB14: sync reads the CALLING teacher's TENANT shard, so seed all
+        # data under teach-1's tenant base (not the global ~/.graider_* dir).
+        base = os.path.join(isolated_home, ".graider_tenants", "teach-1")
+
         # Seed each known location with realistic data
         # ── single-key data (settings.json) ──
-        settings_path = os.path.join(isolated_home, ".graider_settings.json")
+        settings_path = os.path.join(base, ".graider_settings.json")
+        os.makedirs(base, exist_ok=True)
         with open(settings_path, "w") as f:
             json.dump({"global_ai_notes": "be lenient"}, f)
 
         # rubric.json
-        rubric_path = os.path.join(isolated_home, ".graider_rubric.json")
+        rubric_path = os.path.join(base, ".graider_rubric.json")
         with open(rubric_path, "w") as f:
             json.dump({"categories": []}, f)
 
         # ── assignments dir ──
-        assn_dir = os.path.join(isolated_home, ".graider_assignments")
+        assn_dir = os.path.join(base, ".graider_assignments")
         os.makedirs(assn_dir)
         with open(os.path.join(assn_dir, "Quiz1.json"), "w") as f:
             json.dump({"title": "Quiz1"}, f)
 
         # ── lessons dir (nested unit) ──
-        lessons_dir = os.path.join(isolated_home, ".graider_lessons")
+        lessons_dir = os.path.join(base, ".graider_lessons")
         os.makedirs(os.path.join(lessons_dir, "Unit1"))
         with open(
             os.path.join(lessons_dir, "Unit1", "Lesson1.json"), "w",
@@ -308,7 +313,7 @@ class TestSyncAllToCloud:
 
         # ── periods dir: real CSV + meta ──
         periods_dir = os.path.join(
-            isolated_home, ".graider_data", "periods",
+            base, ".graider_data", "periods",
         )
         os.makedirs(periods_dir)
         csv_path = os.path.join(periods_dir, "P1.csv")
@@ -322,7 +327,7 @@ class TestSyncAllToCloud:
 
         # ── resources dir ──
         resources_dir = os.path.join(
-            isolated_home, ".graider_data", "resources",
+            base, ".graider_data", "resources",
         )
         os.makedirs(resources_dir)
         with open(os.path.join(resources_dir, "res-1.json"), "w") as f:
@@ -385,9 +390,9 @@ class TestSyncAllToCloud:
         from backend.storage import sync_all_to_cloud
         from backend import storage as st
 
-        # Seed an unreadable CSV
+        # Seed an unreadable CSV (VB14: under the teacher's tenant shard)
         periods_dir = os.path.join(
-            isolated_home, ".graider_data", "periods",
+            isolated_home, ".graider_tenants", "teach-1", ".graider_data", "periods",
         )
         os.makedirs(periods_dir)
         # Create the meta first so _file_list_keys('period:') matches
