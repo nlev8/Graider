@@ -145,6 +145,28 @@ async def get_clever_user(access_token):
                 return None
             user_data = resp2.json().get("data", {})
 
+            # API v3.0: /me returns data.type="user" for EVERY record — the
+            # role lives in the /users/{id} `roles` object instead. See
+            # https://dev.clever.com/docs/migrating-to-api-30 ("The type field
+            # on /me will now return 'user' for any user records"). Resolve the
+            # real role from `roles`, preferring student (students are limited
+            # to the student role per Clever) then the highest-privilege
+            # non-student role so the district-admin gate (clever_routes.py
+            # `type != 'district_admin'`) stays reachable for multi-role users.
+            # Fall back to the /me type for API v2.x (where it IS the role) or
+            # when `roles` is unexpectedly absent.
+            roles = user_data.get("roles", {}) or {}
+            if "student" in roles:
+                user_type = "student"
+            elif "district_admin" in roles:
+                user_type = "district_admin"
+            elif "teacher" in roles:
+                user_type = "teacher"
+            elif "staff" in roles:
+                user_type = "staff"
+            elif roles:
+                user_type = next(iter(roles))
+
             audit_log(
                 "CLEVER_USER_READ",
                 f"clever_user_type={user_type}",
