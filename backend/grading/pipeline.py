@@ -20,7 +20,7 @@ import threading
 import concurrent.futures
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import logging
 import sentry_sdk
 
@@ -31,11 +31,11 @@ except ImportError:
     try:
         from student_history import add_assignment_to_history, detect_baseline_deviation, build_history_context  # type: ignore[import-not-found,no-redef]
     except ImportError:
-        def add_assignment_to_history(student_id: str, result: dict[str, Any]) -> None:  # type: ignore[misc]
+        def add_assignment_to_history(student_id: str, result: dict[str, Any], teacher_id: str = 'local-dev') -> None:  # type: ignore[misc]
             return None
-        def detect_baseline_deviation(student_id: str, result: dict[str, Any]) -> dict[str, Any]:  # type: ignore[misc]
+        def detect_baseline_deviation(student_id: str, result: dict[str, Any], teacher_id: str = 'local-dev') -> dict[str, Any]:  # type: ignore[misc]
             return {"flag": "normal", "reasons": [], "details": {}}
-        def build_history_context(student_id: str) -> str:
+        def build_history_context(student_id: str, teacher_id: str = 'local-dev') -> str:
             return ""
 
 # accommodation helpers (with fallback stubs matching app.py)
@@ -599,7 +599,7 @@ Look for: main ideas captured, good questions, clear summary at bottom.
     # Build student history context (passed separately to feedback, NOT mixed into grading instructions)
     history_context = ""
     if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
-        history_context = build_history_context(student_info['student_id'])
+        history_context = build_history_context(student_info['student_id'], teacher_id)
 
     # Add class period context for differentiated grading
     if student_period:
@@ -814,6 +814,7 @@ def _dispatch_grade(
     student_info: Any,
     subject: str,
     trusted_students: list[str] | None,
+    teacher_id: str = 'local-dev',
 ) -> Any:
     from assignment_grader import (  # function-local: preserves test patchability
         grade_assignment,
@@ -853,7 +854,7 @@ def _dispatch_grade(
             grade_level, subject, ensemble_models, student_info.get('student_id'),
             assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
-            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights, teacher_id=teacher_id,  # type: ignore[arg-type]
         )
     elif is_trusted:
         # Trusted student: Use full multi-pass pipeline, skip detection only
@@ -863,6 +864,7 @@ def _dispatch_grade(
             assignment_template_local, rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
             student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            teacher_id=teacher_id,
         )
         grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "Trusted writer - detection skipped"}
         grade_result['plagiarism_detection'] = {"flag": "none", "reason": "Trusted writer - detection skipped"}
@@ -873,7 +875,7 @@ def _dispatch_grade(
             grade_level, subject, ai_model, student_info.get('student_id'), assignment_template_local,
             rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style=grading_style,  # type: ignore[arg-type]
-            rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            rubric_weights=file_rubric_weights, teacher_id=teacher_id,  # type: ignore[arg-type]
         )
         grade_result['ai_detection'] = {"flag": "none", "confidence": 0, "reason": "N/A - Fill-in-the-blank"}
         grade_result['plagiarism_detection'] = {"flag": "none", "reason": "N/A - Fill-in-the-blank"}
@@ -884,6 +886,7 @@ def _dispatch_grade(
             rubric_prompt, file_markers, file_exclude_markers,
             marker_config, effort_points, extraction_mode, grading_style,  # type: ignore[arg-type]
             student_history=history_context, rubric_weights=file_rubric_weights,  # type: ignore[arg-type]
+            teacher_id=teacher_id,
         )
     return grade_result
 
@@ -903,6 +906,7 @@ def _assemble_post_grade(
     period_class_level_map: dict[str, str],
     student_info: Any,
     student_period: str,
+    teacher_id: str = 'local-dev',
 ) -> dict[str, Any]:
     has_config = matched_config is not None
     has_custom_markers = len(file_markers) > 0
@@ -915,7 +919,7 @@ def _assemble_post_grade(
     baseline_deviation = {"flag": "normal", "reasons": [], "details": {}}
     if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
         try:
-            baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result)
+            baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result, teacher_id)
         except Exception as e:
             # Behavior-critical: baseline deviation detection flags
             # anomalous grades (potential cheating signal). Silent
@@ -936,7 +940,7 @@ def _assemble_post_grade(
         try:
             grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
                            "assignment": matched_title, "period": student_period}
-            add_assignment_to_history(student_info['student_id'], grade_record_hist)
+            add_assignment_to_history(student_info['student_id'], grade_record_hist, teacher_id)
         except Exception as e:
             sentry_sdk.capture_exception(e)
 
@@ -1261,6 +1265,7 @@ def grade_single_file(
             student_info=student_info,
             subject=subject,
             trusted_students=trusted_students,
+            teacher_id=teacher_id,
         )
 
         # Check for errors
@@ -1283,11 +1288,433 @@ def grade_single_file(
             period_class_level_map=period_class_level_map,
             student_info=student_info,
             student_period=student_period,
+            teacher_id=teacher_id,
         )
 
     except Exception as e:
         _logger.error("Grading failed for %s: %s", filepath, str(e))
         return {"success": False, "error": "Grading failed for this file", "filepath": filepath}
+
+
+def _export_results(
+    *,
+    all_grades: list[Any],
+    grading_state: dict[str, Any],
+    output_folder: str,
+    school_name: str,
+    subject: str,
+    teacher_name: str,
+) -> None:
+    from assignment_grader import (  # function-local: preserves test patchability
+        ASSIGNMENT_NAME,
+        export_detailed_report,
+        export_focus_csv,
+        save_emails_to_folder,
+        save_to_master_csv,
+    )
+    if len(all_grades) > 0:
+        grading_state["log"].append("")
+        grading_state["log"].append("Exporting results...")
+
+        # Focus CSVs (by assignment)
+        export_focus_csv(all_grades, output_folder, ASSIGNMENT_NAME)
+        grading_state["log"].append("  Focus CSVs created")
+
+        # Detailed report
+        export_detailed_report(all_grades, output_folder, ASSIGNMENT_NAME)
+        grading_state["log"].append("  Detailed report created")
+
+        # Email files
+        save_emails_to_folder(all_grades, output_folder, teacher_name, subject, school_name)
+        grading_state["log"].append("  Email files created")
+
+        # Master tracking CSV
+        save_to_master_csv(all_grades, output_folder)
+        grading_state["log"].append("  Master grades updated")
+
+        # Audit trail JSON
+        audit_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        audit_path = os.path.join(output_folder, f"Audit_{ASSIGNMENT_NAME}_{audit_timestamp}.json")
+        audit_data = []
+        for r in grading_state["results"]:
+            audit_data.append({
+                "student_name": r["student_name"],
+                "student_id": r["student_id"],
+                "score": r["score"],
+                "letter_grade": r["letter_grade"],
+                "ai_input": r.get("ai_input", ""),
+                "ai_response": r.get("ai_response", "")
+            })
+        try:
+            with open(audit_path, 'w') as fh:
+                json.dump(audit_data, fh, indent=2)
+            grading_state["log"].append("  Audit trail saved")
+        except Exception as e:
+            grading_state["log"].append(f"  Audit trail error: {str(e)}")
+            sentry_sdk.capture_exception(e)
+
+
+def _grade_all_files(
+    *,
+    PARALLEL_WORKERS: int,
+    _update_state: Callable[..., None],
+    ai_model: str,
+    all_grades: list[Any],
+    grading_lock: threading.Lock,
+    grading_period: str,
+    grading_state: dict[str, Any],
+    gsf_kwargs: dict[str, Any],
+    new_files: list[Any],
+    resubmissions: set[Any],
+    selected_files: list[str] | None,
+) -> bool:
+    completed = 0
+    api_error_occurred = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
+        # Submit files in batches for responsive stop and ordered results
+        file_index = 0
+        stop_break = False
+        while file_index < len(new_files) and not stop_break:
+            if grading_state.get("stop_requested", False):
+                grading_state["log"].append("")
+                grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
+                break
+
+            # Submit next batch
+            batch_end = min(file_index + PARALLEL_WORKERS, len(new_files))
+            future_to_file = {}
+            for i in range(file_index, batch_end):
+                filepath = new_files[i]
+                future = executor.submit(grade_single_file, filepath, i + 1, len(new_files), **gsf_kwargs)
+                future_to_file[future] = (filepath, i + 1)
+
+            # Wait for batch to complete, check stop between results
+            for future in concurrent.futures.as_completed(future_to_file):
+                if grading_state.get("stop_requested", False):
+                    for fut in future_to_file:
+                        fut.cancel()
+                    grading_state["log"].append("")
+                    grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
+                    stop_break = True
+                    break
+
+                filepath, file_num = future_to_file[future]
+
+                try:
+                    result = future.result()
+                except Exception as e:
+                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                    grading_state["log"].append(f"  ❌ Error: {str(e)}")
+                    continue
+
+                # Update progress
+                completed += 1
+                _update_state(progress=completed, current_file=filepath.name)
+
+                # Handle failed grading
+                if not result.get("success"):
+                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
+                    if result.get("is_config_missing"):
+                        grading_state["log"].append(f"  ⏭️  {result.get('error', 'No config')}")
+                    else:
+                        grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
+
+                    # Stop on API errors
+                    if result.get("is_api_error"):
+                        api_error_occurred = True
+                        err_msg = result.get('error', '')
+                        err_lower = err_msg.lower() if err_msg else ''
+                        is_network = any(kw in err_lower for kw in ['connection', 'timeout', 'unreachable', 'refused'])
+                        grading_state["log"].append("")
+                        grading_state["log"].append("=" * 50)
+                        if is_network:
+                            grading_state["log"].append("⚠️  GRADING STOPPED - NETWORK ERROR")
+                            grading_state["log"].append("Unable to connect to the AI provider. This may be due to")
+                            grading_state["log"].append("network restrictions. Contact your IT department to allow")
+                            grading_state["log"].append("access to OpenAI/Anthropic services.")
+                        else:
+                            grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
+                        grading_state["log"].append("=" * 50)
+                        _update_state(error=f"{'Network' if is_network else 'API'} Error: {err_msg}")
+                        for fut in future_to_file:
+                            fut.cancel()
+                        stop_break = True
+                        break
+                    continue
+
+                # Log success
+                student_info = result["student_info"]
+                grade_result = result["grade_result"]
+
+                grading_state["log"].append(f"[{file_num}/{len(new_files)}] {student_info['student_name']}")
+                for msg in result.get("log_messages", []):
+                    grading_state["log"].append(msg)
+
+                # Build grade record for export
+                file_data = result.get("file_data", {})
+                if file_data.get("type") == "text":
+                    student_content = file_data.get("content", "")[:5000]
+                    full_content = file_data.get("content", "")[:10000]
+                else:
+                    student_content = "[Image file]"
+                    full_content = "[Image file]"
+
+                grade_record = {
+                    **student_info,
+                    **grade_result,
+                    "filename": filepath.name,
+                    "assignment": result["matched_title"],
+                    "period": result["student_period"],
+                    "grading_period": grading_period,
+                    "has_markers": False,
+                    "config_mismatch": result.get("config_mismatch", False),
+                    "config_mismatch_reason": result.get("config_mismatch_reason", ""),
+                    "ai_model": ai_model,
+                    "email_approval": "pending"
+                }
+
+                # Resubmission handling: only replace if new score >= old score
+                new_score = int(float(grade_result.get('score', 0) or 0))
+
+                # Late penalty calculation
+                matched_config = result.get("matched_config")
+                late_info = calculate_late_penalty(filepath, matched_config) if matched_config else None
+                original_score = new_score
+                if late_info and late_info.get('is_late'):
+                    penalty_type = late_info.get('penalty_type', 'points_per_day')
+                    if penalty_type == 'points_per_day':
+                        new_score = max(0, new_score - late_info['penalty_points'])
+                    else:
+                        new_score = max(0, new_score - round(original_score * late_info['penalty_percent'] / 100))
+                    penalty_applied = original_score - new_score
+                    grading_state["log"].append(
+                        f"  Late penalty: -{penalty_applied} pts ({late_info['days_late']} day{'s' if late_info['days_late'] != 1 else ''} late)"
+                    )
+
+                # Only treat as resubmission if no explicit file selection
+                # (explicit selection = teacher re-grade, not student resubmission)
+                is_resub = filepath.name in resubmissions and selected_files is None
+                previous_result = None
+                previous_score = None
+
+                if is_resub:
+                    sid = student_info.get('student_id', '')
+                    assign = result["matched_title"]
+                    for r in grading_state["results"]:
+                        if r.get("student_id") == sid and r.get("assignment") == assign:
+                            previous_result = r
+                            previous_score = int(float(r.get("score", 0) or 0))
+                            break
+
+                    if previous_score is not None and new_score < previous_score:
+                        grading_state["log"].append(f"  ↳ Kept original grade ({previous_score}) — resubmission scored lower ({new_score})")
+                        if previous_result:
+                            previous_result["is_resubmission"] = True
+                            previous_result["resubmission_score"] = new_score
+                            previous_result["kept_higher"] = True
+                        continue
+
+                all_grades.append(grade_record)
+
+                # Add to results for UI (remove any existing result for same file first - for regrading)
+                new_result = {
+                    "student_name": student_info['student_name'],
+                    "student_id": student_info.get('student_id', ''),
+                    "student_email": student_info.get('email', ''),
+                    "filename": filepath.name,
+                    "filepath": str(filepath),
+                    "assignment": result["matched_title"],
+                    "period": result["student_period"],
+                    "score": new_score,
+                    "letter_grade": grade_result.get('letter_grade', 'N/A'),
+                    "feedback": grade_result.get('feedback', ''),
+                    "student_content": student_content,
+                    "full_content": full_content,
+                    "breakdown": grade_result.get('breakdown', {}),
+                    "student_responses": grade_result.get('student_responses', []),
+                    "unanswered_questions": grade_result.get('unanswered_questions', []),
+                    "ai_detection": grade_result.get('ai_detection', {}),
+                    "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
+                    "baseline_deviation": result.get("baseline_deviation", {}),
+                    "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
+                    "marker_status": result.get("marker_status", "unverified"),
+                    "is_resubmission": is_resub,
+                    "previous_score": previous_score,
+                    "kept_higher": False,
+                    "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
+                    "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
+                    "token_usage": grade_result.get('token_usage', {}),
+                    "email_approval": "pending",
+                    "original_score": original_score if (late_info and late_info.get('is_late')) else None,
+                    "late_penalty": {"days_late": late_info['days_late'], "penalty_applied": original_score - new_score, "penalty_type": late_info.get('penalty_type', '')} if (late_info and late_info.get('is_late')) else None,
+                }
+                with grading_lock:
+                    from backend.staging import canonicalize_filename as _canon_dedup
+                    canon_name = filepath.name
+                    grading_state["results"] = [r for r in grading_state["results"]
+                                                if r.get("filename") != canon_name
+                                                and _canon_dedup(r.get("filename", "")) != canon_name]  # type: ignore[no-untyped-call]
+                    if is_resub and previous_result:
+                        sid = student_info.get('student_id', '')
+                        assign = result["matched_title"]
+                        grading_state["results"] = [r for r in grading_state["results"] if not (r.get("student_id") == sid and r.get("assignment") == assign)]
+                    grading_state["results"].append(new_result)
+
+                # Accumulate session cost (lock for compound read-modify-write)
+                usage = grade_result.get('token_usage', {})
+                if usage:
+                    with grading_lock:
+                        grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
+                        grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
+                        grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
+                        grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
+
+                # Warn when approaching cost limit
+                cost_limit = grading_state.get("cost_limit", 0)
+                if cost_limit > 0 and not grading_state.get("cost_warning_sent"):
+                    warning_pct = grading_state.get("cost_warning_pct", 80) / 100
+                    if grading_state["session_cost"]["total_cost"] >= cost_limit * warning_pct:
+                        _update_state(cost_warning_sent=True)
+                        grading_state["log"].append(f"  ⚠️ Approaching cost limit: ${grading_state['session_cost']['total_cost']:.4f} of ${cost_limit:.2f}")
+
+                # Auto-stop if cost limit exceeded
+                if cost_limit > 0 and grading_state["session_cost"]["total_cost"] >= cost_limit:
+                    _update_state(stop_requested=True, cost_limit_hit=True)
+                    grading_state["log"].append("")
+                    grading_state["log"].append(f"Cost limit reached (${grading_state['session_cost']['total_cost']:.4f} >= ${cost_limit:.2f}). Auto-stopping...")
+
+            # Advance to next batch
+            file_index = batch_end
+    return api_error_occurred
+
+
+def _load_already_graded(
+    *,
+    grading_state: dict[str, Any],
+    output_folder: str,
+) -> tuple[set[Any], set[Any]]:
+    # Load already graded files from master CSV AND in-memory results
+    already_graded = set()
+
+    # Check master CSV
+    master_file = os.path.join(output_folder, "master_grades.csv")
+    if os.path.exists(master_file):
+        try:
+            from backend.staging import canonicalize_filename as _canon_csv
+            with open(master_file, 'r', encoding='utf-8') as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    filename = row.get('Filename', '')
+                    if filename:
+                        already_graded.add(filename)
+                        already_graded.add(_canon_csv(filename))  # type: ignore[no-untyped-call]
+        except Exception as e:
+            # Behavior-critical: if we can't read the master CSV, the
+            # already_graded set stays empty and previously-graded files
+            # may be regraded (cost + duplicate results). Sentry must see
+            # this so the corrupted CSV gets fixed.
+            _logger.error("Failed to load master_grades.csv for already_graded set: %s", e)
+            sentry_sdk.capture_exception(e)
+
+    # Also check in-memory results (loaded from saved JSON)
+    # Track which files are verified (have markers/config) for skip_verified option
+    # Canonicalize all filenames so they match staged canonical names
+    from backend.staging import canonicalize_filename as _canon
+    verified_files = set()
+    for r in grading_state.get("results", []):
+        if r.get("filename"):
+            already_graded.add(r["filename"])
+            already_graded.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
+            # Track verified status for skip_verified filtering
+            if r.get("marker_status") == "verified":
+                verified_files.add(r["filename"])
+                verified_files.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
+
+    if already_graded:
+        grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
+        if verified_files:
+            grading_state["log"].append(f"  ({len(verified_files)} verified, {len(already_graded) - len(verified_files)} unverified)")
+    return already_graded, verified_files
+
+
+def _load_period_maps(
+    *,
+    grading_state: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    student_period_map = {}  # Maps student name -> period name
+    period_class_level_map = {}  # Maps period name -> class level (standard/advanced/support)
+    periods_dir = os.path.expanduser("~/.graider_data/periods")
+    if os.path.exists(periods_dir):
+        import csv
+        for period_file in os.listdir(periods_dir):
+            if period_file.endswith('.csv'):
+                period_name = period_file.replace('.csv', '')
+                class_level = 'standard'  # Default
+
+                # Load class_level from metadata file if it exists
+                meta_path = os.path.join(periods_dir, f"{period_file}.meta.json")
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, 'r') as mf:
+                            meta = json.load(mf)
+                            period_name = meta.get('period_name', period_name)
+                            class_level = meta.get('class_level', 'standard')
+                    except Exception as e:
+                        # Best-effort: malformed metadata falls back to
+                        # defaults (period name from filename, standard
+                        # class level). Less personalization, not broken.
+                        _logger.debug("Failed to load period metadata %s: %s", meta_path, e)
+
+                period_class_level_map[period_name] = class_level
+
+                try:
+                    with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as pf:
+                        reader = csv.DictReader(pf)
+                        for row in reader:
+                            # Try common column names for student name
+                            first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
+                            last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
+                            full_name = row.get('Name', row.get('Student Name', row.get('Student', row.get('name', '')))).strip()
+
+                            if first and last:
+                                student_key = f"{first} {last}".lower()
+                                student_period_map[student_key] = period_name
+                            elif full_name:
+                                # Handle "Last; First" or "Last, First" formats
+                                if '; ' in full_name:
+                                    parts = full_name.split('; ', 1)
+                                    if len(parts) == 2:
+                                        student_key = f"{parts[1]} {parts[0]}".lower()
+                                        student_period_map[student_key] = period_name
+                                elif ', ' in full_name:
+                                    parts = full_name.split(', ', 1)
+                                    if len(parts) == 2:
+                                        last_name = parts[0].strip()
+                                        first_name = parts[1].strip()
+                                        # Full key: "First Middle Last1 Last2"
+                                        student_key = f"{first_name} {last_name}".lower()
+                                        student_period_map[student_key] = period_name
+                                        # Also add short key: "FirstWord LastWord" for filename matching
+                                        first_simple = first_name.split()[0].lower() if first_name else ''
+                                        last_simple = last_name.split()[0].lower() if last_name else ''
+                                        if first_simple and last_simple:
+                                            short_key = f"{first_simple} {last_simple}"
+                                            if short_key != student_key:
+                                                student_period_map[short_key] = period_name
+                                else:
+                                    student_period_map[full_name.lower()] = period_name
+                except Exception as e:
+                    grading_state["log"].append(f"Warning: Could not load period file {period_file}: {e}")
+
+        if student_period_map:
+            grading_state["log"].append(f"Loaded period data for {len(student_period_map)} students")
+            # Log class levels
+            advanced_count = sum(1 for v in period_class_level_map.values() if v == 'advanced')
+            support_count = sum(1 for v in period_class_level_map.values() if v == 'support')
+            if advanced_count or support_count:
+                grading_state["log"].append(f"  Class levels: {advanced_count} advanced, {support_count} support, {len(period_class_level_map) - advanced_count - support_count} standard")
+    return student_period_map, period_class_level_map
 
 
 def _run_grading_thread_inner(
@@ -1392,8 +1819,7 @@ def _run_grading_thread_inner(
         from assignment_grader import (
             load_roster, parse_filename, read_assignment_file,
             extract_student_work, grade_assignment, grade_multipass, grade_with_parallel_detection,
-            grade_with_ensemble, export_focus_csv, export_detailed_report,
-            save_emails_to_folder, save_to_master_csv, ASSIGNMENT_NAME, STUDENT_WORK_MARKERS
+            grade_with_ensemble, STUDENT_WORK_MARKERS
         )
 
         if all_configs:
@@ -1408,122 +1834,16 @@ def _run_grading_thread_inner(
             grading_state["log"].append(f"Loaded reference documents for AI context")
 
         # Load student-to-period mapping from period CSVs for per-student grading levels
-        student_period_map = {}  # Maps student name -> period name
-        period_class_level_map = {}  # Maps period name -> class level (standard/advanced/support)
-        periods_dir = os.path.expanduser("~/.graider_data/periods")
-        if os.path.exists(periods_dir):
-            import csv
-            for period_file in os.listdir(periods_dir):
-                if period_file.endswith('.csv'):
-                    period_name = period_file.replace('.csv', '')
-                    class_level = 'standard'  # Default
-
-                    # Load class_level from metadata file if it exists
-                    meta_path = os.path.join(periods_dir, f"{period_file}.meta.json")
-                    if os.path.exists(meta_path):
-                        try:
-                            with open(meta_path, 'r') as mf:
-                                meta = json.load(mf)
-                                period_name = meta.get('period_name', period_name)
-                                class_level = meta.get('class_level', 'standard')
-                        except Exception as e:
-                            # Best-effort: malformed metadata falls back to
-                            # defaults (period name from filename, standard
-                            # class level). Less personalization, not broken.
-                            _logger.debug("Failed to load period metadata %s: %s", meta_path, e)
-
-                    period_class_level_map[period_name] = class_level
-
-                    try:
-                        with open(os.path.join(periods_dir, period_file), 'r', encoding='utf-8') as pf:
-                            reader = csv.DictReader(pf)
-                            for row in reader:
-                                # Try common column names for student name
-                                first = row.get('FirstName', row.get('First Name', row.get('first_name', ''))).strip()
-                                last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
-                                full_name = row.get('Name', row.get('Student Name', row.get('Student', row.get('name', '')))).strip()
-
-                                if first and last:
-                                    student_key = f"{first} {last}".lower()
-                                    student_period_map[student_key] = period_name
-                                elif full_name:
-                                    # Handle "Last; First" or "Last, First" formats
-                                    if '; ' in full_name:
-                                        parts = full_name.split('; ', 1)
-                                        if len(parts) == 2:
-                                            student_key = f"{parts[1]} {parts[0]}".lower()
-                                            student_period_map[student_key] = period_name
-                                    elif ', ' in full_name:
-                                        parts = full_name.split(', ', 1)
-                                        if len(parts) == 2:
-                                            last_name = parts[0].strip()
-                                            first_name = parts[1].strip()
-                                            # Full key: "First Middle Last1 Last2"
-                                            student_key = f"{first_name} {last_name}".lower()
-                                            student_period_map[student_key] = period_name
-                                            # Also add short key: "FirstWord LastWord" for filename matching
-                                            first_simple = first_name.split()[0].lower() if first_name else ''
-                                            last_simple = last_name.split()[0].lower() if last_name else ''
-                                            if first_simple and last_simple:
-                                                short_key = f"{first_simple} {last_simple}"
-                                                if short_key != student_key:
-                                                    student_period_map[short_key] = period_name
-                                    else:
-                                        student_period_map[full_name.lower()] = period_name
-                    except Exception as e:
-                        grading_state["log"].append(f"Warning: Could not load period file {period_file}: {e}")
-
-            if student_period_map:
-                grading_state["log"].append(f"Loaded period data for {len(student_period_map)} students")
-                # Log class levels
-                advanced_count = sum(1 for v in period_class_level_map.values() if v == 'advanced')
-                support_count = sum(1 for v in period_class_level_map.values() if v == 'support')
-                if advanced_count or support_count:
-                    grading_state["log"].append(f"  Class levels: {advanced_count} advanced, {support_count} support, {len(period_class_level_map) - advanced_count - support_count} standard")
+        student_period_map, period_class_level_map = _load_period_maps(
+            grading_state=grading_state,
+        )
 
         os.makedirs(output_folder, exist_ok=True)
 
-        # Load already graded files from master CSV AND in-memory results
-        already_graded = set()
-
-        # Check master CSV
-        master_file = os.path.join(output_folder, "master_grades.csv")
-        if os.path.exists(master_file):
-            try:
-                from backend.staging import canonicalize_filename as _canon_csv
-                with open(master_file, 'r', encoding='utf-8') as fh:
-                    reader = csv.DictReader(fh)
-                    for row in reader:
-                        filename = row.get('Filename', '')
-                        if filename:
-                            already_graded.add(filename)
-                            already_graded.add(_canon_csv(filename))  # type: ignore[no-untyped-call]
-            except Exception as e:
-                # Behavior-critical: if we can't read the master CSV, the
-                # already_graded set stays empty and previously-graded files
-                # may be regraded (cost + duplicate results). Sentry must see
-                # this so the corrupted CSV gets fixed.
-                _logger.error("Failed to load master_grades.csv for already_graded set: %s", e)
-                sentry_sdk.capture_exception(e)
-
-        # Also check in-memory results (loaded from saved JSON)
-        # Track which files are verified (have markers/config) for skip_verified option
-        # Canonicalize all filenames so they match staged canonical names
-        from backend.staging import canonicalize_filename as _canon
-        verified_files = set()
-        for r in grading_state.get("results", []):
-            if r.get("filename"):
-                already_graded.add(r["filename"])
-                already_graded.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
-                # Track verified status for skip_verified filtering
-                if r.get("marker_status") == "verified":
-                    verified_files.add(r["filename"])
-                    verified_files.add(_canon(r["filename"]))  # type: ignore[no-untyped-call]
-
-        if already_graded:
-            grading_state["log"].append(f"Found {len(already_graded)} previously graded files")
-            if verified_files:
-                grading_state["log"].append(f"  ({len(verified_files)} verified, {len(already_graded) - len(verified_files)} unverified)")
+        already_graded, verified_files = _load_already_graded(
+            grading_state=grading_state,
+            output_folder=output_folder,
+        )
 
         grading_state["log"].append("Loading student roster...")
         roster = load_roster(roster_file)
@@ -1580,21 +1900,16 @@ def _run_grading_thread_inner(
             _update_state(complete=True, is_running=False)
             return
 
-        all_grades = []
+        all_grades: list[Any] = []
 
         # ═══════════════════════════════════════════════════════════
-        # PARALLEL GRADING HELPER FUNCTION
-        # ═══════════════════════════════════════════════════════════
-        # ═══════════════════════════════════════════════════════════
-        # PARALLEL GRADING EXECUTION
+        # PARALLEL GRADING — build per-file kwargs here, then run the
+        # executor loop (extracted to _grade_all_files in CQ7 PR-4)
         # ═══════════════════════════════════════════════════════════
         PARALLEL_WORKERS = 3  # Conservative: 3 students at once (6 API calls with detection)
 
         grading_state["log"].append(f"⚡ Parallel grading enabled ({PARALLEL_WORKERS} workers)")
         grading_state["log"].append("")
-
-        completed = 0
-        api_error_occurred = False
 
         gsf_kwargs: dict[str, Any] = dict(
             ai_model=ai_model,
@@ -1628,222 +1943,19 @@ def _run_grading_thread_inner(
             teacher_id=teacher_id,
             trusted_students=trusted_students,
         )
-        with concurrent.futures.ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
-            # Submit files in batches for responsive stop and ordered results
-            file_index = 0
-            stop_break = False
-            while file_index < len(new_files) and not stop_break:
-                if grading_state.get("stop_requested", False):
-                    grading_state["log"].append("")
-                    grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
-                    break
-
-                # Submit next batch
-                batch_end = min(file_index + PARALLEL_WORKERS, len(new_files))
-                future_to_file = {}
-                for i in range(file_index, batch_end):
-                    filepath = new_files[i]
-                    future = executor.submit(grade_single_file, filepath, i + 1, len(new_files), **gsf_kwargs)
-                    future_to_file[future] = (filepath, i + 1)
-
-                # Wait for batch to complete, check stop between results
-                for future in concurrent.futures.as_completed(future_to_file):
-                    if grading_state.get("stop_requested", False):
-                        for fut in future_to_file:
-                            fut.cancel()
-                        grading_state["log"].append("")
-                        grading_state["log"].append(f"Stopped - {completed}/{len(new_files)} files completed")
-                        stop_break = True
-                        break
-
-                    filepath, file_num = future_to_file[future]
-
-                    try:
-                        result = future.result()
-                    except Exception as e:
-                        grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
-                        grading_state["log"].append(f"  ❌ Error: {str(e)}")
-                        continue
-
-                    # Update progress
-                    completed += 1
-                    _update_state(progress=completed, current_file=filepath.name)
-
-                    # Handle failed grading
-                    if not result.get("success"):
-                        grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
-                        if result.get("is_config_missing"):
-                            grading_state["log"].append(f"  ⏭️  {result.get('error', 'No config')}")
-                        else:
-                            grading_state["log"].append(f"  ❌ {result.get('error', 'Unknown error')}")
-
-                        # Stop on API errors
-                        if result.get("is_api_error"):
-                            api_error_occurred = True
-                            err_msg = result.get('error', '')
-                            err_lower = err_msg.lower() if err_msg else ''
-                            is_network = any(kw in err_lower for kw in ['connection', 'timeout', 'unreachable', 'refused'])
-                            grading_state["log"].append("")
-                            grading_state["log"].append("=" * 50)
-                            if is_network:
-                                grading_state["log"].append("⚠️  GRADING STOPPED - NETWORK ERROR")
-                                grading_state["log"].append("Unable to connect to the AI provider. This may be due to")
-                                grading_state["log"].append("network restrictions. Contact your IT department to allow")
-                                grading_state["log"].append("access to OpenAI/Anthropic services.")
-                            else:
-                                grading_state["log"].append("⚠️  GRADING STOPPED - API ERROR")
-                            grading_state["log"].append("=" * 50)
-                            _update_state(error=f"{'Network' if is_network else 'API'} Error: {err_msg}")
-                            for fut in future_to_file:
-                                fut.cancel()
-                            stop_break = True
-                            break
-                        continue
-
-                    # Log success
-                    student_info = result["student_info"]
-                    grade_result = result["grade_result"]
-
-                    grading_state["log"].append(f"[{file_num}/{len(new_files)}] {student_info['student_name']}")
-                    for msg in result.get("log_messages", []):
-                        grading_state["log"].append(msg)
-
-                    # Build grade record for export
-                    file_data = result.get("file_data", {})
-                    if file_data.get("type") == "text":
-                        student_content = file_data.get("content", "")[:5000]
-                        full_content = file_data.get("content", "")[:10000]
-                    else:
-                        student_content = "[Image file]"
-                        full_content = "[Image file]"
-
-                    grade_record = {
-                        **student_info,
-                        **grade_result,
-                        "filename": filepath.name,
-                        "assignment": result["matched_title"],
-                        "period": result["student_period"],
-                        "grading_period": grading_period,
-                        "has_markers": False,
-                        "config_mismatch": result.get("config_mismatch", False),
-                        "config_mismatch_reason": result.get("config_mismatch_reason", ""),
-                        "ai_model": ai_model,
-                        "email_approval": "pending"
-                    }
-
-                    # Resubmission handling: only replace if new score >= old score
-                    new_score = int(float(grade_result.get('score', 0) or 0))
-
-                    # Late penalty calculation
-                    matched_config = result.get("matched_config")
-                    late_info = calculate_late_penalty(filepath, matched_config) if matched_config else None
-                    original_score = new_score
-                    if late_info and late_info.get('is_late'):
-                        penalty_type = late_info.get('penalty_type', 'points_per_day')
-                        if penalty_type == 'points_per_day':
-                            new_score = max(0, new_score - late_info['penalty_points'])
-                        else:
-                            new_score = max(0, new_score - round(original_score * late_info['penalty_percent'] / 100))
-                        penalty_applied = original_score - new_score
-                        grading_state["log"].append(
-                            f"  Late penalty: -{penalty_applied} pts ({late_info['days_late']} day{'s' if late_info['days_late'] != 1 else ''} late)"
-                        )
-
-                    # Only treat as resubmission if no explicit file selection
-                    # (explicit selection = teacher re-grade, not student resubmission)
-                    is_resub = filepath.name in resubmissions and selected_files is None
-                    previous_result = None
-                    previous_score = None
-
-                    if is_resub:
-                        sid = student_info.get('student_id', '')
-                        assign = result["matched_title"]
-                        for r in grading_state["results"]:
-                            if r.get("student_id") == sid and r.get("assignment") == assign:
-                                previous_result = r
-                                previous_score = int(float(r.get("score", 0) or 0))
-                                break
-
-                        if previous_score is not None and new_score < previous_score:
-                            grading_state["log"].append(f"  ↳ Kept original grade ({previous_score}) — resubmission scored lower ({new_score})")
-                            if previous_result:
-                                previous_result["is_resubmission"] = True
-                                previous_result["resubmission_score"] = new_score
-                                previous_result["kept_higher"] = True
-                            continue
-
-                    all_grades.append(grade_record)
-
-                    # Add to results for UI (remove any existing result for same file first - for regrading)
-                    new_result = {
-                        "student_name": student_info['student_name'],
-                        "student_id": student_info.get('student_id', ''),
-                        "student_email": student_info.get('email', ''),
-                        "filename": filepath.name,
-                        "filepath": str(filepath),
-                        "assignment": result["matched_title"],
-                        "period": result["student_period"],
-                        "score": new_score,
-                        "letter_grade": grade_result.get('letter_grade', 'N/A'),
-                        "feedback": grade_result.get('feedback', ''),
-                        "student_content": student_content,
-                        "full_content": full_content,
-                        "breakdown": grade_result.get('breakdown', {}),
-                        "student_responses": grade_result.get('student_responses', []),
-                        "unanswered_questions": grade_result.get('unanswered_questions', []),
-                        "ai_detection": grade_result.get('ai_detection', {}),
-                        "plagiarism_detection": grade_result.get('plagiarism_detection', {}),
-                        "baseline_deviation": result.get("baseline_deviation", {}),
-                        "skills_demonstrated": grade_result.get('skills_demonstrated', {}),
-                        "marker_status": result.get("marker_status", "unverified"),
-                        "is_resubmission": is_resub,
-                        "previous_score": previous_score,
-                        "kept_higher": False,
-                        "graded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "ai_input": grade_result.get('_audit', {}).get('ai_input', ''),
-                        "ai_response": grade_result.get('_audit', {}).get('ai_response', ''),
-                        "token_usage": grade_result.get('token_usage', {}),
-                        "email_approval": "pending",
-                        "original_score": original_score if (late_info and late_info.get('is_late')) else None,
-                        "late_penalty": {"days_late": late_info['days_late'], "penalty_applied": original_score - new_score, "penalty_type": late_info.get('penalty_type', '')} if (late_info and late_info.get('is_late')) else None,
-                    }
-                    with grading_lock:
-                        from backend.staging import canonicalize_filename as _canon_dedup
-                        canon_name = filepath.name
-                        grading_state["results"] = [r for r in grading_state["results"]
-                                                    if r.get("filename") != canon_name
-                                                    and _canon_dedup(r.get("filename", "")) != canon_name]  # type: ignore[no-untyped-call]
-                        if is_resub and previous_result:
-                            sid = student_info.get('student_id', '')
-                            assign = result["matched_title"]
-                            grading_state["results"] = [r for r in grading_state["results"] if not (r.get("student_id") == sid and r.get("assignment") == assign)]
-                        grading_state["results"].append(new_result)
-
-                    # Accumulate session cost (lock for compound read-modify-write)
-                    usage = grade_result.get('token_usage', {})
-                    if usage:
-                        with grading_lock:
-                            grading_state["session_cost"]["total_cost"] += usage.get("total_cost", 0)
-                            grading_state["session_cost"]["total_input_tokens"] += usage.get("total_input_tokens", 0)
-                            grading_state["session_cost"]["total_output_tokens"] += usage.get("total_output_tokens", 0)
-                            grading_state["session_cost"]["total_api_calls"] += usage.get("api_calls", 0)
-
-                    # Warn when approaching cost limit
-                    cost_limit = grading_state.get("cost_limit", 0)
-                    if cost_limit > 0 and not grading_state.get("cost_warning_sent"):
-                        warning_pct = grading_state.get("cost_warning_pct", 80) / 100
-                        if grading_state["session_cost"]["total_cost"] >= cost_limit * warning_pct:
-                            _update_state(cost_warning_sent=True)
-                            grading_state["log"].append(f"  ⚠️ Approaching cost limit: ${grading_state['session_cost']['total_cost']:.4f} of ${cost_limit:.2f}")
-
-                    # Auto-stop if cost limit exceeded
-                    if cost_limit > 0 and grading_state["session_cost"]["total_cost"] >= cost_limit:
-                        _update_state(stop_requested=True, cost_limit_hit=True)
-                        grading_state["log"].append("")
-                        grading_state["log"].append(f"Cost limit reached (${grading_state['session_cost']['total_cost']:.4f} >= ${cost_limit:.2f}). Auto-stopping...")
-
-                # Advance to next batch
-                file_index = batch_end
+        api_error_occurred = _grade_all_files(
+            PARALLEL_WORKERS=PARALLEL_WORKERS,
+            _update_state=_update_state,
+            ai_model=ai_model,
+            all_grades=all_grades,
+            grading_lock=grading_lock,
+            grading_period=grading_period,
+            grading_state=grading_state,
+            gsf_kwargs=gsf_kwargs,
+            new_files=new_files,
+            resubmissions=resubmissions,
+            selected_files=selected_files,
+        )
 
         # Handle API error - stop and save
         if api_error_occurred:
@@ -1855,46 +1967,14 @@ def _run_grading_thread_inner(
             return
 
         # Export CSVs and emails
-        if len(all_grades) > 0:
-            grading_state["log"].append("")
-            grading_state["log"].append("Exporting results...")
-
-            # Focus CSVs (by assignment)
-            export_focus_csv(all_grades, output_folder, ASSIGNMENT_NAME)
-            grading_state["log"].append("  Focus CSVs created")
-
-            # Detailed report
-            export_detailed_report(all_grades, output_folder, ASSIGNMENT_NAME)
-            grading_state["log"].append("  Detailed report created")
-
-            # Email files
-            save_emails_to_folder(all_grades, output_folder, teacher_name, subject, school_name)
-            grading_state["log"].append("  Email files created")
-
-            # Master tracking CSV
-            save_to_master_csv(all_grades, output_folder)
-            grading_state["log"].append("  Master grades updated")
-
-            # Audit trail JSON
-            audit_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            audit_path = os.path.join(output_folder, f"Audit_{ASSIGNMENT_NAME}_{audit_timestamp}.json")
-            audit_data = []
-            for r in grading_state["results"]:
-                audit_data.append({
-                    "student_name": r["student_name"],
-                    "student_id": r["student_id"],
-                    "score": r["score"],
-                    "letter_grade": r["letter_grade"],
-                    "ai_input": r.get("ai_input", ""),
-                    "ai_response": r.get("ai_response", "")
-                })
-            try:
-                with open(audit_path, 'w') as fh:
-                    json.dump(audit_data, fh, indent=2)
-                grading_state["log"].append("  Audit trail saved")
-            except Exception as e:
-                grading_state["log"].append(f"  Audit trail error: {str(e)}")
-                sentry_sdk.capture_exception(e)
+        _export_results(
+            all_grades=all_grades,
+            grading_state=grading_state,
+            output_folder=output_folder,
+            school_name=school_name,
+            subject=subject,
+            teacher_name=teacher_name,
+        )
 
         grading_state["log"].append("")
         grading_state["log"].append("=" * 50)

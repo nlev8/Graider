@@ -1,7 +1,12 @@
 """
 Stripe Subscription Routes for Graider.
 Handles checkout sessions, customer portal, subscription status, and webhooks.
-Uses Supabase user_metadata to store stripe_customer_id.
+
+Stores the stripe_customer_id binding (and synced subscription_* fields) in
+Supabase **app_metadata** (service-role-only). VB11: user_metadata is
+client-settable at signUp via the public anon key, so binding billing identity
+there let an attacker point their account at another user's Stripe customer and
+open that customer's billing portal / read their subscription.
 """
 import os
 import logging
@@ -38,29 +43,41 @@ def _is_clever_user():
     return getattr(g, 'user_id', '').startswith('clever:')
 
 
-def _get_user_metadata(user_id):
-    """Fetch user_metadata from Supabase auth.users for the given user."""
+def _get_app_metadata(user_id):
+    """Fetch app_metadata from Supabase auth.users for the given user.
+
+    VB11: billing identity is read from app_metadata (service-role-only), never
+    the client-settable user_metadata.
+    """
     if _is_local_dev() or _is_clever_user():
         return {}
     sb = _get_supabase()
     res = sb.auth.admin.get_user_by_id(user_id)
-    return res.user.user_metadata or {}
+    return (getattr(res.user, "app_metadata", None) or {}) if res and res.user else {}
 
 
-def _update_user_metadata(user_id, metadata_update):
-    """Merge metadata_update into the user's user_metadata."""
+def _update_app_metadata(user_id, metadata_update):
+    """Merge metadata_update into the user's app_metadata (service-role-only).
+
+    GoTrue's admin updateUserById performs a SHALLOW MERGE of the supplied
+    `app_metadata` keys into the existing object (it does not replace the whole
+    object), so sending only `{"stripe_customer_id": ...}` preserves other
+    app_metadata such as `auth_source` / `approved`. See GoTrue
+    `models.User.UpdateUserData` handling (app_metadata is range-merged, not
+    overwritten). We therefore send only the changed keys.
+    """
     if _is_local_dev() or _is_clever_user():
         return
     sb = _get_supabase()
-    sb.auth.admin.update_user_by_id(user_id, {"user_metadata": metadata_update})
+    sb.auth.admin.update_user_by_id(user_id, {"app_metadata": metadata_update})
 
 
 def _get_or_create_customer(user_id, user_email):
     """
-    Get existing Stripe customer ID from user_metadata,
+    Get existing Stripe customer ID from app_metadata,
     or create a new Stripe customer and store the ID.
     """
-    meta = _get_user_metadata(user_id)
+    meta = _get_app_metadata(user_id)
     customer_id = meta.get("stripe_customer_id")
     if customer_id:
         return customer_id
@@ -75,7 +92,7 @@ def _get_or_create_customer(user_id, user_email):
         email=user_email,
         metadata={"supabase_user_id": user_id},
     )
-    _update_user_metadata(user_id, {"stripe_customer_id": customer.id})
+    _update_app_metadata(user_id, {"stripe_customer_id": customer.id})
     return customer.id
 
 
@@ -95,7 +112,7 @@ def subscription_status():
 
     try:
         user_id = g.user_id
-        meta = _get_user_metadata(user_id)
+        meta = _get_app_metadata(user_id)
         customer_id = meta.get("stripe_customer_id")
 
         if not customer_id:
@@ -170,7 +187,7 @@ def create_portal_session():
         return jsonify({"error": "Stripe not configured"}), 500
 
     try:
-        meta = _get_user_metadata(g.user_id)
+        meta = _get_app_metadata(g.user_id)
         customer_id = meta.get("stripe_customer_id")
         if not customer_id:
             return jsonify({"error": "No Stripe customer found"}), 400
@@ -242,7 +259,10 @@ def stripe_webhook():
 def _sync_subscription_metadata(customer_id, subscription_id):
     """
     Look up the Supabase user by stripe_customer_id and update
-    their user_metadata with current subscription status.
+    their app_metadata with current subscription status.
+
+    VB11: both the lookup key and the write target are app_metadata
+    (service-role-only) — never the client-settable user_metadata.
     """
     try:
         sub = stripe.Subscription.retrieve(subscription_id)
@@ -250,18 +270,18 @@ def _sync_subscription_metadata(customer_id, subscription_id):
         if sub.get("items") and sub["items"]["data"]:
             plan_interval = sub["items"]["data"][0]["price"]["recurring"]["interval"]
 
-        # Find user by customer ID in Supabase
+        # Find user by customer ID in Supabase (matched on app_metadata).
         sb = _get_supabase()
         users = list_all_users(sb)
         target_user = None
         for u in users:
-            meta = u.user_metadata or {}
+            meta = getattr(u, "app_metadata", None) or {}
             if meta.get("stripe_customer_id") == customer_id:
                 target_user = u
                 break
 
         if target_user:
-            _update_user_metadata(target_user.id, {
+            _update_app_metadata(target_user.id, {
                 "subscription_status": sub["status"],
                 "subscription_plan": plan_interval,
                 "subscription_period_end": sub["current_period_end"],

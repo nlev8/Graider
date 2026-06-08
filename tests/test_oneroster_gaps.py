@@ -66,7 +66,7 @@ class TestEnsureToken:
     def test_uses_cached_token_when_not_expired(self):
         from backend.oneroster import OneRosterClient
         cli = OneRosterClient(
-            base_url="x", client_id="c", client_secret="s",
+            base_url="https://x.example", client_id="c", client_secret="s",
         )
         # Pre-populate token + far-future expiry
         cli._token = "cached-tok"
@@ -148,7 +148,7 @@ class TestEnsureToken:
         client_mock.post = AsyncMock(return_value=post_resp)
 
         cli = OneRosterClient(
-            base_url="x", client_id="c", client_secret="s",
+            base_url="https://x.example", client_id="c", client_secret="s",
         )
         asyncio.run(cli._ensure_token(client_mock))
         # Default expires_in is 3600 → token_expires ~ now+3600
@@ -170,7 +170,7 @@ class TestGetWithRetry:
 
     def test_success_returns_json(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp = MagicMock(status_code=200)
@@ -185,7 +185,7 @@ class TestGetWithRetry:
 
     def test_401_refreshes_token_and_retries(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "stale-tok"
         cli._token_expires = 999999999999
 
@@ -215,7 +215,7 @@ class TestGetWithRetry:
 
     def test_429_triggers_backoff_then_succeeds(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp_429 = MagicMock(status_code=429)
@@ -236,7 +236,7 @@ class TestGetWithRetry:
 
     def test_5xx_triggers_backoff_then_succeeds(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp_503 = MagicMock(status_code=503)
@@ -259,7 +259,7 @@ class TestGetWithRetry:
         # All MAX_RETRIES attempts return 503 → exits the loop and
         # raises HTTPStatusError on line 80.
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp_503 = MagicMock(status_code=503)
@@ -278,7 +278,7 @@ class TestGetWithRetry:
 
     def test_4xx_other_raises_immediately(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp_403 = MagicMock(status_code=403)
@@ -302,7 +302,7 @@ class TestGetWithRetry:
 class TestPostWithRetry:
     def test_201_returns_json(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp = MagicMock(status_code=201)
@@ -319,7 +319,7 @@ class TestPostWithRetry:
 
     def test_401_refreshes_token_then_succeeds(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "stale"; cli._token_expires = 999999999999
 
         resp_401 = MagicMock(status_code=401)
@@ -351,7 +351,7 @@ class TestPostWithRetry:
 
     def test_429_backoff_then_succeeds(self):
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp_429 = MagicMock(status_code=429)
@@ -375,7 +375,7 @@ class TestPostWithRetry:
         # All MAX_RETRIES attempts return 503 → exits and raises
         # HTTPStatusError on line 116.
         from backend.oneroster import OneRosterClient
-        cli = OneRosterClient("x", "c", "s")
+        cli = OneRosterClient("https://sis.example.com", "c", "s")
         cli._token = "t"; cli._token_expires = 999999999999
 
         resp_503 = MagicMock(status_code=503)

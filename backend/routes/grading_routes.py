@@ -20,6 +20,7 @@ from backend.utils.errors import handle_route_errors
 from backend.utils.audit import audit_log
 from backend.retry import with_retry
 from backend.paths import graider_export_dir
+from backend import storage
 import sentry_sdk
 
 grading_bp = Blueprint('grading', __name__)
@@ -1331,46 +1332,41 @@ def save_ell_students():
 @require_teacher
 @handle_route_errors
 def list_student_history():
-    """List all students with saved history/writing profiles."""
-    import json
+    """List all students with saved history/writing profiles.
 
-    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    VB2b (audit #3): scoped to the calling teacher's tenant — never the
+    global directory, which would leak every tenant's student roster.
+    """
+    teacher_id = g.teacher_id
     students = []
 
     # Build ID -> name lookup from roster and period files
     id_to_name = _build_student_name_lookup()
 
-    if os.path.exists(history_dir):
-        for f in os.listdir(history_dir):
-            if f.endswith('.json'):
-                student_id = f.replace('.json', '')
-                filepath = os.path.join(history_dir, f)
-                try:
-                    with open(filepath, 'r') as hf:
-                        data = json.load(hf)
-                        # Get summary info
-                        profile = data.get('writing_profile', {})
-                        submissions = profile.get('sample_count', 0)
-                        last_updated = data.get('last_updated', 'Unknown')
-                        avg_complexity = profile.get('avg_complexity_score', 0)
+    for student_id in storage.list_student_history(teacher_id):
+        try:
+            data = storage.load_student_history(teacher_id, student_id) or {}
+            profile = data.get('writing_profile', {})
+            submissions = profile.get('sample_count', 0)
+            last_updated = data.get('last_updated', 'Unknown')
+            avg_complexity = profile.get('avg_complexity_score', 0)
 
-                        # Get name: from profile, then roster lookup, then ID as fallback
-                        name = data.get('name') or id_to_name.get(student_id) or student_id
+            # Get name: from profile, then roster lookup, then ID as fallback
+            name = data.get('name') or id_to_name.get(student_id) or student_id
 
-                        students.append({
-                            'student_id': student_id,
-                            'name': name,
-                            'submissions_analyzed': submissions,
-                            'last_updated': last_updated,
-                            'avg_complexity': round(avg_complexity, 1) if avg_complexity else 0,
-                            'file_size': os.path.getsize(filepath)
-                        })
-                except Exception as e:
-                    students.append({
-                        'student_id': student_id,
-                        'name': id_to_name.get(student_id, student_id),
-                        'error': 'Failed to load student results'
-                    })
+            students.append({
+                'student_id': student_id,
+                'name': name,
+                'submissions_analyzed': submissions,
+                'last_updated': last_updated,
+                'avg_complexity': round(avg_complexity, 1) if avg_complexity else 0,
+            })
+        except Exception:
+            students.append({
+                'student_id': student_id,
+                'name': id_to_name.get(student_id, student_id),
+                'error': 'Failed to load student results'
+            })
 
     # Sort by name
     students.sort(key=lambda x: x.get('name', '').lower())
@@ -1378,7 +1374,6 @@ def list_student_history():
     return jsonify({
         "students": students,
         "total": len(students),
-        "history_dir": history_dir
     })
 
 
@@ -1453,64 +1448,52 @@ def _build_student_name_lookup():
 @require_teacher
 @handle_route_errors
 def get_student_history(student_id):
-    """Get detailed history for a specific student."""
-    import json
+    """Get detailed history for a specific student (tenant-scoped).
 
-    history_dir = os.path.expanduser("~/.graider_data/student_history")
-    filepath = os.path.join(history_dir, f"{student_id}.json")
-
-    if not os.path.exists(filepath):
+    VB2b (audit #3): only the owning teacher can read a student's history.
+    """
+    data = storage.load_student_history(g.teacher_id, student_id)
+    if data is None:
         return jsonify({"error": "Student history not found"}), 404
-
-    try:
-        with open(filepath, 'r') as f:
-            data = json.load(f)
-        return jsonify(data)
-    except Exception as e:
-        _logger.exception("Request failed: %s", request.path)
-        return jsonify({"error": "An internal error occurred"}), 500
+    return jsonify(data)
 
 
 @grading_bp.route('/api/student-history/<student_id>', methods=['DELETE'])
 @require_teacher
 @handle_route_errors
 def delete_student_history(student_id):
-    """Delete history for a specific student."""
-    history_dir = os.path.expanduser("~/.graider_data/student_history")
-    filepath = os.path.join(history_dir, f"{student_id}.json")
+    """Delete history for a specific student (tenant-scoped).
 
-    if not os.path.exists(filepath):
+    VB2b (audit #3): a teacher can only delete their OWN student's history;
+    a cross-tenant id returns 404 (and never touches the other tenant).
+    """
+    if storage.load_student_history(g.teacher_id, student_id) is None:
         return jsonify({"error": "Student history not found"}), 404
-
-    try:
-        os.remove(filepath)
-        return jsonify({"status": "deleted", "student_id": student_id})
-    except Exception as e:
-        _logger.exception("Request failed: %s", request.path)
-        return jsonify({"error": "An internal error occurred"}), 500
+    storage.delete_student_history(g.teacher_id, student_id)
+    return jsonify({"status": "deleted", "student_id": student_id})
 
 
 @grading_bp.route('/api/student-history', methods=['DELETE'])
 @require_teacher
 @handle_route_errors
 def delete_all_student_history():
-    """Delete ALL student history (fresh start)."""
-    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    """Delete ALL of the calling teacher's student history (fresh start).
 
-    if not os.path.exists(history_dir):
-        return jsonify({"status": "cleared", "deleted": 0})
-
+    VB2b (audit #3): scoped to the caller's tenant. The pre-fix version
+    enumerated the global directory and wiped EVERY tenant's history at
+    once — a catastrophic cross-tenant data-loss vector.
+    """
+    teacher_id = g.teacher_id
     deleted_count = 0
     errors = []
 
-    for f in os.listdir(history_dir):
-        if f.endswith('.json'):
-            try:
-                os.remove(os.path.join(history_dir, f))
+    for student_id in storage.list_student_history(teacher_id):
+        try:
+            if storage.delete_student_history(teacher_id, student_id):
                 deleted_count += 1
-            except Exception as e:
-                _logger.warning("Failed to delete history file %s: %s", f, e)
-                errors.append(f"{f}: failed to delete")
+        except Exception as e:
+            _logger.warning("Failed to delete history for %s: %s", student_id, e)
+            errors.append(f"{student_id}: failed to delete")
 
     return jsonify({
         "status": "cleared",
@@ -1523,18 +1506,18 @@ def delete_all_student_history():
 @require_teacher
 @handle_route_errors
 def migrate_student_names():
-    """Add student names to existing profiles by looking up from roster."""
-    import json
+    """Add student names to existing profiles by looking up from roster.
+
+    VB2b (audit #3): history read/write is scoped to the calling teacher's
+    tenant via the storage layer (never the global directory).
+    """
     import csv
 
-    history_dir = os.path.expanduser("~/.graider_data/student_history")
+    teacher_id = g.teacher_id
     roster_file = os.path.expanduser("~/.graider_data/roster.csv")
 
     # Also check for period CSVs which have student names
     periods_dir = os.path.expanduser("~/.graider_data/periods")
-
-    if not os.path.exists(history_dir):
-        return jsonify({"error": "No student history directory found"}), 404
 
     # Build a lookup of student_id -> name from all sources
     id_to_name = {}
@@ -1570,29 +1553,26 @@ def migrate_student_names():
                 except Exception as e:
                     sentry_sdk.capture_exception(e)
 
-    # Update profiles with names
+    # Update profiles with names (tenant-scoped)
     updated = 0
-    for f in os.listdir(history_dir):
-        if f.endswith('.json'):
-            student_id = f.replace('.json', '')
-            filepath = os.path.join(history_dir, f)
-            try:
-                with open(filepath, 'r') as hf:
-                    data = json.load(hf)
+    for student_id in storage.list_student_history(teacher_id):
+        try:
+            data = storage.load_student_history(teacher_id, student_id)
+            if not data:
+                continue
 
-                # Check if name already exists
-                if data.get('name') and data['name'] != student_id:
-                    continue  # Already has a name
+            # Check if name already exists
+            if data.get('name') and data['name'] != student_id:
+                continue  # Already has a name
 
-                # Look up name
-                name = id_to_name.get(student_id)
-                if name:
-                    data['name'] = name
-                    with open(filepath, 'w') as hf:
-                        json.dump(data, hf, indent=2)
-                    updated += 1
-            except Exception as e:
-                sentry_sdk.capture_exception(e)
+            # Look up name
+            name = id_to_name.get(student_id)
+            if name:
+                data['name'] = name
+                storage.save_student_history(teacher_id=teacher_id, student_id=student_id, history=data)
+                updated += 1
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     return jsonify({
         "status": "migrated",

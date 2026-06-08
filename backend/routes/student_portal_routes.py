@@ -6,7 +6,7 @@ Uses Supabase for cloud storage - students can submit anytime.
 import json
 import logging
 import os
-import random
+import secrets
 import string
 import uuid
 from datetime import datetime, timezone
@@ -85,7 +85,9 @@ def generate_join_code():
     """Generate a unique 6-character join code (e.g., 'ABC123')."""
     chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
     while True:
-        code = ''.join(random.choices(chars, k=6))
+        # VB9 #21: access codes gate anonymous content access — use a CSPRNG
+        # (secrets) so codes are unpredictable, not Mersenne-Twister random.
+        code = ''.join(secrets.choice(chars) for _ in range(6))
         # Uniqueness check must see ALL existing codes across all teachers,
         # so we stay on service-role here even when USE_PER_USER_JWT=1.
         # Per-user RLS would limit visibility to current teacher's codes
@@ -725,9 +727,12 @@ def submit_assessment(code):
         if not settings.get('allow_multiple_attempts', False):
             existing = submission_repo.find_existing_submission(code, {"name": student_name})
             if existing is not None:
+                # SECURITY (audit #5/#12): the anonymous join-code path does NO
+                # identity verification tying the caller to the matched submission,
+                # so do NOT echo previous_results — it embeds the matched student's
+                # answers, the answer key, and score. Return only the generic message.
                 return jsonify({
                     "error": "You have already submitted this assessment.",
-                    "previous_results": existing.results,
                 }), 400
 
         # Determine grading strategy

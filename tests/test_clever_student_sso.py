@@ -135,8 +135,12 @@ class TestCreateCleverStudentSession:
 
         assert result is None
 
-    def test_fallback_to_email_when_clever_id_not_found(self):
-        """If clever_id lookup returns nothing, falls back to email lookup."""
+    def test_no_email_fallback_when_clever_id_not_found(self):
+        """VB12 (SSO-parity): if the clever_id lookup misses, we FAIL CLOSED —
+        we do NOT fall back to a global, unscoped email match (which could land
+        the student in a different teacher's class on a shared/reused email).
+        The student-table query must therefore never be re-run filtered by
+        email, and no session is minted."""
         student_row = {
             "id": "db-stu-003",
             "first_name": "Alice",
@@ -157,7 +161,7 @@ class TestCreateCleverStudentSession:
         ]
 
         sb = MagicMock()
-        call_count = {"n": 0}
+        eq_cols = []
 
         def _table(name):
             if name == "students":
@@ -165,7 +169,9 @@ class TestCreateCleverStudentSession:
                 q.select.return_value = q
 
                 def _eq(col, val):
-                    # First call (by clever_id) returns nothing; second call (by email) returns student
+                    eq_cols.append(col)
+                    # clever_id misses; an email match WOULD find Alice — but the
+                    # fixed code must never issue the email query.
                     if col == "student_id_number":
                         q.execute.return_value = MagicMock(data=[])
                     else:
@@ -196,6 +202,5 @@ class TestCreateCleverStudentSession:
         with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
             result = _create_clever_student_session("wrong-clever-id", "alice@school.edu")
 
-        assert result is not None
-        assert result["student"]["first_name"] == "Alice"
-        assert result["class"]["name"] == "English 10"
+        assert result is None, "fell back to an unscoped email match (cross-tenant)"
+        assert "email" not in eq_cols, "must not query the students table by email"
