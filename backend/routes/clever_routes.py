@@ -422,27 +422,33 @@ def clever_callback():
     if not code:
         return redirect("/?clever_error=missing_code")
 
-    # Validate state parameter (CSRF protection)
-    # Clever Portal/Instant Login sends users directly to callback without state.
-    # Three cases:
-    #   1. We set state AND Clever returned it → must match (normal OAuth flow)
-    #   2. Neither side has state → Instant Login, allow (no CSRF risk, code is single-use)
-    #   3. One side has state but not the other → session lost or spoofed, reject
-    expected_state = session.pop("clever_oauth_state", None)
-    if expected_state and state:
-        # Normal flow — both sides have state, must match.
-        # Use hmac.compare_digest for constant-time compare (issue #373,
-        # closes 2026-05-14 dimensional-review state/nonce variant).
-        if not hmac.compare_digest(state.encode("utf-8"),
-                                   expected_state.encode("utf-8")):
-            logger.warning("Clever OAuth state mismatch")
+    # Validate state parameter (CSRF protection). State PRESENCE drives the
+    # decision — and we consume the pending session state ONLY when the request
+    # actually carries a state, so a duplicate no-state callback can't clobber a
+    # legitimately-pending restart (Codex review).
+    #   - state present → a return from an OAuth flow: pop the pending session
+    #     state and require a constant-time match (normal flow; also rejects a
+    #     lost-session / spoofed callback that has state but no matching session).
+    #   - state ABSENT → a Clever-initiated Instant Login / Portal launch. Do NOT
+    #     complete authentication from it — a bare code with no state we issued is
+    #     a login-CSRF / session-fixation vector. Per Clever's SSO "Best Practices
+    #     & Edge Cases", treat it as a trigger to RESTART auth from our own site
+    #     with our own state (we do NOT consume any pending state here). Clever,
+    #     with the user already authenticated, bounces straight back WITH our
+    #     state → the match branch above completes it. One transparent hop.
+    if state:
+        # hmac.compare_digest for constant-time compare (issue #373, closes
+        # 2026-05-14 dimensional-review state/nonce variant).
+        expected_state = session.pop("clever_oauth_state", None)
+        if not expected_state or not hmac.compare_digest(
+            state.encode("utf-8"), expected_state.encode("utf-8")
+        ):
+            logger.warning("Clever OAuth state mismatch (expected=%s, got=%s)",
+                           bool(expected_state), bool(state))
             return redirect("/?clever_error=state_mismatch")
-    elif expected_state or state:
-        # One side has state, other doesn't — session lost or spoofed
-        logger.warning("Clever OAuth state mismatch (expected=%s, got=%s)",
-                       bool(expected_state), bool(state))
-        return redirect("/?clever_error=state_mismatch")
-    # else: neither has state — Instant Login flow, proceed
+    else:
+        logger.info("Clever Instant Login (no state) — restarting OAuth with own state")
+        return redirect("/api/clever/login-url?redirect=1")
 
     # Exchange code for token
     token_data = _run_async(exchange_code_for_token(code))
