@@ -706,8 +706,14 @@ def sync_all_to_cloud(teacher_id):
         'automations',
     ]
 
+    # VB14 (SSO-audit follow-up): read every key from the CALLING teacher's
+    # tenant shard (_file_load/_file_list_keys with teacher_id → _tenant_home),
+    # never the global ~/.graider_* dir. /api/sync-to-cloud is an authenticated
+    # per-teacher route; on a multi-tenant server the global dir holds other
+    # tenants' / pre-migration data, so reading it here would slurp it into the
+    # caller's cloud tenant. (VB2b already fixed the student-history loop below.)
     for key in single_keys:
-        data = _file_load(key)
+        data = _file_load(key, teacher_id)
         if data is not None:
             ok = _sb_save(key, data, teacher_id)
             summary[key] = "synced" if ok else "failed"
@@ -715,30 +721,30 @@ def sync_all_to_cloud(teacher_id):
             summary[key] = "no local data"
 
     # Assignments
-    assignment_keys = _file_list_keys('assignment:')
+    assignment_keys = _file_list_keys('assignment:', teacher_id)
     synced_assignments = 0
     for key in assignment_keys:
-        data = _file_load(key)
+        data = _file_load(key, teacher_id)
         if data is not None:
             if _sb_save(key, data, teacher_id):
                 synced_assignments += 1
     summary['assignments'] = f"{synced_assignments} synced"
 
     # Lessons
-    lesson_keys = _file_list_keys('lesson:')
+    lesson_keys = _file_list_keys('lesson:', teacher_id)
     synced_lessons = 0
     for key in lesson_keys:
-        data = _file_load(key)
+        data = _file_load(key, teacher_id)
         if data is not None:
             if _sb_save(key, data, teacher_id):
                 synced_lessons += 1
     summary['lessons'] = f"{synced_lessons} synced"
 
     # Period metadata
-    period_meta_keys = _file_list_keys('period_meta:')
+    period_meta_keys = _file_list_keys('period_meta:', teacher_id)
     synced_periods = 0
     for key in period_meta_keys:
-        data = _file_load(key)
+        data = _file_load(key, teacher_id)
         if data is not None:
             if _sb_save(key, data, teacher_id):
                 synced_periods += 1
@@ -748,27 +754,26 @@ def sync_all_to_cloud(teacher_id):
     # which returns the raw CSV string (storage.py:135-137). Issue #341:
     # was uploading `{"headers": ..., "rows": ...}` dicts, breaking any
     # downstream `load('period:foo.csv')` caller that expected a string.
-    period_keys = _file_list_keys('period:')
+    period_keys = _file_list_keys('period:', teacher_id)
     for key in period_keys:
-        filename = key[len('period:'):]
-        filepath = os.path.join(PERIODS_DIR, filename)
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    raw_csv = f.read()
+        try:
+            # _file_load('period:*', teacher_id) returns the raw CSV string from
+            # the teacher's tenant shard (tenant-scoped; never the global dir).
+            raw_csv = _file_load(key, teacher_id)
+            if raw_csv is not None:
                 _sb_save(key, raw_csv, teacher_id)
-            except Exception as e:
-                logger.warning("Failed to sync period CSV %s: %s", key, e)
-                sentry_sdk.capture_exception(e)
+        except Exception as e:
+            logger.warning("Failed to sync period CSV %s: %s", key, e)
+            sentry_sdk.capture_exception(e)
 
     # Sync resources
     # Gemini quality-review 2026-05-10: was `if data:` which dropped
     # valid empty `{}` / `[]` from sync. Standardize on `is not None`
     # to match the other sync loops above.
-    resource_keys = _file_list_keys('resource:')
+    resource_keys = _file_list_keys('resource:', teacher_id)
     synced_resources = 0
     for key in resource_keys:
-        data = _file_load(key)
+        data = _file_load(key, teacher_id)
         if data is not None:
             if _sb_save(key, data, teacher_id):
                 synced_resources += 1
