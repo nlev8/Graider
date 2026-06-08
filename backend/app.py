@@ -98,8 +98,16 @@ def set_security_headers(response):
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(self), geolocation=()'
-    # Add CSP only on non-API responses (HTML pages)
-    if not request.path.startswith('/api/'):
+    # Add CSP to:
+    #   - all non-/api/ responses (the SPA + public HTML pages), and
+    #   - any response whose Content-Type is text/html, which also covers
+    #     the handful of /api/ endpoints that return HTML directly
+    #     (e.g. /api/auth/approve-user). Previously /api/ HTML pages got no
+    #     CSP at all (audit #27). JSON /api/ responses still get no CSP —
+    #     CSP only governs document rendering, not JSON payloads.
+    content_type = response.headers.get('Content-Type', '')
+    is_html = content_type.startswith('text/html')
+    if not request.path.startswith('/api/') or is_html:
         supabase_url = os.getenv('SUPABASE_URL', '')
         connect_src = f"'self' {supabase_url}" if supabase_url else "'self'"
         response.headers['Content-Security-Policy'] = (
