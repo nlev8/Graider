@@ -271,6 +271,32 @@ class TestCleverGetWithRetry:
         assert sleep_mock.call_count == 0
         assert client.get.call_count == 1
 
+    def test_4xx_error_does_not_log_response_body_pii(self, caplog):
+        """FERPA / logging hygiene: a Clever 4xx error body can carry student or
+        guardian PII (the roster/contacts fetch paths). The error log must NOT
+        include resp.text — only status + label, which are enough to triage."""
+        import logging
+
+        from backend.clever import _clever_get_with_retry
+        client = MagicMock()
+        pii = "Jane Doe guardian@home.edu 555-0100 IEP"
+        client.get = AsyncMock(return_value=self._resp(403, text=pii))
+
+        async def driver():
+            return await _clever_get_with_retry(client, "https://x", {}, label="contacts")
+
+        with patch("backend.clever.asyncio.sleep", new=AsyncMock()), \
+             caplog.at_level(logging.ERROR, logger="backend.clever"):
+            resp = asyncio.run(driver())
+
+        assert resp.status_code == 403
+        assert pii not in caplog.text, (
+            "Clever response body (potential student/guardian PII) must not be logged"
+        )
+        # Status + label are still logged so failures remain triageable.
+        assert "403" in caplog.text
+        assert "contacts" in caplog.text
+
     def test_retries_on_http_error_then_succeeds(self):
         from backend.clever import _clever_get_with_retry
         client = MagicMock()

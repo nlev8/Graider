@@ -58,11 +58,13 @@ SIS_CAPTURES = [
     # role-resolution fix (+22 lines in get_clever_user deriving the role from
     # the /users/{id} `roles` object — see backend/clever.py).
     # 2026-06-08: shifted 247/262/277 -> 256/271/286 by the EDUCATOR_ROLES
-    # module constant (+9 lines near the top of backend/clever.py). The three
-    # roster-fetch captures (now lines 259/274/289) are unchanged; pins track.
-    ("backend/clever.py", 256),
-    ("backend/clever.py", 271),
-    ("backend/clever.py", 286),
+    # module constant (+9 lines near the top of backend/clever.py).
+    # 2026-06-08: shifted 256/271/286 -> 259/274/289 by the response-log PII
+    # redaction (+3 comment lines at _clever_get_with_retry's 4xx branch, above
+    # these roster-fetch captures which are now at 262/277/292). Pins track.
+    ("backend/clever.py", 259),
+    ("backend/clever.py", 274),
+    ("backend/clever.py", 289),
     # 2026-05-07: original pin at line 54 was the `_clever_audit` except
     # block. PR #227 (audit MAJOR #10 close) made `_clever_audit` delegate
     # to `backend.utils.audit.audit_log` whose own try/except + Sentry
