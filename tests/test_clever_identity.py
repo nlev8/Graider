@@ -1,10 +1,19 @@
+import time
+
 import backend.auth as auth
 
 
 class _U:
-    def __init__(self, uid, email):
+    def __init__(self, uid, email, auth_source="clever"):
         self.id = uid
         self.email = email
+        # VB8 #13: auto-link by email is gated on the matched account being
+        # SSO-provisioned, read from APP_metadata (service-role-only, not the
+        # client-settable user_metadata). Default to an SSO account so the
+        # existing link/match/race tests exercise the link path; pass
+        # auth_source=None to model a password (non-SSO) account.
+        self.user_metadata = {}
+        self.app_metadata = {"auth_source": auth_source} if auth_source else {}
 
 
 def _patch(monkeypatch, links=None, users=None, sb=object()):
@@ -31,6 +40,15 @@ def test_single_email_match_links(monkeypatch):
     assert claimed == {}                      # no claim on the match path (pre-existing UUID may collide)
 
 
+def test_single_match_non_sso_account_fails_open(monkeypatch):
+    # VB8 #13 account-takeover guard: a single email match against a
+    # password (non-SSO) account MUST NOT auto-link — fail open to legacy.
+    saved, claimed = _patch(monkeypatch, users=[_U("uuid-victim", "t@x", auth_source=None)])
+    out = auth.resolve_clever_user_id_or_create("c1", "T@X")
+    assert out == ("clever:c1", "unverified_email_legacy")
+    assert saved == {} and claimed == {}
+
+
 def test_zero_match_creates_and_claims(monkeypatch):
     saved, claimed = _patch(monkeypatch, users=[])
     class _Res:  # noqa
@@ -43,8 +61,9 @@ def test_zero_match_creates_and_claims(monkeypatch):
 
     class _Admin:
         def create_user(self, payload):
-            assert payload["user_metadata"]["auth_source"] == "clever"
-            assert payload["user_metadata"]["approved"] is True
+            assert payload["app_metadata"]["auth_source"] == "clever"
+            # VB10: approval lives in app_metadata, not client-settable user_metadata.
+            assert payload["app_metadata"]["approved"] is True
             return _Res()
     sb_obj = type("SB", (), {"auth": type("A", (), {"admin": _Admin()})()})()
     monkeypatch.setattr(auth, "_get_supabase", lambda: sb_obj)
@@ -176,6 +195,7 @@ def test_check_auth_clever_prefers_session_user_id(monkeypatch):
     with app.test_request_context("/api/x"):
         session["clever_user"] = {"clever_id": "c1", "email": "t@x",
                                   "user_id": "uuid-1", "district": "d1"}
+        session["sso_login_ts"] = time.time()  # VB8 #18 absolute-cap anchor
         for fn in app.before_request_funcs.get(None, []):
             fn()
         assert g.user_id == "uuid-1"
@@ -192,6 +212,7 @@ def test_check_auth_clever_falls_back_for_old_session(monkeypatch):
     init_auth(app)
     with app.test_request_context("/api/x"):
         session["clever_user"] = {"clever_id": "c1", "email": "t@x", "district": "d1"}
+        session["sso_login_ts"] = time.time()  # VB8 #18 absolute-cap anchor
         for fn in app.before_request_funcs.get(None, []):
             fn()
         assert g.user_id == "clever:c1"

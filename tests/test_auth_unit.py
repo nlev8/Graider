@@ -28,6 +28,7 @@ doesn't mask coverage.
 from __future__ import annotations
 
 import json
+import time
 from unittest.mock import patch, MagicMock
 
 import jwt
@@ -185,6 +186,31 @@ class TestValidateToken:
             # Second call uses HS256
             second_kwargs = mock_decode.call_args_list[1].kwargs
             assert second_kwargs.get('algorithms') == ['HS256']
+
+    def test_jwks_fetch_failure_falls_back_to_hs256(self, monkeypatch):
+        # VB8 #16: PyJWKClientError (JWKS fetch/network failure) is a
+        # PyJWTError but NOT an InvalidTokenError, so it used to escape the
+        # ES256 try/except and turn the auth hook into a 500 — never reaching
+        # the HS256 fallback. It must be caught and fall through to HS256.
+        import backend.auth as auth_mod
+        from jwt import PyJWKClientError
+        monkeypatch.setattr(auth_mod, '_jwks_client', None)
+        monkeypatch.setenv('SUPABASE_URL', 'https://test.supabase.co')
+        monkeypatch.setenv('SUPABASE_JWT_SECRET', 'hs256-secret')
+
+        fake_payload = {"sub": "user-jwks", "email": "j@k.com"}
+        mock_jwks = MagicMock()
+        # JWKS fetch fails (e.g. WAF 401, TLS, DNS) — wrapped in PyJWKClientError.
+        mock_jwks.get_signing_key_from_jwt.side_effect = PyJWKClientError("JWKS fetch failed")
+
+        with patch.object(auth_mod, '_get_jwks_client', return_value=mock_jwks), \
+             patch.object(auth_mod.jwt, 'decode', return_value=fake_payload) as mock_decode:
+            result = auth_mod.validate_token('fake.token.here')
+            # Must NOT raise; must fall through to HS256 and succeed.
+            assert result == fake_payload
+            # Only the HS256 decode ran (ES256 never reached decode — key fetch failed).
+            assert mock_decode.call_count == 1
+            assert mock_decode.call_args.kwargs.get('algorithms') == ['HS256']
 
     def test_hs256_only_when_no_jwks(self, monkeypatch):
         # No SUPABASE_URL → JWKS client is None → straight to HS256.
@@ -398,6 +424,7 @@ class TestInitAuthSsoPath:
                 'email': 'clever@school.edu',
                 'district': 'd-1',
             }
+            sess['sso_login_ts'] = time.time()  # VB8 #18 absolute-cap anchor
         with patch('backend.auth.resolve_clever_user_id', return_value='sb-uuid-cl'):
             resp = client.get('/api/protected')
         assert resp.status_code == 200
@@ -419,6 +446,7 @@ class TestInitAuthSsoPath:
                 'email': 'cl@school.edu',
                 'tenant_id': 't-1',
             }
+            sess['sso_login_ts'] = time.time()  # VB8 #18 absolute-cap anchor
         resp = client.get('/api/protected')
         assert resp.status_code == 200
         body = resp.get_json()
@@ -467,7 +495,7 @@ class TestInitAuthBearerPath:
         payload = {
             'sub': 'user-good',
             'email': 'good@x.com',
-            'user_metadata': {'approved': True},
+            'app_metadata': {'approved': True},  # VB10: approval in app_metadata
         }
         with patch('backend.auth.validate_token', return_value=payload):
             resp = client.get('/api/protected', headers={
@@ -502,11 +530,12 @@ class TestInitAuthBearerPath:
         payload = {
             'sub': 'user-approved-stale',
             'email': 's@x.com',
-            'user_metadata': {'approved': False},
+            'app_metadata': {'approved': False},
         }
-        # Mock the Supabase admin response
+        # Mock the Supabase admin response (VB10: approval in app_metadata)
         mock_user = MagicMock()
-        mock_user.user_metadata = {'approved': True}
+        mock_user.app_metadata = {'approved': True}
+        mock_user.user_metadata = {}
         mock_res = MagicMock()
         mock_res.user = mock_user
         mock_sb = MagicMock()
@@ -535,6 +564,66 @@ class TestInitAuthBearerPath:
             })
         # Path matches the early-skip branch — should be 200 even
         # without approval.
+        assert resp.status_code == 200
+
+    # ── VB10: approval must be read from app_metadata, never user_metadata ──
+    # user_metadata (raw_user_meta_data) is client-settable at signUp via the
+    # PUBLIC anon key: signUp({options:{data:{approved:true}}}). Trusting it is
+    # a self-approval bypass of the manual onboarding gate.
+
+    def test_self_approval_via_user_metadata_is_rejected(self, auth_app, monkeypatch):
+        monkeypatch.setenv('FLASK_ENV', 'production')
+        client = auth_app.test_client()
+        # Attacker set approved=True in user_metadata at signUp; app_metadata
+        # (service-role-only) has NO approval → must be rejected.
+        payload = {
+            'sub': 'attacker',
+            'email': 'attacker@x.com',
+            'user_metadata': {'approved': True},
+            'app_metadata': {},
+        }
+        with patch('backend.auth.validate_token', return_value=payload), \
+             patch('backend.auth._get_supabase', return_value=None):
+            resp = client.get('/api/protected', headers={
+                'Authorization': 'Bearer attacker.token.here',
+            })
+        assert resp.status_code == 403, "self-approval via user_metadata was honored"
+        assert resp.get_json()['code'] == 'NOT_APPROVED'
+
+    def test_app_metadata_approved_passes(self, auth_app, monkeypatch):
+        monkeypatch.setenv('FLASK_ENV', 'production')
+        client = auth_app.test_client()
+        payload = {
+            'sub': 'real-user',
+            'email': 'real@x.com',
+            'user_metadata': {},
+            'app_metadata': {'approved': True},  # service-role-granted
+        }
+        with patch('backend.auth.validate_token', return_value=payload):
+            resp = client.get('/api/protected', headers={
+                'Authorization': 'Bearer real.token.here',
+            })
+        assert resp.status_code == 200
+
+    def test_stale_jwt_fallback_reads_app_metadata(self, auth_app, monkeypatch):
+        # JWT lacks approval; admin-API re-fetch shows app_metadata.approved.
+        monkeypatch.setenv('FLASK_ENV', 'production')
+        client = auth_app.test_client()
+        payload = {
+            'sub': 'stale', 'email': 's@x.com',
+            'user_metadata': {}, 'app_metadata': {},
+        }
+        mock_user = MagicMock()
+        mock_user.app_metadata = {'approved': True}
+        mock_user.user_metadata = {}
+        mock_res = MagicMock(); mock_res.user = mock_user
+        mock_sb = MagicMock()
+        mock_sb.auth.admin.get_user_by_id.return_value = mock_res
+        with patch('backend.auth.validate_token', return_value=payload), \
+             patch('backend.auth._get_supabase', return_value=mock_sb):
+            resp = client.get('/api/protected', headers={
+                'Authorization': 'Bearer stale.token.here',
+            })
         assert resp.status_code == 200
 
     def test_request_id_set_on_g(self, auth_app, monkeypatch):

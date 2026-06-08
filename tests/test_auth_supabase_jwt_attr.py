@@ -33,7 +33,7 @@ def test_supabase_jwt_attr_set_on_valid_bearer_token(app):
     fake_payload = {
         "sub": "user-abc",
         "email": "t@example.com",
-        "user_metadata": {"approved": True}
+        "app_metadata": {"approved": True}  # VB10: approval in app_metadata
     }
     with patch("backend.auth.validate_token", return_value=fake_payload), \
          patch("backend.auth._get_supabase", return_value=None):

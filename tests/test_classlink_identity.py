@@ -24,9 +24,15 @@ def test_storage_maps_classlink_link_prefix(tmp_path, monkeypatch):
 
 
 class _FakeUser:
-    def __init__(self, uid, email):
+    def __init__(self, uid, email, auth_source="classlink"):
         self.id = uid
         self.email = email
+        # VB8 #13: auto-link by email is gated on the matched account being
+        # SSO-provisioned, read from APP_metadata (service-role-only, not the
+        # client-settable user_metadata). Default to an SSO account so existing
+        # link tests exercise the link path; pass auth_source=None for a password account.
+        self.user_metadata = {}
+        self.app_metadata = {"auth_source": auth_source} if auth_source else {}
 
 
 class _FakeCreateResult:
@@ -63,6 +69,17 @@ def test_resolve_single_email_match_links(monkeypatch):
     assert store["classlink:2284:x"] == "uuid-match"
 
 
+def test_resolve_single_match_non_sso_account_fails_closed(monkeypatch):
+    # VB8 #13 account-takeover guard: a single email match against a
+    # password (non-SSO) account MUST NOT auto-link — fail closed.
+    store = _patch_links(monkeypatch)
+    monkeypatch.setattr(auth, "_get_supabase", lambda: object())
+    monkeypatch.setattr(auth, "list_all_users",
+                        lambda _sb: [_FakeUser("uuid-victim", "a@b.com", auth_source=None)])
+    assert auth.resolve_classlink_user_id("classlink:2284:x", "a@b.com") is None
+    assert store == {}
+
+
 def test_resolve_multiple_matches_fails_closed(monkeypatch):
     _patch_links(monkeypatch)
     monkeypatch.setattr(auth, "_get_supabase", lambda: object())
@@ -93,8 +110,9 @@ def test_resolve_creates_user_when_no_match(monkeypatch):
     assert store["classlink:2284:x"] == "uuid-new"
     assert created["email"] == "a@b.com"
     assert created["email_confirm"] is True
-    assert created["user_metadata"]["approved"] is True
-    assert created["user_metadata"]["auth_source"] == "classlink"
+    # VB10: approval lives in app_metadata (service-role-only), alongside auth_source.
+    assert created["app_metadata"]["approved"] is True
+    assert created["app_metadata"]["auth_source"] == "classlink"
 
 
 def test_resolve_create_race_recovers_by_email(monkeypatch):

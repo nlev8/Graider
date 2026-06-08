@@ -29,6 +29,7 @@ from backend.clever import (
 )
 from backend.accommodations import set_student_accommodation
 from backend.auth import (
+    establish_sso_session,
     load_clever_links,
     resolve_clever_user_id,
     resolve_clever_user_id_or_create,
@@ -502,11 +503,12 @@ def clever_callback():
                 redact_email(clever_user.get("email", "")),
                 hashlib.sha256(str(clever_user.get("clever_id", "")).encode()).hexdigest()[:8])
 
-    # Clear any existing session (shared device support — Clever requirement)
-    session.clear()
+    # Clear any existing session (shared device support — Clever requirement),
+    # rotate the server-side sid (anti-fixation), mark permanent, and stamp the
+    # absolute-lifetime anchor (VB8 #18).
+    establish_sso_session()
 
     # Store Clever session info
-    session.permanent = True  # Apply PERMANENT_SESSION_LIFETIME (8h inactivity timeout)
     session["clever_user"] = {
         "clever_id": clever_user["clever_id"],
         "email": clever_user.get("email", ""),
