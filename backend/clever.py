@@ -218,8 +218,11 @@ async def _clever_get_with_retry(client, url, headers, label=""):
                                resp.status_code, label, wait, attempt + 1, MAX_RETRIES)
                 await asyncio.sleep(wait)
                 continue
-            # 4xx (not 429) — don't retry
-            logger.error("Clever API error (%s): %s %s", label, resp.status_code, resp.text[:200])
+            # 4xx (not 429) — don't retry. Do NOT log resp.text: a roster or
+            # contacts error body can carry student/guardian PII (FERPA). The
+            # status + label are enough to triage; the full body lives in
+            # Clever's own logs.
+            logger.error("Clever API error (%s): status=%s", label, resp.status_code)
             return resp
         except httpx.HTTPError as e:
             wait = 2 ** attempt
