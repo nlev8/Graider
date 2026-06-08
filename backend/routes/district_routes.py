@@ -7,6 +7,7 @@ All config stored with teacher_id="system" via backend.storage.
 import logging
 import os
 import functools
+import hmac
 import secrets
 import time
 from datetime import datetime, timezone, timedelta
@@ -14,6 +15,7 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from backend.extensions import limiter
 from backend.storage import save as storage_save, load as storage_load, list_keys
 from backend.supabase_client import get_supabase as _get_supabase
 from backend.utils.audit import audit_log
@@ -236,6 +238,7 @@ def _clear_old_provider_data(old_provider):
 # ── POST /api/district/auth ─────────────────────────────────────────────────
 
 @district_bp.route("/api/district/auth", methods=["POST"])
+@limiter.limit("10 per minute")  # audit #7: shared-password login — cap brute force
 @handle_route_errors
 def district_auth():
     """Authenticate as district admin or set up initial password."""
@@ -248,12 +251,24 @@ def district_auth():
     # No password configured yet
     if not pw_hash:
         if is_setup and password:
+            # SECURITY (audit #1): the unauthenticated bootstrap used to let the
+            # FIRST anonymous caller claim the highest-privilege district-admin
+            # role (first-to-claim takeover). Require an out-of-band one-time
+            # setup token (DISTRICT_SETUP_TOKEN env) so only the operator can
+            # bootstrap. If it isn't configured, refuse self-service setup — the
+            # operator should set DISTRICT_ADMIN_PASSWORD (which bootstraps the
+            # hash via _get_district_password_hash) instead.
+            setup_token = os.getenv("DISTRICT_SETUP_TOKEN")
+            provided = data.get("setup_token", "")
+            if not setup_token or not provided or not hmac.compare_digest(str(provided), setup_token):
+                audit_log("district_admin_setup_denied", "Bootstrap attempt without valid setup token", user="anonymous", teacher_id="system")
+                return jsonify({"error": "District admin setup is not permitted without a valid setup token. Set DISTRICT_ADMIN_PASSWORD (recommended) or provide DISTRICT_SETUP_TOKEN."}), 403
             if len(password) < 8:
                 return jsonify({"error": "Password must be at least 8 characters"}), 400
             new_hash = generate_password_hash(password)
             storage_save(_KEY_PASSWORD_HASH, {"hash": new_hash}, "system")
             session["district_admin"] = True
-            audit_log("district_admin_setup", "Initial password created", user="district_admin", teacher_id="system")
+            audit_log("district_admin_setup", "Initial password created (setup-token gated)", user="district_admin", teacher_id="system")
             return jsonify({"authenticated": True})
         return jsonify({"needs_setup": True})
 
@@ -273,6 +288,7 @@ def district_auth():
 # ── DELETE /api/district/auth ────────────────────────────────────────────────
 
 @district_bp.route("/api/district/auth", methods=["DELETE"])
+@limiter.limit("10 per minute")  # audit #7: same path as POST auth; keep both capped
 @handle_route_errors
 def district_logout():
     """Clear district admin session."""
