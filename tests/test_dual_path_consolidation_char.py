@@ -583,16 +583,16 @@ class TestRouteContractSeam:
         # No grading_status key for fully-graded MC path
         assert "grading_status" not in data
 
-    def test_joincode_dedup_returns_existing_results(self, _route_client):
-        """Second POST with same (code, student_name) hits ilike-name pre-check.
+    def test_joincode_dedup_does_not_leak_previous_results(self, _route_client):
+        """Second POST with same (code, student_name) hits the ilike-name
+        pre-check and returns the friendly 400.
 
-        Probed 2026-05-20: route returns 400 with error=
-        'You have already submitted this assessment.' and previous_results
-        dict containing the stored results.
-
-        The ilike pre-check fires when allow_multiple_attempts is falsy (default).
-        The response body includes `previous_results` — the exact stored results
-        dict from the first submission row.
+        SECURITY (audit #5/#12): the anonymous join-code path performs NO identity
+        verification tying the caller to the matched submission, so the response
+        must NOT echo `previous_results` (the matched student's answers, the
+        answer key, and score). Previously it did — a classmate (or `student_name`
+        wildcard) could harvest another student's graded work. The 400 now carries
+        only the generic message.
         """
         previous_results = {"score": 5, "total_points": 10, "percentage": 50}
         existing = [{"id": "sub-existing-001", "results": previous_results}]
@@ -609,7 +609,7 @@ class TestRouteContractSeam:
         assert resp.status_code == 400
         data = resp.get_json()
         assert data["error"] == "You have already submitted this assessment."
-        assert data["previous_results"] == previous_results
+        assert "previous_results" not in data, "anonymous dedup 400 must not leak the matched submission"
 
     def test_joincode_missing_content_404(self, _route_client):
         """POST to a nonexistent join_code returns 404.

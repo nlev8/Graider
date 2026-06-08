@@ -11,6 +11,8 @@ from datetime import date
 
 import httpx
 
+from backend.utils.ssrf import validate_outbound_url
+
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 5
@@ -25,6 +27,16 @@ class OneRosterClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.token_url = token_url or f"{self.base_url}/oauth/token"
+        # SSRF guard (audit #9/#11/#14): base_url + token_url come from
+        # district-admin SIS config. Reject literal-internal / non-https targets
+        # (cloud metadata 169.254.169.254, loopback, RFC-1918, localhost) before
+        # any outbound request. All GET URLs are built from base_url (same host),
+        # so validating these two covers every outbound call. resolve=False keeps
+        # the constructor DNS-free; a hostname that *resolves* to a private IP is
+        # a documented residual (would need DNS-level controls / request-time
+        # re-resolution to fully close).
+        validate_outbound_url(self.base_url)
+        validate_outbound_url(self.token_url)
         self._token = None
         self._token_expires = 0
 

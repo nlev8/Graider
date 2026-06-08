@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 import sentry_sdk
 
-from backend.utils.redaction import redact_email
+from backend.utils.redaction import redact_email, redact_name
 
 AUDIT_LOG_FILE = os.path.expanduser("~/.graider_audit.log")
 logger = logging.getLogger(__name__)
@@ -26,12 +26,19 @@ logger = logging.getLogger(__name__)
 # `details` string + `action` string before it reaches either the local
 # file or Supabase.
 #
-# CONTRACT SCOPE (round-3 Codex MEDIUM fold — expanded from PR #227 round 2):
+# CONTRACT SCOPE (round-3 Codex MEDIUM fold — expanded from PR #227 round 2;
+# VB9 #20 added structured-name-field redaction):
 #   - DEDUCTIVELY redacted: emails (a***@example.com), canonical UUIDs
-#     (id=<sha:8>), long opaque hex tokens 32+ chars (hex=<sha:8>).
+#     (id=<sha:8>), long opaque hex tokens 32+ chars (hex=<sha:8>), and
+#     STRUCTURED student-name fields using the `key=value` convention —
+#     `student=`, `student_name=`, `name=` -> initials form (e.g.
+#     `student=A*** J***`). VB9 #20: defense-in-depth so a caller that
+#     forgets to self-redact a student name still cannot leak it verbatim.
 #   - NOT REDACTED (caller responsibility — MUST sanitize at the call site):
-#     - Student / teacher / school names
-#     - Free-form filenames or assignment labels (e.g. "Alice_Smith.docx")
+#     - FREE-FORM names not in a `student=`/`name=` field (regex cannot infer
+#       arbitrary name boundaries from prose), teacher/school names under
+#       other keys (e.g. `teacher=`), free-form filenames or assignment
+#       labels (e.g. "Alice_Smith.docx")
 #     - Phone numbers, postal addresses, dates of birth, SSNs
 #     - Raw IP addresses (use the geolocated source token if you must)
 #     - Short identifiers <32 chars: `student_id[:6]`, custom preset IDs,
@@ -66,6 +73,19 @@ _UUID_PATTERN = re.compile(
 # redaction output and must not be re-redacted).
 _LONG_HEX_PATTERN = re.compile(r"\b[0-9a-fA-F]{32,}\b")
 
+# VB9 #20 (FERPA): structured student-name fields. We CANNOT infer arbitrary
+# name boundaries from free text (see CONTRACT SCOPE above) — but the audit
+# writers that DO emit a student name use the `key=value` field convention
+# (`student=`, `student_name=`, `name=`). This pattern redacts those values
+# deterministically as a defense-in-depth backstop so a caller that forgets
+# to self-redact a name still cannot leak it verbatim. Anchored on `\b` so
+# `filename=`, `assignment=`, `teacher=` are NOT matched (different keys);
+# the value runs up to the next ` key=` token or end of string.
+_NAME_FIELD_PATTERN = re.compile(
+    r"\b(student_name|student|name)=([^=]*?)(?=\s+\S+=|$)",
+    re.IGNORECASE,
+)
+
 
 def _hash_short(value: str) -> str:
     """Return an 8-char sha256 prefix — same redaction shape as the SIS
@@ -95,9 +115,15 @@ def _redact_for_audit(text: str) -> str:
     def _replace_long_hex(match: re.Match) -> str:
         return f"hex={_hash_short(match.group(0))}"
 
+    def _replace_name_field(match: re.Match) -> str:
+        key = match.group(1)
+        redacted = redact_name(match.group(2).strip())
+        return f"{key}={redacted}" if redacted else f"{key}="
+
     text = _EMAIL_PATTERN.sub(_replace_email, text)
     text = _UUID_PATTERN.sub(_replace_uuid, text)
     text = _LONG_HEX_PATTERN.sub(_replace_long_hex, text)
+    text = _NAME_FIELD_PATTERN.sub(_replace_name_field, text)
     return text
 
 
@@ -115,9 +141,12 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
       - Emails -> "a***@example.com"
       - Canonical UUIDs (8-4-4-4-12 hex) -> "id=<sha256[:8]>"
       - Long opaque hex tokens 32+ chars -> "hex=<sha256[:8]>"
+      - Structured student-name fields (`student=`/`student_name=`/`name=`)
+        -> initials form (e.g. "student=A*** J***")  [VB9 #20]
 
     NOT covered (caller MUST sanitize at the call site):
-      - Student / teacher / school names
+      - Free-form names not in a `student=`/`name=` field, teacher / school
+        names under other keys (e.g. `teacher=`)
       - Free-form filenames or assignment labels (e.g. "Alice_Smith.docx")
       - Phone numbers, postal addresses, dates of birth, SSNs
       - Raw IP addresses

@@ -15,7 +15,6 @@ import hashlib
 import io
 import json
 import os
-import random
 import secrets
 import threading
 import uuid
@@ -63,7 +62,9 @@ def _generate_class_code():
     chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
     db = _get_supabase()
     for _ in range(20):
-        code = ''.join(random.choices(chars, k=6))
+        # VB9 #21: class join codes gate roster access — use a CSPRNG
+        # (secrets) so codes are unpredictable, not Mersenne-Twister random.
+        code = ''.join(secrets.choice(chars) for _ in range(6))
         result = db.table('classes').select('id').eq('join_code', code).execute()
         if len(result.data) == 0:
             return code

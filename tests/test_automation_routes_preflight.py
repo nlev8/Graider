@@ -50,7 +50,12 @@ def flask_app(tmp_path, monkeypatch):
 
 class TestRunAutomationCredsPreflight:
     def _write_workflow(self, tmp_path, workflow_id="test-wf"):
-        wf_path = tmp_path / f"{workflow_id}.json"
+        # audit #8: run_automation reads the per-teacher subdir
+        # (_teacher_automations_dir). The fixture's teacher is "teacher-alice",
+        # so the workflow must live there for run to reach the creds preflight.
+        tdir = tmp_path / "teacher-alice"
+        tdir.mkdir(exist_ok=True)
+        wf_path = tdir / f"{workflow_id}.json"
         wf_path.write_text(json.dumps({"id": workflow_id, "steps": []}))
         return workflow_id
 

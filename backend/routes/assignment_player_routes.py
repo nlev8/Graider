@@ -48,6 +48,34 @@ MATHPIX_SUBJECTS = {'math', 'algebra', 'geometry', 'calculus', 'statistics',
                     'trigonometry', 'precalculus', 'ap calculus', 'ap statistics',
                     'ap physics', 'ap chemistry', 'ap biology'}
 
+# VB9 #24 (LLM-side SSRF / URL exfil): the student-controlled `image` field
+# is forwarded to OCR backends (Mathpix `src`, OpenAI Vision `image_url`),
+# both of which will fetch a REMOTE URL if given one. Only inline image
+# payloads are legitimate here — a `data:image/...;base64,` URI or a raw
+# base64 string. Anything carrying a URL scheme (http/https/file/ftp/...) is
+# rejected so a student cannot make our server-side OCR call fetch internal
+# metadata endpoints or exfiltrate via an attacker-controlled host.
+_URL_SCHEME_RE = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.\-]*:')
+
+
+def _is_safe_image_input(image_data) -> bool:
+    """True iff `image_data` is an inline image payload (data: URI or raw
+    base64), not a remote/foreign URL that an OCR backend would fetch."""
+    if not isinstance(image_data, str) or not image_data:
+        return False
+    stripped = image_data.strip()
+    # Allow only the base64 image data URI form.
+    if stripped.lower().startswith('data:image/'):
+        return True
+    # Reject anything else that carries a URL scheme (http:, https:, file:,
+    # ftp:, data:text/html, gopher:, etc.).
+    if _URL_SCHEME_RE.match(stripped):
+        return False
+    # No scheme at all -> treat as raw base64 image bytes (the legitimate
+    # non-data-URI case the OCR helpers already wrap as a data: URI).
+    return True
+
+
 assignment_player_bp = Blueprint('assignment_player', __name__)
 
 # Store active assignments (in production, use database)
@@ -135,6 +163,10 @@ def create_assignment():
         assignment_id = f"assign_{secrets.token_urlsafe(16)}"
         assignment['id'] = assignment_id
         assignment['created_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
+        # Tenant isolation (audit #2/#19): record the owning teacher so
+        # submission reads can be gated to the creator. g.teacher_id is set
+        # by @require_teacher.
+        assignment['teacher_id'] = g.teacher_id
 
         # Save assignment
         os.makedirs(ASSIGNMENTS_DIR, exist_ok=True)
@@ -208,6 +240,20 @@ def get_submissions(assignment_id):
     try:
         if not _validate_assignment_id(assignment_id):
             return jsonify({"error": "Invalid assignment ID"}), 400
+        # Tenant isolation (audit #2/#19): only the owning teacher may read
+        # submissions. The assignment_id doubles as the anonymous student share
+        # link, so it leaks easily (URLs, history, LMS, logs); without this gate
+        # any authenticated teacher could read any other teacher's students'
+        # submissions (FERPA PII). Return 404 (not 403) so a non-owner cannot even
+        # confirm the assignment exists. Legacy assignments created before this fix
+        # carry no teacher_id and are therefore denied (re-publish to restore access).
+        assignment_path = os.path.join(ASSIGNMENTS_DIR, f"{assignment_id}.json")
+        if not os.path.exists(assignment_path):
+            return jsonify({"error": "Assignment not found"}), 404
+        with open(assignment_path, 'r') as af:
+            assignment_owner = json.load(af).get('teacher_id')
+        if assignment_owner != g.teacher_id:
+            return jsonify({"error": "Assignment not found"}), 404
         submissions_dir = os.path.join(ASSIGNMENTS_DIR, 'submissions', assignment_id)
         if not os.path.exists(submissions_dir):
             return jsonify({"submissions": []})
@@ -283,6 +329,14 @@ def _process_image_answer(answer, question, subject, q_type, ai_model='gpt-4o'):
 
     if not image_data:
         return answer, None  # No image to process
+
+    # VB9 #24: reject student-supplied remote URLs before they reach an OCR
+    # backend that would fetch them server-side (LLM-side SSRF / URL exfil).
+    if not _is_safe_image_input(image_data):
+        _logger.warning(
+            "Rejected non-inline image input (URL-bearing) before OCR forwarding"
+        )
+        return answer, None
 
     question_text = question.get('question', '')
     ocr_result = None
