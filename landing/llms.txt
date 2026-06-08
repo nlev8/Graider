@@ -79,6 +79,7 @@ Plan (Lesson Planner) → Create (Assessment/Worksheet Generator) → Assign (Ex
 - **Class Analytics**: Grade distribution charts, per-assignment averages, proficiency vs. growth scatterplots, student progress tracking over time, and "needs attention" alerts.
 - **Student Portal**: Publish assessments online for students to complete digitally with real-time submission and auto-grading.
 - **AI Teaching Assistant**: Chat with an AI that has full context about your class roster, grading history, uploaded curriculum documents, and teaching calendar. Ask "What caused the low grades on Cornell Notes?" and get rubric category breakdowns, omission impact analysis, and differentiated lesson recommendations.
+- **SIS & Rostering Integration (Clever, ClassLink, OneRoster, LTI 1.3)**: Clever-certified single sign-on and automatic roster sync; ClassLink and OneRoster (1EdTech) rostering and SSO; LTI 1.3 launch from any compatible LMS. Teachers and students sign in with their existing district account and classes roster automatically — no manual CSV setup. Graider is built for US K-12 districts on Clever, ClassLink, and OneRoster.
 - **Focus SIS Integration**: Export grades as CSV for Focus SIS import, or use browser automation to upload grades and comments directly into Focus gradebook. Create assignments in Focus through the AI assistant.
 - **Parent Email**: Auto-generate and send personalized parent feedback emails through Outlook with per-student grade breakdowns.
 - **Script Builder**: Visual Playwright browser automation builder for school portal tasks — screenshot textbook pages, export gradebook data, sync attendance reports. Pre-built templates + element picker + AI-assisted workflow creation.
@@ -92,6 +93,7 @@ Plan (Lesson Planner) → Create (Assessment/Worksheet Generator) → Assign (Ex
 
 - **6-12 classroom teachers** who grade 100+ papers per week and want to reclaim their evenings
 - **Social Studies, ELA, Science, and Math teachers** grading written responses, worksheets, and assessments
+- **Districts and schools on Clever, ClassLink, or OneRoster** who want AI grading that rosters and authenticates through their existing SIS/SSO
 - **Teachers using Focus SIS** (Volusia County and other Florida districts) who want automated grade upload
 - **Curriculum coordinators** who need standards-aligned lesson plans and assessment generation
 - **Special education teachers** managing IEP/504 accommodations across large caseloads
