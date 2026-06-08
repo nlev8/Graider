@@ -76,12 +76,17 @@ def test_multipass_per_question_prompt_snapshot(ss, cfg):
     assert len(pq) == 10
     # grade_multipass grades questions in PARALLEL threads → record order is non-deterministic.
     # Hash the SORTED set of prompts for an order-independent exact-snapshot.
-    assert _h("\n===\n".join(sorted(pq))) == "1b23010a2a19d365", \
+    # Re-baselined 2026-06-06 (security/vb6-prompt-injection): the student answer is now wrapped
+    # in an explicit UNTRUSTED-content fence + neutralized for forged prompt markers (audit #10
+    # prompt injection). Prompt wording changed intentionally → hash updated.
+    assert _h("\n===\n".join(sorted(pq))) == "9626918b316d383c", \
         "per-question prompts changed — re-baseline if intentional"
     assert all("QUESTION:" in p for p in pq)
     assert all("STUDENT ANSWER:" in p for p in pq)
     assert all("POINTS POSSIBLE:" in p for p in pq)
     assert all("GRADING APPROACH: STANDARD" in p for p in pq)
+    # Security (audit #10): the student answer must be fenced inside the prompt (open+close).
+    assert all(p.count("-----UNTRUSTED-STUDENT-ANSWER-7f3a9c2e-----") == 2 for p in pq)
 
     assert len(fb) == 1
     assert _h(fb[0]) == "5fa64c107dde0ef8", "feedback prompt changed — re-baseline if intentional"

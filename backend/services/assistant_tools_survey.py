@@ -7,7 +7,7 @@ and compiling survey reports.
 import json
 import logging
 import os
-import random
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def create_parent_survey(title=None, teacher_name=None, questions=None, teacher_
     # Generate unique code
     chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
     while True:
-        code = ''.join(random.choices(chars, k=6))
+        code = ''.join(secrets.choice(chars) for _ in range(6))  # CSPRNG (audit #21)
         result = db.table('published_assessments').select('id').eq('join_code', code).execute()
         if len(result.data) == 0:
             break

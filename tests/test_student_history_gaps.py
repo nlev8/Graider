@@ -71,14 +71,20 @@ class TestLoadStorageLayer:
         )
 
     def test_storage_miss_falls_back_to_file(self, tmp_path, monkeypatch):
-        hist_dir = tmp_path / "history"
-        hist_dir.mkdir()
-        # Pre-write the local file
-        (hist_dir / "sid-1.json").write_text(
+        # VB2b (audit #3): the file fallback is now tenant-scoped. For a real
+        # teacher_id it reads ~/.graider_tenants/<safe>/.graider_data/
+        # student_history/ — NOT the shared global dir (which leaked across
+        # tenants). Pre-write the tenant file and assert the miss falls back
+        # to it.
+        from backend import storage as st
+        monkeypatch.setattr(st, "HOME", str(tmp_path))
+        tenant_dir = (tmp_path / ".graider_tenants" / "teach-1"
+                      / ".graider_data" / "student_history")
+        tenant_dir.mkdir(parents=True)
+        (tenant_dir / "sid-1.json").write_text(
             json.dumps({"from": "file", "assignments": []}),
         )
 
-        monkeypatch.setattr(sh, "HISTORY_DIR", str(hist_dir))
         monkeypatch.setattr(
             sh, "_storage_load_history", MagicMock(return_value=None),
         )
