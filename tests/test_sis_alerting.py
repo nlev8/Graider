@@ -51,9 +51,14 @@ SIS_CAPTURES = [
     # 2026-05-06: shifted 217/231/245 -> 225/240/255 by PR 6 of SIS compliance
     # hardening sprint (audit_log calls added in get_clever_user). Captures
     # themselves are unchanged — pins track the except blocks.
-    ("backend/clever.py", 225),
-    ("backend/clever.py", 240),
-    ("backend/clever.py", 255),
+    # 2026-06-08: shifted 225/240/255 -> 247/262/277 by the Clever API v3.0
+    # role-resolution fix (+22 lines in get_clever_user deriving the role from
+    # the /users/{id} `roles` object — see backend/clever.py). The three
+    # roster-fetch captures (now lines 250/265/280) are unchanged; only the
+    # pins move. Pin 46 (capture at 51) is above the edit, so it is untouched.
+    ("backend/clever.py", 247),
+    ("backend/clever.py", 262),
+    ("backend/clever.py", 277),
     # 2026-05-07: original pin at line 54 was the `_clever_audit` except
     # block. PR #227 (audit MAJOR #10 close) made `_clever_audit` delegate
     # to `backend.utils.audit.audit_log` whose own try/except + Sentry
