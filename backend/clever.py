@@ -608,6 +608,134 @@ def persist_parent_contacts(contact_map, teacher_id="local-dev"):
 
 
 def delete_clever_data(teacher_id="local-dev"):
-    """Delete Clever-synced data. Delegates to shared roster deletion."""
+    """Delete Clever-synced student data for a teacher (FERPA right-to-delete).
+
+    Delegates roster rows + roster CSVs to the shared `delete_roster_data`, then
+    purges the Clever-specific student/guardian-PII artifacts that the roster
+    delete misses:
+      - period/section files (PERIODS_DIR/clever_{section_id}.json[.meta.json]),
+        scoped via the teacher's classes->clever_section_id mapping captured
+        BEFORE delete_roster_data drops those class rows (the files are keyed by
+        section_id, not teacher_id, so this is the only way to scope them);
+      - the per-teacher parent-contact file (guardian emails/phones);
+      - per-student history (scores) and accommodation mappings (IEP/ELL).
+
+    Scope boundary: teacher-AUTHORED content (teacher_data assignment
+    templates / settings / rubric, published_assessments) is intentionally NOT
+    purged — a Clever data deletion targets student PII, not the educator's own
+    work. A full account purge would be a separate, deliberate operation.
+
+    Returns the delete_roster_data dict augmented with per-artifact counts.
+    """
     from backend.roster_sync import delete_roster_data
-    return delete_roster_data(teacher_id)
+    from backend import storage
+
+    # Capture this teacher's Clever section_ids BEFORE delete_roster_data drops
+    # the classes rows. Period files are keyed by section_id (no teacher_id), so
+    # the class->section mapping is the only way to scope them to this teacher.
+    section_ids = []
+    sb = None
+    try:
+        from backend.supabase_client import get_supabase
+        sb = get_supabase()
+        if sb:
+            res = (sb.table("classes").select("clever_section_id")
+                   .eq("teacher_id", teacher_id).execute())
+            section_ids = [c["clever_section_id"] for c in (res.data or [])
+                           if c.get("clever_section_id")]
+    except Exception as e:
+        logger.warning("Could not enumerate Clever sections for deletion (%s): %s",
+                       teacher_id, type(e).__name__)
+        sentry_sdk.capture_exception(e)
+        sb = None
+
+    result = delete_roster_data(teacher_id)
+
+    if sb is None:
+        # Period files are section-keyed (no teacher_id in the filename), so
+        # without the classes->section mapping we cannot safely scope them.
+        # Surface the residual rather than silently leaving section-keyed PII on
+        # disk; the operator can re-run the delete once the DB is reachable.
+        logger.warning(
+            "Clever delete for %s: Supabase unavailable — section-keyed period "
+            "files could not be scoped and may persist; re-run when DB is reachable",
+            teacher_id,
+        )
+        result["period_files_skipped"] = True
+
+    # Period/section files (+ their .meta.json sidecars), scoped to this teacher.
+    periods_removed = 0
+    for sid in section_ids:
+        for fname in (f"clever_{sid}.json", f"clever_{sid}.json.meta.json"):
+            fpath = os.path.join(PERIODS_DIR, fname)
+            try:
+                if os.path.exists(fpath):
+                    os.remove(fpath)
+                    periods_removed += 1
+            except OSError as e:
+                logger.warning("Failed to delete period file %s: %s", fpath, e)
+                sentry_sdk.capture_exception(e)
+    result["period_files"] = periods_removed
+
+    # Per-teacher parent-contact file (guardian PII).
+    safe_id = _safe_teacher_id(teacher_id)
+    contacts_file = os.path.join(GRAIDER_DATA_DIR, "contacts",
+                                 f"parent_contacts_{safe_id}.json")
+    result["parent_contact_files"] = 0
+    try:
+        if os.path.exists(contacts_file):
+            os.remove(contacts_file)
+            result["parent_contact_files"] = 1
+    except OSError as e:
+        logger.warning("Failed to delete parent-contact file %s: %s", contacts_file, e)
+        sentry_sdk.capture_exception(e)
+
+    # Per-student history (scores) — student PII, tenant-scoped storage.
+    hist_deleted = 0
+    try:
+        for sid in storage.list_student_history(teacher_id):
+            if storage.delete_student_history(teacher_id, sid):
+                hist_deleted += 1
+    except Exception as e:
+        logger.warning("student_history deletion failed (%s): %s",
+                       teacher_id, type(e).__name__)
+        sentry_sdk.capture_exception(e)
+    result["student_history"] = hist_deleted
+
+    # Accommodation mappings (IEP/ELL flags) — student PII. Removes the teacher's
+    # whole 'accommodations' blob; the students it maps to are being deleted.
+    try:
+        storage.delete("accommodations", teacher_id)
+        result["accommodations"] = "deleted"
+    except Exception as e:
+        logger.warning("accommodations deletion failed (%s): %s",
+                       teacher_id, type(e).__name__)
+        sentry_sdk.capture_exception(e)
+        result["accommodations"] = "error"
+
+    # Scrub student PII embedded in this teacher's join-code published
+    # assessments. settings.student_accommodations is {student_name: settings}
+    # and settings.restricted_students is [student_name] — both are student PII
+    # (and can carry Clever-sourced IEP/504 context). We UPDATE rather than
+    # delete the rows: the assessment itself is the teacher's authored content,
+    # but the embedded roster snapshot must not survive a FERPA delete.
+    scrubbed = 0
+    if sb is not None:
+        try:
+            rows = (sb.table("published_assessments").select("id,settings")
+                    .eq("teacher_id", teacher_id).execute())
+            for row in (rows.data or []):
+                settings = row.get("settings") or {}
+                if settings.get("student_accommodations") or settings.get("restricted_students"):
+                    settings.pop("student_accommodations", None)
+                    settings.pop("restricted_students", None)
+                    (sb.table("published_assessments").update({"settings": settings})
+                     .eq("id", row["id"]).execute())
+                    scrubbed += 1
+        except Exception as e:
+            logger.warning("published_assessments PII scrub failed (%s): %s",
+                           teacher_id, type(e).__name__)
+            sentry_sdk.capture_exception(e)
+    result["published_assessments_scrubbed"] = scrubbed
+
+    return result

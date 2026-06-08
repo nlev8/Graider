@@ -602,3 +602,151 @@ class TestDeleteCleverData:
         # Should not raise
         result = clever.delete_clever_data("clever:t1")
         assert result["roster_files"] >= 1
+
+    def test_deletes_period_and_contact_files_scoped_to_teacher(self):
+        """FERPA right-to-delete: period files (section-keyed) + the guardian
+        parent-contact file must be purged, scoped to THIS teacher's sections
+        (another teacher's section period file must survive)."""
+        import json as _json
+
+        os.makedirs(clever.PERIODS_DIR, exist_ok=True)
+        for sid in ("sec-1", "sec-2"):
+            with open(os.path.join(clever.PERIODS_DIR, f"clever_{sid}.json"), "w") as f:
+                _json.dump({"clever_section_id": sid, "source": "clever"}, f)
+            with open(os.path.join(clever.PERIODS_DIR, f"clever_{sid}.json.meta.json"), "w") as f:
+                _json.dump({"source": "clever"}, f)
+
+        contacts_dir = os.path.join(clever.GRAIDER_DATA_DIR, "contacts")
+        os.makedirs(contacts_dir, exist_ok=True)
+        safe_id = clever._safe_teacher_id("clever:t1")
+        contact_file = os.path.join(contacts_dir, f"parent_contacts_{safe_id}.json")
+        with open(contact_file, "w") as f:
+            _json.dump({"s1": {"parent_emails": ["guardian@home.edu"]}}, f)
+
+        # Supabase reports teacher clever:t1 owns ONLY section sec-1.
+        class _Q:
+            def __init__(self, data):
+                self._d = data
+
+            def select(self, *a, **k):
+                return self
+
+            def eq(self, *a, **k):
+                return self
+
+            def in_(self, *a, **k):
+                return self
+
+            def delete(self, *a, **k):
+                return self
+
+            def execute(self):
+                return type("R", (), {"data": self._d})()
+
+        class _SB:
+            def table(self, name):
+                rows = [{"id": "c1", "clever_section_id": "sec-1"}] if name == "classes" else []
+                return _Q(rows)
+
+        with patch("backend.supabase_client.get_supabase", return_value=_SB()):
+            result = clever.delete_clever_data("clever:t1")
+
+        assert not os.path.exists(os.path.join(clever.PERIODS_DIR, "clever_sec-1.json"))
+        assert not os.path.exists(os.path.join(clever.PERIODS_DIR, "clever_sec-1.json.meta.json"))
+        assert os.path.exists(os.path.join(clever.PERIODS_DIR, "clever_sec-2.json")), \
+            "another teacher's section period file must NOT be deleted"
+        assert not os.path.exists(contact_file), "guardian parent-contact file must be deleted"
+        assert result["period_files"] == 2  # sec-1 json + its .meta.json
+        assert result["parent_contact_files"] == 1
+
+    def test_deletes_student_pii_but_preserves_authored_content(self):
+        """Student PII (per-student history + accommodation/IEP mappings) is
+        purged via the storage layer, but teacher-AUTHORED content
+        (teacher_data templates/settings, published_assessments) is
+        intentionally NOT deleted — a Clever data deletion targets student data,
+        not the educator's own work."""
+        with patch("backend.storage.list_student_history", return_value=["s1", "s2"]) as m_list, \
+             patch("backend.storage.delete_student_history", return_value=True) as m_delhist, \
+             patch("backend.storage.delete", return_value=True) as m_del:
+            result = clever.delete_clever_data("clever:t1")
+
+        m_list.assert_called_once_with("clever:t1")
+        assert m_delhist.call_count == 2
+        assert {c.args[1] for c in m_delhist.call_args_list} == {"s1", "s2"}
+        assert result["student_history"] == 2
+
+        deleted_keys = {c.args[0] for c in m_del.call_args_list}
+        assert deleted_keys == {"accommodations"}, (
+            "scope boundary breached — only the student accommodations blob may "
+            "be deleted; teacher_data / published_assessments must be preserved"
+        )
+        assert ("accommodations", "clever:t1") in [c.args for c in m_del.call_args_list]
+        assert result["accommodations"] == "deleted"
+
+    def test_period_cleanup_flagged_when_supabase_unavailable(self):
+        """If Supabase is down we cannot scope section-keyed period files —
+        the residual must be surfaced (period_files_skipped), not silent."""
+        # Fixture already patches get_supabase -> None.
+        with patch("backend.storage.list_student_history", return_value=[]), \
+             patch("backend.storage.delete", return_value=True):
+            result = clever.delete_clever_data("clever:t1")
+        assert result.get("period_files_skipped") is True
+
+    def test_scrubs_student_pii_from_published_assessments(self):
+        """FERPA: join-code published_assessments embed student PII
+        (settings.student_accommodations = {name: ...}, restricted_students =
+        [name]). Deletion must SCRUB those fields while preserving the teacher's
+        authored assessment + its non-PII config."""
+        class _Q:
+            def __init__(self, sb, table, data):
+                self._sb, self._t, self._d = sb, table, data
+
+            def select(self, *a, **k):
+                return self
+
+            def eq(self, *a, **k):
+                return self
+
+            def in_(self, *a, **k):
+                return self
+
+            def delete(self, *a, **k):
+                return self
+
+            def update(self, payload):
+                self._sb.updates.append((self._t, payload))
+                return self
+
+            def execute(self):
+                return type("R", (), {"data": self._d})()
+
+        class _SB:
+            def __init__(self, tables):
+                self.tables, self.updates = tables, []
+
+            def table(self, name):
+                return _Q(self, name, self.tables.get(name, []))
+
+        sb = _SB({
+            "classes": [],
+            "published_assessments": [{
+                "id": "pa1",
+                "settings": {
+                    "student_accommodations": {"Jane Doe": {"extended_time": True}},
+                    "restricted_students": ["Jane Doe"],
+                    "time_limit_minutes": 30,  # authored config — must survive
+                },
+            }],
+        })
+        with patch("backend.supabase_client.get_supabase", return_value=sb), \
+             patch("backend.storage.list_student_history", return_value=[]), \
+             patch("backend.storage.delete", return_value=True):
+            result = clever.delete_clever_data("clever:t1")
+
+        pa_updates = [p for (t, p) in sb.updates if t == "published_assessments"]
+        assert pa_updates, "published_assessments embedded PII was not scrubbed"
+        scrubbed = pa_updates[0]["settings"]
+        assert "student_accommodations" not in scrubbed
+        assert "restricted_students" not in scrubbed
+        assert scrubbed.get("time_limit_minutes") == 30, "authored config must be preserved"
+        assert result["published_assessments_scrubbed"] == 1
