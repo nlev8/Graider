@@ -685,3 +685,34 @@ def test_class_count_existing_for_captures_on_execute_exception(monkeypatch):
     repo = ClassSubmissionRepository(sb)
     assert repo.count_existing_for("content-1", {"student_id": "s"}) == 0
     assert isinstance(captured.get("exc"), RuntimeError)
+
+
+# ---------------------------------------------------------------------------
+# audit #4: anonymous join-code student_name must be ILIKE-escaped
+# ---------------------------------------------------------------------------
+
+def _ilike_student_name_value(sb):
+    """Return the captured ILIKE student_name value from whichever table the
+    repo queried (robust to the join-code table name)."""
+    for t in sb.tables.values():
+        q = t.last_query
+        if q is not None and ("ilike", "student_name") in q._filters:
+            return q._filters[("ilike", "student_name")]
+    raise AssertionError("no ilike('student_name', ...) filter was issued")
+
+
+def test_join_code_find_existing_escapes_ilike_wildcards():
+    """Attacker-controlled student_name must be escaped so '%'/'_' are literal,
+    not ILIKE pattern metacharacters — otherwise student_name='%' matches ANY
+    prior submission for that join code and leaks it (audit #4)."""
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    sb = FakeSupabase()
+    JoinCodeSubmissionRepository(sb).find_existing_submission("CODE1", {"name": "%"})
+    assert _ilike_student_name_value(sb) == "\\%", "wildcard '%' not escaped in find_existing_submission"
+
+
+def test_join_code_count_existing_escapes_ilike_wildcards():
+    from backend.services.submission_repository import JoinCodeSubmissionRepository
+    sb = FakeSupabase()
+    JoinCodeSubmissionRepository(sb).count_existing_for("CODE1", {"name": "a_%"})
+    assert _ilike_student_name_value(sb) == "a\\_\\%", "wildcards not escaped in count_existing_for"

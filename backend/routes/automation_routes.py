@@ -30,6 +30,21 @@ TEMPLATES_DIR = os.path.join(PROJECT_ROOT, "backend", "automation", "templates")
 
 os.makedirs(AUTOMATIONS_DIR, exist_ok=True)
 
+
+def _teacher_automations_dir(teacher_id):
+    """Per-tenant automations dir (audit #8). Mirrors storage._tenant_home:
+    'local-dev' (or falsy) keeps the historical flat layout; any real teacher_id
+    gets an isolated subdir. Without this, automation CRUD/run was unscoped — and
+    because a workflow's id is derived from its NAME (predictable + collision-prone),
+    two teachers' same-named workflows would also overwrite each other in one global
+    file. `teacher_id` is sanitized so it can't escape the automations root."""
+    base = AUTOMATIONS_DIR
+    if teacher_id and teacher_id != 'local-dev':
+        safe_tid = re.sub(r'[^a-zA-Z0-9_-]', '_', str(teacher_id))
+        base = os.path.join(AUTOMATIONS_DIR, safe_tid)
+    os.makedirs(base, exist_ok=True)
+    return base
+
 # ── Run state ────────────────────────────────────────────────
 _run_state = {
     "process": None,
@@ -128,12 +143,13 @@ def _read_picker_output(proc):
 @handle_route_errors
 def list_automations():
     """List all saved workflow files."""
+    tdir = _teacher_automations_dir(g.teacher_id)
     workflows = []
-    for filename in sorted(os.listdir(AUTOMATIONS_DIR)):
+    for filename in sorted(os.listdir(tdir)):
         if not filename.endswith('.json'):
             continue
         try:
-            with open(os.path.join(AUTOMATIONS_DIR, filename), 'r') as f:
+            with open(os.path.join(tdir, filename), 'r') as f:
                 wf = json.load(f)
             workflows.append({
                 "id": wf.get("id", filename.replace('.json', '')),
@@ -153,7 +169,7 @@ def list_automations():
 def get_automation(workflow_id):
     """Load a specific workflow JSON."""
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
-    filepath = os.path.join(AUTOMATIONS_DIR, safe_id + ".json")
+    filepath = os.path.join(_teacher_automations_dir(g.teacher_id), safe_id + ".json")
     if not os.path.exists(filepath):
         return jsonify({"error": "Workflow not found"}), 404
     with open(filepath, 'r') as f:
@@ -169,7 +185,14 @@ def save_automation():
     if not data or not data.get("name"):
         return jsonify({"error": "Workflow name required"}), 400
 
-    wf_id = data.get("id") or re.sub(r'[^a-z0-9]+', '-', data["name"].lower()).strip('-')
+    raw_id = data.get("id") or re.sub(r'[^a-z0-9]+', '-', data["name"].lower()).strip('-')
+    # Sanitize the (possibly client-supplied) id the SAME way the URL handlers
+    # sanitize workflow_id. Without this a crafted body id like
+    # "../<other-teacher>/<wf>" escapes the per-teacher subdir and overwrites
+    # another tenant's workflow (audit #8 — caught by Codex verification).
+    wf_id = re.sub(r'[^a-z0-9_-]', '', str(raw_id))
+    if not wf_id:
+        return jsonify({"error": "Invalid workflow id"}), 400
     data["id"] = wf_id
     data.setdefault("version", 1)
     data.setdefault("created_at", datetime.now().isoformat())
@@ -178,7 +201,7 @@ def save_automation():
     for i, step in enumerate(data.get("steps", [])):
         step.setdefault("id", "step-" + str(i + 1))
 
-    filepath = os.path.join(AUTOMATIONS_DIR, wf_id + ".json")
+    filepath = os.path.join(_teacher_automations_dir(g.teacher_id), wf_id + ".json")
     with open(filepath, 'w') as f:
         json.dump(data, f, indent=2)
     return jsonify({"status": "saved", "id": wf_id})
@@ -190,7 +213,7 @@ def save_automation():
 def delete_automation(workflow_id):
     """Delete a workflow file."""
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
-    filepath = os.path.join(AUTOMATIONS_DIR, safe_id + ".json")
+    filepath = os.path.join(_teacher_automations_dir(g.teacher_id), safe_id + ".json")
     if os.path.exists(filepath):
         os.remove(filepath)
     return jsonify({"status": "deleted"})
@@ -275,7 +298,7 @@ def run_automation(workflow_id):
         return jsonify({"error": "An automation is already running"}), 409
 
     safe_id = re.sub(r'[^a-z0-9_-]', '', workflow_id)
-    workflow_path = os.path.join(AUTOMATIONS_DIR, safe_id + ".json")
+    workflow_path = os.path.join(_teacher_automations_dir(g.teacher_id), safe_id + ".json")
     if not os.path.exists(workflow_path):
         return jsonify({"error": "Workflow not found"}), 404
 
@@ -308,6 +331,10 @@ def run_automation(workflow_id):
     _run_state.update({
         "process": None, "status": "running",
         "workflow_name": workflow_id,
+        # Tenant isolation (audit #8 / Codex): the runner is a single global
+        # subprocess, so record who owns the current run. status/stop gate on this
+        # so one teacher can't read or kill another teacher's run.
+        "teacher_id": g.teacher_id,
         "current_step": 0, "total_steps": 0,
         "step_label": "", "message": "Starting automation...",
         "log": [],
@@ -329,6 +356,14 @@ def run_automation(workflow_id):
 @handle_route_errors
 def run_status():
     """Poll current automation run state."""
+    # Tenant isolation (audit #8 / Codex): the runner is a single global
+    # subprocess. Only surface it to the teacher who started it; everyone else
+    # sees idle (no leak of another tenant's workflow_name / progress / log).
+    if _run_state.get("teacher_id") != g.teacher_id:
+        return jsonify({
+            "status": "idle", "workflow_name": "", "current_step": 0,
+            "total_steps": 0, "step_label": "", "message": "", "log": [],
+        })
     return jsonify({
         "status": _run_state.get("status", "idle"),
         "workflow_name": _run_state.get("workflow_name", ""),
@@ -345,6 +380,11 @@ def run_status():
 @handle_route_errors
 def stop_run():
     """Kill running automation subprocess."""
+    # Tenant isolation (audit #8 / Codex): don't let one teacher stop another
+    # teacher's run (DoS). Only the owner of an active run may stop it; an idle
+    # state is a harmless no-op for anyone.
+    if _run_state.get("status") != "idle" and _run_state.get("teacher_id") not in (None, g.teacher_id):
+        return jsonify({"error": "No running automation"}), 404
     proc = _run_state.get("process")
     if proc and proc.poll() is None:
         proc.terminate()
@@ -370,7 +410,10 @@ def start_picker():
     start_url = data.get("url", "https://vportal.volusia.k12.fl.us/")
     auto_login = data.get("login", False)
 
-    _picker_state.update({"status": "picking", "events": [], "process": None})
+    # Tenant isolation (audit #8 / Codex): single global picker subprocess —
+    # record the owner so events/stop can be gated to the teacher who started it.
+    _picker_state.update({"status": "picking", "events": [], "process": None,
+                          "teacher_id": g.teacher_id})
 
     cmd = ["node", PICKER_SCRIPT, "--url", start_url]
     if auto_login:
@@ -408,6 +451,11 @@ def start_picker():
 @handle_route_errors
 def picker_events():
     """Drain and return accumulated picker events."""
+    # Tenant isolation (audit #8 / Codex): only the teacher who started the picker
+    # may drain its events — otherwise another tenant could read A's selector
+    # events and starve A of them (the buffer is drained on read).
+    if _picker_state.get("teacher_id") != g.teacher_id:
+        return jsonify({"status": "idle", "events": []})
     events = list(_picker_state.get("events", []))
     _picker_state["events"] = []
     return jsonify({"status": _picker_state.get("status", "idle"), "events": events})
@@ -418,6 +466,10 @@ def picker_events():
 @handle_route_errors
 def stop_picker():
     """Close picker browser."""
+    # Tenant isolation (audit #8 / Codex): only the owner may stop an active
+    # picker (don't let one tenant kill another's picker browser).
+    if _picker_state.get("status") != "idle" and _picker_state.get("teacher_id") not in (None, g.teacher_id):
+        return jsonify({"error": "No active picker"}), 404
     proc = _picker_state.get("process")
     if proc and proc.poll() is None:
         proc.terminate()
