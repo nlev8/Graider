@@ -79,9 +79,9 @@ except ImportError:
         from student_history import load_student_history, save_student_history
     except ImportError:
         # Fallback if module not available
-        def load_student_history(student_id):
+        def load_student_history(student_id, teacher_id='local-dev'):
             return None
-        def save_student_history(student_id, history):
+        def save_student_history(student_id, history, teacher_id='local-dev'):
             pass
 
 # Accommodation helpers: same nested try/except ImportError resolution as
@@ -401,8 +401,8 @@ def export_individual_student_data():
     ]
     export["grading_results"] = student_results
 
-    # 2. Student history
-    history = load_student_history(safe_id) if safe_id else None
+    # 2. Student history (VB2b: tenant-scoped to the requesting teacher)
+    history = load_student_history(safe_id, teacher_id) if safe_id else None
     export["student_history"] = history
 
     # 3. Accommodations
@@ -674,9 +674,9 @@ def import_individual_student_data():
             save_results(grading_state["results"], teacher_id)
             imported["results"] = len(new_results)
 
-    # 2. Student history — merge assignments lists
+    # 2. Student history — merge assignments lists (VB2b: tenant-scoped)
     if student_history:
-        existing_history = load_student_history(student_id)
+        existing_history = load_student_history(student_id, teacher_id)
         if existing_history and existing_history.get("assignments"):
             # Merge: add assignments not already present (by date + assignment name)
             existing_keys = set()
@@ -690,11 +690,11 @@ def import_individual_student_data():
             for skill, val in student_history.get("skill_scores", {}).items():
                 if skill not in existing_history.get("skill_scores", {}):
                     existing_history.setdefault("skill_scores", {})[skill] = val
-            save_student_history(student_id, existing_history)
+            save_student_history(student_id, existing_history, teacher_id)
         else:
             # No existing history — save the imported one with updated ID
             student_history["student_id"] = student_id
-            save_student_history(student_id, student_history)
+            save_student_history(student_id, student_history, teacher_id)
         imported["history"] = True
 
     # 3. Accommodations

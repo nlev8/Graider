@@ -102,6 +102,47 @@ class TestPasswordHashBootstrap:
         ), "Bootstrapped hash must verify against DISTRICT_ADMIN_PASSWORD"
 
 
+class TestDistrictBootstrapTokenGate:
+    """audit #1: the unauthenticated self-service bootstrap must NOT let the
+    first anonymous caller claim the district-admin role. Self-service setup now
+    requires an out-of-band DISTRICT_SETUP_TOKEN; absent/wrong token → refused."""
+
+    def _post_setup(self, client, body):
+        save_mock = MagicMock()
+        with patch("backend.routes.district_routes.storage_load", return_value=None), \
+             patch("backend.routes.district_routes.storage_save", save_mock), \
+             patch("backend.routes.district_routes.audit_log"):
+            resp = client.post("/api/district/auth", json=body)
+        saved_keys = [c.args[0] for c in save_mock.call_args_list]
+        return resp, saved_keys
+
+    def test_bootstrap_refused_without_setup_token(self, client, monkeypatch):
+        monkeypatch.delenv("DISTRICT_ADMIN_PASSWORD", raising=False)
+        monkeypatch.delenv("DISTRICT_SETUP_TOKEN", raising=False)
+        resp, saved_keys = self._post_setup(
+            client, {"setup": True, "password": "longenough12"})
+        assert resp.status_code == 403
+        assert not (resp.get_json() or {}).get("authenticated")
+        assert "district:password_hash" not in saved_keys, "anonymous bootstrap must not set a password"
+
+    def test_bootstrap_refused_with_wrong_setup_token(self, client, monkeypatch):
+        monkeypatch.delenv("DISTRICT_ADMIN_PASSWORD", raising=False)
+        monkeypatch.setenv("DISTRICT_SETUP_TOKEN", "correct-token")
+        resp, saved_keys = self._post_setup(
+            client, {"setup": True, "password": "longenough12", "setup_token": "wrong"})
+        assert resp.status_code == 403
+        assert "district:password_hash" not in saved_keys
+
+    def test_bootstrap_allowed_with_valid_setup_token(self, client, monkeypatch):
+        monkeypatch.delenv("DISTRICT_ADMIN_PASSWORD", raising=False)
+        monkeypatch.setenv("DISTRICT_SETUP_TOKEN", "correct-token")
+        resp, saved_keys = self._post_setup(
+            client, {"setup": True, "password": "longenough12", "setup_token": "correct-token"})
+        assert resp.status_code == 200
+        assert resp.get_json()["authenticated"] is True
+        assert "district:password_hash" in saved_keys
+
+
 # ──────────────────────────────────────────────────────────────────
 # district_auth: stored-pw + no password supplied (line 190)
 # ──────────────────────────────────────────────────────────────────

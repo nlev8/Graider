@@ -64,8 +64,19 @@ def _per_question_payload(prompt: str) -> dict:
     points = int(pts_m.group(1)) if pts_m else 10
     q_m = re.search(r'QUESTION: (.+)', prompt)
     qtext = q_m.group(1).strip() if q_m else ''
-    a_m = re.search(r'STUDENT ANSWER: "(.*?)"', prompt, re.DOTALL)
-    answer = (a_m.group(1).strip() if a_m else '')
+    # Security (audit #10): the student answer is now wrapped in STUDENT_ANSWER_FENCE lines.
+    # Read the text between the two fence lines; fall back to the old quoted form for any
+    # other caller shape.
+    from backend.services.grader_text_prep import STUDENT_ANSWER_FENCE
+    fence_m = re.search(
+        re.escape(STUDENT_ANSWER_FENCE) + r'\n(.*?)\n' + re.escape(STUDENT_ANSWER_FENCE),
+        prompt, re.DOTALL,
+    )
+    if fence_m:
+        answer = fence_m.group(1).strip()
+    else:
+        a_m = re.search(r'STUDENT ANSWER: "(.*?)"', prompt, re.DOTALL)
+        answer = (a_m.group(1).strip() if a_m else '')
 
     if not answer:
         score, quality, is_correct = 0, 'insufficient', False
