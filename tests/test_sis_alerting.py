@@ -75,7 +75,10 @@ SIS_CAPTURES = [
     # 2026-05-16: shifted 310 -> 325 by PR Task C/C1 (_public_candidates
     # helper + multi-student-row enumeration in _create_clever_student_session).
     # Capture at 327 (outer except 325) unchanged.
-    ("backend/routes/clever_routes.py", 325),
+    # 2026-06-08: shifted 325 -> 332 by VB8 #18 (establish_sso_session import
+    # at module top, +1 line) pushing the capture from 333 to 334 — 1 past the
+    # window=8 edge. Pin tracks the except (332); capture at 334 unchanged.
+    ("backend/routes/clever_routes.py", 332),
     # 2026-05-14: shifted 265 -> 286 by the security-quintet PR (Task 4b
     # added the Clever-ID resolver + filter_roster_to_teacher block to
     # _background_roster_sync — ~21 lines). Capture site at 288 unchanged.
@@ -84,7 +87,10 @@ SIS_CAPTURES = [
     # in _background_roster_sync) unchanged.
     # 2026-05-16: shifted 353 -> 368 by PR Task C/C1 (same +~15 lines from
     # the multi-row enumeration block). Capture at 370 (except 368) unchanged.
-    ("backend/routes/clever_routes.py", 368),
+    # 2026-06-08: shifted 368 -> 375 by VB8 #18 (establish_sso_session import,
+    # +1 line) pushing the capture past the window=8 edge. Pin tracks the
+    # except (375); capture at 377 unchanged.
+    ("backend/routes/clever_routes.py", 375),
     # 2026-05-06: shifted 672 -> 692 by PR 3 of SIS compliance hardening sprint
     # (PII redaction in Clever logs added ~20 lines of helper code earlier in
     # the file). 2026-05-07: shifted 692 -> 699 by PR #227 same-as-above net
