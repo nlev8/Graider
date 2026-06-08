@@ -133,3 +133,61 @@ def test_legacy_sso_session_without_ts_is_rejected(monkeypatch):
         _body, status = rv
         assert status == 401
         assert "clever_user" not in session
+
+
+# ---------------------------------------------------------------------------
+# check_auth — educator-role allowlist on Clever sessions (contact-denial,
+# defense-in-depth at the session-validation layer). The OAuth callback denies
+# non-educator roles at login; this proves a stale cookie minted before that
+# guard cannot ride through.
+# ---------------------------------------------------------------------------
+
+def test_clever_session_non_educator_role_is_cleared(monkeypatch):
+    # A `contact` (parent/guardian) cookie — even within the absolute cap —
+    # must be cleared, never granted teacher-dashboard access (FERPA).
+    app = _init_app(monkeypatch)
+    with app.test_request_context("/api/x"):
+        from flask import session
+        session["clever_user"] = {"clever_id": "c1", "email": "g@x",
+                                  "user_id": "uuid-1", "district": "d1",
+                                  "type": "contact"}
+        session["sso_login_ts"] = time.time()  # fresh — only the role is bad
+        rv = _run_hooks(app)
+        assert rv is not None
+        _body, status = rv
+        assert status == 401
+        assert "clever_user" not in session
+
+
+def test_clever_session_user_sentinel_role_is_cleared(monkeypatch):
+    # The pre-v3-fix "user" sentinel (every Clever user resolved to "user"
+    # before the role fix) is not an educator role → cleared.
+    app = _init_app(monkeypatch)
+    with app.test_request_context("/api/x"):
+        from flask import session
+        session["clever_user"] = {"clever_id": "c1", "email": "t@x",
+                                  "user_id": "uuid-1", "district": "d1",
+                                  "type": "user"}
+        session["sso_login_ts"] = time.time()
+        rv = _run_hooks(app)
+        assert rv is not None
+        _body, status = rv
+        assert status == 401
+        assert "clever_user" not in session
+
+
+def test_clever_session_educator_role_is_allowed(monkeypatch):
+    # An educator role (`staff`) within the cap authenticates normally — the
+    # allowlist must not lock out legitimate educators.
+    from flask import g
+    app = _init_app(monkeypatch)
+    with app.test_request_context("/api/x"):
+        from flask import session
+        session["clever_user"] = {"clever_id": "c1", "email": "t@x",
+                                  "user_id": "uuid-1", "district": "d1",
+                                  "type": "staff"}
+        session["sso_login_ts"] = time.time()
+        rv = _run_hooks(app)
+        assert rv is None
+        assert g.user_id == "uuid-1"
+        assert g.auth_source == "clever"

@@ -90,6 +90,7 @@ export function useAuthSession(isLocalhost) {
         'students_use_portal': 'Student accounts should use the student portal, not the teacher login.',
         'student_not_enrolled': 'Your account was not found. Ask your teacher to sync the class roster.',
         'unsupported_role': 'This account type is not supported.',
+        'role_not_permitted': 'This Clever account type cannot access the teacher dashboard.',
       };
       var friendlyMsg = cleverErrorMessages[cleverError] || ('Clever login failed: ' + cleverError);
       // Store error so LoginScreen can display it

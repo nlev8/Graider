@@ -169,8 +169,11 @@ class TestCleverCallback:
         assert resp.status_code == 302
         assert "clever_login=success" in resp.location
 
-    def test_contact_role_accepted_as_teacher(self):
-        """Non-student roles (e.g. 'contact') are now accepted and treated like teachers."""
+    def test_contact_role_denied(self):
+        """Clever `contact` = parent/guardian. Such accounts must NOT reach the
+        teacher dashboard — it would expose student data (FERPA). Deny with
+        `clever_error=role_not_permitted` and mint NO session (the resolver,
+        which runs only on the accepted path, must never be called)."""
         app = _make_app()
 
         with (
@@ -178,6 +181,105 @@ class TestCleverCallback:
                   new=AsyncMock(return_value={"access_token": "test_token"})),
             patch("backend.routes.clever_routes.get_clever_user",
                   new=AsyncMock(return_value=_clever_user("contact"))),
+            patch("backend.routes.clever_routes.establish_sso_session") as mock_establish,
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create") as mock_resolve,
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+                with client.session_transaction() as sess:
+                    assert "clever_user" not in sess, (
+                        "denied contact user still got a Clever session"
+                    )
+
+        assert resp.status_code == 302
+        assert "clever_error=role_not_permitted" in resp.location
+        # Denial returns BEFORE the session is established or a UUID resolved.
+        mock_establish.assert_not_called()
+        mock_resolve.assert_not_called()
+
+    def test_unknown_role_denied(self):
+        """Deny-by-default: an unrecognized / future non-educator role — and the
+        v3.0 'user' sentinel get_clever_user returns when /users carries no
+        `roles` object — is rejected, not silently treated as a teacher."""
+        app = _make_app()
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("user"))),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create") as mock_resolve,
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+
+        assert resp.status_code == 302
+        assert "clever_error=role_not_permitted" in resp.location
+        mock_resolve.assert_not_called()
+
+    def test_staff_role_allowed(self):
+        """`staff` (counselors, aides, non-teaching educators) stay valid →
+        teacher dashboard. The denial allowlist must not lock them out."""
+        app = _make_app()
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("staff"))),
+            patch("backend.routes.clever_routes.load_clever_links", return_value={}),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
+                  return_value=("clever:clever-teacher-001", "transient_legacy")),
+            patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
+            patch("backend.routes.clever_routes.os.getenv", return_value=None),
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+
+        assert resp.status_code == 302
+        assert "clever_login=success" in resp.location
+
+    def test_district_admin_role_allowed(self):
+        """`district_admin` is a valid admin role → teacher dashboard (and keeps
+        the district-admin-gated route reachable)."""
+        app = _make_app()
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("district_admin"))),
+            patch("backend.routes.clever_routes.load_clever_links", return_value={}),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
+                  return_value=("clever:clever-teacher-001", "transient_legacy")),
+            patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
+            patch("backend.routes.clever_routes.os.getenv", return_value=None),
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+
+        assert resp.status_code == 302
+        assert "clever_login=success" in resp.location
+
+    def test_school_admin_role_allowed(self):
+        """`school_admin` is in the educator allowlist (harmless legacy entry —
+        Clever v3 folds school admins into `staff`, but if it ever surfaces it
+        must not be denied)."""
+        app = _make_app()
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("school_admin"))),
             patch("backend.routes.clever_routes.load_clever_links", return_value={}),
             patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
                   return_value=("clever:clever-teacher-001", "transient_legacy")),

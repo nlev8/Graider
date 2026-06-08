@@ -32,6 +32,16 @@ def require_clever_session(f: F) -> F:
         clever_user = session.get("clever_user")
         if not clever_user:
             return jsonify({"error": "Clever session required"}), 401
+        # Defense-in-depth: check_auth (before_request) already clears
+        # non-educator Clever sessions globally, but re-check here so the
+        # security property holds even if this decorator is ever reached
+        # without that hook. A `contact` (parent/guardian) or the pre-v3-fix
+        # "user" sentinel must never access a teacher endpoint.
+        from backend.clever import EDUCATOR_ROLES
+        _clever_role = clever_user.get("type")
+        if _clever_role and _clever_role not in EDUCATOR_ROLES:
+            session.clear()
+            return jsonify({"error": "Clever session required"}), 401
         g.clever_user = clever_user
         g.teacher_id = getattr(g, 'user_id', clever_user.get('clever_id', ''))
         return f(*args, **kwargs)

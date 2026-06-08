@@ -47,18 +47,22 @@ def _imports_sentry(source: str) -> bool:
 
 # Every (file, flagged_line) pair that PR-0 patched.
 SIS_CAPTURES = [
-    ("backend/clever.py", 46),
+    # 2026-06-08: shifted 46 -> 55 by the EDUCATOR_ROLES module constant added
+    # near the top of backend/clever.py (+9 lines above this capture). Capture
+    # (now line 60) unchanged.
+    ("backend/clever.py", 55),
     # 2026-05-06: shifted 217/231/245 -> 225/240/255 by PR 6 of SIS compliance
     # hardening sprint (audit_log calls added in get_clever_user). Captures
     # themselves are unchanged — pins track the except blocks.
     # 2026-06-08: shifted 225/240/255 -> 247/262/277 by the Clever API v3.0
     # role-resolution fix (+22 lines in get_clever_user deriving the role from
-    # the /users/{id} `roles` object — see backend/clever.py). The three
-    # roster-fetch captures (now lines 250/265/280) are unchanged; only the
-    # pins move. Pin 46 (capture at 51) is above the edit, so it is untouched.
-    ("backend/clever.py", 247),
-    ("backend/clever.py", 262),
-    ("backend/clever.py", 277),
+    # the /users/{id} `roles` object — see backend/clever.py).
+    # 2026-06-08: shifted 247/262/277 -> 256/271/286 by the EDUCATOR_ROLES
+    # module constant (+9 lines near the top of backend/clever.py). The three
+    # roster-fetch captures (now lines 259/274/289) are unchanged; pins track.
+    ("backend/clever.py", 256),
+    ("backend/clever.py", 271),
+    ("backend/clever.py", 286),
     # 2026-05-07: original pin at line 54 was the `_clever_audit` except
     # block. PR #227 (audit MAJOR #10 close) made `_clever_audit` delegate
     # to `backend.utils.audit.audit_log` whose own try/except + Sentry
@@ -126,12 +130,17 @@ SIS_CAPTURES = [
     # (added ?redirect=1 branch + misconfig-redirect to clever_login_url, ~+11
     # lines above this capture). Capture itself unchanged — still the
     # `except sb_err: sentry_sdk.capture_exception(sb_err)` in clever_delete_data.
-    ("backend/routes/clever_routes.py", 829),
+    # 2026-06-08: shifted 829 -> 843 by the Clever contact-role denial
+    # (+14 lines: educator allowlist + deny redirect inserted in clever_callback
+    # ~line 500, well above this capture). Capture (now line 848) unchanged.
+    ("backend/routes/clever_routes.py", 843),
     # 2026-06-01 (whole-branch review): NEW capture pinned — the legacy
     # clever:{id} cleanup `except e` in clever_delete_data captures to Sentry
     # (FERPA right-to-delete observability guardrail). Shifted 776 -> 787 by the
     # SSO redirect-mode fix (~+11 lines in clever_login_url above it).
-    ("backend/routes/clever_routes.py", 787),
+    # 2026-06-08: shifted 787 -> 801 by the Clever contact-role denial (+14
+    # lines in clever_callback ~line 500). Capture (now line 806) unchanged.
+    ("backend/routes/clever_routes.py", 801),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
