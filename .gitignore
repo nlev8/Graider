@@ -6,14 +6,19 @@
 # SECRETS & CREDENTIALS (CRITICAL - NEVER COMMIT THESE)
 # ─────────────────────────────────────────────────────────────
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
 credentials.json
 secrets.json
 *_secret.json
 *_secret.txt
+# Local SQLite DBs + their WAL/SHM/journal sidecars (the bare *.db rule below
+# does NOT match the -shm/-wal/-journal sidecars; audit #6 found them committed)
+*.db-shm
+*.db-wal
+*.db-journal
 *_credentials.json
 *_credentials.txt
 .graider_email.json
