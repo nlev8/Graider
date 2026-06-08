@@ -725,9 +725,12 @@ def submit_assessment(code):
         if not settings.get('allow_multiple_attempts', False):
             existing = submission_repo.find_existing_submission(code, {"name": student_name})
             if existing is not None:
+                # SECURITY (audit #5/#12): the anonymous join-code path does NO
+                # identity verification tying the caller to the matched submission,
+                # so do NOT echo previous_results — it embeds the matched student's
+                # answers, the answer key, and score. Return only the generic message.
                 return jsonify({
                     "error": "You have already submitted this assessment.",
-                    "previous_results": existing.results,
                 }), 400
 
         # Determine grading strategy
