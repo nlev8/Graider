@@ -432,6 +432,75 @@ def _sb_save_student_history(teacher_id, student_id, history):
         return False
 
 
+def _file_list_student_history(teacher_id='local-dev'):
+    """List student_ids that have a history file in this teacher's tenant dir."""
+    history_dir = os.path.join(
+        _tenant_home(teacher_id), ".graider_data", "student_history",
+    )
+    if not os.path.isdir(history_dir):
+        return []
+    return sorted(
+        f[:-5] for f in os.listdir(history_dir) if f.endswith('.json')
+    )
+
+
+def _file_delete_student_history(student_id, teacher_id='local-dev'):
+    """Delete one student's history file from this teacher's tenant dir.
+
+    Returns True if a file was removed, False if it did not exist (or failed).
+    """
+    safe_id = str(student_id).replace('/', '_').replace('\\', '_')
+    history_dir = os.path.join(
+        _tenant_home(teacher_id), ".graider_data", "student_history",
+    )
+    filepath = os.path.join(history_dir, f"{safe_id}.json")
+    if not os.path.exists(filepath):
+        return False
+    try:
+        os.remove(filepath)
+        return True
+    except Exception as e:
+        logger.error("Failed to delete student history file %s: %s", filepath, e)
+        return False
+
+
+def _sb_list_student_history(teacher_id):
+    """List student_ids with history rows for this teacher in Supabase."""
+    def _op():
+        sb = _get_supabase()
+        if not sb:
+            return None
+        result = sb.table('student_history') \
+            .select('student_id') \
+            .eq('teacher_id', teacher_id) \
+            .execute()
+        return sorted({row['student_id'] for row in result.data}) if result.data else []
+    try:
+        return with_retry(_op, label="supabase_list_history", max_retries=3)
+    except Exception as e:
+        logger.error("Supabase list student_history failed: %s", e)
+        return None
+
+
+def _sb_delete_student_history(teacher_id, student_id):
+    """Delete one student's history row (scoped to this teacher) from Supabase."""
+    def _op():
+        sb = _get_supabase()
+        if not sb:
+            return False
+        sb.table('student_history') \
+            .delete() \
+            .eq('teacher_id', teacher_id) \
+            .eq('student_id', student_id) \
+            .execute()
+        return True
+    try:
+        return with_retry(_op, label="supabase_delete_history", max_retries=3)
+    except Exception as e:
+        logger.error("Supabase delete student_history failed: %s", e)
+        return False
+
+
 # ══════════════════════════════════════════════════════════════
 # PUBLIC API
 # ══════════════════════════════════════════════════════════════
@@ -584,6 +653,36 @@ def save_student_history(teacher_id='local-dev', student_id=None, history=None):
     return True
 
 
+def list_student_history(teacher_id='local-dev'):
+    """List student_ids that have history for this teacher (tenant-scoped).
+
+    VB2b (audit #3): the route layer must never enumerate a global,
+    teacher-agnostic directory — that leaks every tenant's student list.
+    """
+    if _use_supabase(teacher_id):
+        ids = _sb_list_student_history(teacher_id)
+        if ids is not None:
+            return ids
+        # Supabase query itself failed → fall back to the per-tenant files.
+        return _file_list_student_history(teacher_id)
+    return _file_list_student_history(teacher_id)
+
+
+def delete_student_history(teacher_id='local-dev', student_id=None):
+    """Delete one student's history, scoped to this teacher (tenant-scoped).
+
+    Returns True if anything was deleted. VB2b (audit #3): deletes must
+    never reach outside the calling teacher's namespace.
+    """
+    if not student_id:
+        return False
+    file_ok = _file_delete_student_history(student_id, teacher_id)
+    if _use_supabase(teacher_id):
+        sb_ok = _sb_delete_student_history(teacher_id, student_id)
+        return bool(sb_ok or file_ok)
+    return file_ok
+
+
 # ══════════════════════════════════════════════════════════════
 # SYNC: Upload all local files to Supabase for a teacher
 # ══════════════════════════════════════════════════════════════
@@ -675,20 +774,18 @@ def sync_all_to_cloud(teacher_id):
                 synced_resources += 1
     summary['resources'] = f"{synced_resources} synced"
 
-    # Student history
-    history_dir = STUDENT_HISTORY_DIR
+    # Student history — VB2b (audit #3): read THIS teacher's tenant history
+    # dir, never the global directory. On a multi-tenant server the global
+    # dir holds other tenants' (and pre-migration) records; reading it here
+    # would slurp them into the calling teacher's cloud tenant.
     synced_history = 0
-    if os.path.exists(history_dir):
-        for f in os.listdir(history_dir):
-            if f.endswith('.json'):
-                student_id = f[:-5]
-                try:
-                    with open(os.path.join(history_dir, f), 'r', encoding='utf-8') as fh:
-                        history = json.load(fh)
-                    if _sb_save_student_history(teacher_id, student_id, history):
-                        synced_history += 1
-                except Exception as e:
-                    sentry_sdk.capture_exception(e)
+    for student_id in _file_list_student_history(teacher_id):
+        try:
+            history = _file_load_student_history(student_id, teacher_id)
+            if history is not None and _sb_save_student_history(teacher_id, student_id, history):
+                synced_history += 1
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
     summary['student_history'] = f"{synced_history} synced"
 
     return summary
