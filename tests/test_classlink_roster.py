@@ -1,4 +1,5 @@
 """ClassLink roster identity + shared-function safety."""
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.routes.classlink_routes import _classlink_roster_external_id
@@ -123,6 +124,7 @@ def test_delete_data_calls_roster_delete_for_classlink_teacher(app_client, monke
                 "type": "teacher",
                 "tenant_id": "dist-A",
             }
+            sess["sso_login_ts"] = time.time()  # VB8 #18 absolute-cap anchor
         r = app_client.post(
             "/api/classlink/delete-data",
             content_type="application/json",
@@ -171,6 +173,7 @@ def test_delete_data_rejects_real_clever_session(app_client):
                 "email": "t@d.edu",
                 "district": "dist-A",
             }
+            sess["sso_login_ts"] = time.time()  # VB8 #18 absolute-cap anchor
         r = app_client.post("/api/classlink/delete-data", content_type="application/json")
         assert r.status_code == 403, r.get_json()
         mock_del.assert_not_called()
@@ -204,6 +207,7 @@ def test_delete_data_allows_uuid_classlink_teacher(app_client, monkeypatch):
                 "type": "teacher",
                 "tenant_id": "dist-A",
             }
+            sess["sso_login_ts"] = time.time()  # VB8 #18 absolute-cap anchor
         r = app_client.post(
             "/api/classlink/delete-data",
             content_type="application/json",

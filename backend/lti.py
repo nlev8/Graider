@@ -232,11 +232,12 @@ def validate_launch_jwt(id_token, platform_config):
             algorithms=["RS256"],
             audience=client_id,
             issuer=issuer,
-            # VB13 (SSO-parity): require the OIDC Core §2 REQUIRED id_token
-            # claims to be PRESENT so a launch token with no `exp`/`iat` can't
-            # be accepted (no expiry/freshness floor). pyjwt's verify_exp /
-            # verify_iat (default True) then validate them. NOT requiring `nbf`
-            # — it is OPTIONAL per OIDC Core §2 and over-requiring it rejects
+            # VB8 #17/#22 + VB13 (SSO-parity) converged on the same fix: require
+            # the OIDC Core §2 REQUIRED id_token claims to be PRESENT so a launch
+            # token with no `exp`/`iat` can't be accepted (no expiry/freshness
+            # floor; parity with the ClassLink path). pyjwt's verify_exp /
+            # verify_iat (default True) then validate them. NOT requiring `nbf` —
+            # it is OPTIONAL per OIDC Core §2 and over-requiring it rejects
             # spec-compliant tokens (workflow Hard Rule #10 / VB8 lesson).
             options={"require": ["iss", "sub", "aud", "exp", "iat"]},
         )

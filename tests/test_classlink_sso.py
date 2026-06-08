@@ -1321,6 +1321,7 @@ class TestClassLinkAuthResolution:
                         'email': 'a@school.edu',
                         'tenant_id': 'dist-A',
                     }
+                    sess['sso_login_ts'] = time.time()  # VB8 #18 absolute-cap anchor
                 data = client.get('/api/_whoami').get_json()
         assert data['teacher_id'] == 'classlink:dist-A:p1'
         assert data['user_id'] == 'classlink:dist-A:p1'
