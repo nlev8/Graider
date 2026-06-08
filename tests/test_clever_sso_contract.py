@@ -164,8 +164,12 @@ class TestCallbackContract:
         with patch("backend.routes.clever_routes.exchange_code_for_token",
                    new=AsyncMock(return_value=None)):
             with app.test_client() as client:
-                # No state on either side — Instant-Login branch, allowed.
-                resp = client.get("/api/clever/callback?code=bogus-code")
+                # Matching state on both sides → past the state check, into the
+                # token-exchange path this contract pins. (A no-state request now
+                # restarts auth instead — covered in test_clever_callback.py.)
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "s"
+                resp = client.get("/api/clever/callback?code=bogus-code&state=s")
 
         assert resp.status_code == 302, \
             "Token exchange failure must redirect, not return 401 to the user"
@@ -190,7 +194,10 @@ class TestCallbackContract:
         with patch("backend.routes.clever_routes.exchange_code_for_token",
                    new=AsyncMock(return_value=None)):
             with app.test_client() as client:
-                resp = client.get("/api/clever/callback?code=any-code")
+                # Matching state both sides → reaches the token-exchange path.
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "s"
+                resp = client.get("/api/clever/callback?code=any-code&state=s")
 
         assert resp.status_code == 302, \
             "Upstream 5xx must NOT bubble up as a 5xx to the browser"

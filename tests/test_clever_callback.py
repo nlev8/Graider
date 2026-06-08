@@ -80,6 +80,47 @@ class TestCleverCallback:
         assert resp.status_code == 302
         assert "clever_error=state_mismatch" in resp.location
 
+    def test_instant_login_no_state_restarts_auth(self):
+        """Clever Instant Login arrives with NO state (neither query nor session).
+        Per Clever best practices we must NOT complete auth from it (login-CSRF /
+        session-fixation); instead restart with our own state. Assert the restart
+        redirect AND that the code is never exchanged."""
+        app = _make_app()
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})) as mock_exchange,
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("teacher"))) as mock_user,
+        ):
+            with app.test_client() as client:
+                # No session state, no query state → Instant Login no-state path.
+                resp = client.get("/api/clever/callback?code=abc123")
+
+        assert resp.status_code == 302
+        assert "/api/clever/login-url" in resp.location
+        assert "redirect=1" in resp.location
+        # Auth must NOT be completed from the bare no-state request.
+        mock_exchange.assert_not_called()
+        mock_user.assert_not_called()
+
+    def test_no_state_callback_preserves_pending_restart_state(self):
+        """Codex regression guard: a no-state callback must NOT consume a pending
+        restart state. Otherwise a duplicate Instant-Login hit would pop the
+        state we just minted, and the real bounce-back (which carries that state)
+        would then fail state_mismatch. The no-state branch must restart without
+        touching session['clever_oauth_state']."""
+        app = _make_app()
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["clever_oauth_state"] = "pending-restart-state"
+            resp = client.get("/api/clever/callback?code=dup123")  # no state
+            assert resp.status_code == 302
+            assert "/api/clever/login-url" in resp.location
+            with client.session_transaction() as sess:
+                assert sess.get("clever_oauth_state") == "pending-restart-state", (
+                    "no-state callback wrongly consumed the pending restart state"
+                )
+
     def test_token_exchange_failure_redirects_error(self):
         """Exchange code returns no access_token → token_exchange_failed redirect."""
         app = _make_app()

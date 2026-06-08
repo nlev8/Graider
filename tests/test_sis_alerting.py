@@ -135,14 +135,20 @@ SIS_CAPTURES = [
     # 2026-06-08: shifted 829 -> 843 by the Clever contact-role denial
     # (+14 lines: educator allowlist + deny redirect inserted in clever_callback
     # ~line 500, well above this capture). Capture (now line 848) unchanged.
-    ("backend/routes/clever_routes.py", 843),
+    # 2026-06-08: shifted 843 -> 849 by the Instant-Login no-state restart —
+    # the state block in clever_callback was rewritten state-presence-driven
+    # (net +6 lines above this capture, now at line 854). Capture unchanged.
+    ("backend/routes/clever_routes.py", 849),
     # 2026-06-01 (whole-branch review): NEW capture pinned — the legacy
     # clever:{id} cleanup `except e` in clever_delete_data captures to Sentry
     # (FERPA right-to-delete observability guardrail). Shifted 776 -> 787 by the
     # SSO redirect-mode fix (~+11 lines in clever_login_url above it).
     # 2026-06-08: shifted 787 -> 801 by the Clever contact-role denial (+14
     # lines in clever_callback ~line 500). Capture (now line 806) unchanged.
-    ("backend/routes/clever_routes.py", 801),
+    # 2026-06-08: shifted 801 -> 807 by the Instant-Login no-state restart
+    # (state block rewritten state-presence-driven, net +6 lines above this
+    # capture, now at line 812). Capture unchanged.
+    ("backend/routes/clever_routes.py", 807),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
