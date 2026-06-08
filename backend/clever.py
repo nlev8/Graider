@@ -28,6 +28,15 @@ CLEVER_TOKEN_URL = "https://clever.com/oauth/tokens"
 CLEVER_API_BASE = "https://api.clever.com"
 CLEVER_API_VERSION = os.getenv("CLEVER_API_VERSION", "v3.0")
 
+# Clever roles permitted to access the teacher dashboard (deny-by-default).
+# A Clever `contact` is a parent/guardian and must NEVER reach teacher views —
+# it would expose student data (FERPA). `school_admin` is a harmless legacy
+# entry (Clever API v3 folds school admins into `staff`; see get_clever_user).
+# The role is resolved from the /users/{id} `roles` object in get_clever_user;
+# this allowlist gates both the SSO callback (login) and check_auth (session
+# validation), so a non-educator can neither log in nor ride a stale cookie.
+EDUCATOR_ROLES = frozenset({"teacher", "staff", "district_admin", "school_admin"})
+
 # Graider data directories (same paths as settings_routes.py / storage.py)
 GRAIDER_DATA_DIR = os.path.expanduser("~/.graider_data")
 ROSTERS_DIR = os.path.join(GRAIDER_DATA_DIR, "rosters")

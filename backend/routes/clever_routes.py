@@ -14,6 +14,7 @@ import sentry_sdk
 from flask import Blueprint, request, jsonify, redirect, session, g
 
 from backend.clever import (
+    EDUCATOR_ROLES,
     get_clever_config,
     get_authorize_url,
     exchange_code_for_token,
@@ -493,11 +494,24 @@ def clever_callback():
                         hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8])
             return redirect("/?clever_error=student_not_enrolled")
 
-    # Any non-student Clever user can access the teacher dashboard
-    # (teacher, district_admin, school_admin, staff, contact, etc.)
     if clever_user["type"] == "student":
         # Already handled above — this is a safety net
         return redirect("/?clever_error=students_use_portal")
+
+    # Educator allowlist (deny-by-default, EDUCATOR_ROLES from backend.clever).
+    # A Clever `contact` is a parent/guardian; such accounts must never reach
+    # the teacher dashboard because it exposes student data (FERPA). Admit only
+    # genuine educator roles; reject `contact`, any unknown/future role, and the
+    # v3.0 "user" sentinel that get_clever_user returns when /users carries no
+    # `roles` object. The same set gates check_auth, so a denied role can't ride
+    # a stale cookie either.
+    if clever_user["type"] not in EDUCATOR_ROLES:
+        logger.info(
+            "AUDIT: Clever login denied (non-educator role=%s) clever_id_hash=%s",
+            clever_user["type"],
+            hashlib.sha256(str(clever_user.get("clever_id", "")).encode()).hexdigest()[:8],
+        )
+        return redirect("/?clever_error=role_not_permitted")
     logger.info("AUDIT: Clever login accepted: type=%s email=%s clever_id_hash=%s",
                 clever_user["type"],
                 redact_email(clever_user.get("email", "")),

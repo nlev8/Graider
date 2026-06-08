@@ -515,12 +515,30 @@ def init_auth(app):
                 logger.info("Clever SSO session past absolute cap — clearing")
                 session.clear()
             else:
-                g.user_id = clever_user.get('user_id') or resolve_clever_user_id(clever_user['clever_id'])
-                g.teacher_id = g.user_id
-                g.user_email = clever_user.get('email', '')
-                g.auth_source = 'clever'
-                g.district_id = clever_user.get('district', '')
-                return None
+                # Educator allowlist (deny-by-default): a non-educator Clever
+                # role — `contact` (parent/guardian) or the pre-v3-fix "user"
+                # sentinel — must not retain teacher-dashboard access via a stale
+                # cookie. The OAuth callback denies these at login; this clears
+                # any session minted before that guard shipped. A type-less
+                # legacy session falls through to the absolute cap above (we
+                # fail open only when `type` is entirely absent, never on a
+                # present non-educator role). EDUCATOR_ROLES is the single source
+                # of truth shared with the callback (backend.clever).
+                from backend.clever import EDUCATOR_ROLES
+                _clever_role = clever_user.get('type')
+                if _clever_role and _clever_role not in EDUCATOR_ROLES:
+                    logger.info(
+                        "Clever SSO session non-educator role=%s — clearing",
+                        _clever_role,
+                    )
+                    session.clear()
+                else:
+                    g.user_id = clever_user.get('user_id') or resolve_clever_user_id(clever_user['clever_id'])
+                    g.teacher_id = g.user_id
+                    g.user_email = clever_user.get('email', '')
+                    g.auth_source = 'clever'
+                    g.district_id = clever_user.get('district', '')
+                    return None
 
         # ClassLink SSO session — `user_id` is the resolved Supabase Auth UUID
         # (set at the OAuth callback by resolve_classlink_user_id); the
