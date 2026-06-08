@@ -6,6 +6,7 @@ Responses stored in published_assessments with content_type="survey".
 import secrets
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, make_response
+from markupsafe import escape
 from backend.supabase_client_scoped import get_request_supabase as get_supabase
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
@@ -200,31 +201,38 @@ def survey_page(code):
     if not record.get('is_active', True):
         return make_response('<h1>This survey is no longer accepting responses</h1>', 410)
 
-    title = record.get('title', 'Parent Survey')
-    teacher = record.get('teacher_name', 'Your Teacher')
+    # HTML-escape teacher-controlled fields before they are interpolated
+    # into this text/html document (audit #15 — stored XSS).
+    title = escape(record.get('title', 'Parent Survey'))
+    teacher = escape(record.get('teacher_name', 'Your Teacher'))
     questions = assessment.get('questions', [])
 
-    # Build questions HTML
+    # Build questions HTML. All teacher-controlled values (question id +
+    # text) are HTML-escaped before interpolation to prevent stored XSS
+    # (audit #15): a malicious survey title/question could otherwise inject
+    # live <script>/attribute-breakout payloads into this text/html page.
     questions_html = ''
     for q in questions:
+        q_id = escape(q['id'])
+        q_text = escape(q['text'])
         if q['type'] == 'rating':
             stars = ''
             for i in range(1, 6):
                 stars += f'''<label class="star-label">
-                    <input type="radio" name="{q['id']}" value="{i}" required>
+                    <input type="radio" name="{q_id}" value="{i}" required>
                     <span class="star" data-value="{i}">&#9733;</span>
                 </label>'''
             questions_html += f'''
             <div class="question">
-                <p class="q-text">{q['text']}</p>
+                <p class="q-text">{q_text}</p>
                 <div class="stars">{stars}</div>
                 <div class="rating-labels"><span>Poor</span><span>Excellent</span></div>
             </div>'''
         elif q['type'] == 'text':
             questions_html += f'''
             <div class="question">
-                <p class="q-text">{q['text']}</p>
-                <textarea name="{q['id']}" rows="3" placeholder="Optional — share your thoughts..."></textarea>
+                <p class="q-text">{q_text}</p>
+                <textarea name="{q_id}" rows="3" placeholder="Optional — share your thoughts..."></textarea>
             </div>'''
 
     html = f'''<!DOCTYPE html>

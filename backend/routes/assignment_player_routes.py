@@ -163,6 +163,10 @@ def create_assignment():
         assignment_id = f"assign_{secrets.token_urlsafe(16)}"
         assignment['id'] = assignment_id
         assignment['created_at'] = time.strftime('%Y-%m-%d %H:%M:%S')
+        # Tenant isolation (audit #2/#19): record the owning teacher so
+        # submission reads can be gated to the creator. g.teacher_id is set
+        # by @require_teacher.
+        assignment['teacher_id'] = g.teacher_id
 
         # Save assignment
         os.makedirs(ASSIGNMENTS_DIR, exist_ok=True)
@@ -236,6 +240,20 @@ def get_submissions(assignment_id):
     try:
         if not _validate_assignment_id(assignment_id):
             return jsonify({"error": "Invalid assignment ID"}), 400
+        # Tenant isolation (audit #2/#19): only the owning teacher may read
+        # submissions. The assignment_id doubles as the anonymous student share
+        # link, so it leaks easily (URLs, history, LMS, logs); without this gate
+        # any authenticated teacher could read any other teacher's students'
+        # submissions (FERPA PII). Return 404 (not 403) so a non-owner cannot even
+        # confirm the assignment exists. Legacy assignments created before this fix
+        # carry no teacher_id and are therefore denied (re-publish to restore access).
+        assignment_path = os.path.join(ASSIGNMENTS_DIR, f"{assignment_id}.json")
+        if not os.path.exists(assignment_path):
+            return jsonify({"error": "Assignment not found"}), 404
+        with open(assignment_path, 'r') as af:
+            assignment_owner = json.load(af).get('teacher_id')
+        if assignment_owner != g.teacher_id:
+            return jsonify({"error": "Assignment not found"}), 404
         submissions_dir = os.path.join(ASSIGNMENTS_DIR, 'submissions', assignment_id)
         if not os.path.exists(submissions_dir):
             return jsonify({"submissions": []})
