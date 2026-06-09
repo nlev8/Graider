@@ -64,7 +64,7 @@ from datetime import datetime
 import sentry_sdk
 from flask import Blueprint, g, jsonify, request
 
-from backend.grading.state import _get_state
+from backend.grading.state import _get_state, save_results  # save_results: GH #423 (latent NameError fix)
 from backend.utils.audit import AUDIT_LOG_FILE, audit_log
 from backend.utils.auth_decorators import require_teacher
 from backend.utils.errors import handle_route_errors
