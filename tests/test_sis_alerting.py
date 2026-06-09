@@ -66,10 +66,13 @@ SIS_CAPTURES = [
     # 2026-06-08: shifted 259/274/289 -> 289/304/319 by the low-batch resilience
     # PR (+30 lines above the sync_roster captures: 2 imports + the
     # _clever_retry_after_seconds helper + the rewritten _clever_get_with_retry).
-    # The three roster-fetch captures (now 292/307/322) are unchanged; pins track.
-    ("backend/clever.py", 289),
-    ("backend/clever.py", 304),
-    ("backend/clever.py", 319),
+    # 2026-06-09: shifted 289/304/319 -> 343/358/373 by the district-token
+    # auto-discovery PR (the fetch_district_tokens function — incl. the
+    # owner_type=district param + robust-JSON guards — inserted above the
+    # sync_roster captures, now at 346/361/376). Pins track.
+    ("backend/clever.py", 343),
+    ("backend/clever.py", 358),
+    ("backend/clever.py", 373),
     # 2026-05-07: original pin at line 54 was the `_clever_audit` except
     # block. PR #227 (audit MAJOR #10 close) made `_clever_audit` delegate
     # to `backend.utils.audit.audit_log` whose own try/except + Sentry
