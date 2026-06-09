@@ -189,33 +189,12 @@ admin, student_account_routes, student_portal_routes, assistant_routes, planner_
 - `SUPABASE_SERVICE_KEY` — Supabase service role key
 - `SUPABASE_JWT_SECRET` — JWT secret for token validation
 
-### Clever Integration
-- `CLEVER_CLIENT_ID` — OAuth client ID
-- `CLEVER_CLIENT_SECRET` — OAuth client secret
-- `CLEVER_REDIRECT_URI` — OAuth callback URL
-- `CLEVER_DISTRICT_TOKEN` — District app token (for Secure Sync)
-- `CLEVER_API_VERSION` — API version (default: v3.0)
-
-### ClassLink SSO
-- `CLASSLINK_CLIENT_ID` — OAuth client ID (from ClassLink developer portal)
-- `CLASSLINK_CLIENT_SECRET` — OAuth client secret
-- `CLASSLINK_REDIRECT_URI` — OAuth callback URL (defaults to `https://app.graider.live/api/classlink/callback`)
-
-### OneRoster Integration (1EdTech)
-- `ONEROSTER_BASE_URL` — OneRoster API root (e.g., `https://sis.district.org/ims/oneroster/v1p1`)
-- `ONEROSTER_CLIENT_ID` — OAuth 2.0 client ID
-- `ONEROSTER_CLIENT_SECRET` — OAuth 2.0 client secret
-- `ONEROSTER_TOKEN_URL` — OAuth token endpoint (optional, defaults to `{base_url}/token`)
-- `ONEROSTER_SCHOOL_ID` — School sourcedId to scope roster fetch (optional)
-
-### LTI 1.3 Integration
-- `LTI_TOOL_URL` — Tool base URL for OIDC/launch callbacks (defaults to request host, set in production to `https://app.graider.live`)
-
-### District Admin
-- `DISTRICT_ADMIN_PASSWORD` — Initial district admin password (optional, can be set via /district first-time setup instead)
-
-### Periodic Roster Sync
-- `PERIODIC_SYNC_SECRET` — Shared secret for cron webhook auth (set in Railway + GitHub Actions secrets)
+### Integration-specific (Clever, ClassLink, OneRoster, LTI 1.3, District Admin, Periodic Sync)
+The full var list + descriptions live in **`.env.example`** (the canonical reference; ~16 vars
+across these six integrations — `CLEVER_*`, `CLASSLINK_*`, `ONEROSTER_*`, `LTI_TOOL_URL`,
+`DISTRICT_ADMIN_PASSWORD`, `PERIODIC_SYNC_SECRET`). Each integration reads its own vars in its own
+module, so grep there when wiring one up:
+`grep -rn 'os.getenv' backend/clever.py backend/routes/classlink_routes.py backend/oneroster.py backend/routes/lti_routes.py`.
 
 ### Optional
 - `OPENAI_API_KEY` — Default OpenAI key (fallback)
@@ -228,21 +207,11 @@ admin, student_account_routes, student_portal_routes, assistant_routes, planner_
 
 ## Supabase Tables
 
-### Authentication & Sessions
-- `classes` — Teacher's classes (name, join_code, clever_section_id)
-- `students` — Student records (name, email, student_id_number, accommodations)
-- `class_students` — Enrollment junction (class_id, student_id)
-- `student_sessions` — Hashed session tokens with expiry
-
-### Content & Submissions
-- `published_assessments` — Join-code published content (anonymous portal, has teacher_id)
-- `published_content` — Class-based published content (Clever/roster, has class_id + content_type + due_date)
-- `student_submissions` — Authenticated student submissions (class-based path)
-- `submissions` — Anonymous join-code submissions
-
-### Storage & Audit
-- `teacher_data` — Key-value storage per teacher (assignments, lessons, resources, settings, rubric)
-- `audit_log` — FERPA-compliant audit trail (action, teacher_id, timestamp, details)
+Core tables (columns drift — the Supabase schema is authoritative; verify field names before any DB change):
+`classes`, `students`, `class_students`, `student_sessions` (auth/sessions); `published_assessments` +
+`submissions` (anonymous join-code path), `published_content` + `student_submissions` (authenticated
+class-based path); `teacher_data` (per-teacher key-value: assignments/lessons/settings/rubric);
+`audit_log` (FERPA audit trail). The load-bearing distinction is the two publish paths:
 
 ### Two Publish Paths
 Graider has two parallel publishing systems:
@@ -272,60 +241,21 @@ Both paths use the same grading functions (`grade_instant_only`, `grade_student_
 4. **Tests are the gate.** New or changed behavior ships with a test that is red before and green after; run the full suite (`pytest -q`), not just the file you touched.
 5. **Leave the tree clean.** Commit only the files the task intended — no incidental noise.
 
-The numbered principles below expand on these; the full four-layer verification loop lives in `.claude/rules/workflow.md`.
+**The 13 working principles** (the four-layer verification loop + Class A/B rationale + incident history live in `.claude/rules/workflow.md`):
 
-### 1. Read Before Write
-Understand context before changing code. Read the function, its callers, and related tests before modifying anything. Never propose changes to code you haven't read. For data-flow bugs, trace the full pipeline (generation → hydration → rendering) before patching one layer.
-
-### 2. Simplicity First
-Make every change as simple as possible. Minimum viable change, not minimum effort. Don't add features, refactor code, or make "improvements" beyond what was asked. Three similar lines of code is better than a premature abstraction. If a fix touches more than 3 files, pause and ask if there's a simpler way.
-
-### 3. Programmatic Over Probabilistic
-Fix bugs in code, not prompts. If the AI can generate bad data, write deterministic post-processing that catches and corrects it — don't rely on prompt wording to prevent it. Prompt improvements are layer 1; code validation is the safety net that actually matters.
-
-### 4. Verify the User Flow
-Unit tests aren't enough — test what the user actually sees. `npm run build` succeeding doesn't mean the feature works. After backend changes, generate a real assessment/assignment and verify the output. After frontend changes, check the rendered UI. "Build passes" is necessary but not sufficient.
-
-### 5. Minimal Blast Radius
-Understand what you're touching before you touch it. A one-object fix (domainNameMap) and a cross-cutting pipeline change (_infer_editable_columns) require different levels of caution. For multi-file changes, map the affected callers first. Never change a shared utility without checking all consumers.
-
-### 6. Root Cause, Not Patch
-Find and fix the actual problem. Empty data tables? Fix the hydration logic that blanks all cells, don't just tell the AI to try harder in the prompt. "N" and "P" buttons? The map is missing entries, not a CSS issue. Ask "why is this happening?" before "how do I hide it?"
-
-### 7. Don't Flag What You Fix
-If a deterministic pipeline phase corrects a problem (e.g., `_normalize_points` fixes point totals), don't also flag it as a warning in a separate validation phase. The user sees a confusing warning about a value that's already been corrected. Either fix silently or warn without fixing — never both.
-
-### 8. Plan for Non-Trivial Tasks
-Enter plan mode for any task requiring 3+ steps or architectural decisions. If something goes sideways, STOP and re-plan — don't keep pushing down a broken path. Write detailed specs upfront to reduce ambiguity. Use plan mode for verification steps, not just building.
-
-### 9. Autonomous Bug Fixing
-When given a bug report with a screenshot or clear description: just fix it. Read the relevant code, identify the root cause, implement the fix, test it. Don't ask "what would you like me to do?" when the answer is obviously "fix it." Zero context-switching required from the user.
-
-### 10. Subagent Discipline
-Use subagents when the task requires 3+ searches, parallel research across multiple files, or would pollute the main context with large outputs. Don't use them for simple greps or reading one file. One task per subagent for focused execution. Prefer direct Glob/Grep/Read for targeted lookups.
-
-### 11. Every Error Is Yours to Fix
-When you find a bug — silent failure, swallowed exception, broken import, latent NameError, dead-code path — the default action is **fix it**, not file-and-defer. "I'll track it as a follow-up" is an escape hatch that turns into rot. Filing a separate issue is reserved for genuinely cross-cutting refactors (different storage key + multi-file + SSE consumer audit, like GH #247) — not "this would be a 5-line fix but isn't strictly in PR scope."
-
-If you can fix it in <15 minutes without touching unrelated code, fix it. Don't just label it MEDIUM and move on. Don't just write a comment that says "TODO." Fix it, add a regression test, ship it.
-
-If the fix genuinely exceeds PR scope (3+ files of unrelated changes, requires architectural decisions, or would balloon the diff past 500 lines), then file a follow-up — but include the **specific fix sketch** and a **5-line repro** in the issue body so future-you (or another contributor) can land it without re-investigating. Filing without a fix sketch is deferring, not tracking.
-
-### 12. Handoff Discipline (avoid context-fatigue dead-ends)
-
-Before `/clear`, `/compact`, an unattended loop, or after 3+ failed attempts at the same root cause:
-write `handoff.md` (or run `/handoff`). Be honest about what you tried and what *failed* — disproved
-hypotheses are the most valuable part. Full required-sections list + self-trigger heuristic: see the
-`/handoff` skill (it's the canonical spec; don't duplicate it here).
-
-### 13. Review Gates Before Auto-Merge (class the PR first)
-
-Classify every PR before opening it: **Class A** (behavior-preserving refactor, proven by nets) →
-auto-merge on green is earned. **Class B** (net-new behavior OR compliance/security/FERPA) → code
-review is a HARD pre-gate: **create PR → review → fix to clean → THEN merge manually** (never
-`gh pr merge --auto` with a review in flight). The tell: *"am I adding logic, or just moving it?"* —
-adding/changing logic (regexes, scoring, redaction, auth) ⇒ Class B. Full rationale + the PR #565
-origin story: `.claude/rules/workflow.md` ("Class A vs Class B").
+1. **Read before write.** Read the function, its callers, and tests before changing anything; for data-flow bugs trace the full pipeline (generation → hydration → rendering) before patching one layer.
+2. **Simplicity first.** Minimum viable change, not minimum effort — no unrequested refactors/features. >3 files touched ⇒ pause and look for a simpler way.
+3. **Programmatic over probabilistic.** Fix bad AI output with deterministic post-processing, not prompt wording. Prompts are layer 1; code validation is the safety net that matters.
+4. **Verify the user flow.** `npm run build` passing ≠ the feature works. After backend changes generate a real assignment and check the output; after frontend changes check the rendered UI.
+5. **Minimal blast radius.** Map affected callers before changing a shared utility; check all consumers first.
+6. **Root cause, not patch.** Ask "why is this happening?" before "how do I hide it?" — fix the hydration/data bug, not the symptom.
+7. **Don't flag what you fix.** If a pipeline phase corrects something (e.g. `_normalize_points`), don't also warn about it. Fix silently OR warn-without-fixing — never both.
+8. **Plan for non-trivial tasks.** 3+ steps or architectural decisions ⇒ plan first; if it goes sideways, STOP and re-plan instead of pushing down a broken path.
+9. **Autonomous bug fixing.** A clear bug report ⇒ just fix it (read code → root-cause → fix → test). Don't ask "what would you like me to do?" when it's obviously "fix it."
+10. **Subagent discipline.** Use subagents for 3+ searches / parallel research / large-output isolation; not for a single grep or file read. One task per subagent.
+11. **Every error is yours to fix.** <15 min + no unrelated files ⇒ fix it now, with a regression test. Defer only genuinely cross-cutting work, and only WITH a fix sketch + 5-line repro in the issue body (filing without a sketch is deferring, not tracking).
+12. **Handoff discipline.** Before `/clear`/`/compact`/unattended loops, or after 3+ failed attempts at the same root cause: write `handoff.md` (the `/handoff` skill is the canonical spec). Disproved hypotheses are the most valuable part — don't sanitize them.
+13. **Review gates before auto-merge.** Classify every PR: Class A (behavior-preserving, proven by nets) earns auto-merge on green; Class B (net-new logic / compliance / security / FERPA) ⇒ create PR → review → fix to clean → merge manually (never `--auto` with a review in flight). Tell: *"am I adding logic, or just moving it?"*
 
 ---
 
