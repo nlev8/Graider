@@ -245,7 +245,9 @@ def _create_clever_student_session(clever_id, email):
             not-found log line — NOT as a lookup key; see VB12).
 
     Returns:
-        dict with keys 'token', 'student', 'class', or None if not found.
+        dict with keys 'token', 'student', 'class'; a dict with
+        status='not_found' or status='no_enrollment' for known failures; or
+        None for infrastructure failures.
     """
     import secrets as _secrets
     from datetime import datetime, timezone, timedelta
@@ -277,7 +279,7 @@ def _create_clever_student_session(clever_id, email):
             logger.info("Clever student not found: email=%s clever_id_hash=%s",
                         redact_email(email),
                         hashlib.sha256(str(clever_id).encode()).hexdigest()[:8])
-            return None
+            return {"status": "not_found"}
 
         _cid_hash = hashlib.sha256(str(clever_id).encode()).hexdigest()[:8]
 
@@ -311,7 +313,7 @@ def _create_clever_student_session(clever_id, email):
 
         if not candidates:
             logger.info("Clever student (clever_id_hash=%s) has no class enrollment", _cid_hash)
-            return None
+            return {"status": "no_enrollment"}
 
         if len(candidates) > 1:
             # Ambiguous — do NOT mint a session. Return a short-lived
@@ -363,9 +365,20 @@ def _background_roster_sync(district_token, teacher_id):
 
         if students:
             persist_roster_as_csv(students, teacher_id)
+        db_counts = {"classes": 0, "students": 0, "enrollments": 0}
         if sections:
             persist_sections_as_periods(sections, teacher_id)
-            _sync_classes_to_db(sections, students, teacher_id)
+            maybe_counts = _sync_classes_to_db(sections, students, teacher_id)
+            if isinstance(maybe_counts, dict):
+                db_counts = maybe_counts
+            if db_counts.get("students", 0) == 0:
+                logger.warning(
+                    "Background Clever roster sync persisted 0 student rows: "
+                    "sections=%d filtered_students=%d teacher_hash=%s",
+                    len(sections),
+                    len(students),
+                    hashlib.sha256(str(teacher_id).encode()).hexdigest()[:8],
+                )
         contacts = roster.get("contacts", [])
         if contacts and students:
             contact_map = extract_parent_contacts(contacts, students)
@@ -483,6 +496,35 @@ def clever_callback():
                 hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8],
             )
             return redirect("/student?" + params)
+        if student_session and student_session.get("status") in {"not_found", "no_enrollment"}:
+            # Roster miss. If the district has no Secure-Sync token, the roster
+            # can never have been synced — surface the config gap, not a
+            # misleading "ask your teacher to sync" (the teacher can't).
+            # Checked only AFTER the lookup: login itself reads Supabase and
+            # must keep working for already-synced students without a token.
+            from backend.api_keys import resolve_clever_district_token
+            district_token = resolve_clever_district_token(clever_user.get("district", "") or None)
+            if not district_token:
+                logger.warning(
+                    "Clever student login failed (%s) and district token missing "
+                    "district=%s clever_id_hash=%s",
+                    student_session["status"],
+                    clever_user.get("district", ""),
+                    hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8],
+                )
+                return redirect("/?clever_error=district_token_missing")
+            error_code = (
+                "student_not_found"
+                if student_session["status"] == "not_found"
+                else "student_no_enrollment"
+            )
+            logger.info(
+                "AUDIT: Clever student login failed (%s): email=%s clever_id_hash=%s",
+                student_session["status"],
+                redact_email(clever_user.get("email", "")),
+                hashlib.sha256(str(clever_user["clever_id"]).encode()).hexdigest()[:8],
+            )
+            return redirect(f"/?clever_error={error_code}")
         if student_session:
             from urllib.parse import urlencode
             auth_code = _create_student_auth_code(student_session["token"])
@@ -553,7 +595,9 @@ def clever_callback():
     # Trigger BACKGROUND roster sync on login (Clever requires daily data updates;
     # login-triggered sync satisfies this requirement). Runs in a separate thread
     # so the OAuth redirect returns immediately. UUID-only: a legacy clever:{id}
-    # outcome must never start the DB roster sync.
+    # outcome must never start the DB roster sync — _background_roster_sync strips
+    # the prefix for section *filtering* only; the raw teacher_id still flows into
+    # sync_roster_to_db's UUID NOT NULL columns (the #617 crash).
     from backend.api_keys import resolve_clever_district_token
     district_token = resolve_clever_district_token(clever_user.get("district", "") or None)
     if district_token and is_uuid:
@@ -563,6 +607,13 @@ def clever_callback():
             daemon=True,
         )
         thread.start()
+    elif not district_token:
+        logger.warning(
+            "Clever teacher login skipped roster sync: district token missing "
+            "district=%s linked=%s",
+            clever_user.get("district", ""),
+            is_uuid,
+        )
 
     logger.info("AUDIT: Clever teacher login: email=%s type=%s district=%s clever_id_hash=%s",
                 redact_email(clever_user.get("email")),
@@ -688,8 +739,19 @@ def clever_sync_roster():
     accomm_data = extract_student_accommodations(students)
 
     # Sync to Supabase (class-based student portal)
+    db_counts = {"classes": 0, "students": 0, "enrollments": 0}
     if sections:
-        _sync_classes_to_db(sections, students, teacher_id)
+        maybe_counts = _sync_classes_to_db(sections, students, teacher_id)
+        if isinstance(maybe_counts, dict):
+            db_counts = maybe_counts
+        if db_counts.get("students", 0) == 0:
+            logger.warning(
+                "Clever roster sync persisted 0 student rows: sections=%d "
+                "filtered_students=%d teacher_hash=%s",
+                len(sections),
+                len(students),
+                hashlib.sha256(str(teacher_id).encode()).hexdigest()[:8],
+            )
 
     _clever_audit("clever_roster_sync",
                   f"Synced {len(students)} students, {len(sections)} sections",
@@ -704,6 +766,9 @@ def clever_sync_roster():
             "teachers": len(roster.get("teachers", [])),
             "students": len(students),
             "sections": len(sections),
+            "db_classes": db_counts.get("classes", 0),
+            "db_students": db_counts.get("students", 0),
+            "db_enrollments": db_counts.get("enrollments", 0),
             "students_with_accommodations": len(accomm_data),
             "parent_contacts": contacts_count,
         },

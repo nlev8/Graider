@@ -91,8 +91,8 @@ class TestCreateCleverStudentSession:
         assert result["student"]["email"] == "jane@school.edu"
         assert result["class"]["name"] == "Math 9"
 
-    def test_not_found_by_clever_id_or_email_returns_none(self):
-        """Student not in DB at all → returns None."""
+    def test_not_found_by_clever_id_or_email_returns_not_found_status(self):
+        """Student not in DB at all → returns explicit not_found status."""
         # students table returns no rows for either lookup
         sb = MagicMock()
 
@@ -108,7 +108,7 @@ class TestCreateCleverStudentSession:
         with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
             result = _create_clever_student_session("unknown-clever-id", "nobody@school.edu")
 
-        assert result is None
+        assert result == {"status": "not_found"}
 
     def test_supabase_not_configured_returns_none(self):
         """If Supabase is not configured, return None gracefully."""
@@ -117,8 +117,8 @@ class TestCreateCleverStudentSession:
 
         assert result is None
 
-    def test_student_found_but_not_enrolled_returns_none(self):
-        """Student exists in DB but has no class enrollment → returns None."""
+    def test_student_found_but_not_enrolled_returns_no_enrollment_status(self):
+        """Student exists in DB but has no class enrollment → explicit status."""
         student_row = {
             "id": "db-stu-002",
             "first_name": "Bob",
@@ -133,7 +133,7 @@ class TestCreateCleverStudentSession:
         with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
             result = _create_clever_student_session("clever-bbb", "bob@school.edu")
 
-        assert result is None
+        assert result == {"status": "no_enrollment"}
 
     def test_no_email_fallback_when_clever_id_not_found(self):
         """VB12 (SSO-parity): if the clever_id lookup misses, we FAIL CLOSED —
@@ -202,5 +202,7 @@ class TestCreateCleverStudentSession:
         with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
             result = _create_clever_student_session("wrong-clever-id", "alice@school.edu")
 
-        assert result is None, "fell back to an unscoped email match (cross-tenant)"
+        assert result == {"status": "not_found"}, (
+            "fell back to an unscoped email match (cross-tenant)"
+        )
         assert "email" not in eq_cols, "must not query the students table by email"
