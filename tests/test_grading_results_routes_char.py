@@ -124,25 +124,29 @@ class TestGradeIndividual:
         assert r.status_code == 400
         assert r.get_json() == {"error": "No file selected"}
 
-    def test_real_file_reaches_grading_pinned_500(self, authed_client):
-        """A real image part flows past the guards into the grading body.
-
-        Characterization discipline: pin the EXACT current behavior, do not
-        assume. In the current code path the grading helper is not resolvable
-        in this execution context, the route's own broad
-        ``except Exception`` catches it and returns its pinned internal-error
-        contract. This is verbatim-preserved by the move (byte-identical
-        body), so it must stay byte-identical post-move.
-        """
+    def test_real_file_reaches_grading_and_handles_error_result(self, authed_client):
+        """A real image part flows past the guards and REACHES the grading
+        helper. GH #423 fixed the latent NameError that previously made this a
+        generic 500 *before* grading was ever invoked (the route's broad
+        ``except`` caught the unresolved-name); the helper is now imported, so
+        the route genuinely calls it. We mock the helper (no live OpenAI call)
+        and pin the ERROR-result contract: a grading ``ERROR`` surfaces as a 500
+        carrying the grader's feedback."""
         import io
+        from unittest.mock import patch
 
-        r = authed_client.post(
-            "/api/grade-individual",
-            data={"file": (io.BytesIO(b"\x89PNG fake"), "scan.png")},
-            content_type="multipart/form-data",
-        )
+        with patch(
+            "backend.routes.grading_results_routes.grade_with_parallel_detection",
+            return_value={"letter_grade": "ERROR", "feedback": "grading unavailable"},
+        ) as mock_grade:
+            r = authed_client.post(
+                "/api/grade-individual",
+                data={"file": (io.BytesIO(b"\x89PNG fake"), "scan.png")},
+                content_type="multipart/form-data",
+            )
+        mock_grade.assert_called_once()  # reached grading — no NameError (GH #423)
         assert r.status_code == 500
-        assert r.get_json() == {"error": "An internal error occurred"}
+        assert r.get_json() == {"error": "grading unavailable"}
 
     def test_auth_missing_is_401(self, noauth_client):
         r = noauth_client.post("/api/grade-individual", data={})

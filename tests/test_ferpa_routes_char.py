@@ -580,29 +580,34 @@ class TestImportStudent:
             "detail_text": "1 grades",
         }
 
-    def test_non_preview_save_results_nameerror_is_500(self, authed_client):
-        """ISSUE #423: a non-preview import with new grading results reaches
-        an app.py `save_results(...)` call that pre-move app.py never bound
-        (no import or def site, only a usage ref) -> NameError -> caught by
-        @handle_route_errors -> the RFC 7807 500 envelope. This pre-existing
-        latent bug is faithfully preserved by the verbatim move and pinned
-        here exactly as observed pre-move."""
-        r = self._upload(
-            authed_client,
-            payload={
-                "student_name": "Imp Student",
-                "grading_results": [
-                    {
-                        "graded_at": "2026-09-09T09:09:09",
-                        "student_name": "Imp Student",
-                        "score": 70,
-                    }
-                ],
-            },
-            preview="false",
-        )
-        assert r.status_code == 500
-        assert r.get_json() == _expected_500("/api/ferpa/import-student")
+    def test_non_preview_import_saves_results_and_succeeds(self, authed_client):
+        """GH #423 (FIXED): a non-preview import with new grading results reaches
+        the `save_results(...)` call. Pre-fix, `save_results` was unbound ->
+        NameError -> RFC 7807 500. It is now imported, so the route persists the
+        results and returns success. We mock `save_results` (no real storage
+        write) and pin the fixed contract: it's called, and the route returns
+        200 success with the imported-results count."""
+        from unittest.mock import patch
+
+        with patch("backend.routes.ferpa_routes.save_results") as mock_save:
+            r = self._upload(
+                authed_client,
+                payload={
+                    "student_name": "Imp Student",
+                    "grading_results": [
+                        {
+                            "graded_at": "2026-09-09T09:09:09",
+                            "student_name": "Imp Student",
+                            "score": 70,
+                        }
+                    ],
+                },
+                preview="false",
+            )
+        # reached save_results with the imported results — no NameError (GH #423)
+        mock_save.assert_called_once()
+        assert r.status_code == 200
+        assert r.get_json().get("status") == "success"
 
     def test_auth_missing_is_401(self, noauth_client):
         r = noauth_client.post(
