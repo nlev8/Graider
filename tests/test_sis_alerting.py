@@ -153,8 +153,10 @@ SIS_CAPTURES = [
     # 2026-06-09: shifted 849 -> 917 by the Clever login error-hardening PR
     # (status-dict handling + district-token-after-miss in clever_callback,
     # db_counts warnings in both sync paths — net +68 lines above this
-    # capture). Pin tracks the except sb_err (917); capture at 919 unchanged.
-    ("backend/routes/clever_routes.py", 917),
+    # capture). Then 917 -> 925 by the review-Minor fix (legacy-skip
+    # observability log in clever_callback, +8 lines). Pin tracks the
+    # except sb_err (925); capture at 927 unchanged.
+    ("backend/routes/clever_routes.py", 925),
     # 2026-06-01 (whole-branch review): NEW capture pinned — the legacy
     # clever:{id} cleanup `except e` in clever_delete_data captures to Sentry
     # (FERPA right-to-delete observability guardrail). Shifted 776 -> 787 by the
@@ -165,9 +167,10 @@ SIS_CAPTURES = [
     # (state block rewritten state-presence-driven, net +6 lines above this
     # capture, now at line 812). Capture unchanged.
     # 2026-06-09: shifted 807 -> 875 by the Clever login error-hardening PR
-    # (same net +68 lines above; see the 917 pin). Pin tracks the
-    # legacy-cleanup except (875); capture at 877 unchanged.
-    ("backend/routes/clever_routes.py", 875),
+    # (same net +68 lines above; see the 925 pin). Then 875 -> 883 by the
+    # review-Minor fix (legacy-skip observability log, +8 lines). Pin tracks
+    # the legacy-cleanup except (883); capture at 885 unchanged.
+    ("backend/routes/clever_routes.py", 883),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.

@@ -614,6 +614,14 @@ def clever_callback():
             clever_user.get("district", ""),
             is_uuid,
         )
+    else:
+        # Token present but teacher is legacy clever:{id} — the #617 guard
+        # firing. Log it so "why didn't this roster sync?" has a signal.
+        logger.info(
+            "Clever roster sync skipped: legacy clever:{id} teacher not "
+            "UUID-linked, teacher_hash=%s",
+            hashlib.sha256(str(resolved_id).encode()).hexdigest()[:8],
+        )
 
     logger.info("AUDIT: Clever teacher login: email=%s type=%s district=%s clever_id_hash=%s",
                 redact_email(clever_user.get("email")),
