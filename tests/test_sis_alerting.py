@@ -48,9 +48,11 @@ def _imports_sentry(source: str) -> bool:
 # Every (file, flagged_line) pair that PR-0 patched.
 SIS_CAPTURES = [
     # 2026-06-08: shifted 46 -> 55 by the EDUCATOR_ROLES module constant added
-    # near the top of backend/clever.py (+9 lines above this capture). Capture
-    # (now line 60) unchanged.
-    ("backend/clever.py", 55),
+    # near the top of backend/clever.py (+9 lines above this capture).
+    # 2026-06-08: shifted 55 -> 57 by the low-batch resilience PR (+2 import
+    # lines: `import time` + `from backend.retry import get_retry_delay`).
+    # Capture (now line 62) unchanged.
+    ("backend/clever.py", 57),
     # 2026-05-06: shifted 217/231/245 -> 225/240/255 by PR 6 of SIS compliance
     # hardening sprint (audit_log calls added in get_clever_user). Captures
     # themselves are unchanged — pins track the except blocks.
@@ -60,11 +62,14 @@ SIS_CAPTURES = [
     # 2026-06-08: shifted 247/262/277 -> 256/271/286 by the EDUCATOR_ROLES
     # module constant (+9 lines near the top of backend/clever.py).
     # 2026-06-08: shifted 256/271/286 -> 259/274/289 by the response-log PII
-    # redaction (+3 comment lines at _clever_get_with_retry's 4xx branch, above
-    # these roster-fetch captures which are now at 262/277/292). Pins track.
-    ("backend/clever.py", 259),
-    ("backend/clever.py", 274),
+    # redaction (+3 comment lines at _clever_get_with_retry's 4xx branch).
+    # 2026-06-08: shifted 259/274/289 -> 289/304/319 by the low-batch resilience
+    # PR (+30 lines above the sync_roster captures: 2 imports + the
+    # _clever_retry_after_seconds helper + the rewritten _clever_get_with_retry).
+    # The three roster-fetch captures (now 292/307/322) are unchanged; pins track.
     ("backend/clever.py", 289),
+    ("backend/clever.py", 304),
+    ("backend/clever.py", 319),
     # 2026-05-07: original pin at line 54 was the `_clever_audit` except
     # block. PR #227 (audit MAJOR #10 close) made `_clever_audit` delegate
     # to `backend.utils.audit.audit_log` whose own try/except + Sentry

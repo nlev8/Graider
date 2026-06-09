@@ -3,7 +3,7 @@
 Clever API v3.0 changed the `/me` endpoint: `data.type` now returns the
 generic string ``"user"`` for EVERY record instead of the role
 (``"teacher"`` / ``"student"`` / ``"district_admin"``). See Clever's
-migration guide (https://dev.clever.com/docs/migrating-to-api-30):
+upgrade guide (https://dev.clever.com/docs/api-v3-upgrade-guide):
 
     "The type field on /me will now return 'user' for any user records
      instead of a specific role type."

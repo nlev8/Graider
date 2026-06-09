@@ -8,6 +8,7 @@ import io
 import json
 import os
 import logging
+import time
 from datetime import datetime
 from urllib.parse import urlencode
 from base64 import b64encode
@@ -18,6 +19,7 @@ import httpx
 import sentry_sdk
 
 from backend.utils.audit import audit_log
+from backend.retry import get_retry_delay
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +158,7 @@ async def get_clever_user(access_token):
 
             # API v3.0: /me returns data.type="user" for EVERY record — the
             # role lives in the /users/{id} `roles` object instead. See
-            # https://dev.clever.com/docs/migrating-to-api-30 ("The type field
+            # https://dev.clever.com/docs/api-v3-upgrade-guide ("The type field
             # on /me will now return 'user' for any user records"). Resolve the
             # real role from `roles`, preferring student (students are limited
             # to the student role per Clever) then the highest-privilege
@@ -194,11 +196,39 @@ async def get_clever_user(access_token):
             return None
 
 
-async def _clever_get_with_retry(client, url, headers, label=""):
-    """GET with exponential backoff on 429 (rate limit) and 5xx errors.
+def _clever_retry_after_seconds(resp):
+    """Server-supplied retry delay (seconds) for a throttled/failed Clever
+    response, or None. Honors the standard `Retry-After` header (delta-seconds)
+    and Clever's `X-RateLimit-Reset` (a Unix timestamp → delta from now), so we
+    back off for as long as Clever asks instead of guessing. Returns the raw
+    value for get_retry_delay to parse/validate."""
+    resp_headers = getattr(resp, "headers", None) or {}
+    retry_after = resp_headers.get("Retry-After") or resp_headers.get("retry-after")
+    # Type-guard: a real httpx.Headers.get() yields str|None, but only accept
+    # str/int/float so a stray object (e.g. a test double's Mock header) can
+    # never be mistaken for a numeric hint — fall back to exponential instead.
+    if isinstance(retry_after, (str, int, float)):
+        return retry_after  # get_retry_delay validates/parses the numeric value
+    reset = resp_headers.get("X-RateLimit-Reset") or resp_headers.get("x-ratelimit-reset")
+    if isinstance(reset, (str, int, float)):
+        try:
+            delta = float(reset) - time.time()
+            if delta > 0:
+                return delta
+        except (ValueError, TypeError):
+            pass
+    return None
 
-    Per Clever docs: 1,200 req/min per token, retry with backoff on 429/5xx,
-    stop after MAX_RETRIES attempts.
+
+async def _clever_get_with_retry(client, url, headers, label=""):
+    """GET with backoff on 429 (rate limit) and 5xx errors.
+
+    Per Clever docs: 1,200 req/min per token; retry on 429/5xx, stop after
+    MAX_RETRIES attempts. Honors a server-supplied delay hint (Retry-After /
+    X-RateLimit-Reset) when present, else exponential backoff with jitter and a
+    cap (shared backend.retry.get_retry_delay). No sleep is issued on the final
+    attempt — it would only delay returning the response we're about to give up
+    on.
     """
     resp = None
     for attempt in range(MAX_RETRIES):
@@ -206,15 +236,15 @@ async def _clever_get_with_retry(client, url, headers, label=""):
             resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
                 return resp
-            if resp.status_code == 429:
-                wait = 2 ** attempt
-                logger.warning("Clever rate limited (%s), retrying in %ds (attempt %d/%d)",
-                               label, wait, attempt + 1, MAX_RETRIES)
-                await asyncio.sleep(wait)
-                continue
-            if resp.status_code >= 500:
-                wait = 2 ** attempt
-                logger.warning("Clever %d error (%s), retrying in %ds (attempt %d/%d)",
+            if resp.status_code == 429 or resp.status_code >= 500:
+                if attempt >= MAX_RETRIES - 1:
+                    logger.warning("Clever %d (%s) — retries exhausted (%d/%d)",
+                                   resp.status_code, label, attempt + 1, MAX_RETRIES)
+                    return resp
+                wait = get_retry_delay(
+                    attempt + 1, retry_after=_clever_retry_after_seconds(resp),
+                )
+                logger.warning("Clever %d (%s), retrying in %.1fs (attempt %d/%d)",
                                resp.status_code, label, wait, attempt + 1, MAX_RETRIES)
                 await asyncio.sleep(wait)
                 continue
@@ -225,13 +255,16 @@ async def _clever_get_with_retry(client, url, headers, label=""):
             logger.error("Clever API error (%s): status=%s", label, resp.status_code)
             return resp
         except httpx.HTTPError as e:
-            wait = 2 ** attempt
-            logger.warning("Clever HTTP error (%s): %s, retrying in %ds (attempt %d/%d)",
+            # No server response here (network-layer error) → exponential
+            # backoff with jitter; no Retry-After to honor. Don't sleep after
+            # the final attempt — re-raise instead.
+            if attempt >= MAX_RETRIES - 1:
+                raise
+            wait = get_retry_delay(attempt + 1)
+            logger.warning("Clever HTTP error (%s): %s, retrying in %.1fs (attempt %d/%d)",
                            label, str(e), wait, attempt + 1, MAX_RETRIES)
-            if attempt < MAX_RETRIES - 1:
-                await asyncio.sleep(wait)
-                continue
-            raise
+            await asyncio.sleep(wait)
+            continue
     return resp  # Return last response after exhausting retries
 
 
