@@ -109,7 +109,11 @@ SIS_CAPTURES = [
     # 2026-06-08: shifted 368 -> 375 by VB8 #18 (establish_sso_session import,
     # +1 line) pushing the capture past the window=8 edge. Pin tracks the
     # except (375); capture at 377 unchanged.
-    ("backend/routes/clever_routes.py", 375),
+    # 2026-06-09: shifted 375 -> 389 by the Clever login error-hardening PR
+    # (db_counts + zero-student-rows warning block added inside
+    # _background_roster_sync, +14 lines). Pin tracks the except (389);
+    # capture at 391 unchanged.
+    ("backend/routes/clever_routes.py", 389),
     # 2026-05-06: shifted 672 -> 692 by PR 3 of SIS compliance hardening sprint
     # (PII redaction in Clever logs added ~20 lines of helper code earlier in
     # the file). 2026-05-07: shifted 692 -> 699 by PR #227 same-as-above net
@@ -146,7 +150,11 @@ SIS_CAPTURES = [
     # 2026-06-08: shifted 843 -> 849 by the Instant-Login no-state restart —
     # the state block in clever_callback was rewritten state-presence-driven
     # (net +6 lines above this capture, now at line 854). Capture unchanged.
-    ("backend/routes/clever_routes.py", 849),
+    # 2026-06-09: shifted 849 -> 917 by the Clever login error-hardening PR
+    # (status-dict handling + district-token-after-miss in clever_callback,
+    # db_counts warnings in both sync paths — net +68 lines above this
+    # capture). Pin tracks the except sb_err (917); capture at 919 unchanged.
+    ("backend/routes/clever_routes.py", 917),
     # 2026-06-01 (whole-branch review): NEW capture pinned — the legacy
     # clever:{id} cleanup `except e` in clever_delete_data captures to Sentry
     # (FERPA right-to-delete observability guardrail). Shifted 776 -> 787 by the
@@ -156,7 +164,10 @@ SIS_CAPTURES = [
     # 2026-06-08: shifted 801 -> 807 by the Instant-Login no-state restart
     # (state block rewritten state-presence-driven, net +6 lines above this
     # capture, now at line 812). Capture unchanged.
-    ("backend/routes/clever_routes.py", 807),
+    # 2026-06-09: shifted 807 -> 875 by the Clever login error-hardening PR
+    # (same net +68 lines above; see the 917 pin). Pin tracks the
+    # legacy-cleanup except (875); capture at 877 unchanged.
+    ("backend/routes/clever_routes.py", 875),
     # 2026-05-05: shifted 92 -> 102 and 150 -> 161 by PR 1 of SIS compliance
     # hardening sprint, which added 6 lines of imports + the OIDC validation
     # block. Captures themselves are unchanged — pins track the except block.
