@@ -64,39 +64,9 @@ Graider is an AI-powered grading assistant for educators. It's a Flask applicati
 
 ## Architecture
 
-### File Structure
-```
-graider/
-├── assignment_grader.py    # Core grading logic, file parsing, OpenAI calls
-├── email_sender.py         # Email functionality for sending feedback
-├── .env                    # API keys (never commit)
-├── backend/
-│   ├── app.py              # Main Flask app, grading state, results
-│   ├── clever.py           # Clever API client, roster sync
-│   ├── auth.py             # JWT auth, Clever session resolution
-│   ├── routes/
-│   │   ├── clever_routes.py             # Clever SSO, roster sync, class creation
-│   │   ├── student_account_routes.py    # Student portal, classes, submissions
-│   │   ├── student_portal_routes.py     # Join code portal, auto-grading
-│   │   └── ...
-│   └── ...
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx          # Main app (teacher dashboard)
-│   │   ├── components/
-│   │   │   ├── StudentApp.jsx      # Student portal (authenticated)
-│   │   │   ├── StudentLogin.jsx    # Student login form
-│   │   │   ├── StudentPortal.jsx   # Join code portal
-│   │   │   ├── LoginScreen.jsx     # Teacher login + Clever SSO
-│   │   │   └── OnboardingWizard.jsx
-│   │   └── tabs/
-│   │       ├── PlannerTab.jsx
-│   │       ├── SettingsTab.jsx
-│   │       ├── ResultsTab.jsx
-│   │       └── AnalyticsTab.jsx
-│   └── ...
-└── ~/.graider_*/           # User config files (rubric, assignments, settings)
-```
+> File layout drifts; the codebase is the source of truth. Use
+> `grep -rnE "@[a-z_]+\.route\(" backend` or GitNexus to locate things. The
+> components below are the stable, load-bearing pieces.
 
 ### Key Components
 
@@ -170,50 +140,9 @@ The multipass grading pipeline (`grade_multipass` → `grade_per_question` → `
 
 ## Code Style
 
-> Note: the active frontend (`frontend/src/`) is a normal Vite/React project — template
-> literals, multi-line strings, and `\n` are all fine. (The old embedded-React string-concat
-> constraints no longer apply; that frontend was removed.)
-
-### Python (Flask Backend)
-
-```python
-# GOOD: Use explicit imports
-from dotenv import load_dotenv
-import json
-import os
-
-# GOOD: Load .env with override
-load_dotenv(os.path.join(app_dir, '.env'), override=True)
-
-# GOOD: Thread-safe state management
-grading_state = {
-    "is_running": False,
-    "log": [],
-    "results": []
-}
-
-# BAD: Global mutable state without locks for critical sections
-```
-
----
-
-## Prohibited Patterns
-
-### Python
-
-1. **NO hardcoded API keys**
-   ```python
-   # NEVER
-   api_key = "sk-..."
-
-   # ALWAYS
-   api_key = os.getenv("OPENAI_API_KEY")
-   ```
-
-2. **NO database operations in `__init__` methods**
-
-3. **NO blocking operations in Flask routes**
-   - Use threading for long-running tasks like grading
+- Active frontend (`frontend/src/`) is a normal Vite/React project — template literals, multi-line strings, `\n` are all fine (the old embedded-React string-concat constraints are gone).
+- Python: explicit imports; load `.env` with `load_dotenv(..., override=True)`; guard shared mutable state (e.g. `grading_state`) with locks in critical sections; use `.get()` for dict access.
+- **Never**: hardcode API keys (always `os.getenv(...)`); do DB operations in `__init__`; run blocking work in a Flask route (thread long tasks like grading).
 
 ---
 
@@ -334,6 +263,16 @@ Both paths use the same grading functions (`grade_instant_only`, `grade_student_
 ---
 
 ## Development Principles
+
+**Golden rules — apply to every change, no exceptions:**
+
+1. **Verify before AND after every file write.** Read the file (plus its callers/tests) before editing; after writing, confirm the change landed as intended and run the relevant test / lint / build before moving on. An unverified write is a guess.
+2. **Read before write, root-cause before patch.** Never change code you haven't read; trace the full data flow before fixing one layer.
+3. **Smallest correct change.** Minimum viable change, not minimum effort — no unrequested refactors or features.
+4. **Tests are the gate.** New or changed behavior ships with a test that is red before and green after; run the full suite (`pytest -q`), not just the file you touched.
+5. **Leave the tree clean.** Commit only the files the task intended — no incidental noise.
+
+The numbered principles below expand on these; the full four-layer verification loop lives in `.claude/rules/workflow.md`.
 
 ### 1. Read Before Write
 Understand context before changing code. Read the function, its callers, and related tests before modifying anything. Never propose changes to code you haven't read. For data-flow bugs, trace the full pipeline (generation → hydration → rendering) before patching one layer.
