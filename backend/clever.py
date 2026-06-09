@@ -126,6 +126,57 @@ async def exchange_code_for_token(code):
             return None
 
 
+def fetch_district_tokens():
+    """List the Secure-Sync district tokens Clever has granted this app.
+
+    Calls GET /oauth/tokens with the app's client_id:secret (Basic auth) — the
+    same endpoint the SSO code-exchange uses. Returns a list of
+    ``{"district_id": <owner.id>, "access_token": <token>}`` for every
+    district-owned token, or ``[]`` on misconfig / non-200 / network error.
+
+    This enables hands-free multi-district roster sync: a Clever-primary
+    district just connects + shares data in Clever, and Graider discovers its
+    Secure-Sync token instead of an operator pasting one per district.
+    """
+    config = get_clever_config()
+    if not config or not (config.get("client_id") and config.get("client_secret")):
+        return []
+    credentials = b64encode(
+        f"{config['client_id']}:{config['client_secret']}".encode()
+    ).decode()
+    try:
+        resp = httpx.get(
+            CLEVER_TOKEN_URL,
+            params={"owner_type": "district"},  # server-side filter (Clever docs)
+            headers={"Authorization": f"Basic {credentials}"},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as e:
+        logger.error("Clever /oauth/tokens fetch error: %s", str(e))
+        sentry_sdk.capture_exception(e)
+        return []
+    if resp.status_code != 200:
+        logger.error("Clever /oauth/tokens failed: status=%s", resp.status_code)
+        return []
+    try:
+        data = resp.json().get("data", [])
+    except (ValueError, AttributeError):
+        return []
+    out = []
+    for entry in data if isinstance(data, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        owner = entry.get("owner", {}) or {}
+        # owner_type=district filters server-side; re-check client-side in case
+        # the param is ignored, so a school/section token can never slip through.
+        if owner.get("type") == "district" and entry.get("access_token"):
+            out.append({
+                "district_id": owner.get("id"),
+                "access_token": entry["access_token"],
+            })
+    return out
+
+
 async def get_clever_user(access_token):
     """Fetch the current user's identity from Clever.
 

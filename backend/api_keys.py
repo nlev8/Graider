@@ -312,9 +312,47 @@ def resolve_clever_district_token(district_id: str | None) -> str:
     roster-scoped, stored in the same per-district dict as (but distinct
     from) the AI provider keys. Lives here, not in clever.py, because
     this module owns `_load_district_keys` + its cache.
+
+    Finally, for a Clever-primary district with no stored/env token, the
+    token is AUTO-DISCOVERED from Clever's /oauth/tokens (matched by Clever
+    district id) and cached — so onboarding a new Clever district needs no
+    manual token entry; it just connects + shares data in Clever.
     """
     if district_id:
         tok = _load_district_keys(district_id).get('clever_district_token', '')
         if tok:
             return tok
-    return os.getenv('CLEVER_DISTRICT_TOKEN', '')
+    env_tok = os.getenv('CLEVER_DISTRICT_TOKEN', '')
+    if env_tok:
+        return env_tok
+    if district_id:
+        return _discover_clever_district_token(district_id)
+    return ''
+
+
+def _discover_clever_district_token(district_id: str) -> str:
+    """Auto-discover a district's Secure-Sync token from Clever /oauth/tokens,
+    matched by Clever district id. Cached on success only (TTL) — failures and
+    not-yet-connected districts retry next sync rather than caching an empty."""
+    cache_key = f"clever_dtoken:{district_id}"
+    with _cache_lock:
+        cached = _cache.get(cache_key)
+        if cached and (time.time() - cached['ts']) < _CACHE_TTL:
+            return cached['token']
+
+    token = ''
+    try:
+        from backend.clever import fetch_district_tokens
+        for entry in fetch_district_tokens():
+            if entry.get('district_id') == district_id:
+                token = entry.get('access_token', '') or ''
+                break
+    except Exception as e:
+        logger.warning("Clever district-token discovery failed (%s): %s",
+                       district_id, type(e).__name__)
+        sentry_sdk.capture_exception(e)
+
+    if token:  # cache successes only
+        with _cache_lock:
+            _cache[cache_key] = {'token': token, 'ts': time.time()}
+    return token
