@@ -197,10 +197,13 @@ class TestGetCleverUser:
 
 
 class TestCleverGetWithRetry:
-    def _resp(self, status, text="", json_data=None):
+    def _resp(self, status, text="", json_data=None, headers=None):
         r = MagicMock()
         r.status_code = status
         r.text = text
+        # Real dict headers (not a Mock) so _clever_retry_after_seconds reads
+        # a genuine absent/numeric value rather than a truthy Mock.
+        r.headers = headers if headers is not None else {}
         if json_data is not None:
             r.json = MagicMock(return_value=json_data)
         return r
@@ -345,6 +348,71 @@ class TestCleverGetWithRetry:
             resp = asyncio.run(driver())
         assert resp.status_code == 429
         assert client.get.call_count == MAX_RETRIES
+
+    def test_429_honors_retry_after_header(self):
+        """Honor a server-supplied Retry-After (seconds) instead of blind
+        2**attempt backoff — back off for exactly as long as Clever asks."""
+        from backend.clever import _clever_get_with_retry
+        r429 = self._resp(429)
+        r429.headers = {"Retry-After": "30"}
+        r200 = self._resp(200, json_data={"data": []})
+        r200.headers = {}
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=[r429, r200])
+
+        async def driver():
+            return await _clever_get_with_retry(client, "https://x", {}, label="t")
+
+        with patch("backend.clever.asyncio.sleep", new=AsyncMock()) as sleep_mock:
+            resp = asyncio.run(driver())
+        assert resp.status_code == 200
+        assert sleep_mock.call_count == 1
+        # Slept for the Retry-After value, not 2**attempt (=1 for attempt 0).
+        assert sleep_mock.call_args[0][0] == 30.0
+
+    def test_429_honors_x_ratelimit_reset_header(self):
+        """Honor Clever's X-RateLimit-Reset (Unix timestamp) as a delta from
+        now when no Retry-After is present."""
+        import time as _time
+        from backend.clever import _clever_get_with_retry
+        reset_ts = _time.time() + 45
+        r429 = self._resp(429)
+        r429.headers = {"X-RateLimit-Reset": str(reset_ts)}
+        r200 = self._resp(200, json_data={"data": []})
+        r200.headers = {}
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=[r429, r200])
+
+        async def driver():
+            return await _clever_get_with_retry(client, "https://x", {}, label="t")
+
+        with patch("backend.clever.asyncio.sleep", new=AsyncMock()) as sleep_mock:
+            resp = asyncio.run(driver())
+        assert resp.status_code == 200
+        slept = sleep_mock.call_args[0][0]
+        assert 40 < slept <= 45, f"expected ~45s from X-RateLimit-Reset, got {slept}"
+
+    def test_no_sleep_on_final_retry_attempt(self):
+        """Wasted-sleep fix: on exhaustion (all 429) the final attempt returns
+        the response WITHOUT a pointless sleep, so sleeps == MAX_RETRIES - 1
+        (still MAX_RETRIES GETs)."""
+        from backend.clever import _clever_get_with_retry, MAX_RETRIES
+        resps = [self._resp(429) for _ in range(MAX_RETRIES)]
+        for r in resps:
+            r.headers = {}
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=resps)
+
+        async def driver():
+            return await _clever_get_with_retry(client, "https://x", {}, label="t")
+
+        with patch("backend.clever.asyncio.sleep", new=AsyncMock()) as sleep_mock:
+            resp = asyncio.run(driver())
+        assert resp.status_code == 429
+        assert client.get.call_count == MAX_RETRIES
+        assert sleep_mock.call_count == MAX_RETRIES - 1, (
+            "the final attempt must not sleep before returning the response"
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
