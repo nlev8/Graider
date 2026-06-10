@@ -164,6 +164,58 @@ def test_extensions_allows_in_memory_in_development(monkeypatch):
     assert backend.extensions.limiter is not None
 
 
+def test_extensions_startup_probe_failure_fails_closed_in_production(monkeypatch):
+    """Hardening sprint PR1 sub-item (2026-06-09 reconciliation, Security
+    level-8 'fails closed'): when REDIS_URL is SET but the startup Redis
+    probe fails in production, backend/extensions.py must raise
+    RuntimeError (non-zero exit) instead of silently degrading to
+    per-worker memory:// rate limits for the process lifetime.
+
+    Same class of behavior as the missing-REDIS_URL check: a broken
+    storage backend at boot is a deploy-blocking config/infra error in
+    prod, not a degradation to absorb.
+    """
+    monkeypatch.setenv("REDIS_URL", "redis://redis.invalid:6379/0")
+    monkeypatch.setenv("FLASK_ENV", "production")
+
+    # extensions.py probes via `redis.from_url(...).ping()` — make the
+    # probe fail at the from_url call (covers DNS/conn/auth failures alike;
+    # the module's except block catches any Exception from the probe).
+    import redis
+
+    def _probe_fails(*args, **kwargs):
+        raise redis.exceptions.ConnectionError("simulated: Redis unreachable at startup")
+
+    monkeypatch.setattr(redis, "from_url", _probe_fails)
+
+    import sys
+    sys.modules.pop("backend.extensions", None)
+    with pytest.raises(RuntimeError, match="Redis .*unreachable at startup"):
+        import backend.extensions  # noqa: F401
+
+
+def test_extensions_startup_probe_failure_falls_back_in_dev(monkeypatch):
+    """Dev/test keeps the 2026-05-20 hotfix #5 behavior: probe failure
+    falls back to memory:// without raising (local dev shouldn't require
+    a live Redis just because REDIS_URL is set in .env)."""
+    monkeypatch.setenv("REDIS_URL", "redis://redis.invalid:6379/0")
+    monkeypatch.setenv("FLASK_ENV", "development")
+
+    import redis
+
+    def _probe_fails(*args, **kwargs):
+        raise redis.exceptions.ConnectionError("simulated: Redis unreachable at startup")
+
+    monkeypatch.setattr(redis, "from_url", _probe_fails)
+
+    import sys
+    sys.modules.pop("backend.extensions", None)
+    import backend.extensions
+
+    assert backend.extensions.limiter is not None
+    assert backend.extensions._storage_uri == "memory://"
+
+
 def test_extensions_global_default_is_100_per_minute(monkeypatch):
     """Phase 4.6 tightened the global default from 200/min → 100/min.
 

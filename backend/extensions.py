@@ -49,21 +49,34 @@ if not redis_url:
 #
 # 1. STARTUP PROBE: at module import, probe Redis with a bounded connect
 #    (~2s, no retries). If reachable, use the configured Redis URL as the
-#    storage. If unreachable, fall back to memory:// for the entire
-#    process lifetime — the limiter never even tries to talk to broken
-#    Redis at request time, so workers can't get stuck in its retry loop.
-#    Sessions are per-worker in this mode (matches the existing
-#    flask-session filesystem fallback in app.py from hotfix #3).
+#    storage. If unreachable:
+#      - in DEV/TEST (is_dev): fall back to memory:// for the entire
+#        process lifetime — the limiter never even tries to talk to broken
+#        Redis at request time, so workers can't get stuck in its retry
+#        loop. Sessions are per-worker in this mode (matches the existing
+#        flask-session filesystem fallback in app.py from hotfix #3).
+#      - in PRODUCTION: raise RuntimeError → non-zero exit (2026-06-10,
+#        hardening sprint PR1 sub-item / 2026-06-09 reconciliation ruling).
+#        The original hotfix #5 fell back to memory:// in prod too, which
+#        is fail-OPEN: rate limits silently became per-worker (bypassable)
+#        for the process lifetime. A Redis that is unreachable AT BOOT is
+#        a config/infra error in the same class as a missing REDIS_URL —
+#        fail the deploy loudly (Railway keeps the previous image serving)
+#        rather than boot with unenforceable limits.
 #
 # 2. storage_options BOUNDS: passed to the Limiter so that IF Redis was
 #    reachable at startup but becomes unreachable later (network blip),
 #    the limiter's redis client fails fast (~2s, no retries) instead of
 #    hanging. in_memory_fallback_enabled then correctly catches the
-#    raised exception and degrades per-request.
+#    raised exception and degrades per-request. This RUNTIME degradation
+#    path is deliberate and unchanged — a transient outage mid-flight
+#    should degrade, not crash a serving worker; only the STARTUP probe
+#    fails closed.
 #
 # The hard config requirement at the top of this file (REDIS_URL must be
-# SET in production) still raises at import — a config-missing error is
-# a different class from a transient outage and stays fail-fast.
+# SET in production) still raises at import — startup failures (config
+# missing, or probe failure in prod) are fail-fast; only post-boot
+# transient outages degrade.
 
 _storage_uri = redis_url or "memory://"
 _storage_options: dict = {}
@@ -92,8 +105,19 @@ if redis_url:
             "Redis reachable at startup; flask-limiter using Redis storage."
         )
     except Exception as _redis_err:
-        # Redis unreachable at startup — fall back to memory:// so the
-        # limiter never tries to talk to broken Redis at request time.
+        if not is_dev:
+            # PRODUCTION fails CLOSED (2026-06-10): booting with memory://
+            # would mean per-worker, bypassable rate limits for the process
+            # lifetime — fail the deploy instead, same as missing REDIS_URL.
+            raise RuntimeError(
+                "Redis is configured (REDIS_URL set) but unreachable at startup: "
+                f"{_redis_err!r}. Refusing to start with per-worker memory:// "
+                "rate limits in production (fail-closed). Fix Redis "
+                "reachability from this service, or set FLASK_ENV=development "
+                "for local dev."
+            ) from _redis_err
+        # DEV/TEST: Redis unreachable at startup — fall back to memory:// so
+        # the limiter never tries to talk to broken Redis at request time.
         # Rate limits become per-worker in-memory for this process lifetime;
         # bypassable but the app serves users correctly. Restart pods to
         # pick Redis back up once it recovers.
