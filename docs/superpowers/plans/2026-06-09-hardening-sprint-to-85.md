@@ -52,6 +52,36 @@ giant FE component functions (`SettingsClassroom` 2,307 LOC; audit
 campaign. Revised projection for this sprint as listed: **~7.6–7.75**;
 reaching ~8 additionally needs the FE component splits.
 
+## Re-score 2026-06-10 (post-Wave-1, mechanical) — overall: **7.4** (7.55 on Clever-cert confirmation)
+
+Wave 1 (#724–#727) + follow-ups (#729 ADR amendment, #730 dep-bump retiring all
+8 CVE waivers, #732 audit-trail test isolation, #733 docs sync) merged and
+deployed 2026-06-10; the two new CI jobs were **promoted to required** the same
+day (11 required checks, verified via `gh api`). All verification commands
+re-run 2026-06-10 evening against `main` @ 1c9d80c; binding interpretation
+rulings from the Reconciliation section applied unchanged.
+
+| Dimension | 7.05 (reconciled) | 2026-06-10 | Evidence for the move |
+|---|--:|--:|---|
+| Security | 7 | **9** | Level 8 now fully met: str(e)-to-client = **0**; limiter startup probe **fails closed** in prod (`extensions.py:58` "in PRODUCTION: raise RuntimeError" — #727, closing the exact Reconciliation gap; verified live: image ba60d21 booted with `/healthz` redis ok). Level 9 all three met: dep-CVE scan gating CI as a **required** check (#724 + same-day promotion); path-traversal regression tests (`tests/test_document_generator_path_traversal.py`, `tests/test_security.py`); CSP/HSTS (`app.py:98,113`). Level 10 fails: no threat model; bandit baseline is a non-zero waiver ledger (pip-audit ledger IS zero after #730); no pen-test → 0/3, no partial. Bandit severity (json, per the ruling's method): HIGH=0, MEDIUM=3 (was 7). |
+| Error Handling | 7 | **7** | Unchanged: anchor grep counts **53** silent `except…: pass`; 0 str(e) [CAP met] but 2/4 level-8 criteria is not a strict majority. PR2/PR6 remain the path to 8. |
+| Code Quality | 6 | **6** | Unchanged per ruling: `SettingsClassroom.jsx` 2,307-line component function binds "no function >300 (FE+BE)". Largest files: AnalyticsTab 2,954 / App.jsx 2,931 / assistant_tools_reports.py 2,723. |
+| Architecture | 7 | **7** | Unchanged: DI hits = 0; `get_supabase()` = 91; dual table families 15/14 files. |
+| Test Coverage | 6 | **6** | Unchanged per ruling: floor 70 + measured ≥70 (CI green) but pre-merge e2e is still the single smoke spec and the 111 `test.skip(` masks persist → 1 of 2 level-7 criteria, no +0.5. |
+| Documentation | 8 | **9** | Level 9 met (#726): `docs/adr/` (8 evidence-cited ADRs + index) + `docs/MODULES.md` (module map + 3 sequence narratives). Level 10 "docs **generated** and drift-checked in CI" is half-met — `Docs Drift Check` exists and is now REQUIRED (stale docs literally fail the build) but docs are hand-written, not generated → compound criterion not met, no partial. 0 blank Purpose cells; 315 live vs 308 documented = 2.2%. |
+| Observability | 7 | **7** | Unchanged per ruling: metrics/tracing layer = 0 grep hits; SENTRY_DSN presence remains repo-unverifiable external state. (Audit-trail integrity hardened by #732 — test fixtures can no longer pollute the prod `audit_log` — but that doesn't move a level-8 criterion.) |
+| Data Integrity | 7.5 | **7.5** | Unchanged: 2 migrations, `0001` still a pass-stamp; dedup constraints CI-asserted (+0.5 stands per the anchors note). |
+| Operational Safety | 7.5 | **8** | All three level-8 criteria now met: env-backed feature flags adopted on a real risky path (#725, `flag_enabled` / FLAG_CLEVER_ROSTER_SYNC kill switch, 7 grep hits); post-deploy smoke verifies the **deployed** image SHA (`post-deploy-smoke.yml:8,35`); BetterStack uptime + status.graider.live (docs/observability.md). Level 9 (canary/auto-rollback/on-call) not met → no partial. |
+| SSO/Roster | 7.5\* | **7.5\*** | Ruling stands: `CLEVER_COMPLIANCE_STATUS.md` proves "ready for cert", not granted. **Reverts to 9 the moment an operator confirms the cert in the Clever partner dashboard** (worth +0.15 overall). Today's live verifications (real Clever teacher login + real ClassLink SSO login on the deployed image) strengthen the evidence base but don't change cert status. |
+| **OVERALL** | 7.05 | **7.4** | 9+7+6+7+6+9+7+7.5+8+7.5 = 74.0/10. **7.55 if Clever cert confirms.** |
+
+**Worklist implied by the deltas** (per the anchors' "score moves = worklist" rule):
+sprint items PR2/PR6 (EH 7→8, swallows 53→<10), PR5 (TC 6→7, de-skip e2e),
+PR4 (Obs 7→8, /metrics), PR7 (DI 7.5→8, real baseline) remain the open
+leverage; CQ 6→7 needs the FE component-function splits (SettingsClassroom et
+al.). Security and OpSafety have banked their sprint targets; Documentation
+overshot (8→9 vs no sprint item).
+
 ## The sprint (ordered by leverage-per-effort)
 
 | # | PR | Dimension | Now→Target | Class | Risk |
