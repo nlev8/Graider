@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
 
+# Least-privilege (precedent: seo-audit.yml). Every job in this workflow
+# only needs to read the checkout — bandit/pip-audit/npm-audit scan files,
+# trufflehog reads the diff from the checkout.
+permissions:
+  contents: read
+
 concurrency:
   group: security-${{ github.ref }}
   cancel-in-progress: true
@@ -58,11 +64,12 @@ jobs:
       - name: Audit lockfiles against known-vulnerability databases
         run: |
           # Build --ignore-vuln args from the committed waiver ledger
-          # (strip comments/blank lines; first whitespace-separated token).
+          # (strip CR + comments/blank lines; first whitespace-separated token).
+          [ -f .pip-audit-ignore ] || { echo "::error::pip-audit waiver ledger .pip-audit-ignore missing"; exit 1; }
           IGNORE_ARGS=()
           while read -r vuln_id; do
             IGNORE_ARGS+=(--ignore-vuln "$vuln_id")
-          done < <(awk '!/^[[:space:]]*(#|$)/ {print $1}' .pip-audit-ignore)
+          done < <(awk '{sub(/\r$/,"")} !/^[[:space:]]*(#|$)/ {print $1}' .pip-audit-ignore)
           echo "Waived IDs: ${IGNORE_ARGS[*]:-(none)}"
           # --disable-pip: audit the fully-resolved, hash-pinned lockfiles
           # as data — no package installation, no resolver.
@@ -91,10 +98,18 @@ jobs:
         working-directory: frontend
         continue-on-error: true
         run: |
-          npm audit --audit-level=high || {
+          rc=0
+          npm audit --audit-level=high || rc=$?
+          if [ "$rc" -eq 1 ]; then
+            # npm audit exits 1 when findings meet the threshold.
             echo "::warning::npm audit found high/critical findings in frontend deps (advisory — not blocking). See step log."
-            exit 1
-          }
+          elif [ "$rc" -ne 0 ]; then
+            # Any other non-zero rc = the audit itself failed (network,
+            # registry, lockfile error) — flag it distinctly so a broken
+            # audit isn't mistaken for a findings report.
+            echo "::warning::npm audit failed to run (rc=$rc) — advisory job, not blocking."
+          fi
+          exit "$rc"
 
   trufflehog:
     name: Secret Scan (trufflehog, verified only, PR diff)

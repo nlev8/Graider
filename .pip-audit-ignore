@@ -48,10 +48,12 @@ GHSA-2h4p-vjrc-8xpq
 # pyjwt verifies ClassLink OIDC id_tokens and Supabase JWTs here.
 # - PYSEC-2026-179 / CVE-2026-48526: JWK-as-HMAC-secret key confusion when a
 #   verifier accepts both asymmetric and HMAC algorithms. Graider's decode
-#   call sites each pin ONE algorithm (auth.py:435 ES256, auth.py:454 HS256,
-#   lti.py:232 RS256, classlink_routes.py:569 RS256), so the
-#   mixed-algorithms precondition is not met — re-verify if any decode
-#   call site changes its algorithms= list.
+#   call sites each pin ONE algorithm: auth.py `validate_token` (ES256
+#   JWKS attempt and separate HS256 legacy-secret fallback, each a
+#   single-algorithm decode), lti.py `validate_launch_jwt` (RS256),
+#   classlink_routes.py `classlink_callback` (RS256). The mixed-algorithms
+#   precondition is not met — re-verify if any decode call site changes
+#   its algorithms= list.
 PYSEC-2026-179
 # - PYSEC-2026-175 / CVE-2026-48522: PyJWKClient passes uri to urlopen with
 #   file:// / ftp:// / data:// handlers enabled. Our JWKS URLs are
