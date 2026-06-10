@@ -1,6 +1,6 @@
 # Graider — Architecture & Developer Guide
 
-A developer-oriented map of how Graider is built: what the pieces are, how they fit, where to find things, and how to run/test/ship. Pair this with [`API_REFERENCE.md`](./API_REFERENCE.md) (the 308-endpoint surface) and the root `CLAUDE.md` (contributor rules + the AI-grading factor list).
+A developer-oriented map of how Graider is built: what the pieces are, how they fit, where to find things, and how to run/test/ship. Pair this with [`API_REFERENCE.md`](./API_REFERENCE.md) (the 308-endpoint surface), [`MODULES.md`](./MODULES.md) (per-module map + sequence narratives for the load-bearing flows), [`adr/`](./adr/README.md) (architecture decision records), and the root `CLAUDE.md` (contributor rules + the AI-grading factor list).
 
 ---
 
