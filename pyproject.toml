@@ -25,6 +25,7 @@ select = ["T20"]  # flake8-print
 "backend/services/grader_cli.py" = ["T20"]      # legacy local-folder grading CLI (user-facing progress)
 "backend/migrations/env.py" = ["T20"]           # hard-fail CLI errors to stderr
 "backend/scripts/**" = ["T20"]                  # CLI scripts
+"scripts/check_docs_drift.py" = ["T20"]         # CI docs-drift gate: print IS the job output
 # Note: backend/services/email_service.py is NOT in this list — runtime code
 # paths (GraiderEmailer class methods) use _logger; the __main__ CLI block
 # keeps prints with inline `# noqa: T201` for user-facing output.
