@@ -517,6 +517,96 @@ class TestCallbackUUIDResolve:
 
 
 # ---------------------------------------------------------------------------
+# TestRosterSyncKillSwitch — FLAG_CLEVER_ROSTER_SYNC gates the background sync
+# ---------------------------------------------------------------------------
+
+class TestRosterSyncKillSwitch:
+    """Hardening sprint Wave 1 PR3: the background roster-sync thread spawn in
+    clever_callback is gated by flag_enabled("clever_roster_sync", default=True).
+    Default-True KILL SWITCH — the path is live in prod, so behavior is
+    unchanged unless an operator sets FLAG_CLEVER_ROSTER_SYNC=false."""
+
+    def _run_callback(self, captured_threads):
+        """Drive the teacher callback with a UUID resolve outcome + a district
+        token present, so the ONLY thing standing between the request and the
+        roster-sync thread is the feature flag."""
+        import os
+        app = _make_app()
+
+        def _fake_thread(*args, **kwargs):
+            captured_threads.append(kwargs)
+            return MagicMock()
+
+        # The blanket return_value=None os.getenv patch used elsewhere in this
+        # file patches the SHARED os module, which would also blind
+        # backend.feature_flags. Be selective: real env for FLAG_* (the thing
+        # under test), None for everything else (CLEVER_* isolation).
+        real_getenv = os.getenv
+
+        def _fake_getenv(key, default=None):
+            if str(key).startswith("FLAG_"):
+                return real_getenv(key, default)
+            return None
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("teacher"))),
+            patch("backend.routes.clever_routes.resolve_clever_user_id_or_create",
+                  return_value=("uuid-7", "created")),
+            patch("backend.routes.clever_routes._background_roster_sync"),
+            patch("backend.routes.clever_routes.threading.Thread",
+                  side_effect=_fake_thread),
+            patch("backend.api_keys.resolve_clever_district_token",
+                  return_value="district-token-abc"),
+            patch("backend.routes.clever_routes._get_supabase_safe", return_value=None),
+            patch("backend.routes.clever_routes.os.getenv", side_effect=_fake_getenv),
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+        return resp
+
+    def test_flag_false_skips_sync_and_warns(self, monkeypatch, caplog):
+        """FLAG_CLEVER_ROSTER_SYNC=false → no thread started + observable warning."""
+        import logging
+        monkeypatch.setenv("FLAG_CLEVER_ROSTER_SYNC", "false")
+        threads = []
+        with caplog.at_level(logging.WARNING,
+                             logger="backend.routes.clever_routes"):
+            resp = self._run_callback(threads)
+
+        assert resp.status_code == 302
+        assert "clever_login=success" in resp.location  # login still succeeds
+        assert threads == []
+        assert any("FLAG_CLEVER_ROSTER_SYNC" in r.getMessage()
+                   for r in caplog.records), (
+            "expected a skip warning naming FLAG_CLEVER_ROSTER_SYNC")
+
+    def test_flag_true_starts_sync(self, monkeypatch):
+        """FLAG_CLEVER_ROSTER_SYNC=true → thread started as before."""
+        monkeypatch.setenv("FLAG_CLEVER_ROSTER_SYNC", "true")
+        threads = []
+        resp = self._run_callback(threads)
+
+        assert resp.status_code == 302
+        assert len(threads) == 1
+        assert threads[0]["args"] == ("district-token-abc", "uuid-7")
+
+    def test_flag_unset_starts_sync(self, monkeypatch):
+        """Flag unset → default-True kill switch keeps prod behavior unchanged."""
+        monkeypatch.delenv("FLAG_CLEVER_ROSTER_SYNC", raising=False)
+        threads = []
+        resp = self._run_callback(threads)
+
+        assert resp.status_code == 302
+        assert len(threads) == 1
+        assert threads[0]["args"] == ("district-token-abc", "uuid-7")
+
+
+# ---------------------------------------------------------------------------
 # TestAccountMerging — email-based Clever ↔ Supabase account link
 # ---------------------------------------------------------------------------
 
