@@ -22,7 +22,7 @@ because each item exists because *something burned us before*.
 - [ ] **`grep -rln '<every file you modified>' tests/`** — run any test that mentions your files. Catches cross-cutting consumers (contract tests, golden tests, observability pins).
 - [ ] **Line-shift scan** — if you extracted, restructured, or inserted lines anywhere in an existing function, scan for tests that pin line numbers in your files (e.g., `test_sis_alerting`). Update pins explicitly with documenting comments.
 - [ ] **Spec reviewer says ✅** — scope compliant: nothing missing, nothing extra. (Always dispatched BEFORE the code-quality reviewer.)
-- [ ] **Code-quality reviewer says ✅** — `opus` for Class B (auth / identity / FERPA); `sonnet` is acceptable for Class A.
+- [ ] **Code-quality reviewer says ✅** — `opus` for ALL reviews, Class A included (model-floor Hard Rule #11; the old sonnet-for-Class-A carve-out was a cost concession the Max plan doesn't need).
 - [ ] **Reviewer issues handled** — every Minor/Important/Critical issue is either fixed inline OR captured as a tracked follow-up with a fix sketch (per CLAUDE.md Principle #11; never "I'll track it" without the sketch).
 - [ ] **Commit scope clean** — only the files this task intentionally touched; no AGENTS.md/CLAUDE.md/handoff.md gitnexus noise, no `.claude/scheduled_tasks.lock`, no `flask_session/`.
 
@@ -90,6 +90,17 @@ because each item exists because *something burned us before*.
     "verify when PRESENT" (`options["verify_*"]`) is load-bearing: most JWT
     libraries verify-when-present by default; demanding presence is a
     separate, stricter choice that needs its own justification.
+11. **Subagent model floor: `sonnet`. Judgment work gets `opus`. Never `haiku`.**
+    "Mechanical" evidence collection still demands faithful *reporting* — the
+    2026-06-09 re-score was nearly poisoned by a frontier model misreading
+    bandit's confidence histogram as severity counts. Sonnet minimum for grep
+    sweeps / data collection / test-run reports; opus for ALL review,
+    spec-compliance, investigation, and synthesis agents (Class A included);
+    the main loop does final arbitration itself — never delegated. Exception:
+    wide fan-outs (15+ agents) may use sonnet workers + opus verification of
+    their outputs to protect the usage cap. Codex adversarial passes run
+    `--effort high`. (Plan-tier rationale: on Max, the constraint is the usage
+    window, not dollars — reliability-per-cap beats tier savings.)
 
 ---
 
