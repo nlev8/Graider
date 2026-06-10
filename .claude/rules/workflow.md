@@ -5,7 +5,7 @@
 > codifying the local guardrails that prevent errors CI catches *expensively*
 > from being caught cheaply, by you, before you push.
 >
-> CI is the **final** safety net (nine status checks gate every merge). This
+> CI is the **final** safety net (eleven status checks gate every merge). This
 > file is the **first** safety net — the per-task hygiene that keeps a red CI
 > run from being your first signal.
 
@@ -213,7 +213,7 @@ Class B. Moving code verbatim ⇒ Class A.
 | Universal preferences | `~/.claude/CLAUDE.md` | Complementary; this file is project-scoped. |
 | Process skills | `superpowers:brainstorming`, `superpowers:writing-plans`, `superpowers:subagent-driven-development`, etc. | This file *enforces* the verification gates those skills assume but don't always check. |
 | Subagent dispatch | controller-authored prompts | Include `Read .claude/rules/workflow.md before starting` in every dispatch prompt for multi-task work. |
-| CI | `.github/workflows/ci.yml` (9 status checks) | This file's gates *mirror* CI locally so you catch fast, not slow. |
+| CI | `.github/workflows/ci.yml` + `security-scan.yml` (11 status checks) | This file's gates *mirror* CI locally so you catch fast, not slow. |
 
 ---
 
