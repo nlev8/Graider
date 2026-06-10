@@ -27,6 +27,6 @@ Conventions:
 | [0003](0003-background-thread-grading-incremental-celery.md) | In-process background-thread grading, migrated incrementally to Celery per path | Accepted (Phase 4.1b pending) |
 | [0004](0004-rate-limiting-redis-required-fail-fast.md) | Rate limiting: Redis required in prod (fail-fast), startup probe + bounded retries | Accepted |
 | [0005](0005-frontend-built-at-deploy-nixpacks.md) | Frontend built at deploy by Railway/NIXPACKS; `backend/static/` gitignored | Accepted |
-| [0006](0006-ci-nine-required-checks-locked-names.md) | CI: nine named required status checks; job names locked to branch protection | Accepted |
+| [0006](0006-ci-nine-required-checks-locked-names.md) | CI: named required status checks (eleven as of 2026-06-10); job names locked to branch protection | Accepted (amended) |
 | [0007](0007-oidc-require-lists-core-required-claims-only.md) | OIDC `require` lists may contain only OIDC Core §2 REQUIRED claims | Accepted |
 | [0008](0008-multipass-grading-pipeline-18-factors.md) | Multipass grading pipeline with all grading factors accumulated into prompt context | Accepted |
