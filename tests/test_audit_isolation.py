@@ -9,7 +9,7 @@ fixture rows (teacher_id ``t-1``, ``clever:clever-teacher-001``, actions
 observed in the production audit trail on 2026-06-10, timestamped exactly at
 local full-suite runs.
 
-The fix is the autouse ``_isolate_audit_supabase_sink`` fixture in
+The fix is the autouse ``_isolate_live_supabase`` fixture in
 ``tests/conftest.py``, which patches the ``_get_audit_supabase`` seam in
 ``backend/utils/audit.py`` so that:
 

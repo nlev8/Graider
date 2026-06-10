@@ -14,6 +14,11 @@ import backend.supabase_client as _supabase_client_module
 # Captured at conftest import time (before any test module loads), so this is
 # guaranteed to be the GENUINE function — the identity reference the audit
 # sink guard below uses to tell "real client" apart from test-installed fakes.
+# DEFENSIVE: this identity guard depends on no test reloading
+# backend.supabase_client — importlib.reload() rebinds get_supabase to a NEW
+# function object, so the guard's `is` check would no longer match and it
+# would FAIL OPEN (treat the real function as a test-installed fake). No
+# test reloads the module today; keep it that way.
 _REAL_GET_SUPABASE = _supabase_client_module.get_supabase
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -72,6 +77,11 @@ def _ensure_tools_merged():
 # Intentionally-live modules (real-Supabase e2e/schema smoke tests that
 # self-skip when Supabase is unconfigured and clean up the rows they
 # create) are exempt: they exist to exercise the live project deliberately.
+# NOTE: the exemption matches on the FINAL module-name component (basename),
+# so a new non-live test must NOT reuse one of these basenames — even in a
+# subdirectory (e.g. tests/foo/test_schema_audit.py would silently bypass
+# the guard). To extend the allowlist: add the module basename below AND
+# ensure that module self-skips when Supabase is unconfigured.
 _LIVE_SUPABASE_TEST_MODULES = frozenset({
     "test_e2e_pipeline",
     "test_e2e_multi_teacher",

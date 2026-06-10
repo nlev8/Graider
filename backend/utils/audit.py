@@ -132,7 +132,7 @@ def _get_audit_supabase():
 
     Extracted from audit_log() as a single patchable seam (issue #731): the
     test suite autouse-patches this function (tests/conftest.py
-    `_isolate_audit_supabase_sink`) so a local pytest run can never insert
+    `_isolate_live_supabase`) so a local pytest run can never insert
     fixture rows into the LIVE audit_log table when the developer .env
     carries production Supabase credentials. Production behavior is
     unchanged — both historical import paths are preserved.
