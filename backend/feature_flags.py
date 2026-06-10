@@ -9,6 +9,10 @@ Convention: ``flag_enabled("clever_roster_sync")`` reads the env var
   parameter (itself defaulting to False per the plan DoD)
 - Anything else → log a warning and fall back to ``default``
 
+SECURITY NOTE: ``FLAG_*`` env vars are boolean-only and must NEVER carry
+secrets — the unrecognized-value warning logs the raw value verbatim, and
+logs may ship to third parties (e.g. Sentry/Railway).
+
 Flags are read from the environment at call time (no caching), so an
 operator can flip a flag with a Railway env-var change + restart.
 
@@ -31,6 +35,10 @@ def flag_enabled(name: str, default: bool = False) -> bool:
 
     Reads ``FLAG_<NAME>`` (upper-cased). Unset/empty → ``default``;
     unrecognized values warn and fall back to ``default``.
+
+    ``name`` should be an env-var-safe identifier (letters/digits/underscores):
+    it is upper-cased into ``FLAG_<NAME>``, so spaces/hyphens produce an env
+    var that can't be set normally and the flag silently always returns ``default``.
     """
     env_var = f"FLAG_{name.upper()}"
     raw = os.getenv(env_var)
