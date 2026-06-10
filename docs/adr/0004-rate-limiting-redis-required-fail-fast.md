@@ -52,6 +52,14 @@ treatments deliberately.
   criterion is "no silent memory:// fallback") — the trade-off is recorded
   here as deliberate, with the 2026-05-19 hang as the justification.
 
+## Supersession watch
+
+PR #727 (in flight) changes layer 2: in production, a startup-probe failure
+will fail **closed** (`RuntimeError` at import — deploy aborts) instead of
+falling back to `memory://`; dev keeps the fallback, and layer 3's per-request
+`in_memory_fallback` degradation is unchanged. If/when #727 merges, revise the
+startup-probe paragraph above — this ADR records main as of today.
+
 ## Evidence
 
 - `backend/extensions.py` (header comments narrate both incidents and all

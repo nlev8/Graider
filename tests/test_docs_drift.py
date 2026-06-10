@@ -72,6 +72,18 @@ def test_route_drift_exact_match_passes():
     assert drift.check_route_drift(live=100, documented=100) == []
 
 
+def test_route_drift_exactly_at_tolerance_passes():
+    # Drift is abs(live - documented) / live; exactly 5.0% is NOT "> tolerance".
+    assert drift.check_route_drift(live=100, documented=105) == []
+
+
+def test_route_drift_just_over_tolerance_fails():
+    # 6% drift (live=100, documented=106) is just past the 5% bar.
+    problems = drift.check_route_drift(live=100, documented=106)
+    assert len(problems) == 1
+    assert "drift" in problems[0]
+
+
 def test_route_drift_beyond_tolerance_fails():
     # 100 documented vs 120 live = 16.7% drift.
     problems = drift.check_route_drift(live=120, documented=100)

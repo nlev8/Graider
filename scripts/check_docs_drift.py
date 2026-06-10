@@ -9,7 +9,10 @@ docs fail the build"). Three deterministic checks, no AI, no network:
    --include='*.py'`) vs the endpoint count declared in the
    docs/API_REFERENCE.md header (`**N endpoints.**`). Fails when relative
    drift exceeds ROUTE_DRIFT_TOLERANCE (±5% — the anchors' own level-7
-   tolerance for the API reference).
+   tolerance for the API reference). Routes registered programmatically via
+   `add_url_rule` are NOT counted — only `@<blueprint>.route(...)` decorators
+   are, the same gap as the CLAUDE.md grep this mirrors (currently zero such
+   registrations in backend/).
 2. ADR index integrity: every relative `*.md` link in docs/adr/README.md
    must resolve to an existing file, and every `NNNN-*.md` ADR on disk
    must be linked from the index.
