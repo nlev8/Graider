@@ -127,6 +127,23 @@ def _redact_for_audit(text: str) -> str:
     return text
 
 
+def _get_audit_supabase():
+    """Resolve the Supabase client used by the audit sink.
+
+    Extracted from audit_log() as a single patchable seam (issue #731): the
+    test suite autouse-patches this function (tests/conftest.py
+    `_isolate_live_supabase`) so a local pytest run can never insert
+    fixture rows into the LIVE audit_log table when the developer .env
+    carries production Supabase credentials. Production behavior is
+    unchanged — both historical import paths are preserved.
+    """
+    try:
+        from backend.supabase_client import get_supabase
+    except ImportError:
+        from supabase_client import get_supabase
+    return get_supabase()
+
+
 def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id: str = ""):
     """
     FERPA Compliance: Log all data access and modifications.
@@ -189,11 +206,7 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
 
     # Supabase (persistent across deploys)
     try:
-        try:
-            from backend.supabase_client import get_supabase
-        except ImportError:
-            from supabase_client import get_supabase
-        sb = get_supabase()
+        sb = _get_audit_supabase()
         if sb:
             sb.table('audit_log').insert({
                 'timestamp': timestamp,

@@ -68,7 +68,14 @@ class TestSaveLoadDelete:
         delete('resource:test-roundtrip', 'local-dev')
         assert load('resource:test-roundtrip', 'local-dev') is None
 
-    def test_clever_link_roundtrip(self):
+    def test_clever_link_roundtrip(self, monkeypatch):
+        # Issue #731: with a configured .env this test used to take the
+        # Supabase branch and write/delete a LIVE teacher_data row
+        # (teacher_id='system'). Pin it to the file backend — the same path
+        # CI exercises (no SUPABASE_URL there) — so the roundtrip contract
+        # is tested without touching production.
+        import backend.storage as storage
+        monkeypatch.setattr(storage, "_is_supabase_configured", lambda: False)
         from backend.storage import save, load, delete
         data = {"supabase_user_id": "uid-123"}
         assert save('clever_link:test-link', data, 'system')
