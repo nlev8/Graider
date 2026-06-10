@@ -21,7 +21,7 @@ anti-patterns, the four-layer verification loop, and the universal definition of
 (per-task + per-branch). The "Lessons From Incidents" appendix records what each rule is
 there to prevent — read it once so the rules read as protection, not bureaucracy.
 
-CI is the **final** safety net (the nine status checks below). The workflow file is the
+CI is the **final** safety net (the eleven status checks below). The workflow file is the
 **first** safety net — local guardrails that catch issues seconds-fast instead of
 red-PR-slow. The two are complementary; running both is the standard.
 
@@ -42,7 +42,7 @@ All changes go through Pull Requests:
 4. CI runs automatically (backend tests + frontend build)
 5. Merge when CI passes → Railway auto-deploys
 
-**Branch protection on `main` requires 9 status checks (verified via `gh api repos/nlev8/Graider/branches/main/protection/required_status_checks`):**
+**Branch protection on `main` requires 11 status checks (verified via `gh api repos/nlev8/Graider/branches/main/protection/required_status_checks`; the last two promoted 2026-06-10 after the Wave 1 hardening sprint):**
 
 - `Backend Tests` (pytest with `--cov-fail-under=70`; measured global ~70.5% as of 2026-06-03. **Bump rule:** raise the floor only when measured global is ≥0.5% above the new floor. Full bump history lives in git log / the cicd-pipeline plan doc.)
 - `Frontend Build` (Vite build succeeds + frontend test count ≥ floor)
@@ -53,10 +53,12 @@ All changes go through Pull Requests:
 - `Bandit SAST`
 - `Secret Scan (trufflehog, verified only, PR diff)`
 - `Mypy Strict (Critical Modules)`
+- `Dependency CVE Scan (pip-audit)` (audits committed `requirements*.txt` lockfiles; waivers live in `.pip-audit-ignore` with justification + removal condition; added in #724, promoted 2026-06-10)
+- `Docs Drift Check` (`scripts/check_docs_drift.py`: live route count vs API_REFERENCE.md ±5%, ADR index integrity, MODULES.md path existence; added in #726, promoted 2026-06-10)
 
 **Emergency bypass:** Repo admins can merge without CI if `enforce_admins` is false. Use only for critical hotfixes — fix CI immediately after.
 
-**CI job names are locked:** The branch protection rule references the 9 jobs above by exact name. If you rename a job in `.github/workflows/ci.yml`, update the branch protection rule too or merges will be blocked. See `docs/superpowers/plans/2026-04-02-cicd-pipeline.md` Task 3 for the update command.
+**CI job names are locked:** The branch protection rule references the 11 jobs above by exact name. If you rename a job in `.github/workflows/ci.yml` or `.github/workflows/security-scan.yml`, update the branch protection rule too or merges will be blocked. See `docs/superpowers/plans/2026-04-02-cicd-pipeline.md` Task 3 for the update command.
 
 ## Project Overview
 
