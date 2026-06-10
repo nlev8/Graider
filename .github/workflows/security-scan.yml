@@ -33,6 +33,69 @@ jobs:
             -ll -iii \
             --baseline .bandit-baseline.json
 
+  pip-audit:
+    # Hardening sprint PR1 (docs/superpowers/plans/2026-06-09-hardening-sprint-to-85.md):
+    # fail the build on known-vulnerable Python pins in the committed
+    # lockfiles. Waivers (accepted risk) live in .pip-audit-ignore — one
+    # vuln ID per line, each with a justification comment; the file header
+    # documents the process. NOTE: making this job a REQUIRED status check
+    # is a branch-protection (admin) step taken after this job has a green
+    # history — do not rename the job without updating branch protection.
+    name: Dependency CVE Scan (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit lockfiles against known-vulnerability databases
+        run: |
+          # Build --ignore-vuln args from the committed waiver ledger
+          # (strip comments/blank lines; first whitespace-separated token).
+          IGNORE_ARGS=()
+          while read -r vuln_id; do
+            IGNORE_ARGS+=(--ignore-vuln "$vuln_id")
+          done < <(awk '!/^[[:space:]]*(#|$)/ {print $1}' .pip-audit-ignore)
+          echo "Waived IDs: ${IGNORE_ARGS[*]:-(none)}"
+          # --disable-pip: audit the fully-resolved, hash-pinned lockfiles
+          # as data — no package installation, no resolver.
+          pip-audit -r requirements.txt --disable-pip "${IGNORE_ARGS[@]}"
+          pip-audit -r requirements-dev.txt --disable-pip "${IGNORE_ARGS[@]}"
+
+  npm-audit-advisory:
+    # ADVISORY ONLY (hardening sprint PR1): report frontend dependency
+    # vulnerabilities without blocking the merge. continue-on-error keeps
+    # the job green at the workflow level while the step annotation makes
+    # findings visible in the run summary. Promote to blocking once the
+    # backlog is triaged.
+    name: Frontend Dependency Audit (npm audit, advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit (report-only, high+)
+        working-directory: frontend
+        continue-on-error: true
+        run: |
+          npm audit --audit-level=high || {
+            echo "::warning::npm audit found high/critical findings in frontend deps (advisory — not blocking). See step log."
+            exit 1
+          }
+
   trufflehog:
     name: Secret Scan (trufflehog, verified only, PR diff)
     runs-on: ubuntu-latest

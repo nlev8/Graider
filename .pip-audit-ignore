@@ -1,0 +1,78 @@
+# pip-audit waiver ledger — Dependency CVE Scan (security-scan.yml)
+#
+# WAIVER PROCESS
+# ==============
+# The "Dependency CVE Scan (pip-audit)" CI job fails on any known
+# vulnerability in requirements.txt / requirements-dev.txt that is NOT
+# listed in this file. To accept a finding as known risk:
+#
+#   1. Add the vulnerability ID (PYSEC-* / GHSA-* / CVE-*, exactly as
+#      pip-audit prints it) on its own line below.
+#   2. Directly above the ID, add a comment block with:
+#      - package==version affected, fix version
+#      - WHY the risk is accepted (exposure analysis, not "busy")
+#      - a removal condition (usually "remove when <pkg> bumped to <ver>")
+#   3. Waivers are reviewed in the PR that adds them — an entry without a
+#      justification comment should be rejected in review.
+#
+# Each line below is passed to pip-audit as --ignore-vuln <ID>.
+# Lines starting with '#' and blank lines are ignored.
+#
+# PREFERRED RESOLUTION is always bumping the pin in requirements*.in and
+# re-running pip-compile — a waiver is a loan, not a payment.
+#
+# ---------------------------------------------------------------------------
+# ACTIVE WAIVERS (added 2026-06-10, PR "ci: dependency CVE scan gate")
+# These 8 findings pre-date the gate. Waived to land the gate without
+# coupling it to runtime dependency bumps (Class A CI-only change);
+# follow-up dep-bump PR tracked in the gate PR body. Remove each entry
+# when its package is bumped to the fix version.
+# ---------------------------------------------------------------------------
+
+# idna 3.13 → fix 3.15 (also appears via requirements-dev.txt).
+# CVE-2026-45409: quadratic-time processing of crafted labels in
+# encode/uts46 contexto checks (DoS via CPU burn). Graider calls idna only
+# transitively via requests/httpx on outbound URLs we construct or receive
+# from authenticated SIS/LMS configs — not on bulk anonymous input.
+# Remove when: idna >= 3.15 in requirements.txt.
+GHSA-65pc-fj4g-8rjx
+
+# mako 1.3.11 → fix 1.3.12.
+# CVE-2026-44307: Windows-only backslash path traversal in TemplateLookup.
+# Graider deploys on Linux (Railway / ubuntu CI) and mako is a transitive
+# dep of alembic (migration tooling), never user-facing TemplateLookup.
+# Remove when: mako >= 1.3.12 in requirements.txt.
+GHSA-2h4p-vjrc-8xpq
+
+# pyjwt 2.12.1 → fix 2.13.0 — FOUR advisories. HIGHEST-PRIORITY follow-up:
+# pyjwt verifies ClassLink OIDC id_tokens and Supabase JWTs here.
+# - PYSEC-2026-179 / CVE-2026-48526: JWK-as-HMAC-secret key confusion when a
+#   verifier accepts both asymmetric and HMAC algorithms. Graider's decode
+#   call sites each pin ONE algorithm (auth.py:435 ES256, auth.py:454 HS256,
+#   lti.py:232 RS256, classlink_routes.py:569 RS256), so the
+#   mixed-algorithms precondition is not met — re-verify if any decode
+#   call site changes its algorithms= list.
+PYSEC-2026-179
+# - PYSEC-2026-175 / CVE-2026-48522: PyJWKClient passes uri to urlopen with
+#   file:// / ftp:// / data:// handlers enabled. Our JWKS URLs are
+#   https:// constants from trusted IdP config, not user input.
+PYSEC-2026-175
+# - PYSEC-2026-177 / CVE-2026-48524: unknown-kid JWKS refetch with no rate
+#   limit (outbound request amplification). Bounded here by flask-limiter
+#   on the SSO endpoints that trigger verification.
+PYSEC-2026-177
+# - PYSEC-2026-178 / CVE-2026-48525: detached-JWS b64=false handling.
+#   Graider never uses unencoded-payload (RFC 7797) tokens.
+PYSEC-2026-178
+# Remove all four when: pyjwt >= 2.13.0 in requirements.txt.
+
+# urllib3 2.6.3 → fix 2.7.0 (also appears via requirements-dev.txt).
+# - PYSEC-2026-142 / CVE-2026-44432: over-decompression on partial reads
+#   (memory amplification). Outbound responses come from configured
+#   SIS/LMS/AI providers, not arbitrary attacker-chosen origins.
+PYSEC-2026-142
+# - PYSEC-2026-141 / CVE-2026-44431: sensitive headers forwarded on
+#   cross-origin redirects via low-level ProxyManager/assert_same_host=False
+#   API. Graider uses requests/httpx high-level APIs, not that path.
+PYSEC-2026-141
+# Remove both when: urllib3 >= 2.7.0 in requirements.txt.
