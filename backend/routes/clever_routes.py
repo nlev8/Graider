@@ -599,8 +599,16 @@ def clever_callback():
     # the prefix for section *filtering* only; the raw teacher_id still flows into
     # sync_roster_to_db's UUID NOT NULL columns (the #617 crash).
     from backend.api_keys import resolve_clever_district_token
+    from backend.feature_flags import flag_enabled
     district_token = resolve_clever_district_token(clever_user.get("district", "") or None)
-    if district_token and is_uuid:
+    # KILL SWITCH (hardening sprint Wave 1 PR3): this path is LIVE in prod, so
+    # the flag defaults True — behavior is unchanged unless an operator sets
+    # FLAG_CLEVER_ROSTER_SYNC=false (e.g. to stop a misbehaving sync without
+    # a deploy).
+    if not flag_enabled("clever_roster_sync", default=True):
+        logger.warning(
+            "Clever roster sync skipped: FLAG_CLEVER_ROSTER_SYNC disabled")
+    elif district_token and is_uuid:
         thread = threading.Thread(
             target=_background_roster_sync,
             args=(district_token, resolved_id),
