@@ -9,6 +9,18 @@ import shutil
 import tempfile
 import pytest
 
+import backend.supabase_client as _supabase_client_module
+
+# Captured at conftest import time (before any test module loads), so this is
+# guaranteed to be the GENUINE function — the identity reference the audit
+# sink guard below uses to tell "real client" apart from test-installed fakes.
+# DEFENSIVE: this identity guard depends on no test reloading
+# backend.supabase_client — importlib.reload() rebinds get_supabase to a NEW
+# function object, so the guard's `is` check would no longer match and it
+# would FAIL OPEN (treat the real function as a test-installed fake). No
+# test reloads the module today; keep it that way.
+_REAL_GET_SUPABASE = _supabase_client_module.get_supabase
+
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 GRADING_FIXTURES_DIR = os.path.join(FIXTURES_DIR, "grading")
 
@@ -38,6 +50,77 @@ def _ensure_tools_merged():
     so this retry succeeds."""
     import backend.services.assistant_tools as at
     at._merge_submodules()
+
+
+# ── Issue #731: live-Supabase isolation ─────────────────────────────────
+# The developer .env carries PRODUCTION Supabase credentials, so any code
+# path that reaches the real backend.supabase_client singletons during a
+# local pytest run talks to the LIVE project. Proven leak (2026-06-10): the
+# audit sink in backend/utils/audit.py inserted fixture rows (teacher_id
+# 't-1', actions CLEVER_USER_READ / CLASSLINK_LOGIN / ...) into the
+# production audit_log table during full-suite runs. A create_client-level
+# probe additionally showed unit tests reaching live teacher_data /
+# submissions / published_assessments via unmocked storage paths.
+#
+# Guard strategy (autouse, per test):
+#   1. Null the supabase_client singletons and stub create_client so
+#      get_supabase()/get_raw_supabase()/get_supabase_or_raise() behave
+#      exactly as they do in CI (no SUPABASE_URL there → no client). Tests
+#      that need a client install their own fakes via mock.patch /
+#      monkeypatch, which override this guard and restore it afterwards.
+#   2. Patch the audit sink seam (backend.utils.audit._get_audit_supabase)
+#      with an identity guard: the REAL get_supabase is never invoked from
+#      audit_log() during a test — even if a real singleton exists — while a
+#      test-installed fake on backend.supabase_client.get_supabase IS
+#      honored (tests/test_audit_redaction.py asserts on inserted payloads).
+#
+# Intentionally-live modules (real-Supabase e2e/schema smoke tests that
+# self-skip when Supabase is unconfigured and clean up the rows they
+# create) are exempt: they exist to exercise the live project deliberately.
+# NOTE: the exemption matches on the FINAL module-name component (basename),
+# so a new non-live test must NOT reuse one of these basenames — even in a
+# subdirectory (e.g. tests/foo/test_schema_audit.py would silently bypass
+# the guard). To extend the allowlist: add the module basename below AND
+# ensure that module self-skips when Supabase is unconfigured.
+_LIVE_SUPABASE_TEST_MODULES = frozenset({
+    "test_e2e_pipeline",
+    "test_e2e_multi_teacher",
+    "test_e2e_classroom",
+    "test_schema_assertions",
+    "test_schema_audit",
+})
+
+
+@pytest.fixture(autouse=True)
+def _isolate_live_supabase(request, monkeypatch):
+    """Prevent tests from reaching the live Supabase project (issue #731)."""
+    # request.module.__name__ may be dotted ("tests.test_e2e_pipeline") —
+    # compare on the final component only.
+    if request.module.__name__.rpartition(".")[2] in _LIVE_SUPABASE_TEST_MODULES:
+        yield
+        return
+
+    import backend.utils.audit as _audit_module
+
+    # (1) No real client can be created or reused during this test.
+    monkeypatch.setattr(_supabase_client_module, "_supabase_raw", None)
+    monkeypatch.setattr(_supabase_client_module, "_supabase_resilient", None)
+    monkeypatch.setattr(
+        _supabase_client_module, "create_client", lambda *a, **k: None
+    )
+
+    # (2) Audit sink: block the real client even if a singleton somehow
+    #     exists, but honor an explicitly installed test fake.
+    def _guarded_audit_supabase():
+        current = _supabase_client_module.get_supabase
+        if current is _REAL_GET_SUPABASE:
+            return None  # unpatched = would be the live client → block
+        return current()  # a test installed its own fake → honor it
+
+    monkeypatch.setattr(
+        _audit_module, "_get_audit_supabase", _guarded_audit_supabase
+    )
+    yield
 
 
 @pytest.fixture(autouse=True)
