@@ -89,6 +89,9 @@ export function useAuthSession(isLocalhost) {
         'user_fetch_failed': 'Could not retrieve your account information from Clever.',
         'students_use_portal': 'Student accounts should use the student portal, not the teacher login.',
         'student_not_enrolled': 'Your account was not found. Ask your teacher to sync the class roster.',
+        'student_not_found': 'Your account was not found in the synced class roster. Ask your teacher to sync the class roster.',
+        'student_no_enrollment': 'Your account was found, but no class enrollment was found. Ask your teacher to sync the class roster.',
+        'district_token_missing': 'Clever roster sync is not configured for this district. Ask an administrator to update the Clever district token.',
         'unsupported_role': 'This account type is not supported.',
         'role_not_permitted': 'This Clever account type cannot access the teacher dashboard.',
       };

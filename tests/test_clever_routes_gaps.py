@@ -251,6 +251,50 @@ class TestSyncRoster:
         body = resp.get_json()
         assert body["counts"]["sections"] == 1
 
+    def test_sync_roster_returns_db_counts_and_warns_on_zero_students(self, monkeypatch, caplog):
+        monkeypatch.setenv("CLEVER_DISTRICT_TOKEN", "tok")
+        app = _make_app()
+        roster = {
+            "sections": [
+                {"data": {
+                    "id": "sec-1",
+                    "teachers": ["clever-teacher-001"],
+                    "students": ["stu-1"],
+                }},
+            ],
+            "students": [{"data": {"id": "stu-1"}}],
+            "teachers": [],
+            "contacts": [],
+        }
+        with app.test_client() as client:
+            _logged_in_session(client)
+            with patch(
+                "backend.routes.clever_routes._run_async",
+                return_value=roster,
+            ), patch(
+                "backend.routes.clever_routes.persist_roster_as_csv",
+            ), patch(
+                "backend.routes.clever_routes.persist_sections_as_periods",
+            ), patch(
+                "backend.routes.clever_routes.extract_student_accommodations",
+                return_value=[],
+            ), patch(
+                "backend.routes.clever_routes._sync_classes_to_db",
+                return_value={"classes": 1, "students": 0, "enrollments": 0},
+            ), patch(
+                "backend.routes.clever_routes.map_sections_to_periods",
+                return_value=[],
+            ):
+                with caplog.at_level("WARNING", logger="backend.routes.clever_routes"):
+                    resp = client.post("/api/clever/sync-roster")
+
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert body["counts"]["db_classes"] == 1
+        assert body["counts"]["db_students"] == 0
+        assert body["counts"]["db_enrollments"] == 0
+        assert "persisted 0 student rows" in caplog.text
+
 
 # ──────────────────────────────────────────────────────────────────
 # /api/clever/apply-accommodations

@@ -152,6 +152,8 @@ class TestCleverCallback:
                   new=AsyncMock(return_value={"access_token": "test_token"})),
             patch("backend.routes.clever_routes.get_clever_user",
                   new=AsyncMock(return_value=_clever_user("student"))),
+            patch("backend.api_keys.resolve_clever_district_token",
+                  return_value="district-token-abc"),
             patch("backend.routes.clever_routes._create_clever_student_session",
                   return_value=student_session_data) as mock_create,
         ):
@@ -176,6 +178,8 @@ class TestCleverCallback:
                   new=AsyncMock(return_value={"access_token": "test_token"})),
             patch("backend.routes.clever_routes.get_clever_user",
                   new=AsyncMock(return_value=_clever_user("student"))),
+            patch("backend.api_keys.resolve_clever_district_token",
+                  return_value="district-token-abc"),
             patch("backend.routes.clever_routes._create_clever_student_session",
                   return_value=None),
         ):
@@ -186,6 +190,93 @@ class TestCleverCallback:
 
         assert resp.status_code == 302
         assert "clever_error=student_not_enrolled" in resp.location
+
+    @pytest.mark.parametrize(
+        "session_result",
+        [{"status": "not_found"}, {"status": "no_enrollment"}],
+    )
+    def test_student_roster_miss_with_missing_district_token_surfaces_config(self, session_result):
+        """Roster miss + no Secure-Sync token → config error, not roster absence.
+
+        The token check runs AFTER the lookup: a missing token must never block
+        an already-synced student from logging in (login reads Supabase only).
+        """
+        app = _make_app()
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("student"))),
+            patch("backend.api_keys.resolve_clever_district_token",
+                  return_value=""),
+            patch("backend.routes.clever_routes._create_clever_student_session",
+                  return_value=session_result) as mock_create,
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+
+        assert resp.status_code == 302
+        assert "clever_error=district_token_missing" in resp.location
+        mock_create.assert_called_once()
+
+    def test_student_success_does_not_require_district_token(self):
+        """An already-synced student logs in fine with NO district token configured."""
+        app = _make_app()
+        student_session_data = {
+            "token": "session-token-xyz",
+            "student": {"id": "db-stu-001", "first_name": "Jane"},
+            "class": {"id": "cls-1", "name": "Math 9"},
+        }
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("student"))),
+            patch("backend.api_keys.resolve_clever_district_token",
+                  return_value=""),
+            patch("backend.routes.clever_routes._create_clever_student_session",
+                  return_value=student_session_data),
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+
+        assert resp.status_code == 302
+        assert "/student?" in resp.location
+        assert "clever_error" not in resp.location
+
+    @pytest.mark.parametrize(
+        ("session_result", "expected_error"),
+        [
+            ({"status": "not_found"}, "student_not_found"),
+            ({"status": "no_enrollment"}, "student_no_enrollment"),
+        ],
+    )
+    def test_student_known_failure_redirects_specific_error(self, session_result, expected_error):
+        app = _make_app()
+
+        with (
+            patch("backend.routes.clever_routes.exchange_code_for_token",
+                  new=AsyncMock(return_value={"access_token": "test_token"})),
+            patch("backend.routes.clever_routes.get_clever_user",
+                  new=AsyncMock(return_value=_clever_user("student"))),
+            patch("backend.api_keys.resolve_clever_district_token",
+                  return_value="district-token-abc"),
+            patch("backend.routes.clever_routes._create_clever_student_session",
+                  return_value=session_result),
+        ):
+            with app.test_client() as client:
+                with client.session_transaction() as sess:
+                    sess["clever_oauth_state"] = "valid-state"
+                resp = client.get("/api/clever/callback?code=abc123&state=valid-state")
+
+        assert resp.status_code == 302
+        assert f"clever_error={expected_error}" in resp.location
 
     def test_teacher_role_redirects_success(self):
         """Teacher login → session populated, redirect with clever_login=success."""

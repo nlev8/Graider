@@ -87,7 +87,7 @@ def test_clever_session_does_not_fall_back_to_unscoped_email():
     sb = _sb_clever(by_id_rows=[], by_email_rows=[_STUDENT], enroll_rows=_ENROLL)
     with patch("backend.routes.clever_routes._get_supabase_safe", return_value=sb):
         result = _create_clever_student_session("clever-X", "shared@school.edu")
-    assert result is None, (
+    assert result == {"status": "not_found"}, (
         "Clever student session fell back to an unscoped email match "
         "(cross-tenant exposure)"
     )
