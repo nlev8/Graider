@@ -94,7 +94,7 @@ def grade_individual():
     if student_info_str:
         try:
             student_info = json.loads(student_info_str)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("student info JSON parse failed: %s", type(e).__name__)
 
     # Parse assignment config if provided
@@ -102,7 +102,7 @@ def grade_individual():
     if assignment_config_str:
         try:
             assignment_config = json.loads(assignment_config_str)
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("assignment config JSON parse failed", exc_info=True)
 
     # Build AI notes from config
@@ -217,7 +217,7 @@ def grade_individual():
         if result.get('student_id'):
             try:
                 add_assignment_to_history(result['student_id'], result, teacher_id)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning("Could not update student history: %s", e)
                 sentry_sdk.capture_exception(e)
 
@@ -277,7 +277,7 @@ def _remove_from_master_csv(result):
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
                 writer.writerows(filtered)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Could not remove from master_grades.csv: %s", e)
         sentry_sdk.capture_exception(e)
 
@@ -332,7 +332,7 @@ def _sync_approval_to_master_csv(result, approval_status):
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
                 writer.writerows(rows)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Could not sync approval to master_grades.csv: %s", e)
         sentry_sdk.capture_exception(e)
 

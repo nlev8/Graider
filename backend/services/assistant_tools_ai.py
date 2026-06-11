@@ -123,7 +123,7 @@ def _call_haiku(prompt, max_tokens=1500, teacher_id=None):
             metadata={"feature_label": "assistant_tools_ai"},
         ))
         text = (response.content_parts[0].text if response.content_parts else "").strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"AI call failed: {str(e)}"}
 
     # Response-text parse. Try direct JSON parse FIRST: this handles

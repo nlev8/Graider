@@ -201,7 +201,7 @@ class ElevenLabsTTSStream:
         self._closed = True
         try:
             self._send_json({"text": ""})  # EOS
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             logger.debug("end-of-stream signal send failed", exc_info=True)
         self.audio_queue.put(None)
 
@@ -224,7 +224,7 @@ class ElevenLabsTTSStream:
                 try:
                     self._send_json({"text": " "})
                     self._last_send = time.time()
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
                     break
 
     def _send_json(self, data):
@@ -256,7 +256,7 @@ class ElevenLabsTTSStream:
                 # in the queue. None kills the _drain_audio thread permanently.
                 # The pipeline must stay alive for subsequent text rounds.
                 self._flush_done.set()
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             logger.debug("audio stream message handling failed", exc_info=True)
 
     def _on_error(self, ws, error):

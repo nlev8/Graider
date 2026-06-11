@@ -83,7 +83,7 @@ def _spawn_grading_thread_safe(*, target, args, kwargs=None):
         t = threading.Thread(target=target, args=args, kwargs=kwargs or {}, daemon=True)
         t.start()
         return t
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Failed to spawn portal grading: %s", e)
         sentry_sdk.capture_exception(e)
         return None
@@ -354,7 +354,7 @@ def sync_roster_to_class(class_id):
                         'student_id': student_uuid,
                     }, on_conflict='class_id,student_id').execute()
                     synced += 1
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning("Roster sync failed for %s %s: %s", first, last, e)
                 errors.append(f"{first} {last}: sync failed")
 
@@ -740,7 +740,7 @@ def get_portal_submissions():
                 'id', count='exact'
             ).eq('teacher_id', teacher_id).eq('status', 'pending').execute()
             pending_count = pending_conf.count or 0
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
         return jsonify({"submissions": results, "pending_confirmations": pending_count})
@@ -1285,7 +1285,7 @@ def submit_student_work(content_id):
                     'submitted_at': now_ts,
                     'status': 'pending',
                 }).execute()
-            except Exception as conf_err:
+            except Exception as conf_err:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("Confirmation queue insert skipped: %s", conf_err)
 
         # Return instant results to student (MC scores immediately)
@@ -1353,7 +1353,7 @@ def check_student_session():
                     "name": cls.data[0].get('name', ''),
                     "subject": cls.data[0].get('subject', ''),
                 }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
         return jsonify({
@@ -1366,7 +1366,7 @@ def check_student_session():
             },
             "class_info": class_info,
         })
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return jsonify({"valid": False}), 401
 
 
@@ -1426,7 +1426,7 @@ def send_submission_confirmations():
                 try:
                     dt = datetime.fromisoformat(sub_time.replace('Z', '+00:00'))
                     sub_time = dt.strftime('%B %d, %Y at %I:%M %p')
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("submission timestamp format failed: %s", type(e).__name__)
             body += f"Submitted: {sub_time}\n"
 

@@ -134,7 +134,7 @@ def image_to_latex(image_data, formats=None):
             'raw': {},
             'error': f'Mathpix API HTTP {status}: {body}',
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {
             'latex': '',
             'text': '',

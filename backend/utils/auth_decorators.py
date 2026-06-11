@@ -60,7 +60,7 @@ def require_admin(f: F) -> F:
         try:
             from backend.storage import load
             admin_role = load(f"admin_role:{user_id}", "system")  # type: ignore[no-untyped-call]
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             admin_role = None
             sentry_sdk.capture_exception(e)
         if not admin_role:

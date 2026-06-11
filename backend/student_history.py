@@ -100,7 +100,7 @@ def load_student_history(student_id: str, teacher_id: str = 'local-dev') -> dict
         try:
             with open(path, 'r') as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     return {
@@ -125,7 +125,7 @@ def save_student_history(student_id: str, history: dict, teacher_id: str = 'loca
     try:
         with open(path, 'w') as f:
             json.dump(history, f, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error saving student history: %s", e)
         sentry_sdk.capture_exception(e)
 

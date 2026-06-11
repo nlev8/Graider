@@ -40,7 +40,7 @@ def _call_haiku(prompt, max_tokens=1500):
         return json.loads(text)
     except json.JSONDecodeError:
         return {"error": "AI returned non-JSON response", "raw": text}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"AI call failed: {str(e)}"}
 
 

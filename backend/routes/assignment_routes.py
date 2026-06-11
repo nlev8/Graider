@@ -64,7 +64,7 @@ def save_assignment_config():
             try:
                 with open(filepath, 'r') as f:
                     existing = json.load(f)
-            except (json.JSONDecodeError, Exception) as e:
+            except (json.JSONDecodeError, Exception) as e:  # noqa: BLE001  # broad catch: error is logged
                 existing = {}
                 sentry_sdk.capture_exception(e)
 
@@ -219,7 +219,7 @@ def list_assignments():
                         "dueDate": data.get("dueDate", ""),
                         "latePenalty": data.get("latePenalty", {}),
                     }
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 assignment_data[name] = {"aliases": [], "title": name, "completionOnly": False, "rubricType": "standard", "countsTowardsGrade": True, "importedFilename": "", "dueDate": "", "latePenalty": {}}
                 sentry_sdk.capture_exception(e)
 

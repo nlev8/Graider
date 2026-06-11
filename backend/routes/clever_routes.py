@@ -332,7 +332,7 @@ def _create_clever_student_session(clever_id, email):
         # Exactly one (student_row, class) — mint against the owning row.
         chosen = candidates[0]
         return _mint_clever_student_session(sb, chosen["_student_row"], chosen)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to create clever student session: %s", str(e))
         sentry_sdk.capture_exception(e)
         return None
@@ -386,7 +386,7 @@ def _background_roster_sync(district_token, teacher_id):
                 persist_parent_contacts(contact_map, teacher_id)
         logger.info("Background roster sync complete: %d students, %d sections, %d contacts",
                     len(students), len(sections), len(contacts))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Background roster sync failed: %s", str(e))
         sentry_sdk.capture_exception(e)
 
@@ -657,7 +657,7 @@ def clever_session_check():
         roster_files = _glob.glob(roster_pattern)
         if roster_files:
             last_sync_time = os.path.getmtime(roster_files[0])
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("clever roster last-sync time lookup failed: %s", type(e).__name__)
 
     return jsonify({
@@ -696,7 +696,7 @@ def clever_sync_roster():
 
     try:
         roster = _run_async(sync_roster(district_token))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Clever roster sync failed: %s", str(e))
         return jsonify({"error": "Failed to sync roster from Clever"}), 502
 
@@ -839,7 +839,7 @@ def clever_apply_accommodations():
                 applied += 1
             else:
                 errors.append(f"Failed to save for {student_id}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("Error applying accommodation for %s: %s",
                          hashlib.sha256(str(student_id).encode()).hexdigest()[:8], e)
             errors.append(f"Error for {student_id}")
@@ -888,7 +888,7 @@ def clever_delete_data():
         if clever_id and not str(teacher_id).startswith("clever:"):
             try:
                 result["legacy_cleanup"] = delete_clever_data(f"clever:{clever_id}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 logger.warning("Legacy Clever cleanup failed (non-fatal): %s", type(e).__name__)
                 sentry_sdk.capture_exception(e)
                 result["legacy_cleanup_error"] = type(e).__name__
@@ -930,7 +930,7 @@ def clever_delete_data():
                     "students": len(student_ids),
                 }
                 logger.info("AUDIT: Clever Supabase data deleted for %s: %s", teacher_id, result.get("supabase_deleted"))
-        except Exception as sb_err:
+        except Exception as sb_err:  # noqa: BLE001  # broad catch: error is logged
             logger.error("Supabase deletion failed for %s: %s", teacher_id, str(sb_err))
             sentry_sdk.capture_exception(sb_err)
             result["supabase_error"] = "Partial deletion — local files removed, Supabase cleanup failed"
@@ -938,7 +938,7 @@ def clever_delete_data():
         _clever_audit("clever_data_deletion", f"Deleted: {result}", teacher_id)
         logger.info("Clever data deletion for %s: %s", teacher_id, result)
         return jsonify({"status": "deleted", "deleted": result})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Clever data deletion failed for %s: %s", teacher_id, str(e))
         return jsonify({"error": "An internal error occurred"}), 500
 

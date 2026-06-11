@@ -188,7 +188,7 @@ def _get_standards_for_lesson(lesson):
             "objectives": data.get("objectives", []),
             "topics": [d.get("topic", "") for d in data.get("days", [])],
         }
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return {"title": lesson.get("lesson_title", ""), "vocab": [], "standards": []}
 
 

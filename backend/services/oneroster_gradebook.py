@@ -94,7 +94,7 @@ async def post_results(client, line_item_id, scores):
                 comment=entry.get("comment", ""),
             )
             synced += 1
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # broad catch: error is logged
             failed += 1
             errors.append(str(exc))
             sentry_sdk.capture_exception(exc)

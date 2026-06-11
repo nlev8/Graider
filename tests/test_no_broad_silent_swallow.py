@@ -39,7 +39,7 @@ def _find_broad_silent_swallows():
         src = p.read_text(encoding="utf-8")
         try:
             tree = ast.parse(src)
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
             continue
         for n in ast.walk(tree):
             if not isinstance(n, ast.ExceptHandler):

@@ -658,7 +658,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
     if student_id and student_id != "UNKNOWN":
         try:
             history_context = build_history_context(student_id, teacher_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.info(f"  Note: Could not load student history: {e}")
 
     # Build accommodation context for IEP/504 students (FERPA compliant)
@@ -669,7 +669,7 @@ TEACHER'S GRADING INSTRUCTIONS (FOLLOW THESE CAREFULLY):
             accommodation_context = build_accommodation_prompt(student_id, teacher_id)
             if accommodation_context:
                 _logger.info(f"  Applying accommodations for student")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.info(f"  Note: Could not load accommodations: {e}")
     return custom_section, history_context, accommodation_context
 
@@ -999,7 +999,7 @@ def _load_ell_language(student_id):
                 lang = ell_entry.get("language")
                 if lang and lang != "none":
                     ell_language = lang
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning("ELL language load failed: %s", type(e).__name__)
     return ell_language
 
@@ -1055,7 +1055,7 @@ def _finalize_grading_result(
             try:
                 update_writing_profile(student_id, current_writing_style, student_name, teacher_id)
                 _logger.info(f"  📊 Updated writing profile for {student_name}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.info(f"  Note: Could not update writing profile: {e}")
 
     # Add style comparison info to result for transparency
@@ -1187,7 +1187,7 @@ def _recover_grading_json_decode_error(response_text, e):
         debug_file.write(response_text)
         debug_file.close()
         _logger.info(f"  ⚠️  Full response saved to: {debug_file.name}")
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         _logger.info(f"  ⚠️  Could not display response")
 
     # Try to extract key fields with regex as fallback
@@ -1210,7 +1210,7 @@ def _recover_grading_json_decode_error(response_text, e):
                 "skills_demonstrated": {"strengths": [], "developing": []},
                 "json_recovery": True
             }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("malformed-JSON regex recovery failed: %s", type(e).__name__)
 
     return {
@@ -1435,7 +1435,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
                     response_text = response.choices[0].message.content or ""
                     _logger.info(f"  ⚠️  Structured output empty, falling back to text parse")
                     result = None
-            except Exception as structured_err:
+            except Exception as structured_err:  # noqa: BLE001  # broad catch: error is logged
                 # Structured output not supported for this model — fall back to standard call
                 _logger.info(f"  ⚠️  Structured output failed ({structured_err}), falling back to standard API")
                 response = with_retry(lambda: client.chat.completions.create(
@@ -1496,7 +1496,7 @@ def grade_assignment(student_name: str, assignment_data: dict, custom_ai_instruc
 
     except json.JSONDecodeError as e:
         return _recover_grading_json_decode_error(response_text, e)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.info(f"  ⚠️  API error: {e}")
         import traceback
         traceback.print_exc()
@@ -1661,7 +1661,7 @@ def _multipass_grade_questions_parallel(responses, marker_config, effort_points,
                             "excellent": True, "improvement_note": ""
                         }
                         continue  # Skip LLM call — instant correct, zero cost
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("SymPy equivalence check failed: %s", type(e).__name__)  # SymPy failed — fall through to normal AI grading
 
             f = executor.submit(
@@ -1688,7 +1688,7 @@ def _multipass_grade_questions_parallel(responses, marker_config, effort_points,
             idx = future_to_idx[future]
             try:
                 question_results[idx] = future.result()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.info(f"    ⚠️ Question {idx+1} grading failed: {e}")
                 meta = question_meta[idx] if idx < len(question_meta) else {'points': 10}
                 question_results[idx] = {
@@ -1839,7 +1839,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
                 lang = ell_entry.get("language")
                 if lang and lang != "none":
                     ell_language = lang
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning("ELL language load failed: %s", type(e).__name__)
 
     # === BUILD BREAKDOWN (before feedback so we can pass rubric scores) ===
@@ -1971,7 +1971,7 @@ def grade_multipass(student_name: str, assignment_data: dict, custom_ai_instruct
             if ai_flag not in ["likely", "possible"]:
                 try:
                     update_writing_profile(student_id, current_writing_style, student_name, teacher_id)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     _logger.warning("writing profile update failed: %s", type(e).__name__)
 
     _logger.info(f"  ✅ Multi-pass grading complete: {final_score} ({letter_grade})")
@@ -2230,7 +2230,7 @@ def grade_with_ensemble(student_name: str, assignment_data: dict, custom_ai_inst
                 result = future.result()
                 results[model] = result
                 _logger.info(f"    ✓ {model}: {result.get('score', 0)} ({result.get('letter_grade', 'N/A')})")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.info(f"    ✗ {model}: Error - {str(e)[:50]}")
                 results[model] = {"score": 0, "letter_grade": "ERROR", "feedback": f"Error: {e}"}
 

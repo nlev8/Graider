@@ -73,7 +73,7 @@ def _is_zip_bomb(filepath) -> bool:
                                     _ZIP_MAX_TOTAL_UNCOMPRESSED,
                                 )
                                 return True
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     _logger.warning(
                         "Zip member %r failed to decompress (%s); treating as unsafe",
                         getattr(info, "filename", "?"), type(e).__name__,
@@ -83,7 +83,7 @@ def _is_zip_bomb(filepath) -> bool:
     except zipfile.BadZipFile:
         # Not a valid zip — let the downstream parser report the real error.
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Zip-bomb inspection failed (%s); treating as unsafe", type(e).__name__)
         return True
 
@@ -189,7 +189,7 @@ def read_image_file(filepath: str) -> dict:
             "data": image_data,
             "media_type": mime_types[extension]
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Error reading image: %s", e)
         return None
 
@@ -235,7 +235,7 @@ def read_docx_file(filepath: str) -> str:
                         full_text.append(' | '.join(row_text))
 
         return '\n'.join(full_text)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Error reading file: %s", e)
         return None
 
@@ -703,7 +703,7 @@ def read_docx_file_structured(filepath: str) -> dict:
             "plain_text": plain_text,
             "tables": tables_found
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Error in structured read: %s", e)
         return {"is_graider_table": False, "plain_text": None, "tables": []}
 
@@ -748,7 +748,7 @@ def read_assignment_file(filepath: str) -> dict:
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 return {"type": "text", "content": f.read()}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("Error reading text file: %s", e)
             return None
     

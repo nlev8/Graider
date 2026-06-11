@@ -103,7 +103,7 @@ class SubmissionRepository:
             self._sb.table(self.table_name).update(update_fields).eq(
                 "id", submission_id
             ).execute()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("Failed to update Supabase submission: %s", e)
             sentry_sdk.capture_exception(e)
 
@@ -145,7 +145,7 @@ class SubmissionRepository:
                 "*"
             ).eq("id", submission_id).single().execute()
             return result.data
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # FERPA: hash submission_id, see Codex audit MAJOR #14 round-4.
             logger.error(
                 "Failed to fetch submission row %s: %s",
@@ -249,7 +249,7 @@ class JoinCodeSubmissionRepository(SubmissionRepository):
             ).eq("join_code", lookup_key).ilike(
                 "student_name", _escape_ilike(student_info.get("name") or "")
             ).execute()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("find_existing_submission failed for %s", lookup_key)
             sentry_sdk.capture_exception(e)
             return None
@@ -274,7 +274,7 @@ class JoinCodeSubmissionRepository(SubmissionRepository):
             ).eq("join_code", lookup_key).ilike(
                 "student_name", _escape_ilike(student_info.get("name") or "")
             ).execute()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("count_existing_for failed for table %s: %s", self.table_name, e)
             sentry_sdk.capture_exception(e)
             return 0
@@ -310,7 +310,7 @@ class ClassSubmissionRepository(SubmissionRepository):
             ).eq(
                 "student_id", student_info["student_id"]
             ).execute()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("find_existing_submission failed for %s", lookup_key)
             sentry_sdk.capture_exception(e)
             return None
@@ -338,7 +338,7 @@ class ClassSubmissionRepository(SubmissionRepository):
             ).eq(
                 "content_id", lookup_key
             ).execute()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("count_existing_for failed for table %s: %s", self.table_name, e)
             sentry_sdk.capture_exception(e)
             return 0

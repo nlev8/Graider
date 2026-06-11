@@ -32,7 +32,7 @@ def get_supabase():
     try:
         from backend.supabase_client import get_supabase as _get_sb
         return _get_sb()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return None
 
 
@@ -166,7 +166,7 @@ def _save_cursor(last_teacher_id):
     """Save the paging cursor after a successful batch."""
     try:
         storage_save('sync:last_cursor', {'last_teacher_id': last_teacher_id}, 'system')
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to save sync cursor: %s", e)
         sentry_sdk.capture_exception(e)
 

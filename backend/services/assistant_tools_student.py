@@ -358,7 +358,7 @@ def _find_all_student_files(student_name, dirs):
                             matches.append((display_name, filepath, label))
                             seen_files.add(filepath)
                             break  # found in this file, move to next
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
                 continue
     return matches
@@ -445,7 +445,7 @@ def _delete_student_supabase(student_name):
         if deleted:
             return f"Deleted from Supabase: {', '.join(deleted)} (removed from Companion app)."
         return ""
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         import logging
         sentry_sdk.capture_exception(e)
         logging.getLogger(__name__).warning("Supabase student delete failed: %s", e)
@@ -463,7 +463,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
         try:
             from flask import g
             teacher_id = getattr(g, 'user_id', 'local-dev')
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: falls back to default
             teacher_id = 'local-dev'
 
     audit_tool_action(teacher_id, 'remove_student_from_roster', 'DELETE')
@@ -497,7 +497,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                                 raw = f"{first} {last}".strip()
                             names.append(raw)
                         roster_info.append({"file": f, "directory": prefix, "count": len(names), "sample": names[:5]})
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: falls back to default
                     roster_info.append({"file": f, "directory": prefix, "error": "Could not read"})
         return {
             "error": f"No student found matching '{student_name}' in any roster.",
@@ -513,7 +513,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
         try:
             removed, remaining = _remove_student_from_csv(student_name, filepath)
             results.append({"source": label, "removed": removed, "remaining": remaining})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             errors.append({"source": label, "error": "Failed to remove from roster"})
             sentry_sdk.capture_exception(e)
 
@@ -541,7 +541,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
         if results_removed > 0:
             save_results(grading_state["results"], teacher_id)
             results.append({"source": "grading_results", "removed": results_removed})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         errors.append({"source": "grading_results", "error": "Failed to remove grading results"})
         sentry_sdk.capture_exception(e)
 
@@ -568,7 +568,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                     writer.writeheader()
                     writer.writerows(filtered)
                 results.append({"source": f"master_csv ({os.path.basename(os.path.dirname(master_file))})", "removed": csv_removed})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         errors.append({"source": "master_csv", "error": "Failed to remove from master grades"})
         sentry_sdk.capture_exception(e)
 
@@ -580,7 +580,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
         from backend.storage import delete_student_history as _storage_delete_history
         if _storage_delete_history(teacher_id=teacher_id, student_id=safe_id):
             results.append({"source": "student_history", "removed": 1})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         errors.append({"source": "student_history", "error": "Failed to remove student history"})
         sentry_sdk.capture_exception(e)
 
@@ -598,7 +598,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                 with open(accomm_file, 'w') as f:
                     json.dump(all_acc, f, indent=2)
                 results.append({"source": "accommodations", "removed": len(removed_keys)})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         errors.append({"source": "accommodations", "error": "Failed to remove accommodations"})
         sentry_sdk.capture_exception(e)
 
@@ -616,7 +616,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                 with open(contacts_file, 'w') as f:
                     json.dump(all_contacts, f, indent=2)
                 results.append({"source": "parent_contacts", "removed": len(removed_keys)})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         errors.append({"source": "parent_contacts", "error": "Failed to remove parent contacts"})
         sentry_sdk.capture_exception(e)
 
@@ -634,7 +634,7 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
                 with open(ell_file, 'w') as f:
                     json.dump(all_ell, f, indent=2)
                 results.append({"source": "ell_data", "removed": len(removed_keys)})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         errors.append({"source": "ell_data", "error": "Failed to remove ELL data"})
         sentry_sdk.capture_exception(e)
 
@@ -669,7 +669,7 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
         try:
             from flask import g
             teacher_id = getattr(g, 'user_id', 'local-dev')
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: falls back to default
             teacher_id = 'local-dev'
 
     # Look up student in roster
@@ -703,7 +703,7 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
             1 for r in grading_state.get("results", [])
             if _fuzzy_name_match(student_name, r.get("student_name", ""))
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("student results count from grading state failed: %s", type(e).__name__)
 
     # Build and save pending payload
@@ -711,7 +711,7 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
     try:
         from backend.storage import save as storage_save
         storage_save("pending_send:remove_student", pending, teacher_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
     try:
         # PR #279 Gemini round-1 CRIT fix: namespace the filesystem
@@ -722,7 +722,7 @@ def remove_student_from_roster(student_name, teacher_id='local-dev', **kwargs):
         os.makedirs(os.path.dirname(pending_path), exist_ok=True)
         with open(pending_path, "w") as f:
             json.dump(pending, f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     return {
@@ -747,7 +747,7 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
         try:
             from flask import g
             teacher_id = getattr(g, 'user_id', 'local-dev')
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: falls back to default
             teacher_id = 'local-dev'
 
     # Load pending payload from storage
@@ -755,7 +755,7 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
     try:
         from backend.storage import load as storage_load, save as storage_save
         pending = storage_load("pending_send:remove_student", teacher_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # Filesystem fallback (namespaced by teacher_id — see PR #279 fix)
@@ -765,7 +765,7 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
             if os.path.exists(pending_path):
                 with open(pending_path, "r") as f:
                     pending = json.load(f)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     if not pending or pending.get("action") != "remove_student":
@@ -801,13 +801,13 @@ def confirm_student_removal(teacher_id='local-dev', **kwargs):
     # Clear pending storage
     try:
         storage_save("pending_send:remove_student", None, teacher_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
     try:
         pending_path = _pending_send_path(teacher_id)
         if os.path.exists(pending_path):
             os.remove(pending_path)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     if isinstance(result, dict):
@@ -1056,7 +1056,7 @@ def import_student_data(file_path, period=None, student_id=None, teacher_id='loc
                         writer = csv.DictWriter(f, fieldnames=fieldnames)
                         writer.writeheader()
                         writer.writerows(rows)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("Could not add student to roster: %s", e)
             sentry_sdk.capture_exception(e)
 

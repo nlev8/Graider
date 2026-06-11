@@ -59,7 +59,7 @@ def _admin_claim_rate_limit_key():
     ip = get_remote_address()
     try:
         uid = getattr(g, "teacher_id", None) or getattr(g, "user_id", None)
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: falls back to default
         uid = None
     return f"{ip}|{uid or 'anon'}"
 
@@ -214,7 +214,7 @@ def _discover_teachers(admin_role):
     # Layer 1: SIS auto-discovery
     try:
         _discover_via_sis(admin_role, teacher_map)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("SIS teacher discovery failed: %s", e)
         sentry_sdk.capture_exception(e)
 
@@ -233,7 +233,7 @@ def _discover_teachers(admin_role):
     if not teacher_map:
         try:
             _discover_fallback(teacher_map)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Fallback teacher discovery failed: %s", e)
             sentry_sdk.capture_exception(e)
 
@@ -552,7 +552,7 @@ def _enrich_teachers(teachers):
             ts = row.get("timestamp")
             if tid and ts and tid not in last_activity:
                 last_activity[tid] = ts
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to enrich teachers (batched): %s", e)
         sentry_sdk.capture_exception(e)
         # Round-2 Codex MEDIUM fold: partial-failure path used to leave
@@ -677,7 +677,7 @@ def compute_overview(teacher_ids):
                         except (ValueError, TypeError):
                             pass
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Overview aggregation error (batched): %s", e)
         sentry_sdk.capture_exception(e)
 
@@ -800,7 +800,7 @@ def admin_teacher_summary(teacher_id):
             .limit(10).execute()
         summary["recent_activity"] = audit_res.data or []
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Teacher summary error for %s: %s", teacher_id, e)
         sentry_sdk.capture_exception(e)
 
@@ -835,7 +835,7 @@ def admin_activity():
             for entry in (res.data or []):
                 entry["teacher_name"] = name_map.get(tid, "")
                 all_entries.append(entry)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Activity fetch error for teacher %s: %s", tid, e)
             sentry_sdk.capture_exception(e)
 

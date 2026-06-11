@@ -20,7 +20,7 @@ def _get_supabase():
     try:
         from backend.supabase_client import get_supabase
         return get_supabase()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return None
 
 

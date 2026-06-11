@@ -608,7 +608,7 @@ def create_function_graph(
                 color = colors[idx % len(colors)]
                 ax.plot(x_vals, y_vals, color=color, linewidth=2, label=label)
                 all_y.extend(y_vals[np.isfinite(y_vals)])
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("expression curve plot failed", exc_info=True)
                 continue
 

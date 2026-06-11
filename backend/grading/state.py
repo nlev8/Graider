@@ -103,7 +103,7 @@ def load_saved_results(teacher_id: str = 'local-dev') -> list[dict[str, Any]]:
                     if cleaned != sn:
                         r['student_name'] = cleaned
                 return results
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return []
 
@@ -118,7 +118,7 @@ def save_results(results: list[dict[str, Any]], teacher_id: str = 'local-dev') -
         try:
             with open(RESULTS_FILE, 'w') as f:
                 json.dump(results, f, indent=2)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.error("Error saving results: %s", e)
             sentry_sdk.capture_exception(e)
 

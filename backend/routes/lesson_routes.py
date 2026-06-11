@@ -134,7 +134,7 @@ def list_lessons():
                         }
                         units[unit_name].append(lesson_info)
                         all_lessons.append(lesson_info)
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     logger.debug("saved lesson JSON load failed", exc_info=True)
 
     return jsonify({"units": units, "lessons": all_lessons})
@@ -252,7 +252,7 @@ def _load_calendar(teacher_id='local-dev'):
             if key not in data:
                 data[key] = default
         return data
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return dict(_DEFAULT_CALENDAR)
 
 
@@ -424,7 +424,7 @@ def parse_document_for_calendar():
 
         if not text or text.startswith('['):
             return jsonify({"error": "Could not extract text from document"}), 400
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to extract text from %s: %s", filename, e)
         return jsonify({"error": "Failed to read document"}), 500
 
@@ -476,7 +476,7 @@ def parse_document_for_calendar():
     except json.JSONDecodeError:
         logger.error("AI returned non-JSON response for %s", filename)
         return jsonify({"error": "AI could not parse events from this document"}), 500
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("AI parsing failed for %s: %s", filename, e)
         return jsonify({"error": "AI parsing failed"}), 500
 

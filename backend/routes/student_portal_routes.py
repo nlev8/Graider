@@ -336,7 +336,7 @@ def list_saved_assessments():
                             "total_points": assessment.get('total_points'),
                             "question_count": question_count,
                         })
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("saved assessment listing entry failed", exc_info=True)
 
         assessments.sort(key=lambda x: x.get('saved_at', ''), reverse=True)
@@ -1515,7 +1515,7 @@ def _run_personalized_remediation(db, cls_row, target_mode, target_student_ids,
             sid = futures[fut]
             try:
                 variants.append(fut.result())
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning(
                     "remediation.personalize.variant_failed student=%s: %s", sid, e
                 )
@@ -1591,7 +1591,7 @@ def _run_shared_remediation(cls_row, target_mode, target_student_id,
         try:
             from backend.accommodations import build_accommodation_prompt
             accommodation_segment = build_accommodation_prompt(target_student_id, g.teacher_id) or ""
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning(
                 "remediation.accommodations_helper_failed teacher=%s student=%s",
                 g.teacher_id, target_student_id,
@@ -1916,7 +1916,7 @@ def post_remediate(class_id):
         for sid in target_student_ids:
             try:
                 seg = _bap(sid, g.teacher_id) or ""
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning(
                     "remediation.personalize.accommodation_load_failed teacher=%s student=%s",
                     g.teacher_id, sid,

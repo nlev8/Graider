@@ -79,7 +79,7 @@ def _district_teacher_rows(ids, sb):
             if uid:
                 name_by_id[str(uid)] = {"email": getattr(u, "email", "") or "",
                                         "name": (getattr(u, "user_metadata", {}) or {}).get("first_name", "") or ""}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("district teacher name lookup failed (non-fatal): %s", type(e).__name__)
     teachers = [{"user_id": tid, "email": name_by_id.get(tid, {}).get("email", ""),
                  "name": name_by_id.get(tid, {}).get("name", "") or "—"} for tid in sorted(ids)]
@@ -154,7 +154,7 @@ def _clear_old_provider_data(old_provider):
 
     try:
         all_classes = db.table("classes").select("id, teacher_id, clever_section_id").execute()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to query classes for provider switch: %s", str(e))
         sentry_sdk.capture_exception(e)
         return 0
@@ -201,7 +201,7 @@ def _clear_old_provider_data(old_provider):
 
             db.table("classes").delete().eq("id", cls["id"]).execute()
             deleted_classes += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Failed to delete class %s: %s", cls["id"], str(e))
             sentry_sdk.capture_exception(e)
 
@@ -212,7 +212,7 @@ def _clear_old_provider_data(old_provider):
             if remaining.count == 0:
                 db.table("students").delete().eq("id", sid).execute()
                 deleted_students += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     import glob
@@ -517,7 +517,7 @@ def district_test_connection():
                 loop.close()
 
             return jsonify({"status": "connected"})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("District OneRoster connection test failed: %s", str(e))
             return jsonify({"error": "Connection failed"}), 502
 
@@ -618,7 +618,7 @@ def _revoke_designated_admin_by_email(email):
                    if getattr(u, "email", None) and u.email.lower() == norm]
         if len(matches) == 1:
             _sync_sso_admin_revocation(matches[0].id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Immediate SSO admin revoke failed (non-fatal): %s", type(e).__name__)
 
 

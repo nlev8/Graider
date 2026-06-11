@@ -41,7 +41,7 @@ import openai  # noqa: F401
 try:
     import google.generativeai  # noqa: F401
     GEMINI_SDK_AVAILABLE = True
-except Exception:  # pragma: no cover - depends on environment
+except Exception:  # pragma: no cover - depends on environment  # noqa: BLE001  # optional dependency probe
     GEMINI_SDK_AVAILABLE = False
 
 # ── Deterministic, content-matched payload builders ───────────────────────────

@@ -36,7 +36,7 @@ def client():
     from backend.extensions import limiter
     try:
         limiter.reset()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
         pass
     with app.test_client() as c:
         yield c
@@ -49,7 +49,7 @@ def auth_client():
     from backend.extensions import limiter
     try:
         limiter.reset()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
         pass
     with app.test_client() as c:
         with c.session_transaction() as sess:

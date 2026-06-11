@@ -222,7 +222,7 @@ def _create_classlink_student_session(tenant_id, person_id):
             }
         chosen = candidates[0]
         return _mint_classlink_student_session(sb, chosen["_student_row"], chosen)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to create ClassLink student session: %s", str(e))
         sentry_sdk.capture_exception(e)
         return None
@@ -294,7 +294,7 @@ def _trigger_roster_sync(teacher_id, tenant_id):
     def _bg_sync():
         try:
             _run_classlink_roster_sync(teacher_id, tenant_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Post-login ClassLink roster sync failed for %s: %s", teacher_id, e)
             sentry_sdk.capture_exception(e)
 

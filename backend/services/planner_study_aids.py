@@ -201,7 +201,7 @@ def generate_slides_payload(*, content, title, subject, grade, instructions,
             slide_data["_image_data"] = {
                 str(k): base64.b64encode(v).decode('ascii') for k, v in images.items()
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("Image generation failed, continuing without images: %s", e)
             slide_data["_image_data"] = {}
 

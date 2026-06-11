@@ -236,7 +236,7 @@ class OneRosterClient:
                             u for u in users
                             if (u.get("role") or "").lower() == "teacher"
                         ]
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     logger.info("Users fallback fetch failed: %s", e)
 
             # Demographics are optional (some providers don't support them)
@@ -245,7 +245,7 @@ class OneRosterClient:
                 demographics = await self._get_paginated(
                     client, "/demographics", "demographics", label="demographics"
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 logger.info("Demographics fetch failed (optional): %s", e)
 
             return {
@@ -475,7 +475,7 @@ def get_oneroster_config(teacher_id=None):
                     "school_id": stored.get("school_id"),
                     "teacher_sourced_id": stored.get("teacher_sourced_id"),
                 }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.debug("Could not load per-teacher OneRoster config: %s", e)
 
     # Try district-level config from storage
@@ -487,7 +487,7 @@ def get_oneroster_config(teacher_id=None):
             if teacher_id:
                 try:
                     teacher_sourced_id = load("oneroster_teacher_id", teacher_id)
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     logger.debug("oneroster teacher sourcedId load failed", exc_info=True)
             return {
                 "base_url": district_cfg.get("base_url"),
@@ -498,7 +498,7 @@ def get_oneroster_config(teacher_id=None):
                 "teacher_sourced_id": teacher_sourced_id,
                 "_source": "district",
             }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.debug("Could not load district OneRoster config: %s", e)
 
     # Fall back to environment variables
