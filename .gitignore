@@ -220,6 +220,9 @@ tramp
 # ─────────────────────────────────────────────────────────────
 # Output folders (contain graded work - don't commit student data!)
 Results/
+# ...but the ResultsTab source components are code, not graded output
+# (macOS core.ignorecase makes `Results/` also match `results/`):
+!frontend/src/tabs/results/
 Graded/
 Output/
 Exports/
