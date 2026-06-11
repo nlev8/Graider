@@ -74,6 +74,12 @@ export default function TrustedWritersSection(props) {
                     }}
                   >
                     {config.trustedStudents.map((studentId) => {
+                      // KNOWN BUG (preserved verbatim from the pre-split monolith — do NOT copy
+                      // this pattern): `status` is not a prop here, so it resolves to the
+                      // window.status browser global (a string) and this lookup ALWAYS yields []
+                      // → displayName always falls through to the periods/raw-id fallback below.
+                      // Fixing it means threading the real grading `status` prop — Class B,
+                      // tracked in PR #753's Known follow-ups with a sketch.
                       const matchedResult = (status.results || []).find(r => (r.student_id || r.student) === studentId);
                       let displayName = matchedResult ? matchedResult.student_name : null;
                       if (!displayName) {
