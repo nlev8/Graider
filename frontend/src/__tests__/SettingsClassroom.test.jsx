@@ -72,4 +72,54 @@ describe('SettingsClassroom', () => {
     const { container } = render(<SettingsClassroom {...makeProps()} />);
     expect(container.firstChild).toBeTruthy();
   });
+
+  // Exercises the branches the default smoke test leaves hidden (Clever section,
+  // LTI add-platform form, expanded period with edit row + add-student form,
+  // accommodation suggestion panels) so every extracted section actually renders.
+  it('smoke: renders all guarded sections without crashing', () => {
+    const props = makeProps({
+      isCleverUser: true,
+      showManualSetup: true,
+      ltiShowForm: true,
+      activeProvider: null,
+      districtSisProvider: '',
+      sortedPeriods: [{ filename: 'p1.csv', period_name: 'Period 1', row_count: 1, course_codes: ['M101'], class_level: 'standard', imported_from: 'focus' }],
+      expandedPeriod: 'p1.csv',
+      loadingExpandedStudents: false,
+      expandedStudents: [
+        { id: 's1', full: 'Student One', first: 'Student', last: 'One', student_email: 'a@b.c', parent_emails: ['p@b.c'], parent_phones: ['555'] },
+        { id: 's2', full: 'Student Two', first: 'Student', last: 'Two', student_email: '', parent_emails: [], parent_phones: [] },
+      ],
+      editingStudentId: 's1',
+      editStudentData: { student_name: 'Student One', student_email: '', parent_emails: '', parent_phones: '' },
+      addingStudent: true,
+      newStudent: { name: '', student_id: '', grade: '', student_email: '', parent_emails: '', parent_phones: '' },
+      cleverSyncing: false,
+      cleverSyncResult: {
+        counts: { students: 1, sections: 1, students_with_accommodations: 1 },
+        available_sections: [{ clever_section_id: 'c1', name: 'Sec', subject: 'Math', grade: '6', student_clever_ids: ['x'] }],
+      },
+      cleverSelectedSections: { c1: true },
+      cleverAccommSuggestions: { s1: { name: 'Student One', iep_status: true, ell_status: true, home_language: 'Spanish', suggested_presets: ['ell_support'] } },
+      oneRosterAccommodations: { s1: { name: 'Student One', iep_status: false, ell_status: true, home_language: 'Spanish', suggested_presets: [] } },
+      oneRosterStatus: 'connected',
+      oneRosterTestResult: { success: true, school_name: 'School' },
+      oneRosterSyncResult: { counts: { students: 1, sections: 1, classes: 1, enrollments: 1, students_with_accommodations: 1 } },
+      oneRosterHasCredentials: true,
+      ltiToolConfig: { oidc_login_url: 'a', launch_url: 'b', jwks_url: 'c', redirect_uri: 'd' },
+      ltiPlatforms: [{ name: 'Canvas', issuer: 'https://i', client_id: 'cid' }],
+      ltiNewPlatform: { name: '', issuer: '', client_id: '', auth_login_url: '', auth_token_url: '', jwks_url: '', deployment_ids: '' },
+      ltiContexts: [{ context_id: 'ctx', context_title: 'Course', student_count: 1, platform_issuer: 'https://i', students: [{ name: 'Student One', user_id: 'u1' }] }],
+      ltiSelectedContext: { context_id: 'ctx', platform_issuer: 'https://i' },
+      ltiSyncScores: [{ student_name: 'Student One', score: '95' }],
+      ltiSyncResult: { status: 'ok', synced: 1, total: 1, unmatched_students: ['Student Two'] },
+      focusImporting: true,
+      focusImportProgress: 'Importing...',
+      studentAccommodations: { s1: { student_name: 'Student One', presets: [{ id: 'ell_support', name: 'ELL' }], custom_notes: 'note' } },
+      accommodationPresets: [{ id: 'ell_support', name: 'ELL Support', description: 'desc', icon: 'FileText' }],
+      parentContacts: { count: 1, with_email: 1, without_email: 1, period_stats: { P1: { total: 1 } } },
+    });
+    const { container } = render(<SettingsClassroom {...props} />);
+    expect(container.firstChild).toBeTruthy();
+  });
 });
