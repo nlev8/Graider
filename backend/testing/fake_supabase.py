@@ -31,6 +31,12 @@ is simply absent from returned rows), or_, contains, text search. If a route
 a future promoted spec exercises needs one of these, extend this file with a
 pinned unit test in tests/test_fake_supabase.py.
 
+Also not implemented: UNIQUE-index conflict errors (Postgres 23505). The real
+DB's partial unique index uq_submissions_dedup_key catches concurrent
+double-submits as a second line of defense; this fake never raises 23505, so
+e2e specs cover only the synchronous duplicate pre-check, NOT the
+race-condition index path.
+
 Thread-safety: a single RLock guards every execute() — the Flask backend
 serves Playwright traffic from multiple threads.
 """

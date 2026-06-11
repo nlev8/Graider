@@ -242,15 +242,17 @@ jobs:
       - name: Guard — promoted specs contain zero conditional skips
         # The whole point of PR5 is removing silent-skip masking. If a
         # test.skip( creeps back into a promoted spec, fail loudly here
-        # rather than letting the suite go green by skipping.
+        # rather than letting the suite go green by skipping. Also catches
+        # test.only( (silently shrinks the suite to one test) and
+        # test.fixme( (skips without tripping a skip-only guard).
         run: |
-          if grep -n 'test\.skip(' \
+          if grep -nE 'test\.(skip|only|fixme)\(' \
             frontend/e2e/student-mc-grading.spec.js \
             frontend/e2e/student-tf-grading.spec.js \
             frontend/e2e/student-matching.spec.js \
             frontend/e2e/student-error-states.spec.js \
             frontend/e2e/student-portal.spec.js; then
-            echo "::error::Promoted e2e specs must not contain test.skip( — masks were removed in PR5"
+            echo "::error::Promoted e2e specs must not contain test.skip(/only(/fixme( — masks were removed in PR5"
             exit 1
           fi
 

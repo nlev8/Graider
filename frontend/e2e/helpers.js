@@ -81,9 +81,13 @@ async function startAssessment(page, joinCode, studentName) {
 
 /**
  * Generate a unique student name to avoid duplicate constraints.
+ * Counter suffix makes collisions impossible even when two calls land in
+ * the same millisecond (serial --workers=1 runs have no parallel jitter,
+ * so Date.now() alone is collision-improbable, not collision-proof).
  */
+let __uniqueNameSeq = 0
 function uniqueName(prefix = 'Student') {
-  return `${prefix} ${Date.now()}`
+  return `${prefix} ${Date.now()}-${++__uniqueNameSeq}`
 }
 
 /**
