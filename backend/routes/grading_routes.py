@@ -1174,7 +1174,7 @@ def _read_focus_comments_output(proc):
             if len(_focus_comments_state["log"]) > 100:
                 _focus_comments_state["log"] = _focus_comments_state["log"][-50:]
         except json.JSONDecodeError:
-            pass
+            _logger.debug("Non-JSON line from Focus comments subprocess ignored")
 
     if _focus_comments_state["status"] == "running":
         _focus_comments_state["status"] = "done"

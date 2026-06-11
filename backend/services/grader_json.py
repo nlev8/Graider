@@ -4,7 +4,10 @@ parenthetical comments, unescaped newlines). Pure logic (json + re — no LLM /
 I/O / Flask) extracted from assignment_grader.py. Wave 7 Slice 5.
 """
 import json
+import logging
 import re
+
+_logger = logging.getLogger(__name__)
 
 
 def _try_parse_json_fallback(text: str) -> dict:
@@ -20,7 +23,7 @@ def _try_parse_json_fallback(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        pass
+        _logger.debug("Direct JSON parse of LLM response failed; trying fence strip")
 
     # Strip markdown code blocks
     cleaned = text.strip()
@@ -37,7 +40,7 @@ def _try_parse_json_fallback(text: str) -> dict:
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        pass
+        _logger.debug("Fence-stripped JSON parse failed; applying repair heuristics")
 
     # Repair common LLM JSON issues
     fixed = cleaned

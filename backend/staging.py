@@ -5,10 +5,13 @@ Before grading or listing files, copy assignments to a sibling staging folder
 with clean canonical names. All downstream code reads from the staged folder.
 """
 import json
+import logging
 import os
 import re
 import shutil
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {'.docx', '.pdf', '.txt', '.jpg', '.jpeg', '.png'}
 MANIFEST_NAME = '_staging_manifest.json'
@@ -95,8 +98,8 @@ def _load_manifest(staging_folder):
         try:
             with open(manifest_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError) as e:
+            _logger.warning("Corrupt/unreadable staging manifest %s (%s); treating as empty", manifest_path, e)
     return {}
 
 
@@ -230,8 +233,8 @@ def stage_files(assignments_folder, log_fn=None):
             try:
                 os.remove(os.path.join(staging_folder, f))
                 stale_removed += 1
-            except OSError:
-                pass
+            except OSError as e:
+                _logger.debug("Best-effort stale staged file removal failed for %s: %s", f, e)
 
     if stale_removed > 0:
         log(f"Removed {stale_removed} stale staged file(s)")

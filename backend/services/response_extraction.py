@@ -1,6 +1,9 @@
 """Pure student-response text parsing and extraction. No Flask, no network, no file I/O."""
 
+import logging
 import re
+
+_logger = logging.getLogger(__name__)
 
 
 def is_question_or_prompt(text: str) -> bool:
@@ -435,8 +438,8 @@ def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int
             match = re.search(pattern, doc_lower)
             if match:
                 return match.start()
-        except re.error:
-            pass
+        except re.error as e:
+            _logger.debug("Marker significant-words pattern failed to compile: %s", e)
 
     # Try first significant phrase (first 5 words)
     first_phrase = ' '.join(marker_words[:5])
@@ -446,8 +449,8 @@ def fuzzy_find_marker(doc_text: str, marker: str, threshold: float = 0.7) -> int
         match = re.search(flexible_pattern[:100], doc_lower)  # Limit pattern length
         if match:
             return match.start()
-    except re.error:
-        pass
+    except re.error as e:
+        _logger.debug("Marker flexible pattern failed to compile: %s", e)
 
     return -1
 

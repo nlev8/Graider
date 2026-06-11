@@ -663,7 +663,7 @@ def _analyze_group_weaknesses(group_results):
                 try:
                     cat_totals[cat].append(int(float(val)) if val else 0)
                 except (ValueError, TypeError):
-                    pass
+                    _logger.debug("Non-numeric breakdown value %r skipped for category %s", val, cat)
 
     category_weaknesses = []
     for cat, vals in cat_totals.items():
@@ -2606,8 +2606,8 @@ def confirm_and_send(teacher_id='local-dev'):
                 storage_save('pending_send:send_focus_comms', None, teacher_id)
             try:
                 os.remove(_pending_send_path(teacher_id))
-            except OSError:
-                pass
+            except OSError as e:
+                _logger.debug("Pending-send file cleanup skipped (likely already absent): %s", e)
             audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_messages"] = len(messages)
             return result
@@ -2625,8 +2625,8 @@ def confirm_and_send(teacher_id='local-dev'):
                 storage_save('pending_send:send_parent_emails', None, teacher_id)
             try:
                 os.remove(_pending_send_path(teacher_id))
-            except OSError:
-                pass
+            except OSError as e:
+                _logger.debug("Pending-send file cleanup skipped (likely already absent): %s", e)
             audit_tool_action(teacher_id, 'confirm_and_send', 'SEND_EMAIL')
             result["total_emails"] = len(emails)
             return result
@@ -2642,8 +2642,8 @@ def confirm_and_send(teacher_id='local-dev'):
                     storage_save('pending_send:send_behavior_email', None, teacher_id)
                 try:
                     os.remove(_pending_send_path(teacher_id))
-                except OSError:
-                    pass
+                except OSError as e:
+                    _logger.debug("Pending-send file cleanup skipped (likely already absent): %s", e)
 
             if method == "focus":
                 from backend.routes.email_routes import launch_focus_comms

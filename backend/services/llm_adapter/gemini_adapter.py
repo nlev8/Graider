@@ -427,7 +427,7 @@ class GeminiAdapter:
                         if text:
                             yield TextDelta(text=text)
                     except (ValueError, AttributeError):
-                        pass
+                        pass  # documented SDK behavior on function-call chunks; per-chunk hot loop — logging would spam
 
                     # Function call parts — treated as atomic ToolCallDelta + ToolCallComplete
                     # (Gemini doesn't stream incremental JSON fragments, it delivers the

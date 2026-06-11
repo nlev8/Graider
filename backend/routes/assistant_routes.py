@@ -724,7 +724,7 @@ def _load_analytics_snapshot():
                         if val > 0:
                             categories[name][cat].append(val)
                     except (ValueError, TypeError):
-                        pass
+                        logger.debug("Non-numeric %s value skipped in category breakdown", cat)
 
         if not all_scores:
             return ""

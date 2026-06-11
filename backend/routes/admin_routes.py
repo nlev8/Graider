@@ -631,7 +631,7 @@ def compute_overview(teacher_ids):
                     try:
                         all_scores.append(float(score))
                     except (ValueError, TypeError):
-                        pass
+                        logger.debug("Non-numeric submission score %r skipped in overview", score)
 
         # 3. classes (class-based path) for these teachers
         classes_rows, c3 = _chunked_in_rows_capped(
@@ -675,7 +675,7 @@ def compute_overview(teacher_ids):
                         try:
                             all_scores.append(float(score))
                         except (ValueError, TypeError):
-                            pass
+                            logger.debug("Non-numeric student submission score %r skipped in overview", score)
 
     except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Overview aggregation error (batched): %s", e)
@@ -786,7 +786,7 @@ def admin_teacher_summary(teacher_id):
                     try:
                         scores.append(float(sc))
                     except (ValueError, TypeError):
-                        pass
+                        logger.debug("Non-numeric score %r skipped in teacher summary", sc)
             summary["recent_assessments"].append({
                 "title": pa.get("title", ""),
                 "submissions": len(sub_res.data or []),

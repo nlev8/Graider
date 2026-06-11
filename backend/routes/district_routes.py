@@ -223,8 +223,8 @@ def _clear_old_provider_data(old_provider):
             for f in glob.glob(os.path.join(data_dir, pattern)):
                 try:
                     os.remove(f)
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.debug("Best-effort roster cache cleanup failed for %s: %s", f, e)
 
     logger.info(
         "Provider switch cleanup (%s): %d classes, %d enrollments, %d orphaned students "

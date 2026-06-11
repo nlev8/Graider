@@ -472,7 +472,7 @@ def _read_outlook_output(proc):
             if len(_outlook_send_state["log"]) > 100:
                 _outlook_send_state["log"] = _outlook_send_state["log"][-50:]
         except json.JSONDecodeError:
-            pass
+            _logger.debug("Non-JSON line from Outlook sender subprocess ignored")
 
     if _outlook_send_state["status"] == "running":
         _outlook_send_state["status"] = "done"
@@ -1395,7 +1395,7 @@ def _read_focus_comms_output(proc):
             if len(_focus_comms_state["log"]) > 100:
                 _focus_comms_state["log"] = _focus_comms_state["log"][-50:]
         except json.JSONDecodeError:
-            pass
+            _logger.debug("Non-JSON line from Focus comms subprocess ignored")
 
     # Read stderr for crash diagnostics
     stderr_output = ""

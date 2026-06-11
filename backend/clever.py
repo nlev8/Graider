@@ -267,7 +267,7 @@ def _clever_retry_after_seconds(resp):
             if delta > 0:
                 return delta
         except (ValueError, TypeError):
-            pass
+            logger.debug("Unparseable X-RateLimit-Reset header %r; using exponential backoff", reset)
     return None
 
 
