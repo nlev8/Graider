@@ -232,6 +232,16 @@ except Exception as e:  # noqa: BLE001  # broad catch: error is logged
     _logger.warning("db_mode observability hook not loaded: %s", e)
     sentry_sdk.capture_exception(e)
 
+# Hardening sprint PR4: /metrics (Prometheus text format) + request
+# instrumentation hooks. Per-worker registry; limiter-exempt like /healthz;
+# optional METRICS_TOKEN bearer gate. See backend/metrics.py docstring.
+try:
+    from backend.metrics import register_metrics
+    register_metrics(app)
+except Exception as e:  # noqa: BLE001 — broad catch: error is logged + captured; metrics must never block boot
+    _logger.warning("metrics endpoint not loaded: %s", e)
+    sentry_sdk.capture_exception(e)
+
 @app.errorhandler(500)
 def handle_500(e):
     return jsonify({"error": "Internal server error"}), 500
