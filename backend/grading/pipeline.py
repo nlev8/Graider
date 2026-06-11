@@ -80,7 +80,7 @@ def _check_batch_calibration(results: list[dict[str, Any]]) -> dict[str, Any]:
         try:
             scores.append(float(s))
         except (ValueError, TypeError):
-            pass
+            _logger.debug("Non-numeric score %r skipped in calibration check", s)
     if len(scores) < 5:
         return {"calibrated": True, "concerns": []}
 

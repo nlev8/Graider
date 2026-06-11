@@ -148,7 +148,7 @@ def _grade_matches(code_grade, requested_grade):
             req = int(requested_grade) if requested_grade.isdigit() else 0
             return int(lo) <= req <= int(hi)
         except (ValueError, IndexError):
-            pass
+            _logger.debug("Unparseable grade range %r in standards filter", code_grade)
     if code_grade == '912' and requested_grade in ('9', '10', '11', '12'):
         return True
     return False

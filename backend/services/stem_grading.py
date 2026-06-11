@@ -43,14 +43,14 @@ def _normalize_math_input(expr_str: str):
     try:
         return sympify(float(s))
     except (ValueError, TypeError):
-        pass
+        pass  # probe chain: not a plain number is the normal path for symbolic input — try next form
 
     # 2. Percentage: "50%" → 0.5
     if s.endswith('%'):
         try:
             return sympify(float(s[:-1].strip()) / 100)
         except (ValueError, TypeError):
-            pass
+            pass  # probe chain: not a numeric percentage — try next form
 
     # 3. Fraction string: "1/2", "-3/4"
     frac_match = re.match(r'^(-?\d+)\s*/\s*(\d+)$', s)
@@ -116,7 +116,7 @@ def _compare_numeric_forms(student_str: str, correct_str: str, tolerance: float 
                 'correct_value': correct_val,
             }
     except (TypeError, ValueError):
-        pass
+        pass  # expressions with free symbols can't evaluate to float — non-equivalent is the verdict
 
     return {'equivalent': False, 'method': 'symbolic'}
 
@@ -174,7 +174,7 @@ def check_math_equivalence(student_answer: str, correct_answer: str, tolerance: 
                     'difference': abs(student_num - correct_num)
                 }
         except ValueError:
-            pass  # Not simple numbers, try symbolic
+            pass  # probe chain: not simple numbers — symbolic comparison follows
 
         # Try normalized student notation (handles 2x+3, x^2, 1/2, 50%)
         norm_result = _compare_numeric_forms(student_clean, correct_clean, tolerance)
@@ -208,7 +208,7 @@ def check_math_equivalence(student_answer: str, correct_answer: str, tolerance: 
                     'difference': abs(student_val - correct_val)
                 }
         except (TypeError, ValueError):
-            pass
+            pass  # expressions with free symbols can't evaluate numerically — non-equivalent is the verdict
 
         return {
             'equivalent': False,
@@ -346,7 +346,7 @@ def check_cell_value(expected: str, student: str, tolerance_percent: float) -> d
                 'deviation': round(percent_diff, 2)
             }
     except ValueError:
-        pass
+        pass  # probe chain: non-numeric values — exact string comparison below is the fallback
 
     # String comparison failed
     return {

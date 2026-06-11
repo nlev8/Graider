@@ -148,7 +148,7 @@ def get_retry_delay(
             if ra > 0:
                 return ra
         except (ValueError, TypeError):
-            pass  # fall through to exponential backoff
+            logger.debug("Unparseable Retry-After header %r; using exponential backoff", retry_after)
 
     base: float = BASE_DELAY_S * (2 ** (attempt - 1))
     base = min(base, max_delay_s)

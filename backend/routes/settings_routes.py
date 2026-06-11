@@ -775,7 +775,7 @@ def _suggest_mapping(headers, sample_rows):
                         if suffix.isdigit() and 6 <= int(suffix) <= 12:
                             grade_suffix_count += 1
                 except (ValueError, TypeError):
-                    pass
+                    _logger.debug("Non-numeric student ID skipped in grade-suffix heuristic")
         if total_checked > 0 and grade_suffix_count / total_checked > 0.5:
             id_strip_digits = 2
 
@@ -1083,8 +1083,8 @@ def save_parent_contact_mapping():
         # Clean up temp file
         try:
             os.remove(tmp_path)
-        except OSError:
-            pass
+        except OSError as e:
+            _logger.debug("Best-effort temp file cleanup failed for %s: %s", tmp_path, e)
 
         # Save to JSON (same format as before)
         with open(PARENT_CONTACTS_FILE, 'w') as f:
@@ -1560,7 +1560,7 @@ def _run_focus_import(creds_path=None):
                 elif msg_type == "warning":
                     _focus_import_state["progress"] = message
             except json.JSONDecodeError:
-                pass
+                _logger.debug("Non-JSON line from Focus import subprocess ignored")
 
         proc.wait()
 
@@ -1609,8 +1609,8 @@ def _process_focus_import(import_data):
         try:
             with open(PARENT_CONTACTS_FILE, 'r') as f:
                 contacts = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
+        except (json.JSONDecodeError, IOError) as e:
+            _logger.warning("Could not load existing parent contacts (%s); non-Focus entries may be lost on save", e)
 
     # Store student schedules separately for cross-teacher lookup
     schedules_path = os.path.join(GRAIDER_DATA_DIR, "student_schedules.json")
@@ -1810,8 +1810,8 @@ def _update_meta_row_count(filename, new_count):
             meta['row_count'] = new_count
             with open(meta_path, 'w') as f:
                 json.dump(meta, f, indent=2)
-        except (json.JSONDecodeError, IOError):
-            pass
+        except (json.JSONDecodeError, IOError) as e:
+            _logger.warning("Could not update row_count in %s: %s", meta_path, e)
 
 
 def _find_student_id_col(headers):
@@ -1837,8 +1837,8 @@ def _load_parent_contacts():
         try:
             with open(PARENT_CONTACTS_FILE, 'r') as f:
                 return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
+        except (json.JSONDecodeError, IOError) as e:
+            _logger.warning("Corrupt/unreadable parent contacts file (%s); returning empty", e)
     return {}
 
 
@@ -1956,8 +1956,8 @@ def add_student():
                     with open(meta_path, 'r') as f:
                         meta = json.load(f)
                     period_name = meta.get('period_name', '')
-                except (json.JSONDecodeError, IOError):
-                    pass
+                except (json.JSONDecodeError, IOError) as e:
+                    _logger.debug("Could not read period_name from %s: %s", meta_path, e)
 
             contacts[student_id] = {
                 "student_name": student_name,
@@ -2117,8 +2117,8 @@ def update_student():
                     with open(meta_path, 'r') as f:
                         meta = json.load(f)
                     period_name = meta.get('period_name', '')
-                except (json.JSONDecodeError, IOError):
-                    pass
+                except (json.JSONDecodeError, IOError) as e:
+                    _logger.debug("Could not read period_name from %s: %s", meta_path, e)
 
             if isinstance(parent_emails, str):
                 parent_emails = [e.strip() for e in parent_emails.split(',') if e.strip()]

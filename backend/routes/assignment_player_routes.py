@@ -1660,7 +1660,7 @@ def grade_protractor(question, answer):
                 return {'correct': True, 'partial_credit': 0.7, 'feedback': f'Close! The exact answer is {correct_answer} degrees'}
             return {'correct': False, 'feedback': f'Incorrect. The angle measures {correct_answer} degrees'}
         except ValueError:
-            pass
+            _logger.debug("Non-numeric measure answer; falling through to string comparison")
 
     if mode == 'classify':
         expected = correct_answer.lower()
