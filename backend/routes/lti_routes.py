@@ -356,7 +356,7 @@ def lti_sync_grades():
         try:
             lineitem = ags_client.create_lineitem(label, max_score, resource_link_id)
             lineitem_url = lineitem.get("id", "")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("Failed to create lineitem: %s", e)
             return jsonify({"error": "Failed to create lineitem"}), 500
 

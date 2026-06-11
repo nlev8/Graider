@@ -89,7 +89,7 @@ def _scan_submission_folder(roster_name_map, saved_norms, saved_display,
     try:
         stage_result = stage_files(folder)
         scan_folder = stage_result["staging_folder"]
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: falls back to default
         scan_folder = folder  # fallback to raw folder
 
     # Build reverse lookup: lowercase (first, last) -> student_id
@@ -838,7 +838,7 @@ def scan_submissions_folder(top_n=None, assignment_filter=None,
             with open(settings_path, 'r', encoding='utf-8') as f:
                 settings_data = json.load(f)
             folder = settings_data.get('config', {}).get('assignments_folder', '')
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("assignments folder settings load failed", exc_info=True)
     if not folder:
         # Fallback: try _load_settings() (global settings) then default
@@ -855,7 +855,7 @@ def scan_submissions_folder(top_n=None, assignment_filter=None,
         stage_result = stage_files(folder)
         scan_folder = stage_result["staging_folder"]
         duplicates_removed = stage_result["duplicates_skipped"]
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: falls back to default
         scan_folder = folder
         duplicates_removed = 0
 

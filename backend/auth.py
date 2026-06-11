@@ -79,7 +79,7 @@ def load_clever_links():
                 clever_id = key[len('clever_link:'):]
                 links[clever_id] = data.get('supabase_user_id', '')
         return links
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Fallback to legacy file if storage not available
         sentry_sdk.capture_exception(e)
         legacy_path = os.path.expanduser("~/.graider_data/clever_links.json")
@@ -95,7 +95,7 @@ def save_clever_link(clever_id, supabase_user_id):
     try:
         from backend.storage import save
         save(f'clever_link:{clever_id}', {'supabase_user_id': supabase_user_id}, 'system')
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Fallback to legacy file
         sentry_sdk.capture_exception(e)
         legacy_path = os.path.expanduser("~/.graider_data/clever_links.json")
@@ -126,7 +126,7 @@ def load_classlink_links():
                 guid = key[len('classlink_link:'):]
                 links[guid] = data.get('supabase_user_id', '')
         return links
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return {}
 
@@ -136,7 +136,7 @@ def save_classlink_link(guid, supabase_user_id):
     try:
         from backend.storage import save
         save(f'classlink_link:{guid}', {'supabase_user_id': supabase_user_id}, 'system')
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
     logger.info("Linked ClassLink GUID to Supabase user %s", supabase_user_id)
 
@@ -237,7 +237,7 @@ def resolve_classlink_user_id(guid, email, name=None):
             new_id = res.user.id
             save_classlink_link(guid, new_id)
             return new_id
-        except Exception as create_err:
+        except Exception as create_err:  # noqa: BLE001  # broad catch: error is logged
             # Concurrency: a parallel first-login may have created the user already.
             logger.warning("ClassLink resolve: create_user failed (%s); re-resolving by email", type(create_err).__name__)
             recheck = _email_matches()
@@ -248,7 +248,7 @@ def resolve_classlink_user_id(guid, email, name=None):
                 save_classlink_link(guid, recheck[0].id)
                 return recheck[0].id
             return None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("ClassLink resolve failed (non-fatal): %s", type(e).__name__)
         sentry_sdk.capture_exception(e)
         return None
@@ -268,10 +268,10 @@ def _claim_clever_text_data(clever_id, uuid):
         for table in ("teacher_data", "published_assessments", "student_history"):
             try:
                 sb.table(table).update({"teacher_id": uuid}).eq("teacher_id", legacy).execute()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 logger.warning("Clever data-claim on %s failed (non-fatal): %s", table, type(e).__name__)
                 sentry_sdk.capture_exception(e)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Clever data-claim failed (non-fatal): %s", type(e).__name__)
         sentry_sdk.capture_exception(e)
 
@@ -348,7 +348,7 @@ def resolve_clever_user_id_or_create(clever_id, email, name=None):
             save_clever_link(clever_id, new_id)
             _claim_clever_text_data(clever_id, new_id)
             return new_id, "created"
-        except Exception as create_err:
+        except Exception as create_err:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Clever resolve: create_user failed (%s); re-resolving by email",
                            type(create_err).__name__)
             recheck = _email_matches()
@@ -359,7 +359,7 @@ def resolve_clever_user_id_or_create(clever_id, email, name=None):
                 save_clever_link(clever_id, recheck[0].id)
                 return recheck[0].id, "matched"
             return legacy, "create_failed_legacy"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Clever resolve failed (non-fatal): %s", type(e).__name__)
         sentry_sdk.capture_exception(e)
         return legacy, "transient_legacy"
@@ -609,7 +609,7 @@ def init_auth(app):
                             # User is actually approved, JWT is just stale
                             logger.info("User %s approved via admin API fallback (stale JWT)", g.user_email)
                             return None  # Allow request
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     logger.warning("Admin API approval fallback failed: %s", str(e))
                     sentry_sdk.capture_exception(e)
 

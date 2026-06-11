@@ -21,7 +21,7 @@ def _get_supabase():
     try:
         from backend.supabase_client import get_supabase
         return get_supabase()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return None
 
 
@@ -127,11 +127,11 @@ class TestE2EPipeline:
         if self.db and self.join_code:
             try:
                 self.db.table('submissions').delete().eq('join_code', self.join_code).execute()
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
                 pass
             try:
                 self.db.table('published_assessments').delete().eq('join_code', self.join_code).execute()
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
                 pass
 
     def test_full_pipeline(self):
@@ -303,6 +303,6 @@ class TestE2EPipeline:
                 self.submission_ids.append(sub2.data[0]['id'])
                 # Clean up — this is OK, just means the constraint allows it
                 pytest.skip("Unique constraint allows this combination — check index definition")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
             # Expected: unique constraint violation
             assert '23505' in str(e) or 'duplicate' in str(e).lower()

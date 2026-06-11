@@ -230,7 +230,7 @@ def stripe_webhook():
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except stripe.error.SignatureVerificationError:
         return jsonify({"error": "Invalid signature"}), 400
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Webhook event construction failed: %s", str(e))
         return jsonify({"error": "Invalid webhook payload"}), 400
 
@@ -287,6 +287,6 @@ def _sync_subscription_metadata(customer_id, subscription_id):
                 "subscription_period_end": sub["current_period_end"],
                 "subscription_cancel_at_period_end": sub["cancel_at_period_end"],
             })
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         pass  # Webhook must return 200; errors logged by Stripe retry
         sentry_sdk.capture_exception(e)

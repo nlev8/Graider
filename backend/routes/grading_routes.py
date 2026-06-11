@@ -164,7 +164,7 @@ def clear_results():
                 saved_results = [r for r in saved_results if r.get("filename") not in filenames_set]
                 with open(results_file, 'w') as f:
                     json.dump(saved_results, f)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
 
         # Also remove from master_grades.csv
@@ -183,7 +183,7 @@ def clear_results():
                     writer.writeheader()
                     writer.writerows(rows_to_keep)
                 _logger.info("Removed %d entries from master_grades.csv", cleared_count)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.error("Could not update master_grades.csv: %s", e)
                 sentry_sdk.capture_exception(e)
 
@@ -206,7 +206,7 @@ def clear_results():
         if os.path.exists(results_file):
             try:
                 os.remove(results_file)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
 
         # Also clear master_grades.csv so files can be regraded
@@ -214,7 +214,7 @@ def clear_results():
             try:
                 os.remove(master_file)
                 _logger.info("Removed master_grades.csv")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning("Could not remove master_grades.csv: %s", e)
                 sentry_sdk.capture_exception(e)
 
@@ -290,7 +290,7 @@ def _sync_result_to_master_csv(result):
                 writer = csv.DictWriter(f, fieldnames=header)
                 writer.writeheader()
                 writer.writerows(rows)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Could not sync to master_grades.csv: %s", e)
         sentry_sdk.capture_exception(e)
 
@@ -375,7 +375,7 @@ def update_result():
             results_copy = list(grading_state["results"])
         with open(results_file, 'w', encoding='utf-8') as f:
             json.dump(results_copy, f, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # Sync updated fields to master_grades.csv so the Assistant sees fresh data
@@ -399,7 +399,7 @@ def update_result():
                     assignment=updated_result.get('assignment', ''),
                     student_answer_snippet='',
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 import logging
                 sentry_sdk.capture_exception(e)
                 logging.getLogger(__name__).warning("Failed to record correction: %s", e)
@@ -641,7 +641,7 @@ def export_focus_csv():
                                 name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("roster CSV parse failed: %s", type(e).__name__)
 
     # Load from periods
@@ -682,7 +682,7 @@ def export_focus_csv():
                                 name = f"{first} {last}"
                         if student_id and name:
                             roster_students.append({'id': student_id, 'name': name})
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("period roster CSV parse failed: %s", type(e).__name__)
 
     # Build list of students to match
@@ -794,7 +794,7 @@ Example: {{"John Smith": "12345", "Jane Doe": "67890", "Unknown Student": "UNMAT
                         matched_id = matches[s['name']]
                         if matched_id != 'UNMATCHED':
                             s['id'] = matched_id
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.error("Claude matching error: %s", e)
             # Continue without matching
 
@@ -929,7 +929,7 @@ def export_focus_batch():
     if sys.platform == 'darwin':
         try:
             subprocess.Popen(['open', FOCUS_EXPORTS_DIR])
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("Focus exports folder open (local dev) failed", exc_info=True)
 
     return jsonify(manifest)
@@ -1052,7 +1052,7 @@ def export_lms_csv():
     if sys.platform == 'darwin':
         try:
             subprocess.Popen(['open', export_dir])
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("exports folder open (local dev) failed", exc_info=True)
 
     return jsonify(manifest)
@@ -1361,7 +1361,7 @@ def list_student_history():
                 'last_updated': last_updated,
                 'avg_complexity': round(avg_complexity, 1) if avg_complexity else 0,
             })
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: falls back to default
             students.append({
                 'student_id': student_id,
                 'name': id_to_name.get(student_id, student_id),
@@ -1422,7 +1422,7 @@ def _build_student_name_lookup():
                     name = parse_student_name(row)
                     if student_id and name:
                         id_to_name[student_id] = name
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     # Also try period CSVs
@@ -1438,7 +1438,7 @@ def _build_student_name_lookup():
                             name = parse_student_name(row)
                             if student_id and name:
                                 id_to_name[student_id] = name
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     sentry_sdk.capture_exception(e)
 
     return id_to_name
@@ -1491,7 +1491,7 @@ def delete_all_student_history():
         try:
             if storage.delete_student_history(teacher_id, student_id):
                 deleted_count += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("Failed to delete history for %s: %s", student_id, e)
             errors.append(f"{student_id}: failed to delete")
 
@@ -1533,7 +1533,7 @@ def migrate_student_names():
                     last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
                     if student_id and first and last:
                         id_to_name[str(student_id).strip()] = f"{first} {last}"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.error("Could not read roster: %s", e)
             sentry_sdk.capture_exception(e)
 
@@ -1550,7 +1550,7 @@ def migrate_student_names():
                             last = row.get('LastName', row.get('Last Name', row.get('last_name', ''))).strip()
                             if student_id and first and last:
                                 id_to_name[str(student_id).strip()] = f"{first} {last}"
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     sentry_sdk.capture_exception(e)
 
     # Update profiles with names (tenant-scoped)
@@ -1571,7 +1571,7 @@ def migrate_student_names():
                 data['name'] = name
                 storage.save_student_history(teacher_id=teacher_id, student_id=student_id, history=data)
                 updated += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     return jsonify({

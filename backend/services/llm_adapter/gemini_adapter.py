@@ -243,14 +243,14 @@ class GeminiAdapter:
             text = raw.text
             if text:
                 content_parts.append(TextPart(text=text))
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             # raw.text raises if the response was blocked; try parts directly
             try:
                 candidate = raw.candidates[0]
                 for part in candidate.content.parts:
                     if hasattr(part, "text") and part.text:
                         content_parts.append(TextPart(text=part.text))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # SDK-defensive: candidate/parts shape varies across genai
                 # versions. Missing parts → empty content_parts (caller
                 # treats as no text response).
@@ -263,7 +263,7 @@ class GeminiAdapter:
             if hasattr(raw, "usage_metadata") and raw.usage_metadata:
                 prompt_tokens = getattr(raw.usage_metadata, "prompt_token_count", 0) or 0
                 completion_tokens = getattr(raw.usage_metadata, "candidates_token_count", 0) or 0
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # SDK-defensive: usage_metadata schema varies. Missing → 0/0
             # tokens (cost will be reported as $0 for this call; cumulative
             # cost tracking will be slightly under-counted).
@@ -283,7 +283,7 @@ class GeminiAdapter:
             candidate = raw.candidates[0]
             fr = candidate.finish_reason
             raw_finish_reason = fr.name if hasattr(fr, "name") else str(fr)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # SDK-defensive: candidate/finish_reason may be missing. Falls
             # through to normalize_finish_reason(None) which returns the
             # canonical default.
@@ -446,7 +446,7 @@ class GeminiAdapter:
                                         args = _unwrap_protobuf(fc.args) if fc.args else {}
                                         if not isinstance(args, dict):
                                             args = {}
-                                    except Exception as unwrap_err:
+                                    except Exception as unwrap_err:  # noqa: BLE001  # broad catch: error is logged
                                         _logger.warning(
                                             "Failed to unwrap Gemini tool args for %s: %s — treating as empty",
                                             fc.name, unwrap_err,
@@ -471,7 +471,7 @@ class GeminiAdapter:
                                             args=args,
                                         )
                                     )
-                    except Exception as loop_err:
+                    except Exception as loop_err:  # noqa: BLE001  # broad catch: error is logged
                         _logger.warning("Gemini tool-call scan failed mid-stream: %s", loop_err)
 
                     # Usage metadata — only on final chunk
@@ -479,7 +479,7 @@ class GeminiAdapter:
                         if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
                             prompt_tokens = getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0
                             completion_tokens = getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                         # SDK-defensive: streaming chunk usage_metadata schema
                         # varies. Missing → keep prior token counts.
                         _logger.debug("Failed to extract Gemini stream usage_metadata: %s", e)
@@ -491,7 +491,7 @@ class GeminiAdapter:
                         raw = fr.name if hasattr(fr, "name") else str(fr)
                         if raw and raw not in ("", "FINISH_REASON_UNSPECIFIED", "0"):
                             finish_reason_raw = raw
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                         # SDK-defensive: streaming chunk candidates may be
                         # absent until the last chunk. Falls through to
                         # whatever finish_reason_raw was set elsewhere.
@@ -525,7 +525,7 @@ class GeminiAdapter:
                 if callable(method):
                     try:
                         method()
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("gemini stream %s() raised on cleanup", method_name, exc_info=True)
                     break
 
@@ -652,7 +652,7 @@ class GeminiAdapter:
             try:
                 fr = candidate.finish_reason
                 finish_reason_raw = fr.name if hasattr(fr, "name") else str(fr)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # SDK-defensive: image-gen finish_reason may be absent.
                 # Falls through to prompt_feedback.block_reason check below.
                 _logger.debug("Failed to extract Gemini image finish_reason: %s", e)
@@ -663,7 +663,7 @@ class GeminiAdapter:
                     br = getattr(pf, "block_reason", None)
                     if br is not None:
                         finish_reason_raw = br.name if hasattr(br, "name") else str(br)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # SDK-defensive: prompt_feedback shape varies. Falls through
                 # to "unknown" finish_reason in the blocked-call emit below.
                 _logger.debug("Failed to extract Gemini image block_reason: %s", e)

@@ -177,7 +177,7 @@ def _file_load(data_key, teacher_id='local-dev'):
                 return f.read()
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to load file %s: %s", filepath, e)
         return None
 
@@ -197,7 +197,7 @@ def _file_save(data_key, data, teacher_id='local-dev'):
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to save file %s: %s", filepath, e)
         return False
 
@@ -211,7 +211,7 @@ def _file_delete(data_key, teacher_id='local-dev'):
         if os.path.exists(filepath):
             os.remove(filepath)
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to delete file %s: %s", filepath, e)
         return False
 
@@ -290,7 +290,7 @@ def _sb_load(data_key, teacher_id):
         return None
     try:
         return with_retry(_query, label="supabase_load", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase load failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
         return None
 
@@ -310,7 +310,7 @@ def _sb_save(data_key, data, teacher_id):
         return True
     try:
         return with_retry(_query, label="supabase_save", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase save failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
         return False
 
@@ -329,7 +329,7 @@ def _sb_delete(data_key, teacher_id):
         return True
     try:
         return with_retry(_op, label="supabase_delete", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase delete failed for key=%s teacher=%s: %s", data_key, teacher_id, e)
         return False
 
@@ -348,7 +348,7 @@ def _sb_list_keys(prefix, teacher_id):
         return sorted([row['data_key'] for row in result.data]) if result.data else []
     try:
         return with_retry(_op, label="supabase_list_keys", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase list_keys failed for prefix=%s teacher=%s: %s", prefix, teacher_id, e)
         return None
 
@@ -369,7 +369,7 @@ def _file_load_student_history(student_id, teacher_id='local-dev'):
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return None
 
@@ -386,7 +386,7 @@ def _file_save_student_history(student_id, history, teacher_id='local-dev'):
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(history, f, indent=2)
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to save student history file %s: %s", filepath, e)
         return False
 
@@ -407,7 +407,7 @@ def _sb_load_student_history(teacher_id, student_id):
         return None
     try:
         return with_retry(_op, label="supabase_load_history", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase load student_history failed: %s", e)
         return None
 
@@ -427,7 +427,7 @@ def _sb_save_student_history(teacher_id, student_id, history):
         return True
     try:
         return with_retry(_op, label="supabase_save_history", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase save student_history failed: %s", e)
         return False
 
@@ -459,7 +459,7 @@ def _file_delete_student_history(student_id, teacher_id='local-dev'):
     try:
         os.remove(filepath)
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to delete student history file %s: %s", filepath, e)
         return False
 
@@ -477,7 +477,7 @@ def _sb_list_student_history(teacher_id):
         return sorted({row['student_id'] for row in result.data}) if result.data else []
     try:
         return with_retry(_op, label="supabase_list_history", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase list student_history failed: %s", e)
         return None
 
@@ -496,7 +496,7 @@ def _sb_delete_student_history(teacher_id, student_id):
         return True
     try:
         return with_retry(_op, label="supabase_delete_history", max_retries=3)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Supabase delete student_history failed: %s", e)
         return False
 
@@ -762,7 +762,7 @@ def sync_all_to_cloud(teacher_id):
             raw_csv = _file_load(key, teacher_id)
             if raw_csv is not None:
                 _sb_save(key, raw_csv, teacher_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Failed to sync period CSV %s: %s", key, e)
             sentry_sdk.capture_exception(e)
 
@@ -789,7 +789,7 @@ def sync_all_to_cloud(teacher_id):
             history = _file_load_student_history(student_id, teacher_id)
             if history is not None and _sb_save_student_history(teacher_id, student_id, history):
                 synced_history += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     summary['student_history'] = f"{synced_history} synced"
 

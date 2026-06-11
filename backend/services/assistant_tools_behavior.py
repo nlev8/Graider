@@ -76,7 +76,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
         res = query.execute()
         rows = res.data or []
         logger.info("_load_behavior_events: joined query returned %d rows", len(rows))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Fallback: query without the session join if it fails
         logger.warning("_load_behavior_events: joined query failed (%s), trying fallback", e)
         try:
@@ -106,7 +106,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
                 r['behavior_sessions'] = session_info
                 rows.append(r)
             logger.info("_load_behavior_events: after fallback filtering, %d rows", len(rows))
-        except Exception as e2:
+        except Exception as e2:  # noqa: BLE001  # broad catch: error is logged
             logger.error("_load_behavior_events: fallback query also failed: %s", e2)
             sentry_sdk.capture_exception(e2)
 
@@ -138,7 +138,7 @@ def _load_behavior_events(teacher_id, cutoff_date=None, period=None, student_nam
             try:
                 dt = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
                 timestamp = dt.strftime('%H:%M')
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 logger.debug("behavior event timestamp parse failed", exc_info=True)
 
         student = students[sid]
@@ -187,7 +187,7 @@ def _load_settings():
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return {}
 
@@ -198,7 +198,7 @@ def _load_parent_contacts():
     try:
         with open(PARENT_CONTACTS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return []
 
@@ -330,7 +330,7 @@ def debug_behavior(teacher_id='local-dev'):
             "recent_sessions": [{"period": s.get("period"), "date": s.get("date"), "device": s.get("device")} for s in sessions[:5]],
             "recent_events": [{"name": e.get("student_name"), "type": e.get("type"), "time": e.get("event_time")} for e in events[:10]],
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"Debug query failed: {str(e)}", "teacher_id": teacher_id}
 
 
@@ -619,7 +619,7 @@ INSTRUCTIONS:
 
         return subject, body
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         import logging
         logging.getLogger(__name__).warning(f"AI email generation failed: {e}")
         return None
@@ -859,7 +859,7 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
         from backend.storage import save as storage_save
         storage_save("pending_send:send_behavior_email", pending, teacher_id)
         storage_save("pending_send", pending, teacher_id)
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         logger.debug("pending behavior email storage save failed", exc_info=True)
 
     # Filesystem fallback — GH #280 fix: per-tenant path (was global)
@@ -869,7 +869,7 @@ def send_behavior_email(student_name, subject, body, method="focus", teacher_id=
         os.makedirs(os.path.dirname(pending_path), exist_ok=True)
         with open(pending_path, 'w') as f:
             json.dump(pending, f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     to_preview = parent_email if method == "email" else "Focus Communications portal"

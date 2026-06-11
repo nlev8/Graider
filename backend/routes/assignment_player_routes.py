@@ -119,7 +119,7 @@ def _load_teacher_context():
                 if parts:
                     context['rubric_prompt'] = "CUSTOM RUBRIC:\n" + '\n'.join(parts)
             context['grading_style'] = settings.get('gradingStyle', 'standard')
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("rubric/grading-style context build failed", exc_info=True)
     return context
 
@@ -422,7 +422,7 @@ def _vision_ocr_fallback(image_data, question_text, subject):
             'error': None,
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("GPT-4o Vision OCR failed: %s", e)
         return {
             'extracted_text': '',
@@ -626,7 +626,7 @@ def _grade_with_ai(question, student_answer, q_type, q_points,
             'improvement_note': ai_result.get('improvement_note', ''),
         }
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Fallback to basic grading if AI fails
         _logger.error("AI grading failed, falling back to basic: %s", e)
         return grade_short_answer(question, answer_text)
@@ -747,7 +747,7 @@ def grade_question(question, student_answer, q_type):
         else:  # short_answer and others
             return grade_short_answer(question, answer_value)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {'correct': False, 'feedback': 'An internal error occurred', 'error': True}
 
 
@@ -1046,7 +1046,7 @@ def grade_box_plot(question, answer):
             student_val = float(answer.get(key, 0))
             if abs(student_val - exp_val) < tolerance:
                 correct_count += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("numeric answer comparison failed: %s", type(e).__name__)
 
     if correct_count == total:
@@ -1079,7 +1079,7 @@ def grade_math_equation(question, answer):
             return {'correct': True, 'feedback': 'Correct!'}
         else:
             return {'correct': False, 'feedback': f'Incorrect. Expected: {correct_answer}'}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Fallback to string comparison
         sentry_sdk.capture_exception(e)
         if str(answer_val).strip() == str(correct_answer).strip():
@@ -1109,7 +1109,7 @@ def grade_coordinates(question, answer):
             return {'correct': True, 'feedback': f'Correct! Within {distance:.1f} km'}
         else:
             return {'correct': False, 'feedback': f'Off by {distance:.1f} km. Expected: ({correct_lat}, {correct_lng})'}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {'correct': False, 'feedback': 'An internal error occurred'}
 
 
@@ -1157,7 +1157,7 @@ def grade_data_table(question, answer):
                 'partial_credit': correct_cells / total_cells if total_cells > 0 else 0,
                 'feedback': f'{correct_cells}/{total_cells} cells correct'
             }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {'correct': False, 'feedback': 'An internal error occurred'}
 
 
@@ -1216,7 +1216,7 @@ def grade_function_graph(question, answer):
             exp_norm = normalize_expr(exp_expr)
             try:
                 exp_sym = sympify(exp_norm)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("expected expression sympify failed", exc_info=True)
                 continue
 
@@ -1227,7 +1227,7 @@ def grade_function_graph(question, answer):
                     if simplify(exp_sym - stu_sym) == 0:
                         matched += 1
                         break
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: falls back to default
                     # Fall back to string comparison
                     if exp_norm == stu_norm:
                         matched += 1

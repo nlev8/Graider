@@ -67,7 +67,7 @@ def approve_user_route():
     # Verify HMAC
     try:
         expected = _sign_approval(user_id, email)
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return _approval_page("Server configuration error.", success=False)
 
     if not hmac.compare_digest(token, expected):
@@ -80,7 +80,7 @@ def approve_user_route():
         sb.auth.admin.update_user_by_id(user_id, {"app_metadata": {"approved": True}})
         logger.info("User approved: %s (%s)", email, user_id)
         return _approval_page(email + " has been approved!", success=True)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to approve user %s: %s", user_id, str(e))
         return _approval_page("Failed to approve user. Please try again or contact support.", success=False)
 
@@ -144,7 +144,7 @@ def approval_status():
             "email": res.user.email,
             "first_name": meta.get("first_name", ""),
         })
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Error checking approval status: %s", str(e))
         return jsonify({"error": "Failed to check approval status"}), 500
 
@@ -201,7 +201,7 @@ def notify_signup_route():
                 )
             else:
                 logger.warning("Could not find user_id for %s to build approval link", email)
-        except Exception as lookup_err:
+        except Exception as lookup_err:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Could not build approval link: %s", str(lookup_err))
 
         supabase_url = os.getenv("SUPABASE_URL", "")
@@ -242,7 +242,7 @@ def notify_signup_route():
             timeout=10,
         )
         logger.info("Signup notification sent for %s", email)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to send signup notification: %s", str(e))
 
     return jsonify({"status": "ok"})

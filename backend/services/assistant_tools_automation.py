@@ -103,7 +103,7 @@ def list_automations_tool(teacher_id='local-dev', **kwargs):
                 "description": wf.get("description", ""),
                 "step_count": len(wf.get("steps", [])),
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     if not workflows:
         return {"message": "No automations saved yet. I can create one for you - just describe what you want to automate."}
@@ -190,7 +190,7 @@ def run_automation_tool(name, teacher_id='local-dev', **kwargs):
                     "step_count": len(wf.get("steps", [])),
                     "message": "Found automation '" + wf["name"] + "'. Switch to the Automations tab and click the Run button to start it.",
                 }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return {"found": False, "error": "No automation matching '" + name + "' found. Use create_automation to make one."}
 

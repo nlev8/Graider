@@ -798,7 +798,7 @@ def _parse_curriculum_map_for_dates(start_date, end_date):
                 if meta.get("doc_type") == "curriculum":
                     curriculum_file = os.path.join(DOCUMENTS_DIR, fname)
                     break
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("curriculum document metadata read failed", exc_info=True)
                 continue
         elif 'curriculum' in fname.lower() or 'pacing' in fname.lower():
@@ -818,7 +818,7 @@ def _parse_curriculum_map_for_dates(start_date, end_date):
     try:
         req_start = _dt.strptime(start_date, '%Y-%m-%d')
         req_end = _dt.strptime(end_date, '%Y-%m-%d')
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return None
 
     # Helper to parse flexible date strings like "Feb. 17th", "March 12th", "January 6th"
@@ -1024,7 +1024,7 @@ def _extract_pdf_text(filepath):
         return "\n\n".join(pages), page_count
     except ImportError:
         return "[PDF extraction requires PyMuPDF: pip install pymupdf]", 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return f"[Error extracting PDF: {e}]", 0
 
 
@@ -1058,7 +1058,7 @@ def _extract_docx_text(filepath):
         return '\n'.join(full_text)
     except ImportError:
         return "[DOCX extraction requires python-docx: pip install python-docx]"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return f"[Error extracting DOCX: {e}]"
 
 
@@ -1147,7 +1147,7 @@ def create_focus_assignment(name, category=None, points=None, date=None, descrip
         }
     except FileNotFoundError:
         return {"error": "Node.js not found. Make sure Node.js is installed."}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"Failed to launch automation: {str(e)}"}
 
 
@@ -1588,7 +1588,7 @@ def generate_worksheet_tool(title, worksheet_type, vocab_terms=None, questions=N
         )
     except ImportError:
         return {"error": "python-docx not installed. Run: pip install python-docx"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": "Failed to generate worksheet: " + str(e)}
 
 
@@ -1603,7 +1603,7 @@ def generate_document_tool(title, content, style_name=None, save_to_builder=Fals
         )
     except ImportError:
         return {"error": "python-docx not installed. Run: pip install python-docx"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": "Failed to generate document: " + str(e)}
 
 
@@ -1690,7 +1690,7 @@ def save_document_style_tool(name, style, teacher_id='local-dev'):
     try:
         from backend.services.document_generator import save_style
         return save_style(name=name, style_dict=style)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": "Failed to save style: " + str(e)}
 
 
@@ -1700,7 +1700,7 @@ def list_document_styles_tool(teacher_id='local-dev'):
     try:
         from backend.services.document_generator import list_styles
         return list_styles()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": "Failed to list styles: " + str(e)}
 
 
@@ -1847,7 +1847,7 @@ def get_recent_lessons(unit_name=None, teacher_id='local-dev'):
                     "standards_covered": list(set(all_standards)),
                     "saved_at": data.get("_saved_at", ""),
                 })
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
                 continue
 
@@ -1915,7 +1915,7 @@ def get_calendar(start_date=None, end_date=None, teacher_id='local-dev'):
             if not lessons:
                 result["note"] = ("No lessons scheduled for this period. Curriculum map data shows what should be covered. "
                                   "Also check uploaded reference documents in your system context for additional details.")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     return result
@@ -2032,7 +2032,7 @@ def list_resources_tool(teacher_id='local-dev'):
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         meta = json.load(f)
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("document metadata load failed", exc_info=True)
 
             size_kb = round(os.path.getsize(fpath) / 1024, 1)
@@ -2042,7 +2042,7 @@ def list_resources_tool(teacher_id='local-dev'):
                 "description": meta.get("description", ""),
                 "size_kb": size_kb,
             })
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"Error reading documents directory: {e}"}
 
     return {"documents": documents, "total": len(documents)}
@@ -2080,7 +2080,7 @@ def read_resource_tool(filename, teacher_id='local-dev'):
                 content = f.read()
         else:
             return {"error": f"Unsupported file type: {ext}. Supported: PDF, DOCX, DOC, TXT, MD."}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"Error reading {safe_name}: {e}"}
 
     truncated = False
@@ -2105,7 +2105,7 @@ def read_resource_tool(filename, teacher_id='local-dev'):
                 meta = json.load(f)
             result["doc_type"] = meta.get("doc_type", "unknown")
             result["description"] = meta.get("description", "")
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("resource doc metadata enrich failed", exc_info=True)
 
     return result
@@ -2139,7 +2139,7 @@ def save_assignment_config(title, document_text=None, questions=None, totalPoint
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 existing = json.load(f)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     # Merge updates
@@ -2362,7 +2362,7 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
         try:
             with open(pending_path, 'w') as pf:
                 json.dump(pending_data, pf)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
         audit_tool_action(teacher_id, 'send_parent_emails', 'SEND_EMAIL')
@@ -2386,7 +2386,7 @@ def send_parent_emails(email_subject, email_body, student_names=None, period=Non
         return result
     except ImportError:
         return {"error": "Outlook sender not available. Check backend installation."}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": "Failed to launch Outlook sender: " + str(e)}
 
 
@@ -2421,7 +2421,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
     try:
         with open(FOCUS_ROSTER_FILE, 'r', encoding='utf-8') as f:
             roster = json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": "Failed to load Focus roster: " + str(e)}
 
     # Build flat list of all students from roster periods
@@ -2515,7 +2515,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
         try:
             with open(pending_path, 'w') as pf:
                 json.dump(pending_data, pf)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
         audit_tool_action(teacher_id, 'send_focus_comms', 'SEND_EMAIL')
@@ -2538,7 +2538,7 @@ def send_focus_comms(email_subject, email_body=None, sms_body=None, student_name
         return result
     except ImportError:
         return {"error": "Focus Comms route not available. Check backend installation."}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": "Failed to launch Focus Comms: " + str(e)}
 
 
@@ -2573,7 +2573,7 @@ def confirm_and_send(teacher_id='local-dev'):
         try:
             with open(pending_path, 'r') as f:
                 pending = json.load(f)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
             return {"error": "Failed to read pending send: " + str(e)}
 
     # GH #280 fix: cross-tenant IDOR validation. Defense-in-depth even
@@ -2687,7 +2687,7 @@ def confirm_and_send(teacher_id='local-dev'):
                 }
         else:
             return {"error": f"Unknown pending action: {action}"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"Failed to launch send: {str(e)}"}
 
 

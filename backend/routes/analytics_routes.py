@@ -32,7 +32,7 @@ def _find_master_grades():
                     path = os.path.join(folder, "master_grades.csv")
                     if os.path.exists(path):
                         return path
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("master grades CSV path resolution failed", exc_info=True)
 
     # Check common locations
@@ -120,7 +120,7 @@ def _fetch_assessment_analytics(source):
             'summative_average': round(sum(_summative_scores) / len(_summative_scores), 1) if _summative_scores else None,
             'summative_count': len(_summative_scores),
         }
-    except Exception as _e:
+    except Exception as _e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Error fetching assessment analytics: %s", str(_e))
         sentry_sdk.capture_exception(_e)
     return assessment_stats, assessment_category_summary
@@ -351,7 +351,7 @@ def _load_valid_assignment_names():
                 for alias in config.get('aliases', []):
                     if alias:
                         valid_names.add(_normalize_assignment_name(alias))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     return valid_names
@@ -692,7 +692,7 @@ def export_district_report():
             teacher_name = settings.get("teacher_name", teacher_name)
             school_name = settings.get("school_name", school_name)
             subject = settings.get("subject", subject)
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("teacher settings load from storage failed", exc_info=True)
 
     # Fallback to local file settings
@@ -705,7 +705,7 @@ def export_district_report():
                     teacher_name = file_settings.get('teacher_name', teacher_name)
                     school_name = file_settings.get('school_name', school_name)
                     subject = file_settings.get('subject', subject)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("teacher settings load from local file failed", exc_info=True)
 
     # Collect anonymized aggregate data
@@ -734,7 +734,7 @@ def export_district_report():
                 categories["completeness"].append(int(bd.get("completeness", 0) or 0))
                 categories["writing"].append(int(bd.get("writing_quality", 0) or 0))
                 categories["effort"].append(int(bd.get("effort_engagement", 0) or 0))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # Fall back to master_grades.csv if no results in storage
@@ -879,7 +879,7 @@ def cleanup_master_csv():
                     approval = r.get('email_approval', '')
                     if student and assignment and approval:
                         approval_lookup[(student.lower(), assignment)] = approval
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     # Read all rows

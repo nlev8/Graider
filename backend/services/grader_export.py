@@ -272,7 +272,7 @@ def save_to_master_csv(grades: list, output_folder: str):
                                 kept_old_keys.add(key)
                                 # Keep old row, skip the new grade
                     existing_rows.append(row)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("Could not read existing master CSV: %s", e)
 
     # Filter out grades where old score was kept
@@ -434,6 +434,6 @@ def create_outlook_drafts(grades: list):
         _logger.info(f"📧 Created {count} draft emails in Outlook")
         return True
         
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.info(f"⚠️  Outlook error: {e}")
         return False

@@ -412,7 +412,7 @@ def enrich_batch(standards_batch, cache):
             # Remove the flag
             s.pop("_needs_enrichment", None)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         print(f"  ERROR enriching batch: {e}")
         # Don't remove the flag so it can be retried
 

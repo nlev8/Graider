@@ -169,7 +169,7 @@ def load_style(style_name):
         for key, val in saved.items():
             if key in style and val is not None:
                 style[key] = val
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # Coerce numeric fields to proper types (JSON or AI tools may pass strings)
@@ -369,7 +369,7 @@ def _process_visual_block(doc, block, block_type):
             font_size = block.get("font_size", 20)
             img = render_latex(latex, font_size=font_size)
             add_image_to_docx(doc, img, width_inches=4)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Math image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -385,7 +385,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=6)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Number line image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -401,7 +401,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Coordinate plane image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -443,7 +443,7 @@ def _process_visual_block(doc, block, block_type):
                 doc.add_paragraph(f"[Unknown graph type: {graph_type}]")
                 return
             add_image_to_docx(doc, img, width_inches=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Graph image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -457,7 +457,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Box plot image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -483,7 +483,7 @@ def _process_visual_block(doc, block, block_type):
                 doc.add_paragraph(f"[Unknown shape type: {shape_type}]")
                 return
             add_image_to_docx(doc, img, width_inches=4)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Shape image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -500,7 +500,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Function graph image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -517,7 +517,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=4)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Circle image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -533,7 +533,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=4)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Polygon image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -550,7 +550,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Histogram image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -566,7 +566,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Pie chart image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -583,7 +583,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Dot plot image generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -596,7 +596,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=4)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Stem-and-leaf plot generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -611,7 +611,7 @@ def _process_visual_block(doc, block, block_type):
                 blank=block.get("blank", False),
             )
             add_image_to_docx(doc, img, width_inches=4.5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Venn diagram generation failed]")
             sentry_sdk.capture_exception(e)
 
@@ -624,7 +624,7 @@ def _process_visual_block(doc, block, block_type):
                 title=block.get("title"),
             )
             add_image_to_docx(doc, img, width_inches=3.5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             doc.add_paragraph("[Protractor image generation failed]")
             sentry_sdk.capture_exception(e)
 

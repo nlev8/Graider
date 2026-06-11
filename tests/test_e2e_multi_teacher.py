@@ -31,7 +31,7 @@ def _get_supabase():
     try:
         from backend.supabase_client import get_supabase
         return get_supabase()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return None
 
 
@@ -252,11 +252,11 @@ class TestMultiTeacherSmoke:
         for code in self.join_codes:
             try:
                 self.db.table('submissions').delete().eq('join_code', code).execute()
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
                 pass
             try:
                 self.db.table('published_assessments').delete().eq('join_code', code).execute()
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
                 pass
 
     def _publish(self, teacher):

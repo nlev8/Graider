@@ -245,7 +245,7 @@ class OpenAITTSStream:
                     b64_audio = base64.b64encode(mp3_bytes).decode("ascii")
                     with self._results_lock:
                         self._results[seq_num] = ("audio", b64_audio)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     logger.error("OpenAI TTS error for text '%s...': %s", text[:40], e)
                     with self._results_lock:
                         self._results[seq_num] = ("skip", None)

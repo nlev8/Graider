@@ -101,7 +101,7 @@ def update_writing_profile(student_id: str, current_style: dict, student_name: s
         with open(history_file, 'w') as f:
             json.dump(history, f, indent=2)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Could not update writing profile: %s", e)
 
 
@@ -120,7 +120,7 @@ def get_writing_profile(student_id: str, teacher_id: str = 'local-dev') -> dict:
             with open(history_file, 'r') as f:
                 history = json.load(f)
                 return history.get("writing_profile")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("writing profile history load failed: %s", type(e).__name__)
 
     return None

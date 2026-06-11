@@ -66,7 +66,7 @@ async def timed_request(
                 error_message=f"Expected {expected_status}, got {resp.status_code}",
                 response_snippet=resp.text[:500] if resp.text else None,
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
         latency = (time.perf_counter() - start) * 1000
         return None, StepResult(
             persona_id=persona_id,
@@ -95,7 +95,7 @@ async def poll_until(
                 data = resp.json()
                 if condition_fn(data):
                     return resp
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
             pass
         await asyncio.sleep(interval_s)
     return None

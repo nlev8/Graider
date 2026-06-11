@@ -245,7 +245,7 @@ def _load_results(teacher_id='local-dev'):
     try:
         with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return []
 
@@ -333,7 +333,7 @@ def _load_master_csv(period_filter='all', teacher_id='local-dev'):
                     rows.append(parsed)
                     if sid and sid != "UNKNOWN":
                         seen_keys.add((sid, _norm_assign(assign)))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     # 2. Merge in results JSON entries not already in master CSV.
@@ -424,7 +424,7 @@ def _load_period_class_levels(teacher_id='local-dev'):
                 period_name = meta.get('period_name', f.replace('.csv.meta.json', ''))
                 class_level = meta.get('class_level', 'standard')
                 levels[period_name] = class_level
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("period class-level metadata load failed", exc_info=True)
     return levels
 
@@ -450,7 +450,7 @@ def _load_accommodations(teacher_id='local-dev'):
                     "notes": data.get('notes', ''),
                     "student_id": student_id,
                 }
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
     return accommodations
 
@@ -467,7 +467,7 @@ def _load_settings(teacher_id='local-dev'):
         try:
             with open(settings_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("settings file load failed", exc_info=True)
     return {}
 
@@ -485,7 +485,7 @@ def _load_standards():
         from backend.routes.planner_routes import load_standards as _planner_load
         result = _planner_load(state, subject, grade)
         return result.get('standards', [])
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("planner standards load failed", exc_info=True)
 
     # Fallback: try legacy file path directly
@@ -513,7 +513,7 @@ def _load_standards():
             if isinstance(data, list):
                 return data
             return data.get('standards', [])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return []
 
@@ -550,7 +550,7 @@ def _load_saved_lessons(teacher_id='local-dev'):
                             "unit": unit_dir,
                             "standards": data.get('standards', []),
                         })
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                         sentry_sdk.capture_exception(e)
     return lessons
 
@@ -635,7 +635,7 @@ def _load_roster(teacher_id='local-dev'):
                         meta = json.load(fh)
                     csv_name = f.replace('.meta.json', '')
                     period_meta[csv_name] = meta
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("period metadata load failed", exc_info=True)
 
         for f in sorted(os.listdir(PERIODS_DIR)):
@@ -677,7 +677,7 @@ def _load_roster(teacher_id='local-dev'):
                             })
                             if student_id:
                                 seen_ids.add(student_id)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
 
     # --- Phase 2: Clever roster CSVs from ROSTERS_DIR ---
@@ -697,7 +697,7 @@ def _load_roster(teacher_id='local-dev'):
                     period_name = section.get('name', f.replace('.json', ''))
                     for sid in section.get('students', []):
                         clever_student_periods.setdefault(sid, []).append(period_name)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     sentry_sdk.capture_exception(e)
 
         for f in sorted(os.listdir(ROSTERS_DIR)):
@@ -729,7 +729,7 @@ def _load_roster(teacher_id='local-dev'):
                                 "course_codes": [],
                             })
                         seen_ids.add(student_id)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
 
     return roster
@@ -747,7 +747,7 @@ def _load_parent_contacts(teacher_id='local-dev'):
     try:
         with open(PARENT_CONTACTS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return {}
 
@@ -791,7 +791,7 @@ def _load_saved_assignments(teacher_id='local-dev'):
                 "norm": _normalize_assignment_name(title),
                 "aliases": _collect_aliases(data, data.get('aliases', [])),
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return saved
 
@@ -809,7 +809,7 @@ def _load_calendar(teacher_id='local-dev'):
     try:
         with open(CALENDAR_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return default
 
 
@@ -836,7 +836,7 @@ def _load_memories(teacher_id='local-dev'):
         with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data if isinstance(data, list) else []
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return []
 
@@ -858,7 +858,7 @@ def _load_email_config():
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return {}
 
@@ -967,7 +967,7 @@ def execute_tool(tool_name, tool_input):
             try:
                 from backend.utils.compliance import audit_tool_action
                 audit_tool_action(tool_input['teacher_id'], tool_name, 'INVOKE')
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 pass  # Audit failure should never block tool execution
                 sentry_sdk.capture_exception(e)
 
@@ -986,5 +986,5 @@ def execute_tool(tool_name, tool_input):
             return handler(**kwargs)
         else:
             return handler()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {"error": f"Tool execution error: {str(e)}"}

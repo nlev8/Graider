@@ -50,7 +50,7 @@ def send_emails():
             try:
                 with open(contacts_file, 'r', encoding='utf-8') as cf:
                     parent_contacts = json.load(cf)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
 
         # Group by student email for combined emails
@@ -272,7 +272,7 @@ def export_outlook_emails():
                 if os.path.exists(results_file):
                     with open(results_file, 'r') as f:
                         results = json.load(f)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
 
         if not results:
@@ -289,7 +289,7 @@ def export_outlook_emails():
             emailer = GraiderEmailer()
             if not teacher_name or teacher_name == 'Your Teacher':
                 teacher_name = emailer.config.get('teacher_name', teacher_name)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
         emails = []
@@ -896,7 +896,7 @@ def send_confirmation_emails():
         try:
             stage_result = stage_files(assignments_folder)
             scan_path = Path(stage_result["staging_folder"])
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: falls back to default
             scan_path = Path(assignments_folder)
 
         all_files = []
@@ -921,7 +921,7 @@ def send_confirmation_emails():
                         for alias in cfg.get('aliases', []):
                             if alias:
                                 alias_to_title[alias] = title
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("assignment config alias load failed", exc_info=True)
         all_config_names = set(alias_to_title.keys())
 
@@ -1030,7 +1030,7 @@ def send_confirmation_emails():
                 try:
                     with open(contacts_path, 'r') as fh:
                         parent_contacts = json.load(fh)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     sentry_sdk.capture_exception(e)
 
         # Build one confirmation email per student
@@ -1138,7 +1138,7 @@ def pending_confirmations():
                 for r in state["results"]:
                     if r.get('confirmation_sent'):
                         confirmed_filenames.add(r.get('filename', ''))
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("confirmation-sent filename collection failed", exc_info=True)  # Grading state not available — skip
 
         # Stage files first — canonicalize and deduplicate
@@ -1146,7 +1146,7 @@ def pending_confirmations():
         try:
             stage_result = stage_files(assignments_folder)
             scan_path = Path(stage_result["staging_folder"])
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: falls back to default
             scan_path = Path(assignments_folder)
 
         pending_students = set()
@@ -1194,7 +1194,7 @@ def _load_confirmed_filenames():
         try:
             with open(CONFIRMATIONS_FILE, 'r') as f:
                 return set(json.load(f))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return set()
 
@@ -1205,7 +1205,7 @@ def _save_confirmed_filenames(filenames_set):
     try:
         with open(CONFIRMATIONS_FILE, 'w') as f:
             json.dump(sorted(filenames_set), f, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error saving confirmations file: %s", e)
         sentry_sdk.capture_exception(e)
 
@@ -1255,7 +1255,7 @@ def mark_confirmations_sent_file():
             try:
                 with open(RESULTS_FILE, 'w') as f:
                     json.dump(results, f, indent=2)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.error("Error saving results after marking confirmations: %s", e)
                 sentry_sdk.capture_exception(e)
 
@@ -1401,7 +1401,7 @@ def _read_focus_comms_output(proc):
     stderr_output = ""
     try:
         stderr_output = proc.stderr.read().strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     proc.wait()
@@ -1505,7 +1505,7 @@ def confirm_send():
                     pending = _storage_load('pending_send:' + _key, teacher_id)
                     if pending:
                         break
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     # Fall back to per-tenant pending file
@@ -1542,12 +1542,12 @@ def confirm_send():
             _storage_save('pending_send', None, teacher_id)
             if action_key:
                 _storage_save('pending_send:' + action_key, None, teacher_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
         try:
             if os.path.exists(pending_path):
                 os.remove(pending_path)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     if action == "send_focus_comms":

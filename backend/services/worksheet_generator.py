@@ -231,7 +231,7 @@ def _embed_visual(doc, visual):
                 title=visual.get('title', '')
             )
             add_image_to_docx(doc, img_data, width_inches=3.5)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         doc.add_paragraph("[Visual failed to render]")
         sentry_sdk.capture_exception(e)
 

@@ -58,7 +58,7 @@ def get_clever_config():
                 "client_secret": district_cfg.get("client_secret"),
                 "redirect_uri": redirect_uri,
             }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # Fall back to environment variables
@@ -730,7 +730,7 @@ def delete_clever_data(teacher_id="local-dev"):
                    .eq("teacher_id", teacher_id).execute())
             section_ids = [c["clever_section_id"] for c in (res.data or [])
                            if c.get("clever_section_id")]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Could not enumerate Clever sections for deletion (%s): %s",
                        teacher_id, type(e).__name__)
         sentry_sdk.capture_exception(e)
@@ -783,7 +783,7 @@ def delete_clever_data(teacher_id="local-dev"):
         for sid in storage.list_student_history(teacher_id):
             if storage.delete_student_history(teacher_id, sid):
                 hist_deleted += 1
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("student_history deletion failed (%s): %s",
                        teacher_id, type(e).__name__)
         sentry_sdk.capture_exception(e)
@@ -794,7 +794,7 @@ def delete_clever_data(teacher_id="local-dev"):
     try:
         storage.delete("accommodations", teacher_id)
         result["accommodations"] = "deleted"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("accommodations deletion failed (%s): %s",
                        teacher_id, type(e).__name__)
         sentry_sdk.capture_exception(e)
@@ -819,7 +819,7 @@ def delete_clever_data(teacher_id="local-dev"):
                     (sb.table("published_assessments").update({"settings": settings})
                      .eq("id", row["id"]).execute())
                     scrubbed += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("published_assessments PII scrub failed (%s): %s",
                            teacher_id, type(e).__name__)
             sentry_sdk.capture_exception(e)

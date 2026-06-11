@@ -57,7 +57,7 @@ def load_support_documents_for_planning() -> str:
                         from docx import Document
                         doc = Document(filepath)
                         content = '\n'.join([p.text for p in doc.paragraphs])
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("standards docx extraction failed", exc_info=True)
                         continue
                 elif filepath.endswith('.pdf'):
@@ -66,7 +66,7 @@ def load_support_documents_for_planning() -> str:
                         pdf = fitz.open(filepath)
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("standards pdf extraction failed", exc_info=True)
                         continue
 
@@ -79,7 +79,7 @@ def load_support_documents_for_planning() -> str:
                     docs_content.append(f"[{doc_label}]\n{chunk}")
                     total_chars += len(chunk)
 
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("support document load failed", exc_info=True)
                 continue
 
@@ -177,7 +177,7 @@ def _load_standards_file(filepath):
         if isinstance(data, list):
             return data
         return data.get('standards', [])
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return []
 
 

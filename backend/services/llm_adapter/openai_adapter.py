@@ -481,7 +481,7 @@ class OpenAIAdapter:
             # disconnect, error, or normal completion.
             try:
                 stream.close()
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("openai stream.close() raised on cleanup", exc_info=True)
 
         # Emit ToolCallComplete for every accumulated tool call

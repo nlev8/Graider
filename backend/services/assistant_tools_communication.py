@@ -393,7 +393,7 @@ def generate_parent_conference_notes(student_name, teacher_id='local-dev', **kwa
         try:
             with open(PARENT_CONTACTS_FILE, "r") as f:
                 contacts = json.load(f)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     # Find parent info

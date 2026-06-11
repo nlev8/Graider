@@ -90,7 +90,7 @@ async def run_persona(
         fn = ALL_SCENARIOS[name]
         try:
             await fn(client, persona, persona_data, results)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
             results.append(StepResult(
                 persona_id=persona["id"],
                 scenario=name,
@@ -106,7 +106,7 @@ async def run_persona(
         fn = ALL_SCENARIOS[name]
         try:
             await fn(client, persona, persona_data, results)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
             results.append(StepResult(
                 persona_id=persona["id"],
                 scenario=name,
@@ -162,7 +162,7 @@ async def run_cross_contamination_check(
                     status_code=resp.status_code if resp else 0,
                     error_message=f"Could not load rubric: {resp.status_code}",
                 )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
             result = StepResult(
                 persona_id=persona["id"],
                 scenario="cross_contamination",
@@ -201,7 +201,7 @@ async def run_stress_tests(
                     latency_ms=round(latency, 1),
                     status_code=resp.status_code,
                 ))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
                 results.append(StepResult(
                     persona_id=persona["id"],
                     scenario="stress_rapid_poll",
@@ -247,7 +247,7 @@ async def main(num_personas: int = 5, scenario_filter: list[str] | None = None):
             if resp.status_code not in (200, 304):
                 print(f"Server not responding at {BASE_URL} (status {resp.status_code})")
                 return False
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             print(f"Cannot connect to {BASE_URL}: {e}")
             print("Start the server first: cd backend && python app.py")
             return False

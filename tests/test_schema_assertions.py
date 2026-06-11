@@ -94,7 +94,7 @@ class TestStudentSubmissionsSchema:
                 "student_name": sentinel_name,
                 "status": "submitted",  # known-valid under both old + new CHECK
             }).execute()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
             pytest.fail(
                 f"Sentinel INSERT blocked (likely RLS or permissions on "
                 f"student_submissions for the service-role key used by the "

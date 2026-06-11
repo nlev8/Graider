@@ -89,7 +89,7 @@ def _parse_docx(file_data, filename):
             # Check document properties for title
             if doc.core_properties.title:
                 doc_title = doc.core_properties.title
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
         # If no metadata title, use first heading or first paragraph

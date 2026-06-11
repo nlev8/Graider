@@ -72,10 +72,10 @@ def _cleanup_subprocesses():
             try:
                 proc.terminate()
                 proc.wait(timeout=3)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 try:
                     proc.kill()
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("automation subprocess kill failed", exc_info=True)
 
 atexit.register(_cleanup_subprocesses)
@@ -158,7 +158,7 @@ def list_automations():
                 "step_count": len(wf.get("steps", [])),
                 "updated_at": wf.get("updated_at", ""),
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return jsonify({"workflows": workflows})
 
@@ -239,7 +239,7 @@ def list_templates():
                     "step_count": len(wf.get("steps", [])),
                     "is_template": True,
                 })
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
     return jsonify({"templates": templates})
 
@@ -260,7 +260,7 @@ def get_template(template_id):
                 wf = json.load(f)
             if wf.get("id") == template_id:
                 return jsonify(wf)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return jsonify({"error": "Template not found"}), 404
 
@@ -282,7 +282,7 @@ def delete_template(template_id):
             if wf.get("id") == template_id:
                 os.remove(filepath)
                 return jsonify({"status": "deleted"})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return jsonify({"status": "deleted"})
 

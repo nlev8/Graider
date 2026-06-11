@@ -121,7 +121,7 @@ def test_connection():
 
         _run_async(_test())
         return jsonify({"status": "connected"})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("OneRoster connection test failed: %s", str(e))
         return jsonify({"error": "Connection failed"}), 502
 
@@ -155,7 +155,7 @@ def sync_roster():
                 # Stale lock — clear it and proceed
                 logger.warning("Stale provider switch lock detected (>5min old). Clearing.")
                 _ss("district:provider_switch_in_progress", None, "system")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # Load config
@@ -176,7 +176,7 @@ def sync_roster():
             school_id=cfg.get("school_id"),
             teacher_sourced_id=cfg.get("teacher_sourced_id"),
         ))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("OneRoster roster fetch failed: %s", str(e))
         return jsonify({"error": "Failed to fetch roster from OneRoster API"}), 502
 
@@ -202,7 +202,7 @@ def sync_roster():
             for s in students
         ]
         persist_roster_as_csv(csv_students, teacher_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to persist OneRoster roster as CSV: %s", str(e))
         sentry_sdk.capture_exception(e)
 
@@ -217,7 +217,7 @@ def sync_roster():
             for c in classes
         ]
         persist_sections_as_periods(csv_sections, teacher_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to persist OneRoster sections as periods: %s", str(e))
         sentry_sdk.capture_exception(e)
 
@@ -363,13 +363,13 @@ def sync_grades():
             total_points=float(total_points),
             class_sourced_id=class_sourced_id,
         ))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to create/find lineItem: %s", e)
         return jsonify({"error": "Failed to create assignment in SIS"}), 500
 
     try:
         result = _run_async(post_results(client, line_item_id, scores))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to post results: %s", e)
         return jsonify({"error": "Failed to post scores"}), 500
 

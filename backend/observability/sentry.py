@@ -107,7 +107,7 @@ def _is_client_error(event: dict) -> bool:
             bare_name = exc_type.rsplit(".", 1)[-1]
             if bare_name in _CLIENT_ERROR_TYPES:
                 return True
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         # Defensive: never let the scrubber crash — a broken scrubber
         # swallows events silently.
         logger.debug("client-error classification scrub failed", exc_info=True)
@@ -327,7 +327,7 @@ def _scrub_frame_locals(event: dict) -> None:
                 for name in list(frame_vars.keys()):
                     if name in _PII_LOCAL_NAMES:
                         frame_vars[name] = "[PII-scrubbed]"
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         # Defensive: never let the scrubber crash.
         logger.debug("PII local-variable scrub failed", exc_info=True)
 
@@ -465,7 +465,7 @@ def critical_path(fn):
             try:
                 import sentry_sdk
                 sentry_sdk.set_tag("severity", "critical")
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 logger.debug("critical severity tag attach failed", exc_info=True)
             raise
 

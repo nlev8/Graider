@@ -66,7 +66,7 @@ def _load_memories(teacher_id='local-dev'):
         with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data if isinstance(data, list) else []
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
         return []
 
@@ -126,7 +126,7 @@ def _load_calendar(teacher_id='local-dev'):
     try:
         with open(CALENDAR_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return default
 
 
@@ -151,7 +151,7 @@ def _load_email_config():
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return {}
 

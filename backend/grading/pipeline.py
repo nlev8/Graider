@@ -163,7 +163,7 @@ def load_support_documents_for_grading(subject: Optional[str] = None) -> str:
                         from docx import Document
                         doc = Document(filepath)
                         content = '\n'.join([p.text for p in doc.paragraphs])
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("support document docx extraction failed", exc_info=True)
                         continue
                 elif filepath.endswith('.pdf'):
@@ -172,7 +172,7 @@ def load_support_documents_for_grading(subject: Optional[str] = None) -> str:
                         pdf = fitz.open(filepath)
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("support document pdf extraction failed", exc_info=True)
                         continue
 
@@ -183,7 +183,7 @@ def load_support_documents_for_grading(subject: Optional[str] = None) -> str:
                     docs_content.append(f"[{doc_label}]\n{content[:2000]}")
                     total_chars += len(content[:2000])
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.error("Error loading document: %s", e)
                 continue
 
@@ -503,7 +503,7 @@ def _build_file_ai_notes(
         if _correction_ctx:
             file_ai_notes += "\n\n" + _correction_ctx
             _logger.info("  Applying Correction Patterns (%d chars)", len(_correction_ctx))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("  Correction patterns skipped: %s", e)
 
     # Inject model answers from config (if generated)
@@ -684,7 +684,7 @@ STANDARD CLASS GRADING EXPECTATIONS:
                                     "breakdown": {}
                                 }
                                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # Best-effort: prior-session lookup is for resubmission
                 # context. If the master CSV is unreadable, the
                 # primary-session error already alerted via the
@@ -920,7 +920,7 @@ def _assemble_post_grade(
     if student_info.get('student_id') and student_info['student_id'] != "UNKNOWN":
         try:
             baseline_deviation = detect_baseline_deviation(student_info['student_id'], grade_result, teacher_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Behavior-critical: baseline deviation detection flags
             # anomalous grades (potential cheating signal). Silent
             # failure means anomalies go unflagged. The grading
@@ -941,7 +941,7 @@ def _assemble_post_grade(
             grade_record_hist = {**student_info, **grade_result, "filename": filepath.name,
                            "assignment": matched_title, "period": student_period}
             add_assignment_to_history(student_info['student_id'], grade_record_hist, teacher_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     # Get class level for logging
@@ -1079,7 +1079,7 @@ def grade_single_file(
                     file_text = temp_file_data.get("content", "")
                     if file_text:
                         matched_config = find_matching_config(filepath.name, all_configs, grading_state, file_text)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # Best-effort: content-based matching failed. The
                 # surrounding flow will then use whatever fallback
                 # config / no-config handling exists for this file
@@ -1291,7 +1291,7 @@ def grade_single_file(
             teacher_id=teacher_id,
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Grading failed for %s: %s", filepath, str(e))
         return {"success": False, "error": "Grading failed for this file", "filepath": filepath}
 
@@ -1349,7 +1349,7 @@ def _export_results(
             with open(audit_path, 'w') as fh:
                 json.dump(audit_data, fh, indent=2)
             grading_state["log"].append("  Audit trail saved")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             grading_state["log"].append(f"  Audit trail error: {str(e)}")
             sentry_sdk.capture_exception(e)
 
@@ -1402,7 +1402,7 @@ def _grade_all_files(
 
                 try:
                     result = future.result()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     grading_state["log"].append(f"[{file_num}/{len(new_files)}] {filepath.name}")
                     grading_state["log"].append(f"  ❌ Error: {str(e)}")
                     continue
@@ -1609,7 +1609,7 @@ def _load_already_graded(
                     if filename:
                         already_graded.add(filename)
                         already_graded.add(_canon_csv(filename))  # type: ignore[no-untyped-call]
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Behavior-critical: if we can't read the master CSV, the
             # already_graded set stays empty and previously-graded files
             # may be regraded (cost + duplicate results). Sentry must see
@@ -1660,7 +1660,7 @@ def _load_period_maps(
                             meta = json.load(mf)
                             period_name = meta.get('period_name', period_name)
                             class_level = meta.get('class_level', 'standard')
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                         # Best-effort: malformed metadata falls back to
                         # defaults (period name from filename, standard
                         # class level). Less personalization, not broken.
@@ -1704,7 +1704,7 @@ def _load_period_maps(
                                                 student_period_map[short_key] = period_name
                                 else:
                                     student_period_map[full_name.lower()] = period_name
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     grading_state["log"].append(f"Warning: Could not load period file {period_file}: {e}")
 
         if student_period_map:
@@ -1787,7 +1787,7 @@ def _run_grading_thread_inner(
                 try:
                     with open(os.path.join(assignments_dir, f), 'r') as cf:
                         all_configs[config_name.lower()] = json.load(cf)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     # Best-effort: malformed/missing config file just means this
                     # one entry isn't available for matching. Other configs work.
                     _logger.debug("Failed to load assignment config %s: %s", f, e)
@@ -2000,7 +2000,7 @@ def _run_grading_thread_inner(
         # Save results to storage for persistence across restarts
         save_results(results_snapshot, teacher_id)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _update_state(error=str(e))
         sentry_sdk.capture_exception(e)
         grading_state["log"].append(f"Error: {str(e)}")

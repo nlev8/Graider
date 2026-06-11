@@ -66,7 +66,7 @@ class TestSyncReRaiseOnTransient:
                     raise_transient=raise_transient,
                 )
                 return ("returned", None)
-            except Exception as raised:
+            except Exception as raised:  # noqa: BLE001  # broad catch: returns fallback
                 return ("raised", raised)
 
     def test_celery_path_reraises_transient_as_TransientError(self):

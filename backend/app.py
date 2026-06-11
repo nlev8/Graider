@@ -189,7 +189,7 @@ if os.getenv('REDIS_URL'):
         app.config['SESSION_KEY_PREFIX'] = 'graider:'
         app.config['SESSION_REDIS'] = _session_redis
         Session(app)
-    except Exception as _redis_err:
+    except Exception as _redis_err:  # noqa: BLE001  # broad catch: error is logged
         # Redis unreachable at startup — fall back to filesystem sessions
         # for this worker. Sessions become per-worker until Redis recovers
         # and the worker restarts; acceptable degraded mode (better than
@@ -212,13 +212,13 @@ try:
     from backend.utils.logging_utils import configure_logging, log_request_timing
     configure_logging(app)
     log_request_timing(app)
-except Exception as e:
+except Exception as e:  # noqa: BLE001  # broad catch: error is logged
     _logger.warning("Logging configuration failed: %s", e)
 
 try:
     from backend.auth import init_auth
     init_auth(app)
-except Exception as e:
+except Exception as e:  # noqa: BLE001  # broad catch: error is logged
     _logger.warning("Auth middleware not loaded: %s", e)
     sentry_sdk.capture_exception(e)
 
@@ -228,7 +228,7 @@ except Exception as e:
 try:
     from backend.observability.db_mode import register as _register_db_mode
     _register_db_mode(app)
-except Exception as e:
+except Exception as e:  # noqa: BLE001  # broad catch: error is logged
     _logger.warning("db_mode observability hook not loaded: %s", e)
     sentry_sdk.capture_exception(e)
 
@@ -276,9 +276,9 @@ try:
                     for sid in ids:
                         _sb.table(table).update({'status': 'grading_failed'}).eq('id', sid).execute()
                     _logger.info("Recovered %d stale partial submissions in %s", len(ids), table)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("stale partial submission recovery (per-table) failed", exc_info=True)
-except Exception:
+except Exception:  # noqa: BLE001  # broad catch: error is logged
     _logger.debug("stale partial submission recovery (startup sweep) failed", exc_info=True)
 
 # ══════════════════════════════════════════════════════════════
@@ -337,7 +337,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                         from docx import Document
                         doc = Document(filepath)
                         content = '\n'.join([p.text for p in doc.paragraphs])
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("support document docx extraction failed", exc_info=True)
                         continue
                 elif filepath.endswith('.pdf'):
@@ -346,7 +346,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                         pdf = fitz.open(filepath)
                         content = '\n'.join([page.get_text() for page in pdf])
                         pdf.close()
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("support document pdf extraction failed", exc_info=True)
                         continue
 
@@ -357,7 +357,7 @@ def load_support_documents_for_grading(subject: str = None) -> str:
                     docs_content.append(f"[{doc_label}]\n{content[:2000]}")
                     total_chars += len(content[:2000])
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.error("Error loading document: %s", e)
                 continue
 
@@ -561,7 +561,7 @@ def healthz():
                 status["supabase"] = "ok"
             else:
                 status["supabase"] = f"degraded (status {resp.status_code})"
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: falls back to default
         status["supabase"] = "error"
 
     # Check Redis if configured
@@ -599,7 +599,7 @@ def healthz():
             status["redis"] = "ok"
         else:
             status["redis"] = "not configured"
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: falls back to default
         status["redis"] = "error"
 
     # Tiered fail-closed contract.
