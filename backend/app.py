@@ -238,7 +238,7 @@ except Exception as e:  # noqa: BLE001  # broad catch: error is logged
 try:
     from backend.metrics import register_metrics
     register_metrics(app)
-except Exception as e:
+except Exception as e:  # noqa: BLE001 — broad catch: error is logged + captured; metrics must never block boot
     _logger.warning("metrics endpoint not loaded: %s", e)
     sentry_sdk.capture_exception(e)
 

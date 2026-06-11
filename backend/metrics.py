@@ -280,7 +280,7 @@ def register_metrics(app: "Flask") -> None:
         from backend.extensions import limiter
 
         graider_metrics = limiter.exempt(graider_metrics)
-    except Exception as exc:  # pragma: no cover — extensions unavailable in odd harnesses
+    except Exception as exc:  # pragma: no cover — extensions unavailable in odd harnesses  # noqa: BLE001 — broad catch: error is logged; exemption is best-effort
         logging.getLogger(__name__).warning(
             "flask-limiter unavailable; /metrics registered without "
             "limiter exemption: %s", exc,
