@@ -4,13 +4,15 @@
  * Closes GH #229 (filed during PR #228 Codex review): the smoke-level
  * DOMPurify contract tests in `smoke.test.jsx` verify the LIBRARY
  * behavior in jsdom but don't exercise the actual production call site
- * at `AssistantChat.jsx:178` where `renderMarkdown` pipes assistant
- * messages through `DOMPurify.sanitize()` and then drops them into a
- * `dangerouslySetInnerHTML` block.
+ * (since the CQ wave-3 split: `assistant-chat/markdown.js`, rendered by
+ * `assistant-chat/MessageBubble.jsx`) where `renderMarkdown` pipes
+ * assistant messages through `DOMPurify.sanitize()` and then drops them
+ * into a `dangerouslySetInnerHTML` block.
  *
  * This test renders AssistantChat with a malicious assistant message
  * seeded via the localStorage hydration path used by `loadStoredMessages`
- * in `AssistantChat.jsx:184-190`, then asserts the rendered DOM contains:
+ * (since the split: `assistant-chat/storage.js`), then asserts the
+ * rendered DOM contains:
  *   - NO `<script>` element
  *   - NO inline `onerror`/`onclick`/etc. handler attributes
  *   - NO `javascript:` URI in `href` attributes
