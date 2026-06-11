@@ -52,7 +52,7 @@ giant FE component functions (`SettingsClassroom` 2,307 LOC; audit
 campaign. Revised projection for this sprint as listed: **~7.6–7.75**;
 reaching ~8 additionally needs the FE component splits.
 
-## Re-score 2026-06-11 (sprint COMPLETE, mechanical) — overall: **7.6** (7.75 on Clever-cert confirmation)
+## Re-score 2026-06-11 (sprint COMPLETE, mechanical) — overall: **7.75** (Clever cert operator-confirmed same day; was 7.6 pending confirmation)
 
 All seven sprint items are now merged: PR1 #724, PR2 #735 (ruff E722+BLE001
 lock), PR3 #725, PR4 #736 (/metrics), PR5 #740 (e2e de-skip wave 1 +
@@ -73,8 +73,8 @@ incorporated (DI "down intentionally N/A"; TC factual-basis change).
 | Observability | 7 | **7.5** | Metrics layer now present: `/metrics` Prometheus text endpoint + request instrumentation (#736; anchor grep `opentelemetry|prometheus|statsd|metrics_` = 2 hits, was 0). Audit durably persisted (insert failures capture+warn, per 06-09 evidence). 2 of 3 level-8 criteria → +0.5; "error tracking active in prod" remains repo-unverifiable (binding ruling) → not 8. |
 | Data Integrity | 7.5 | **7.5** | Same number, transformed basis (#738): 0001 is now a REAL live-introspected baseline (16 `CREATE TABLE IF NOT EXISTS`, FKs/UNIQUEs/CHECKs/indexes/RLS versioned), up-tested in CI (Migrations Smoke + 15 bootstrap tests). Only level-8 sub-clause unmet: "down tested in CI" — `downgrade()` is intentionally `NotImplementedError` (reversing a baseline = full schema drop; per #738's opus review: credit as "level 8-minus", do NOT record a clean 8). Strict majority of level 8 → +0.5 stands on a much stronger basis. |
 | Operational Safety | 8 | **8** | Unchanged (level 9 needs canary/auto-rollback/on-call). |
-| SSO/Roster | 7.5\* | **7.5\*** | Ruling stands; reverts to 9 on operator cert confirmation in the Clever dashboard. |
-| **OVERALL** | 7.4 | **7.6** | 9+7.5+6+7+9+7+7.5+7.5+8+7.5 = 76.0/10. **7.75 if Clever cert confirms.** |
+| SSO/Roster | 7.5\* | **9** | **Amended 2026-06-11 (same day): operator confirmed the Clever certification — Graider is live in the Clever app Library** (`docs/CLEVER_COMPLIANCE_STATUS.md` updated). Per the binding ruling, the asterisk resolves: 7.5\*→9. Residuals (legacy `clever:{id}` fail-open, N-rows-per-student, no event-webhook reconciliation) remain documented design choices → caps at 9 per the level-10 `[CAP]`. |
+| **OVERALL** | 7.4 | **7.75** | 9+7.5+6+7+9+7+7.5+7.5+8+9 = 77.5/10. (Pre-confirmation this section briefly recorded 7.6 with SSO 7.5\*; the cert confirmation landed the same day and is folded in.) |
 
 **Worklist implied:** EH 7.5→8 = log the ~43 returns-fallback sites; TC 7→8 =
 floor/measured 80 + de-mask the remaining 49 (e2e wave 2); Obs 7.5→8 = make
