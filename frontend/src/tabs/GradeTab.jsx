@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import Icon from "../components/Icon";
-import ActivityLog from "../components/ActivityLog";
 import * as api from "../services/api";
-import { getAuthHeaders } from "../services/api";
+import ErrorBanner from "./grade/ErrorBanner";
+import GradingModesPanel from "./grade/GradingModesPanel";
+import ActivityMonitorCard from "./grade/ActivityMonitorCard";
+import PeriodFilter from "./grade/PeriodFilter";
+import StudentFilter from "./grade/StudentFilter";
+import AssignmentFilter from "./grade/AssignmentFilter";
+import ActiveFiltersSummary from "./grade/ActiveFiltersSummary";
+import RegradeToggles from "./grade/RegradeToggles";
+import IndividualUploadPanel from "./grade/IndividualUploadPanel";
+import GradingProgress from "./grade/GradingProgress";
+import useIndividualUpload from "./grade/useIndividualUpload";
 
 /*
  * Grade tab — fully extracted. By end of PR 4, App.jsx no longer declares any
@@ -13,10 +22,22 @@ import { getAuthHeaders } from "../services/api";
  *   - PR 2 moved toggles + the showActivityLog vertical slice.
  *   - PR 3 moved selectedPeriod / periodStudents / gradeFilterAssignment /
  *     individualUpload / gradeAssignment plus their handlers.
- *   - PR 4 (this revision) moves gradeFilterStudent as pure local UI state and
- *     deletes the dead portal-era file-selection branch (matching-files UI,
- *     selectedFiles, availableFiles, fileMatchesPeriodStudent helper, cost
- *     estimate banner) plus the dead gradeImportedDoc setter call.
+ *   - PR 4 moved gradeFilterStudent as pure local UI state and deleted the
+ *     dead portal-era file-selection branch (matching-files UI, selectedFiles,
+ *     availableFiles, fileMatchesPeriodStudent helper, cost estimate banner)
+ *     plus the dead gradeImportedDoc setter call.
+ *
+ * CQ wave-2 split (this revision): the 1,625-line component function is now a
+ * thin shell composing ./grade/* sections (wave-1 tabs/analytics + tabs/results
+ * precedent). All state stays GradeTab-owned and is threaded down as props —
+ * behavior-preserving, no logic changes:
+ *   - ErrorBanner, GradingModesPanel, ActivityMonitorCard
+ *   - PeriodFilter, StudentFilter, AssignmentFilter, ActiveFiltersSummary
+ *   - RegradeToggles (skip-verified / exclude-graded / exclude-approved)
+ *   - IndividualUploadPanel (+ StudentNameAutocomplete, IndividualResultCard)
+ *   - GradingProgress
+ *   - useIndividualUpload hook (individualUpload state slice + handlers +
+ *     blob-URL revoke effect)
  *
  * Mount: this component is always-mounted with display:none-style hiding from
  * App.jsx (Assistant-tab precedent), so local state survives tab switches.
@@ -82,14 +103,25 @@ export default function GradeTab(props) {
     gradingNotes: "",
     responseSections: [],
   });
-  const [individualUpload, setIndividualUpload] = useState({
-    file: null,
-    studentName: "",
-    studentInfo: null, // Full student info from CSV (id, email, etc.)
-    preview: null,
-    isGrading: false,
-    result: null,
-    showSuggestions: false,
+
+  // CQ wave-2 — individualUpload state slice + handlers + blob-revoke effect
+  // live in the hook (wave-1 useAnalyticsData precedent).
+  const {
+    individualUpload,
+    setIndividualUpload,
+    handleIndividualFileSelect,
+    handleIndividualGrade,
+    clearIndividualUpload,
+    getStudentSuggestions,
+  } = useIndividualUpload({
+    config,
+    globalAINotes,
+    periods,
+    selectedPeriod,
+    periodStudents,
+    gradeAssignment,
+    addToast,
+    setStatus,
   });
 
   // Auto-scroll the activity log to the bottom when new entries arrive.
@@ -103,20 +135,6 @@ export default function GradeTab(props) {
       setShowActivityLog(true);
     }
   }, [status.error]);
-
-  // PR 3 — Codex Round 4 MINOR. Revoke blob URLs created by handleIndividualFileSelect
-  // to prevent memory leaks. Pre-PR-3 the state lived in App and never unmounted, so the
-  // only cleanup path was clearIndividualUpload(). With local state in an always-mounted
-  // GradeTab, the cleanup runs whenever individualUpload.preview changes (the previous
-  // value's URL gets revoked) and on component unmount.
-  useEffect(() => {
-    const url = individualUpload.preview;
-    return () => {
-      if (url && typeof url === "string" && url.startsWith("blob:")) {
-        URL.revokeObjectURL(url);
-      }
-    };
-  }, [individualUpload.preview]);
 
   // PR 3 — Load students from selected period (was App-level loadPeriodStudents).
   const loadPeriodStudents = async (periodFilename) => {
@@ -135,489 +153,25 @@ export default function GradeTab(props) {
     }
   };
 
-  // PR 3 — Handle individual file upload for paper/handwritten assignments.
-  const handleIndividualFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const preview = file.type.startsWith("image/")
-      ? URL.createObjectURL(file)
-      : null;
-    setIndividualUpload((prev) => ({
-      ...prev,
-      file,
-      preview,
-      result: null,
-    }));
-  };
-
-  // PR 3 — Submit the individual upload to /api/grade-individual.
-  const handleIndividualGrade = async () => {
-    if (!individualUpload.file || !individualUpload.studentName.trim()) {
-      addToast("Please select a file and enter the student name", "warning");
-      return;
-    }
-
-    setIndividualUpload((prev) => ({ ...prev, isGrading: true, result: null }));
-
-    try {
-      const formData = new FormData();
-      formData.append("file", individualUpload.file);
-      formData.append("student_name", individualUpload.studentName.trim());
-      formData.append("grade_level", config.grade_level);
-      formData.append("subject", config.subject);
-      formData.append("output_folder", config.output_folder);
-      formData.append("globalAINotes", globalAINotes);
-      formData.append("teacher_name", config.teacher_name || "");
-      formData.append("school_name", config.school_name || "");
-      // Pass class period for differentiated grading
-      if (selectedPeriod) {
-        const periodName = periods.find(p => p.filename === selectedPeriod)?.period_name || '';
-        formData.append("classPeriod", periodName);
-      }
-      // Pass student info from CSV if available
-      if (individualUpload.studentInfo) {
-        formData.append(
-          "studentInfo",
-          JSON.stringify(individualUpload.studentInfo),
-        );
-      }
-      // Pass assignment config if available
-      if (
-        gradeAssignment.gradingNotes ||
-        gradeAssignment.customMarkers?.length > 0 ||
-        gradeAssignment.title
-      ) {
-        formData.append("assignmentConfig", JSON.stringify(gradeAssignment));
-      }
-
-      const authHdrs = await getAuthHeaders();
-      const response = await fetch("/api/grade-individual", {
-        method: "POST",
-        headers: { ...authHdrs },
-        body: formData,
-      });
-      const result = await response.json();
-
-      if (result.error) {
-        addToast("Grading error: " + result.error, "error");
-        setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
-        return;
-      }
-
-      setIndividualUpload((prev) => ({ ...prev, isGrading: false, result }));
-
-      // Add to results list
-      setStatus((prev) => ({
-        ...prev,
-        results: [...prev.results, result],
-      }));
-
-      addToast(
-        `Graded - ${individualUpload.studentName}: ${result.letter_grade} (${result.score}%)`,
-        "success",
-      );
-    } catch (error) {
-      console.error("Individual grading error:", error);
-      addToast("Failed to grade: " + error.message, "error");
-      setIndividualUpload((prev) => ({ ...prev, isGrading: false }));
-    }
-  };
-
-  // PR 3 — Clear the individual upload form. Note: the blob-URL revoke effect
-  // also runs when preview changes, but explicit cleanup here covers the case
-  // where the user clicks the X button without replacing the file.
-  const clearIndividualUpload = () => {
-    if (individualUpload.preview) {
-      URL.revokeObjectURL(individualUpload.preview);
-    }
-    setIndividualUpload({
-      file: null,
-      studentName: "",
-      studentInfo: null,
-      preview: null,
-      isGrading: false,
-      result: null,
-      showSuggestions: false,
-    });
-  };
-
-  // PR 3 — Filter students for the individual-upload autocomplete.
-  const getStudentSuggestions = (input) => {
-    if (!input || input.length < 2) return [];
-    const lowerInput = input.toLowerCase();
-    return periodStudents
-      .filter((s) => {
-        const fullName = s.full?.toLowerCase() || "";
-        const first = s.first?.toLowerCase() || "";
-        const last = s.last?.toLowerCase() || "";
-        return (
-          fullName.includes(lowerInput) ||
-          first.includes(lowerInput) ||
-          last.includes(lowerInput)
-        );
-      })
-      .slice(0, 5); // Limit to 5 suggestions
-  };
-
-  const pct = status.total > 0 ? (status.progress / status.total) * 100 : 0;
-
   return (
     <div data-tutorial="grade-card" className="fade-in">
-      {/* Error Alert Banner */}
-      {status.error && (
-        <div
-          className="glass-card fade-in"
-          style={{
-            padding: "15px 20px",
-            marginBottom: "20px",
-            background: "rgba(248,113,113,0.1)",
-            border: "1px solid rgba(248,113,113,0.4)",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-          }}
-        >
-          <Icon
-            name="AlertTriangle"
-            size={24}
-            style={{ color: "#f87171" }}
-          />
-          <div style={{ flex: 1 }}>
-            <div
-              style={{
-                fontWeight: 600,
-                color: "#f87171",
-                marginBottom: "4px",
-              }}
-            >
-              Grading Stopped - Error Detected
-            </div>
-            <div
-              style={{
-                fontSize: "0.9rem",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {status.error}
-            </div>
-          </div>
-          <button
-            onClick={() =>
-              setStatus((prev) => ({ ...prev, error: null }))
-            }
-            style={{
-              background: "rgba(248,113,113,0.2)",
-              border: "none",
-              borderRadius: "8px",
-              padding: "8px 12px",
-              color: "#f87171",
-              cursor: "pointer",
-              fontSize: "0.85rem",
-              fontWeight: 500,
-            }}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+      <ErrorBanner status={status} setStatus={setStatus} />
 
-      {/* Assignment Grading Modes - Collapsible */}
-      {savedAssignments.length > 0 && (
-        <div
-          className="glass-card"
-          style={{
-            padding: gradingModesExpanded ? "15px 20px" : "12px 20px",
-            marginBottom: "20px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              cursor: "pointer",
-            }}
-            onClick={() => setGradingModesExpanded(!gradingModesExpanded)}
-          >
-            <h3
-              style={{
-                fontSize: "1rem",
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                margin: 0,
-              }}
-            >
-              <Icon
-                name={gradingModesExpanded ? "ChevronDown" : "ChevronRight"}
-                size={18}
-              />
-              <Icon name="FileCheck" size={18} style={{ color: "#10b981" }} />
-              Assignment Grading Modes
-              <span
-                style={{
-                  fontSize: "0.8rem",
-                  color: "var(--text-muted)",
-                  fontWeight: 400,
-                }}
-              >
-                ({savedAssignments.filter(n => savedAssignmentData[n]?.completionOnly).length} completion-only)
-              </span>
-            </h3>
-          </div>
+      <GradingModesPanel
+        savedAssignments={savedAssignments}
+        savedAssignmentData={savedAssignmentData}
+        setSavedAssignmentData={setSavedAssignmentData}
+        addToast={addToast}
+        gradingModesExpanded={gradingModesExpanded}
+        setGradingModesExpanded={setGradingModesExpanded}
+      />
 
-          {gradingModesExpanded && (
-            <div style={{ marginTop: "15px" }}>
-              <p
-                style={{
-                  fontSize: "0.85rem",
-                  color: "var(--text-muted)",
-                  marginBottom: "12px",
-                }}
-              >
-                Toggle assignments between AI grading and completion-only tracking.
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  maxHeight: "250px",
-                  overflowY: "auto",
-                }}
-              >
-                {savedAssignments.map((name) => {
-                  const isCompletionOnly = savedAssignmentData[name]?.completionOnly || false;
-                  return (
-                    <div
-                      key={name}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 12px",
-                        borderRadius: "8px",
-                        background: isCompletionOnly
-                          ? "rgba(34, 197, 94, 0.1)"
-                          : "rgba(99, 102, 241, 0.05)",
-                        border: isCompletionOnly
-                          ? "1px solid rgba(34, 197, 94, 0.3)"
-                          : "1px solid var(--glass-border)",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <Icon
-                          name={isCompletionOnly ? "CheckCircle" : "FileText"}
-                          size={18}
-                          style={{ color: isCompletionOnly ? "#22c55e" : "#6366f1" }}
-                        />
-                        <span style={{ fontWeight: 500 }}>{name}</span>
-                        {isCompletionOnly && (
-                          <span
-                            style={{
-                              fontSize: "0.7rem",
-                              background: "rgba(34, 197, 94, 0.2)",
-                              color: "#22c55e",
-                              padding: "2px 8px",
-                              borderRadius: "10px",
-                              fontWeight: 600,
-                            }}
-                          >
-                            COMPLETION
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        className="btn"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const newData = {
-                            ...savedAssignmentData[name],
-                            completionOnly: !isCompletionOnly,
-                          };
-                          setSavedAssignmentData(prev => ({
-                            ...prev,
-                            [name]: newData,
-                          }));
-                          try {
-                            // Load the full assignment first to preserve all data (including importedDoc)
-                            const fullData = await api.loadAssignment(name);
-                            if (fullData.assignment) {
-                              await api.saveAssignmentConfig({
-                                ...fullData.assignment,
-                                completionOnly: !isCompletionOnly,
-                              });
-                            } else {
-                              // Fallback if load fails
-                              await api.saveAssignmentConfig({
-                                ...newData,
-                                title: name,
-                                completionOnly: !isCompletionOnly,
-                              });
-                            }
-                            addToast(
-                              `"${name}" set to ${!isCompletionOnly ? "Completion Only" : "AI Grading"}`,
-                              "success"
-                            );
-                          } catch (e) {
-                            addToast("Error saving: " + e.message, "error");
-                          }
-                        }}
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: "0.8rem",
-                          background: isCompletionOnly ? "rgba(34, 197, 94, 0.2)" : "rgba(99, 102, 241, 0.2)",
-                          color: isCompletionOnly ? "#22c55e" : "#818cf8",
-                          border: `1px solid ${isCompletionOnly ? "rgba(34, 197, 94, 0.4)" : "rgba(99, 102, 241, 0.4)"}`,
-                        }}
-                        title={isCompletionOnly ? "Click to enable AI grading" : "Click to set as completion only"}
-                      >
-                        <Icon name={isCompletionOnly ? "CheckCircle" : "Sparkles"} size={14} style={{ marginRight: "6px" }} />
-                        {isCompletionOnly ? "Completion Only" : "AI Grading"}
-                      </button>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <Icon name="Clock" size={14} style={{ color: (() => { const dd = savedAssignmentData[name]?.dueDate; if (!dd) return "var(--text-muted)"; return new Date(dd) < new Date() ? "#f87171" : "#fbbf24"; })() }} />
-                        <input
-                          type="date"
-                          className="input"
-                          value={(savedAssignmentData[name]?.dueDate || "").slice(0, 10)}
-                          onChange={async (e) => {
-                            const dateVal = e.target.value ? e.target.value + "T23:59" : "";
-                            setSavedAssignmentData(prev => ({ ...prev, [name]: { ...prev[name], dueDate: dateVal } }));
-                            try {
-                              const fullData = await api.loadAssignment(name);
-                              if (fullData.assignment) {
-                                await api.saveAssignmentConfig({ ...fullData.assignment, dueDate: dateVal });
-                              }
-                              addToast(dateVal ? "Due date set for " + name : "Due date cleared for " + name, "success");
-                            } catch (err) {
-                              addToast("Error saving due date: " + err.message, "error");
-                            }
-                          }}
-                          style={{ width: "130px", fontSize: "0.75rem", padding: "4px 6px", height: "30px" }}
-                          title={savedAssignmentData[name]?.dueDate ? "Due: " + new Date(savedAssignmentData[name].dueDate).toLocaleDateString() : "Set due date"}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Activity Monitor - Horizontal Collapsible */}
-      <div
-        className="glass-card"
-        style={{
-          padding: "15px 20px",
-          marginBottom: "20px",
-          background: status.error
-            ? "rgba(248,113,113,0.05)"
-            : status.is_running
-              ? "rgba(74,222,128,0.05)"
-              : "var(--glass-bg)",
-          border: `1px solid ${
-            status.error
-              ? "rgba(248,113,113,0.3)"
-              : status.is_running
-                ? "rgba(74,222,128,0.3)"
-                : "var(--glass-border)"
-          }`,
-        }}
-      >
-        <button
-          onClick={() => setShowActivityLog(!showActivityLog)}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--text-primary)",
-            padding: 0,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-            }}
-          >
-            <Icon
-              name={status.error ? "AlertCircle" : "Terminal"}
-              size={18}
-              style={{
-                color: status.error
-                  ? "#f87171"
-                  : status.is_running
-                    ? "#4ade80"
-                    : "var(--text-secondary)",
-              }}
-            />
-            <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>
-              Activity Monitor
-            </span>
-            {status.error && (
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  padding: "3px 10px",
-                  borderRadius: "12px",
-                  background: "rgba(248,113,113,0.2)",
-                  color: "#f87171",
-                  fontWeight: 500,
-                }}
-              >
-                Error
-              </span>
-            )}
-            {status.is_running && !status.error && (
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  padding: "3px 10px",
-                  borderRadius: "12px",
-                  background: "rgba(74,222,128,0.2)",
-                  color: "#4ade80",
-                  fontWeight: 500,
-                }}
-              >
-                Running...
-              </span>
-            )}
-            {status.log.length > 0 && (
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  padding: "3px 8px",
-                  borderRadius: "8px",
-                  background: "var(--input-bg)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {status.log.length} entries
-              </span>
-            )}
-          </div>
-          <Icon
-            name={showActivityLog ? "ChevronUp" : "ChevronDown"}
-            size={18}
-            style={{ color: "var(--text-muted)" }}
-          />
-        </button>
-
-        <ActivityLog
-          ref={logRef}
-          open={showActivityLog}
-          log={status.log}
-        />
-      </div>
+      <ActivityMonitorCard
+        status={status}
+        showActivityLog={showActivityLog}
+        setShowActivityLog={setShowActivityLog}
+        logRef={logRef}
+      />
 
       {/* Full width layout */}
       <div className="glass-card" style={{ padding: "25px" }}>
@@ -635,1032 +189,71 @@ export default function GradeTab(props) {
           Start Grading
         </h2>
 
-        {/* Period Filter - Show when periods exist */}
-        {periods.length > 0 && (
-          <div
-            data-tutorial="grade-period-filter"
-            style={{
-              padding: "15px",
-              background:
-                "linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.05))",
-              borderRadius: "12px",
-              border: "1px solid rgba(99, 102, 241, 0.2)",
-              marginBottom: "20px",
-            }}
-          >
-            <label
-              className="label"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <Icon
-                name="Users"
-                size={16}
-                style={{ color: "var(--accent-primary)" }}
-              />
-              Filter by Class Period
-            </label>
-            <select
-              className="input"
-              value={selectedPeriod}
-              onChange={async (e) => {
-                const periodFilename = e.target.value;
-                setSelectedPeriod(periodFilename);
-                setGradeFilterStudent(""); // Clear student filter when period changes
-                await loadPeriodStudents(periodFilename);
-              }}
-              style={{ cursor: "pointer" }}
-            >
-              <option value="">All Periods (No Filter)</option>
-              {sortedPeriods.map((p) => (
-                <option key={p.filename} value={p.filename}>
-                  {p.period_name} ({p.row_count} students)
-                </option>
-              ))}
-            </select>
-            {selectedPeriod && periodStudents.length > 0 && (
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  color: "var(--accent-primary)",
-                  marginTop: "8px",
-                  fontWeight: 500,
-                }}
-              >
-                ✓ Filtering to {periodStudents.length} students in{" "}
-                {
-                  sortedPeriods.find(
-                    (p) => p.filename === selectedPeriod,
-                  )?.period_name
-                }
-              </p>
-            )}
-          </div>
-        )}
+        <PeriodFilter
+          periods={periods}
+          sortedPeriods={sortedPeriods}
+          selectedPeriod={selectedPeriod}
+          setSelectedPeriod={setSelectedPeriod}
+          setGradeFilterStudent={setGradeFilterStudent}
+          loadPeriodStudents={loadPeriodStudents}
+          periodStudents={periodStudents}
+        />
 
-        {/* Student Filter */}
-        <div
-          data-tutorial="grade-student-filter"
-          style={{
-            padding: "15px",
-            background:
-              "linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(124, 58, 237, 0.05))",
-            borderRadius: "12px",
-            border: "1px solid rgba(139, 92, 246, 0.2)",
-            marginBottom: "20px",
-          }}
-        >
-          <label
-            className="label"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <Icon
-              name="User"
-              size={16}
-              style={{ color: "#8b5cf6" }}
-            />
-            Filter by Student
-          </label>
-          {selectedPeriod && periodStudents.length > 0 ? (
-            <select
-              className="input"
-              value={gradeFilterStudent}
-              onChange={(e) =>
-                setGradeFilterStudent(e.target.value)
-              }
-              style={{ cursor: "pointer" }}
-            >
-              <option value="">All Students in Period</option>
-              {periodStudents.map((student, idx) => {
-                const displayName =
-                  student.full ||
-                  student.name ||
-                  `${student.first || ""} ${student.last || ""}`.trim() ||
-                  String(student);
-                return (
-                  <option key={idx} value={displayName}>
-                    {displayName}
-                  </option>
-                );
-              })}
-            </select>
-          ) : (
-            <div style={{ position: "relative" }}>
-              <input
-                type="text"
-                className="input"
-                list="grade-student-suggestions"
-                value={gradeFilterStudent}
-                onChange={(e) =>
-                  setGradeFilterStudent(e.target.value)
-                }
-                onClick={(e) => {
-                  if (gradeFilterStudent) {
-                    e.target.dataset.prev = gradeFilterStudent;
-                    setGradeFilterStudent("");
-                  }
-                }}
-                onBlur={(e) => {
-                  if (
-                    !gradeFilterStudent &&
-                    e.target.dataset.prev
-                  ) {
-                    setGradeFilterStudent(e.target.dataset.prev);
-                    e.target.dataset.prev = "";
-                  }
-                }}
-                placeholder={
-                  sortedPeriods.length > 0
-                    ? "Type or select student..."
-                    : "Type student name to filter..."
-                }
-                style={{
-                  fontSize: "0.9rem",
-                  paddingRight: gradeFilterStudent
-                    ? "30px"
-                    : undefined,
-                }}
-              />
-              {gradeFilterStudent && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setGradeFilterStudent("");
-                  }}
-                  style={{
-                    position: "absolute",
-                    right: "8px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#888",
-                    padding: "4px",
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                  title="Clear"
-                >
-                  <Icon name="X" size={14} />
-                </button>
-              )}
-              <datalist id="grade-student-suggestions">
-                {sortedPeriods
-                  .flatMap((p) => p.students || [])
-                  .map((s, i) => {
-                    const name =
-                      s.full ||
-                      s.name ||
-                      (
-                        (s.first || "") +
-                        " " +
-                        (s.last || "")
-                      ).trim();
-                    return <option key={i} value={name} />;
-                  })}
-              </datalist>
-            </div>
-          )}
-          {gradeFilterStudent && (
-            <p
-              style={{
-                fontSize: "0.75rem",
-                color: "#8b5cf6",
-                marginTop: "8px",
-                fontWeight: 500,
-              }}
-            >
-              ✓ Will only grade files for "{gradeFilterStudent}"
-            </p>
-          )}
-        </div>
+        <StudentFilter
+          selectedPeriod={selectedPeriod}
+          periodStudents={periodStudents}
+          sortedPeriods={sortedPeriods}
+          gradeFilterStudent={gradeFilterStudent}
+          setGradeFilterStudent={setGradeFilterStudent}
+        />
 
-        {/* Assignment Filter */}
-        {savedAssignments.length > 0 && (
-          <div
-            data-tutorial="grade-assignment-filter"
-            style={{
-              padding: "15px",
-              background:
-                "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
-              borderRadius: "12px",
-              border: "1px solid rgba(16, 185, 129, 0.2)",
-              marginBottom: "20px",
-            }}
-          >
-            <label
-              className="label"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <Icon
-                name="FileText"
-                size={16}
-                style={{ color: "#10b981" }}
-              />
-              Filter by Assignment
-            </label>
-            <select
-              className="input"
-              value={gradeFilterAssignment}
-              onChange={async (e) => {
-                const assignmentName = e.target.value;
-                setGradeFilterAssignment(assignmentName);
-                // Auto-load the assignment config when selected
-                if (assignmentName) {
-                  try {
-                    const data =
-                      await api.loadAssignment(assignmentName);
-                    if (data.assignment) {
-                      setGradeAssignment({
-                        ...data.assignment,
-                        title: data.assignment.title || "",
-                        customMarkers:
-                          data.assignment.customMarkers || [],
-                        gradingNotes:
-                          data.assignment.gradingNotes || "",
-                        responseSections:
-                          data.assignment.responseSections || [],
-                        excludeMarkers:
-                          data.assignment.excludeMarkers || [],
-                      });
-                      // PR 4: setGradeImportedDoc was removed — that App-level
-                      // state was dead (set but never read).
-                      addToast(
-                        `Loaded "${assignmentName}"`,
-                        "success",
-                      );
-                    }
-                  } catch (err) {
-                    console.error("Load error:", err);
-                  }
-                }
-              }}
-              style={{ cursor: "pointer" }}
-            >
-              <option value="">Select Assignment...</option>
-              {savedAssignments.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                  {savedAssignmentData[name]?.completionOnly
-                    ? " (Completion)"
-                    : ""}
-                </option>
-              ))}
-            </select>
-            {gradeFilterAssignment && (
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  color: "#10b981",
-                  marginTop: "8px",
-                  fontWeight: 500,
-                }}
-              >
-                ✓ Using "{gradeFilterAssignment}" configuration
-              </p>
-            )}
-          </div>
-        )}
+        <AssignmentFilter
+          savedAssignments={savedAssignments}
+          savedAssignmentData={savedAssignmentData}
+          gradeFilterAssignment={gradeFilterAssignment}
+          setGradeFilterAssignment={setGradeFilterAssignment}
+          setGradeAssignment={setGradeAssignment}
+          addToast={addToast}
+        />
 
-        {/* Active Filters Summary */}
-        {(gradeFilterStudent || gradeFilterAssignment) && (
-          <div
-            style={{
-              padding: "12px 15px",
-              background: "rgba(251, 191, 36, 0.1)",
-              borderRadius: "10px",
-              border: "1px solid rgba(251, 191, 36, 0.3)",
-              marginBottom: "20px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: "10px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                flexWrap: "wrap",
-              }}
-            >
-              <Icon
-                name="Filter"
-                size={16}
-                style={{ color: "#f59e0b" }}
-              />
-              <span
-                style={{
-                  fontSize: "0.85rem",
-                  color: "#f59e0b",
-                  fontWeight: 600,
-                }}
-              >
-                Active Filters:
-              </span>
-              {gradeFilterStudent && (
-                <span
-                  style={{
-                    padding: "4px 10px",
-                    background: "rgba(99, 102, 241, 0.2)",
-                    borderRadius: "6px",
-                    fontSize: "0.8rem",
-                    color: "var(--accent-primary)",
-                  }}
-                >
-                  Student: {gradeFilterStudent}
-                </span>
-              )}
-              {gradeFilterAssignment && (
-                <span
-                  style={{
-                    padding: "4px 10px",
-                    background: "rgba(16, 185, 129, 0.2)",
-                    borderRadius: "6px",
-                    fontSize: "0.8rem",
-                    color: "#10b981",
-                  }}
-                >
-                  Assignment: {gradeFilterAssignment}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => {
-                setGradeFilterStudent("");
-                setGradeFilterAssignment("");
-              }}
-              style={{
-                padding: "4px 10px",
-                background: "rgba(239, 68, 68, 0.1)",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-                borderRadius: "6px",
-                color: "#ef4444",
-                fontSize: "0.8rem",
-                cursor: "pointer",
-              }}
-            >
-              Clear Filters
-            </button>
-          </div>
-        )}
+        <ActiveFiltersSummary
+          gradeFilterStudent={gradeFilterStudent}
+          gradeFilterAssignment={gradeFilterAssignment}
+          setGradeFilterStudent={setGradeFilterStudent}
+          setGradeFilterAssignment={setGradeFilterAssignment}
+        />
 
         {/* PR 4 deleted the dead "Matching Files Preview" block here — it
             depended on availableFiles (always empty after the portal-only
             workflow shipped) and selectedFiles (a stub). The whole block
             was unreachable. */}
 
-        {/* Skip Verified Toggle - Show when there are unverified results */}
-        {status.results &&
-          status.results.some(
-            (r) => r.marker_status === "unverified",
-          ) && (
-            <div
-              style={{
-                padding: "15px",
-                background:
-                  "linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.05))",
-                borderRadius: "12px",
-                border: "1px solid rgba(251, 191, 36, 0.3)",
-                marginBottom: "20px",
-              }}
-            >
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={skipVerified}
-                  onChange={(e) =>
-                    setSkipVerified(e.target.checked)
-                  }
-                  style={{
-                    width: "18px",
-                    height: "18px",
-                    cursor: "pointer",
-                  }}
-                />
-                <div>
-                  <span
-                    style={{ fontWeight: 600, color: "#fbbf24" }}
-                  >
-                    Regrade All (Including Verified)
-                  </span>
-                  <p
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "var(--text-secondary)",
-                      margin: "4px 0 0 0",
-                    }}
-                  >
-                    {`Check to also regrade ${status.results.filter((r) => r.marker_status === "verified").length} verified grades. ${status.results.filter((r) => r.marker_status === "unverified").length} unverified will always be regraded.`}
-                  </p>
-                </div>
-              </label>
-            </div>
-          )}
-
-        {/* Exclude students already graded in this session */}
-        {status.results.length > 0 && (
-          <div
-            className="glass-card"
-            style={{
-              padding: "15px 20px",
-              marginBottom: "20px",
-              background: "rgba(34, 197, 94, 0.05)",
-              border: "1px solid rgba(34, 197, 94, 0.2)",
-            }}
-          >
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={excludeGradedStudents}
-                onChange={(e) =>
-                  setExcludeGradedStudents(e.target.checked)
-                }
-                style={{
-                  width: "18px",
-                  height: "18px",
-                  cursor: "pointer",
-                }}
-              />
-              <div>
-                <span
-                  style={{ fontWeight: 600, color: "#22c55e" }}
-                >
-                  Exclude Already Graded Files
-                </span>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-secondary)",
-                    margin: "4px 0 0 0",
-                  }}
-                >
-                  Skip {(() => {
-                    // Filter results by current assignment filter
-                    let relevantResults = status.results;
-                    if (gradeFilterAssignment) {
-                      const cfg = savedAssignmentData[gradeFilterAssignment] || {};
-                      const importedFn = (cfg.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
-                      const names = [gradeFilterAssignment, cfg.title || "", ...(cfg.aliases || []), importedFn].filter(Boolean).map(n => n.toLowerCase());
-                      relevantResults = status.results.filter((r) => {
-                        const rAssign = (r.assignment || "").toLowerCase();
-                        const rFile = (r.filename || "").toLowerCase();
-                        return names.some(n => rAssign.includes(n) || rFile.includes(n) || n.includes(rAssign));
-                      });
-                    }
-                    return relevantResults.length;
-                  })()} file(s) already graded{gradeFilterAssignment ? ` for "${gradeFilterAssignment}"` : ""}.
-                  Only grade new files.
-                </p>
-              </div>
-            </label>
-          </div>
-        )}
-
-        {/* Exclude students already approved */}
-        {status.results.length > 0 && Object.values(emailApprovals).some((v) => v === "approved") && (
-          <div
-            className="glass-card"
-            style={{
-              padding: "15px 20px",
-              marginBottom: "20px",
-              background: "rgba(34, 197, 94, 0.05)",
-              border: "1px solid rgba(34, 197, 94, 0.2)",
-            }}
-          >
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={excludeApprovedStudents}
-                onChange={(e) =>
-                  setExcludeApprovedStudents(e.target.checked)
-                }
-                style={{
-                  width: "18px",
-                  height: "18px",
-                  cursor: "pointer",
-                }}
-              />
-              <div>
-                <span
-                  style={{ fontWeight: 600, color: "#22c55e" }}
-                >
-                  Exclude Already Approved
-                </span>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-secondary)",
-                    margin: "4px 0 0 0",
-                  }}
-                >
-                  Skip {(() => {
-                    // Count approved results, optionally filtered by assignment
-                    let count = 0;
-                    if (gradeFilterAssignment) {
-                      const cfg = savedAssignmentData[gradeFilterAssignment] || {};
-                      const importedFn = (cfg.importedFilename || "").toLowerCase().replace(/\.[^/.]+$/, "");
-                      const names = [gradeFilterAssignment, cfg.title || "", ...(cfg.aliases || []), importedFn].filter(Boolean).map(n => n.toLowerCase());
-                      status.results.forEach((r, idx) => {
-                        if (emailApprovals[idx] !== "approved") return;
-                        const rAssign = (r.assignment || "").toLowerCase();
-                        const rFile = (r.filename || "").toLowerCase();
-                        if (names.some(n => rAssign.includes(n) || rFile.includes(n) || n.includes(rAssign))) {
-                          count++;
-                        }
-                      });
-                    } else {
-                      status.results.forEach((r, idx) => {
-                        if (emailApprovals[idx] === "approved") count++;
-                      });
-                    }
-                    return count;
-                  })()} approved file(s){gradeFilterAssignment ? ` for "${gradeFilterAssignment}"` : ""}.
-                  Only re-grade unapproved files.
-                </p>
-              </div>
-            </label>
-          </div>
-        )}
+        <RegradeToggles
+          status={status}
+          emailApprovals={emailApprovals}
+          savedAssignmentData={savedAssignmentData}
+          gradeFilterAssignment={gradeFilterAssignment}
+          skipVerified={skipVerified}
+          setSkipVerified={setSkipVerified}
+          excludeGradedStudents={excludeGradedStudents}
+          setExcludeGradedStudents={setExcludeGradedStudents}
+          excludeApprovedStudents={excludeApprovedStudents}
+          setExcludeApprovedStudents={setExcludeApprovedStudents}
+        />
 
         {/* Grading Notes removed from Grade tab — use Grading Setup (Builder) instead */}
 
-        {/* Individual Upload - For Paper/Handwritten Assignments */}
-        <div
-          data-tutorial="grade-individual"
-          style={{
-            marginTop: "20px",
-            padding: "20px",
-            borderRadius: "16px",
-            background:
-              "linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05))",
-            border: "1px solid rgba(16, 185, 129, 0.2)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "15px",
-            }}
-          >
-            <div
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "10px",
-                background: "rgba(16, 185, 129, 0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Icon
-                name="Camera"
-                size={20}
-                style={{ color: "#10b981" }}
-              />
-            </div>
-            <div>
-              <h4 style={{ margin: 0, fontWeight: 600 }}>
-                Individual Upload
-              </h4>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.75rem",
-                  color: "var(--text-muted)",
-                }}
-              >
-                For paper/handwritten assignments (uses GPT-4o
-                vision)
-              </p>
-            </div>
-          </div>
+        <IndividualUploadPanel
+          individualUpload={individualUpload}
+          setIndividualUpload={setIndividualUpload}
+          periodStudents={periodStudents}
+          getStudentSuggestions={getStudentSuggestions}
+          handleIndividualFileSelect={handleIndividualFileSelect}
+          handleIndividualGrade={handleIndividualGrade}
+          clearIndividualUpload={clearIndividualUpload}
+        />
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: individualUpload.preview
-                ? "1fr 1fr"
-                : "1fr",
-              gap: "15px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-              }}
-            >
-              {/* Student Name with Autocomplete */}
-              <div style={{ position: "relative" }}>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder={
-                    periodStudents.length > 0
-                      ? "Start typing student name..."
-                      : "Student name..."
-                  }
-                  value={individualUpload.studentName}
-                  onChange={(e) =>
-                    setIndividualUpload((prev) => ({
-                      ...prev,
-                      studentName: e.target.value,
-                      studentInfo: null, // Clear selected student when typing
-                      showSuggestions: e.target.value.length >= 2,
-                    }))
-                  }
-                  onFocus={() =>
-                    setIndividualUpload((prev) => ({
-                      ...prev,
-                      showSuggestions: prev.studentName.length >= 2,
-                    }))
-                  }
-                  onBlur={() =>
-                    setTimeout(
-                      () =>
-                        setIndividualUpload((prev) => ({
-                          ...prev,
-                          showSuggestions: false,
-                        })),
-                      200,
-                    )
-                  }
-                />
-                {/* Autocomplete Dropdown */}
-                {individualUpload.showSuggestions &&
-                  getStudentSuggestions(
-                    individualUpload.studentName,
-                  ).length > 0 && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "100%",
-                        left: 0,
-                        right: 0,
-                        background: "var(--card-bg)",
-                        border: "1px solid var(--glass-border)",
-                        borderRadius: "8px",
-                        marginTop: "4px",
-                        zIndex: 100,
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                        maxHeight: "200px",
-                        overflowY: "auto",
-                      }}
-                    >
-                      {getStudentSuggestions(
-                        individualUpload.studentName,
-                      ).map((student, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() =>
-                            setIndividualUpload((prev) => ({
-                              ...prev,
-                              studentName:
-                                student.full ||
-                                `${student.first} ${student.last}`,
-                              studentInfo: student,
-                              showSuggestions: false,
-                            }))
-                          }
-                          style={{
-                            padding: "10px 12px",
-                            cursor: "pointer",
-                            borderBottom:
-                              idx <
-                              getStudentSuggestions(
-                                individualUpload.studentName,
-                              ).length -
-                                1
-                                ? "1px solid var(--glass-border)"
-                                : "none",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.target.style.background =
-                              "var(--glass-bg)")
-                          }
-                          onMouseLeave={(e) =>
-                            (e.target.style.background =
-                              "transparent")
-                          }
-                        >
-                          <Icon
-                            name="User"
-                            size={16}
-                            style={{ color: "var(--text-muted)" }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 500 }}>
-                              {student.full ||
-                                `${student.first} ${student.last}`}
-                            </div>
-                            {student.email && (
-                              <div
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "var(--text-muted)",
-                                }}
-                              >
-                                {student.email}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                {/* Selected Student Indicator */}
-                {individualUpload.studentInfo && (
-                  <div
-                    style={{
-                      marginTop: "6px",
-                      fontSize: "0.75rem",
-                      color: "#10b981",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    <Icon name="CheckCircle" size={12} />
-                    Student matched from roster
-                  </div>
-                )}
-              </div>
-
-              <div
-                onClick={() =>
-                  document
-                    .getElementById("individualFileInput")
-                    ?.click()
-                }
-                style={{
-                  padding: "20px",
-                  border: "2px dashed var(--glass-border)",
-                  borderRadius: "10px",
-                  textAlign: "center",
-                  cursor: "pointer",
-                  background: individualUpload.file
-                    ? "rgba(16, 185, 129, 0.1)"
-                    : "var(--glass-bg)",
-                }}
-              >
-                <input
-                  id="individualFileInput"
-                  type="file"
-                  accept="image/*,.pdf,.heic,.heif"
-                  onChange={handleIndividualFileSelect}
-                  style={{ display: "none" }}
-                />
-                {individualUpload.file ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <Icon
-                      name="CheckCircle"
-                      size={20}
-                      style={{ color: "#10b981" }}
-                    />
-                    <span
-                      style={{
-                        fontWeight: 500,
-                        fontSize: "0.9rem",
-                      }}
-                    >
-                      {individualUpload.file.name}
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <Icon
-                      name="Upload"
-                      size={24}
-                      style={{ color: "var(--text-muted)" }}
-                    />
-                    <p
-                      style={{
-                        margin: "8px 0 0",
-                        fontSize: "0.85rem",
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      Click to upload image
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={handleIndividualGrade}
-                  disabled={
-                    !individualUpload.file ||
-                    !individualUpload.studentName.trim() ||
-                    individualUpload.isGrading
-                  }
-                  className="btn btn-primary"
-                  style={{
-                    flex: 1,
-                    opacity:
-                      !individualUpload.file ||
-                      !individualUpload.studentName.trim() ||
-                      individualUpload.isGrading
-                        ? 0.5
-                        : 1,
-                  }}
-                >
-                  {individualUpload.isGrading ? (
-                    <>Grading...</>
-                  ) : (
-                    <>
-                      <Icon name="Sparkles" size={16} />
-                      Grade
-                    </>
-                  )}
-                </button>
-                {individualUpload.file && (
-                  <button
-                    onClick={clearIndividualUpload}
-                    className="btn btn-secondary"
-                    style={{ padding: "8px 12px" }}
-                    aria-label="Clear individual upload"
-                    title="Clear individual upload"
-                  >
-                    <Icon name="X" size={16} />
-                  </button>
-                )}
-              </div>
-
-              {individualUpload.result && (
-                <div
-                  style={{
-                    padding: "12px",
-                    borderRadius: "10px",
-                    background: "rgba(16, 185, 129, 0.15)",
-                    border: "1px solid rgba(16, 185, 129, 0.3)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "1.5rem",
-                        fontWeight: 800,
-                        color: "#10b981",
-                      }}
-                    >
-                      {individualUpload.result.letter_grade}
-                    </span>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>
-                        {individualUpload.result.score}%
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {individualUpload.studentName}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {individualUpload.preview && (
-              <div
-                style={{
-                  borderRadius: "10px",
-                  overflow: "hidden",
-                  border: "1px solid var(--glass-border)",
-                }}
-              >
-                <img
-                  src={individualUpload.preview}
-                  alt="Preview"
-                  style={{
-                    width: "100%",
-                    height: "auto",
-                    maxHeight: "250px",
-                    objectFit: "contain",
-                    background: "#fff",
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Progress */}
-        {status.is_running && (
-          <div style={{ marginTop: "20px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "8px",
-                fontSize: "0.9rem",
-              }}
-            >
-              <span>Progress</span>
-              <span>
-                {status.progress}/{status.total}
-              </span>
-            </div>
-            <div
-              style={{
-                height: "8px",
-                background: "var(--btn-secondary-bg)",
-                borderRadius: "4px",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${pct}%`,
-                  background:
-                    "linear-gradient(90deg, #6366f1, #8b5cf6)",
-                  transition: "width 0.3s",
-                }}
-              />
-            </div>
-            {status.current_file && (
-              <p
-                style={{
-                  marginTop: "8px",
-                  fontSize: "0.85rem",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                {status.current_file}
-              </p>
-            )}
-            {status.session_cost && status.session_cost.total_cost > 0 && (
-              <div style={{
-                display: "flex", gap: "16px", fontSize: "0.8rem",
-                color: "var(--text-secondary)", marginTop: "8px"
-              }}>
-                <span>Cost: ${status.session_cost.total_cost.toFixed(4)}</span>
-                <span>Tokens: {(status.session_cost.total_input_tokens + status.session_cost.total_output_tokens).toLocaleString()}</span>
-                <span>API Calls: {status.session_cost.total_api_calls}</span>
-              </div>
-            )}
-          </div>
-        )}
+        <GradingProgress status={status} />
 
         {/* PR 4 deleted the pre-grading cost-estimate banner here — it gated
             on selectedFiles.length > 0, which was always 0 after the dead
