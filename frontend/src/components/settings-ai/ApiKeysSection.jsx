@@ -40,6 +40,12 @@ export default function ApiKeysSection(props) {
                   gap: "15px",
                 }}
               >
+                {/* The three key fields below are near-identical ON PURPOSE:
+                    they are verbatim relocations from the pre-split monolith
+                    (CQ wave 5, Class A discipline — moving code, not adding
+                    logic). Do NOT "DRY" them into one parameterized component
+                    without a dedicated Class B PR: key handling must stay
+                    byte-auditable per provider. */}
                 {/* OpenAI API Key */}
                 <OpenAIKeyField {...props} />
 
