@@ -1,12 +1,18 @@
 import { defineConfig } from '@playwright/test'
 
+// E2E_BASE_URL override (hardening sprint PR5): lets a local verification
+// run point at a backend spawned on a non-default port (PORT env, see
+// backend/app.py) — e.g. a GRAIDER_FAKE_SUPABASE=1 backend on :3100 while
+// the regular dev server keeps :3000. CI never sets it; default unchanged.
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 45000,
   retries: 1,
   workers: 2,  // Limit parallelism to reduce API contention
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: BASE_URL,
     headless: true,
     screenshot: 'only-on-failure',
   },
@@ -35,7 +41,7 @@ export default defineConfig({
   // job's "always-fresh-server" semantics unchanged.
   webServer: {
     command: 'npm run build && (cd .. && ${PYTHON:-./venv/bin/python} backend/app.py)',
-    url: 'http://localhost:3000',
+    url: BASE_URL,
     reuseExistingServer: process.env.E2E_REUSE_BACKEND === '1' || !process.env.CI,
     timeout: 120_000,
     stdout: 'pipe',

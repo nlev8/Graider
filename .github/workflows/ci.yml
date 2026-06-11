@@ -169,6 +169,118 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  frontend-e2e-extended:
+    # Hardening sprint PR5 (e2e de-skip wave 1): runs the 5 promoted
+    # Playwright specs whose `test.skip(!joinCode)` masks were replaced
+    # with real API-driven fixtures (helpers.publishAssessmentStrict).
+    # The backend is spawned with GRAIDER_FAKE_SUPABASE=1 (test-only,
+    # dev-mode-gated hook in backend/supabase_client.py) so the join-code
+    # publish → student-take → results flow runs hermetically against the
+    # in-memory fake in backend/testing/fake_supabase.py — no live
+    # Supabase project, no AI keys (MC/TF/matching grading is
+    # deterministic; the one short-answer submit exercises the
+    # celery-enqueue-failure → thread-grading fallback, whose background
+    # AI call fails harmlessly against the stub key).
+    #
+    # NON-REQUIRED on creation. Promotion playbook (mirrors the 2026-05-11
+    # Frontend E2E Smoke promotion): observe >=15 consecutive green runs
+    # on main, then an admin adds "Frontend E2E Extended" to the branch
+    # protection required_status_checks. Do NOT rename this job without
+    # updating that rule (see CLAUDE.md "CI job names are locked").
+    name: Frontend E2E Extended
+    runs-on: ubuntu-latest
+    needs: [frontend-build]
+    env:
+      FLASK_ENV: development
+      FLASK_SECRET_KEY: ci-test-secret-not-for-production
+      # Stub OpenAI — promoted specs never need a real grading model.
+      OPENAI_API_KEY: sk-ci-stub
+      # Activate the in-memory Supabase fake (fail-closed: the gate
+      # raises unless FLASK_ENV is a dev/test value).
+      GRAIDER_FAKE_SUPABASE: '1'
+      # Intentionally unreachable broker: a short-answer submission's
+      # grade_portal_submission.delay() must hit the documented
+      # kombu OperationalError fallback (student_portal_routes.py)
+      # instead of crashing on the missing-CELERY_BROKER_URL import
+      # guard in backend/celery_app.py.
+      CELERY_BROKER_URL: redis://127.0.0.1:6390/1
+      PYTHON: python3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend deps
+        run: pip install --require-hashes -r requirements.txt
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Guard — promoted specs contain zero conditional skips
+        # The whole point of PR5 is removing silent-skip masking. If a
+        # test.skip( creeps back into a promoted spec, fail loudly here
+        # rather than letting the suite go green by skipping.
+        run: |
+          if grep -n 'test\.skip(' \
+            frontend/e2e/student-mc-grading.spec.js \
+            frontend/e2e/student-tf-grading.spec.js \
+            frontend/e2e/student-matching.spec.js \
+            frontend/e2e/student-error-states.spec.js \
+            frontend/e2e/student-portal.spec.js; then
+            echo "::error::Promoted e2e specs must not contain test.skip( — masks were removed in PR5"
+            exit 1
+          fi
+
+      - name: Run promoted E2E specs
+        # --workers=1: single shared backend + shared in-memory store +
+        # per-route rate limits (10/min on /api/student/submit) — serial
+        # execution keeps submit cadence under the limiter and avoids
+        # cross-spec state races (same reasoning as e2e-nightly.yml).
+        run: |
+          cd frontend && npx playwright test \
+            e2e/student-mc-grading.spec.js \
+            e2e/student-tf-grading.spec.js \
+            e2e/student-matching.spec.js \
+            e2e/student-error-states.spec.js \
+            e2e/student-portal.spec.js \
+            --workers=1 \
+            --reporter=list,html \
+            --trace=retain-on-failure
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-extended
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
   migrations-smoke:
     name: Migrations Smoke
     runs-on: ubuntu-latest

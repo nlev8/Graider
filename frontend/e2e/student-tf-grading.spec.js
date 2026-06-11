@@ -7,15 +7,14 @@
  * - Mixed TF in subject assessments
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerTF, answerMC, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
+import { publishAssessmentStrict, deleteAssessment, startAssessment, uniqueName, answerTF, answerMC, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
 
 test.describe('True/False — All Correct', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.tfOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.tfOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('all True/False correct → 100%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1: Water boils at 100C → True (correct)
     await answerTF(page, 'true')
@@ -32,11 +31,10 @@ test.describe('True/False — All Correct', () => {
 
 test.describe('True/False — All Wrong', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.tfOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.tfOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('all wrong → 0%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1: False (wrong — should be True)
     await answerTF(page, 'false')
@@ -53,11 +51,10 @@ test.describe('True/False — All Wrong', () => {
 
 test.describe('True/False — Partial', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.tfOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.tfOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('1 of 3 correct → 33%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1: True (correct)
     await answerTF(page, 'true')
@@ -80,7 +77,6 @@ test.describe('True/False — Partial', () => {
   })
 
   test('2 of 3 correct → 67%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1: True (correct)
     await answerTF(page, 'true')
@@ -97,11 +93,10 @@ test.describe('True/False — Partial', () => {
 
 test.describe('True/False — Button Rendering', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.tfOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.tfOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('TF buttons render for first question', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // In one-at-a-time mode, only the current question's TF buttons show
     const trueBtn = page.locator('[data-testid="tf-option-true"]')
@@ -111,7 +106,6 @@ test.describe('True/False — Button Rendering', () => {
   })
 
   test('question text renders correctly', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1 is visible on load
     const body = await page.textContent('body')
@@ -119,7 +113,6 @@ test.describe('True/False — Button Rendering', () => {
   })
 
   test('clicking True/False does not crash', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     await answerTF(page, 'true')
     const body = await page.textContent('body')
@@ -127,7 +120,6 @@ test.describe('True/False — Button Rendering', () => {
   })
 
   test('can toggle between True and False on same question', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Click True then False for same question before advancing
     await page.locator('[data-testid="tf-option-true"]').click()
@@ -141,11 +133,10 @@ test.describe('True/False — Button Rendering', () => {
 
 test.describe('True/False — In Mixed Assessment', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.usHistory8) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.usHistory8) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('TF question renders on Q2 screen in history', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistTF'))
     // Q1 is MC — advance to Q2 (TF: 1775)
     await answerMC(page, 1)  // answer Q1 first
@@ -158,7 +149,6 @@ test.describe('True/False — In Mixed Assessment', () => {
   })
 
   test('correct TF in mixed assessment counts toward score', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistTFScore'))
     // Q1: MC — B) Declaration of Independence (index 1)
     await answerMC(page, 1)

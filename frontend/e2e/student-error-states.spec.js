@@ -8,7 +8,7 @@
  * - Inactive assessments
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, clickNext, finishAndSubmit, ASSESSMENTS, AUTH_HEADERS } from './helpers.js'
+import { publishAssessmentStrict, deleteAssessment, startAssessment, uniqueName, answerMC, clickNext, finishAndSubmit, ASSESSMENTS, AUTH_HEADERS } from './helpers.js'
 
 test.describe('Invalid Join Codes', () => {
   test('nonexistent code shows error', async ({ page }) => {
@@ -68,11 +68,10 @@ test.describe('Invalid Join Codes', () => {
 
 test.describe('Empty Name Handling', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('empty name prevents start', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -90,7 +89,6 @@ test.describe('Empty Name Handling', () => {
   })
 
   test('whitespace-only name is rejected', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -111,14 +109,13 @@ test.describe('Duplicate Submission', () => {
   let joinCode
   const studentName = 'DupTest ' + Date.now()
   test.beforeAll(async ({ request }) => {
-    joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly, {
+    joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly, {
       allow_multiple_attempts: false,
     })
   })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('first submission succeeds', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, studentName)
     await answerMC(page, 1)  // Q1: B) 4
     await clickNext(page)
@@ -130,7 +127,6 @@ test.describe('Duplicate Submission', () => {
   })
 
   test('second submission with same name is rejected or scored', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, studentName)
     await answerMC(page, 1)  // Q1
     await clickNext(page)
@@ -147,7 +143,7 @@ test.describe('Duplicate Submission', () => {
 test.describe('Inactive Assessment', () => {
   let joinCode
   test.beforeAll(async ({ request }) => {
-    joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly)
+    joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly)
     // Toggle to inactive
     if (joinCode) {
       await request.post('/api/teacher/assessment/' + joinCode + '/toggle', {
@@ -158,7 +154,6 @@ test.describe('Inactive Assessment', () => {
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('inactive assessment shows error', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -167,7 +162,6 @@ test.describe('Inactive Assessment', () => {
   })
 
   test('inactive assessment does not show questions', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -180,11 +174,10 @@ test.describe('Inactive Assessment', () => {
 
 test.describe('Submit Without Answering', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('submitting without answers shows 0% or warning', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // In one-at-a-time mode, Next is disabled without answering (for assessments).
     // But we can still answer with wrong answers and submit.
@@ -202,11 +195,10 @@ test.describe('Submit Without Answering', () => {
 
 test.describe('Page Navigation', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('refreshing assessment page reloads correctly', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
