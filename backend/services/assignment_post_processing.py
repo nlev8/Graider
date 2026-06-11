@@ -846,7 +846,7 @@ def _hydrate_fraction_model(q):
             num = int(parts[0].strip())
             q['correct_numerator'] = num
         except (ValueError, IndexError):
-            pass
+            _logger.debug("Unparseable fraction answer %r; correct_numerator not hydrated", ans)
 
 
 def _hydrate_unit_circle(q):
@@ -1283,7 +1283,7 @@ def _extract_dimensions_from_text(question):
                     try:
                         question[field] = float(match.group(1))
                     except ValueError:
-                        pass
+                        _logger.debug("Non-numeric %s dimension %r not hydrated", field, match.group(1))
                     break
 
     # ── Pythagorean-specific extraction ──────────────────────────────────
@@ -1619,7 +1619,7 @@ def _check_physical_impossibilities(text):
                         'severity': 'error',
                     })
             except (ValueError, IndexError):
-                pass
+                _logger.debug("Unparseable value in impossible-geometry check; skipping")
     return issues
 
 

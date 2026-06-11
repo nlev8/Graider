@@ -555,7 +555,7 @@ def _finalize_portal_grading(all_questions, answers, written_results, ai_notes, 
                             def_idx = definitions.index(correct_def)
                             correct_letter = chr(65 + def_idx)
                         except ValueError:
-                            pass
+                            logger.warning("Answer-key definition for term %r not in definitions list; match ungradable", term)
                     if correct_letter and student_match.upper() == correct_letter:
                         correct_count += 1
                 earned = round(points * (correct_count / total_matches)) if total_matches > 0 else 0

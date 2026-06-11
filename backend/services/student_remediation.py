@@ -134,7 +134,7 @@ def _difficulty_directive(difficulty, grade):
     try:
         grade_num = int(str(grade).strip())
     except (ValueError, TypeError, AttributeError):
-        pass
+        _logger.debug("Non-numeric grade %r; using generic difficulty phrasing", grade)
 
     if difficulty == 'easier':
         if grade_num is not None:

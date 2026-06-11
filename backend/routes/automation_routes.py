@@ -112,7 +112,7 @@ def _read_runner_output(proc):
             if len(_run_state["log"]) > 200:
                 _run_state["log"] = _run_state["log"][-100:]
         except json.JSONDecodeError:
-            pass
+            _logger.debug("Non-JSON line from automation subprocess ignored")
 
     if _run_state["status"] == "running":
         _run_state["status"] = "done"
@@ -131,7 +131,7 @@ def _read_picker_output(proc):
             elif event.get("type") == "done":
                 _picker_state["status"] = "done"
         except json.JSONDecodeError:
-            pass
+            _logger.debug("Non-JSON line from picker subprocess ignored")
     if _picker_state["status"] == "picking":
         _picker_state["status"] = "done"
 

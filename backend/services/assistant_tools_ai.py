@@ -6,6 +6,7 @@ These complement the zero-cost local-data tools with content
 that cannot be produced from templates or local data alone.
 """
 import json
+import logging
 import os
 
 from backend.services.assistant_tools import (
@@ -13,6 +14,8 @@ from backend.services.assistant_tools import (
     _load_roster, _fuzzy_name_match, _safe_int_score,
 )
 from backend.utils.compliance import anonymize_for_ai, deanonymize, audit_tool_action, require_teacher_id
+
+_logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════
@@ -332,8 +335,8 @@ def generate_iep_progress_notes(student_name="", goal_area="", **kwargs):
         result_str = deanonymize(result_str, name_mapping)
         try:
             result = json.loads(result_str)
-        except json.JSONDecodeError:
-            pass  # Keep original result if deanonymized string isn't valid JSON
+        except json.JSONDecodeError as e:
+            _logger.warning("Deanonymized IEP notes are not valid JSON (%s); returning anonymized result", e)
 
     return result
 
