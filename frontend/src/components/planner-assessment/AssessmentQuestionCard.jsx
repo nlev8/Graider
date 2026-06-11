@@ -5,6 +5,10 @@ import QuestionAnswerInputs from "./QuestionAnswerInputs";
 
 export default function AssessmentQuestionCard(props) {
   const { editMode, editingQuestion, q, qIdx, regenerateOneQuestion, regeneratingQuestions, sIdx, saveEditedQuestion, selectedQuestions, setEditingQuestion, toggleQuestionSelect } = props;
+  // NOTE: the two inner key={qIdx} props below (qCard div, QuestionEditOverlay)
+  // are intentionally-retained no-ops from the verbatim monolith split — the
+  // real list key lives on <AssessmentQuestionCard key={qIdx}> at the .map()
+  // boundary in AssessmentPreview.jsx. Safe to drop in a future cleanup.
                                     const qCard = (
                                     <div
                                       key={qIdx}
