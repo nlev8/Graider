@@ -95,6 +95,12 @@ export default function QuestionRenderer({
       )}
 
       <div style={styles.inputContainer}>
+        {/* DISPATCH INVARIANT: every question type must appear in EXACTLY ONE
+            of the two input switches — MATH_VISUAL_TYPES (the router list,
+            defined in MathVisualInput.jsx) routes to MathVisualInput; every
+            other type falls to ChoiceTextInput (short_answer is its default).
+            Adding a new type = add its case to ONE switch, and if it's a
+            math/visual type, add it to MATH_VISUAL_TYPES too. */}
         {MATH_VISUAL_TYPES.includes(qType) ? (
           <MathVisualInput
             question={question}
