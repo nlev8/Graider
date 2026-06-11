@@ -197,7 +197,9 @@ def test_ack_marker_regex_accepts_expected_forms():
 
 
 def test_baseline_is_excluded_from_scan():
-    """The 0001 baseline revision is empty by design and exempt."""
+    """The 0001 baseline revision is exempt by policy (additive-only
+    IF-NOT-EXISTS expression of the live schema; PR7 rewrote it in place
+    from a no-op pass-stamp)."""
     paths = [p.name for p in _iter_revision_files()]
     assert not any(p.startswith("0001_baseline") for p in paths), (
         f"Baseline should not be in scanned file list: {paths}"
