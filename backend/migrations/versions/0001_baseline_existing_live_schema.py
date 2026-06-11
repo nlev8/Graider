@@ -18,6 +18,12 @@ repo root had drifted from live (4 whole tables missing, 6 columns
 missing, divergent CHECK/UNIQUE constraints and RLS policies); LIVE is
 the source of truth here, per the PR7 spec.
 
+Drift from this snapshot is NOT auto-detected yet (that is the anchors'
+level-10 "schema<->DB drift detection" criterion, tracked as a follow-up):
+until that exists, schema changes must go through a new forward migration,
+never the Supabase dashboard — out-of-band changes silently invalidate
+this baseline.
+
 Why a real body in 0001 is safe against production
 ---------------------------------------------------
 Production was stamped (`alembic stamp 0001_baseline`) on 2026-04-18 —
@@ -53,7 +59,11 @@ Intentional exclusions (not expressed here):
   auth.uid(): on a bare empty Postgres (no Supabase auth schema) the
   policy bodies cannot resolve and are skipped; in CI the stubs provide
   auth.uid()/auth.role() so policies are created. RLS ENABLE itself is
-  unconditional (no dependency, idempotent).
+  unconditional (no dependency, idempotent). Consequence: bootstrapping a
+  real-but-not-yet-provisioned Supabase target (auth schema absent) lands
+  in DEFAULT-DENY for non-owner roles — RLS on, zero policies. That is
+  fail-CLOSED (the safe direction); re-running upgrade after auth exists
+  creates the policies.
 
 Note on revision ID length: Alembic's default alembic_version.version_num
 column is VARCHAR(32). The short "0001_baseline" ID (13 chars) fits with
