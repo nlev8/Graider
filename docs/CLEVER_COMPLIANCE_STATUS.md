@@ -1,8 +1,12 @@
 # Clever Compliance Status
 
-**Last verified:** May 5, 2026 (post 2026-05-05 SIS compliance hardening sprint, PRs #208–#213)
+**Last verified:** June 11, 2026 (operator confirmation)
 **Total Clever tests:** 117+ (all passing — 87 baseline + 30+ added by sprint)
-**Overall status:** Production-ready for Clever Library certification
+**Overall status:** ✅ **CERTIFIED — listed in the Clever app Library** (operator-confirmed
+in the Clever partner dashboard, 2026-06-11; the app is live in the Library at
+apps.clever.com/graider). This satisfies the hardening rubric's SSO/Roster level-8/9
+"certified by at least one provider" criterion — the 2026-06-09 Reconciliation ruling's
+condition ("reverts to 9 the moment an operator confirms the cert") is met.
 
 ---
 
