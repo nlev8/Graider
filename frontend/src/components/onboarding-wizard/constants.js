@@ -1,0 +1,107 @@
+export const STEPS = [
+  { title: "Welcome to Graider!", icon: "GraduationCap" },
+  { title: "About You", icon: "User" },
+  { title: "Your Classroom", icon: "School" },
+  { title: "Grading Style", icon: "ClipboardCheck" },
+  { title: "Rubric Setup", icon: "ClipboardList" },
+  { title: "AI Connection", icon: "Cpu" },
+  { title: "Import Roster", icon: "Users" },
+  { title: "All Set!", icon: "PartyPopper" },
+];
+
+export const GRADE_LEVELS = [
+  "K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+];
+
+export const SUBJECTS = [
+  "English/ELA", "Math", "Science", "US History", "World History",
+  "Social Studies", "Civics", "Geography", "Other",
+];
+
+export const STATES = [
+  { value: "FL", label: "Florida" },
+  { value: "TX", label: "Texas" },
+  { value: "CA", label: "California" },
+  { value: "NY", label: "New York" },
+  { value: "IL", label: "Illinois" },
+  { value: "PA", label: "Pennsylvania" },
+  { value: "OH", label: "Ohio" },
+  { value: "GA", label: "Georgia" },
+  { value: "NC", label: "North Carolina" },
+  { value: "MI", label: "Michigan" },
+  { value: "NJ", label: "New Jersey" },
+  { value: "VA", label: "Virginia" },
+  { value: "WA", label: "Washington" },
+  { value: "AZ", label: "Arizona" },
+  { value: "MA", label: "Massachusetts" },
+  { value: "TN", label: "Tennessee" },
+  { value: "IN", label: "Indiana" },
+  { value: "MO", label: "Missouri" },
+  { value: "MD", label: "Maryland" },
+  { value: "WI", label: "Wisconsin" },
+  { value: "CO", label: "Colorado" },
+  { value: "MN", label: "Minnesota" },
+  { value: "SC", label: "South Carolina" },
+  { value: "AL", label: "Alabama" },
+  { value: "LA", label: "Louisiana" },
+  { value: "KY", label: "Kentucky" },
+  { value: "OR", label: "Oregon" },
+  { value: "OK", label: "Oklahoma" },
+  { value: "CT", label: "Connecticut" },
+  { value: "UT", label: "Utah" },
+  { value: "IA", label: "Iowa" },
+  { value: "NV", label: "Nevada" },
+  { value: "AR", label: "Arkansas" },
+  { value: "MS", label: "Mississippi" },
+  { value: "KS", label: "Kansas" },
+  { value: "NM", label: "New Mexico" },
+  { value: "NE", label: "Nebraska" },
+  { value: "ID", label: "Idaho" },
+  { value: "WV", label: "West Virginia" },
+  { value: "HI", label: "Hawaii" },
+  { value: "NH", label: "New Hampshire" },
+  { value: "ME", label: "Maine" },
+  { value: "MT", label: "Montana" },
+  { value: "RI", label: "Rhode Island" },
+  { value: "DE", label: "Delaware" },
+  { value: "SD", label: "South Dakota" },
+  { value: "ND", label: "North Dakota" },
+  { value: "AK", label: "Alaska" },
+  { value: "VT", label: "Vermont" },
+  { value: "WY", label: "Wyoming" },
+  { value: "DC", label: "Washington D.C." },
+];
+
+export const GRADING_PERIODS = [
+  { value: "Q1", label: "Quarter 1" },
+  { value: "Q2", label: "Quarter 2" },
+  { value: "Q3", label: "Quarter 3" },
+  { value: "Q4", label: "Quarter 4" },
+  { value: "S1", label: "Semester 1" },
+  { value: "S2", label: "Semester 2" },
+  { value: "FY", label: "Full Year" },
+];
+
+export const GRADING_STYLES = [
+  {
+    value: "lenient",
+    label: "Lenient",
+    icon: "Heart",
+    description: "Focus on effort and growth. Best for younger students or building confidence.",
+    color: "#22c55e",
+  },
+  {
+    value: "standard",
+    label: "Standard",
+    icon: "Scale",
+    description: "Balanced feedback with fair expectations. Good for most classroom settings.",
+    color: "#6366f1",
+  },
+  {
+    value: "strict",
+    label: "Strict",
+    icon: "Shield",
+    description: "High expectations with detailed corrections. Best for advanced or honors classes.",
+    color: "#f59e0b",
+  },
+];
