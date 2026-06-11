@@ -134,7 +134,7 @@ def get_audit_logs(limit: int = 100):
                         entry['teacher_id'] = parts[4][len('teacher='):]
                     logs.append(entry)
             return logs[::-1]  # Newest first
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error reading audit logs: %s", e)
         sentry_sdk.capture_exception(e)
         return []
@@ -339,7 +339,7 @@ def export_individual_student_data():
                     with open(meta_path, 'r') as mf:
                         meta = json.load(mf)
                     period_label = meta.get('period_name', period_label)
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.warning("period metadata read failed", exc_info=True)
             try:
                 with open(os.path.join(periods_dir, fname), 'r', encoding='utf-8') as pf:
@@ -360,7 +360,7 @@ def export_individual_student_data():
                             matched_email = row.get('Email', row.get('email', ''))
                             matched_period = period_label
                             break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.warning("period roster scan failed: %s", type(e).__name__)
                 continue
             if matched_name:
@@ -413,7 +413,7 @@ def export_individual_student_data():
             with open(accomm_file, 'r') as f:
                 all_acc = json.load(f)
             student_accommodations = all_acc.get(safe_id) or all_acc.get(matched_id or '')
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     export["accommodations"] = student_accommodations
 
@@ -425,7 +425,7 @@ def export_individual_student_data():
             with open(ell_file, 'r') as f:
                 all_ell = json.load(f)
             ell_data = all_ell.get(safe_id) or all_ell.get(matched_id or '')
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     export["ell_data"] = ell_data
 
@@ -437,7 +437,7 @@ def export_individual_student_data():
             with open(contacts_file, 'r') as f:
                 all_contacts = json.load(f)
             parent_contacts = all_contacts.get(safe_id) or all_contacts.get(matched_id or '')
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     export["parent_contacts"] = parent_contacts
 
@@ -538,7 +538,7 @@ def export_individual_student_data():
                 elements.append(Spacer(1, 6))
 
         doc.build(elements)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         pdf_path = None
         sentry_sdk.capture_exception(e)
         _logger.error("PDF generation error: %s", e)
@@ -547,7 +547,7 @@ def export_individual_student_data():
     if sys.platform == 'darwin':
         try:
             subprocess.run(['open', export_dir], check=False)
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("export folder open (local dev) failed", exc_info=True)
 
     audit_log("EXPORT_STUDENT_DATA", f"Exported full data for student (name redacted), {record_count} records")
@@ -714,7 +714,7 @@ def import_individual_student_data():
             try:
                 with open(ell_file, 'r') as f:
                     all_ell = json.load(f)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
         all_ell[student_id] = ell_data
         os.makedirs(os.path.dirname(ell_file), exist_ok=True)
@@ -730,7 +730,7 @@ def import_individual_student_data():
             try:
                 with open(contacts_file, 'r') as f:
                     all_contacts = json.load(f)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
         all_contacts[student_id] = parent_contacts
         os.makedirs(os.path.dirname(contacts_file), exist_ok=True)
@@ -764,7 +764,7 @@ def import_individual_student_data():
                         writer = csv.DictWriter(f, fieldnames=fieldnames)
                         writer.writeheader()
                         writer.writerows(rows)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("Could not add student to roster: %s", e)
             sentry_sdk.capture_exception(e)
 

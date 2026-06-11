@@ -19,7 +19,7 @@ def _get_supabase():
     try:
         from backend.supabase_client import get_supabase
         return get_supabase()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return None
 
 
@@ -103,7 +103,7 @@ def _sync_roster_to_db_impl(classes, students, enrollments, teacher_id, provider
             .upsert(class_payloads, on_conflict="teacher_id,clever_section_id")
             .execute()
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to batch-upsert classes (%s): %s", provider, str(e))
         sentry_sdk.capture_exception(e)
         return zero
@@ -163,7 +163,7 @@ def _sync_roster_to_db_impl(classes, students, enrollments, teacher_id, provider
             .upsert(list(unique_students.values()), on_conflict="teacher_id,student_id_number")
             .execute()
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to batch-upsert students (%s): %s", provider, str(e))
         sentry_sdk.capture_exception(e)
         return {"classes": synced_classes, "students": 0, "enrollments": 0}
@@ -197,7 +197,7 @@ def _sync_roster_to_db_impl(classes, students, enrollments, teacher_id, provider
                 enrollment_payloads, on_conflict="class_id,student_id"
             ).execute()
             synced_enrollments = len(enrollment_payloads)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.warning("Failed to batch-upsert enrollments (%s): %s", provider, str(e))
             sentry_sdk.capture_exception(e)
 
@@ -244,7 +244,7 @@ def deactivate_missing_students(teacher_id, current_student_external_ids, provid
 
         return deactivated
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to deactivate missing students for %s: %s", teacher_id, e)
         return 0
 
@@ -296,7 +296,7 @@ def delete_roster_data(teacher_id):
             deleted["classes"] = len(class_ids)
             deleted["students"] = len(student_ids)
             deleted["enrollments"] = len(class_ids)  # approximation
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("Supabase roster deletion failed for %s: %s", teacher_id, str(e))
             sentry_sdk.capture_exception(e)
 

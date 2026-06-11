@@ -287,7 +287,7 @@ def _safe_save_results(results, teacher_id):
     try:
         from backend.grading.state import save_results
         save_results(results, teacher_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to save result to teacher storage: %s", e)
         sentry_sdk.capture_exception(e)
 
@@ -629,7 +629,7 @@ def _finalize_portal_grading(all_questions, answers, written_results, ai_notes, 
             results = load_saved_results(teacher_id)
             results = _upsert_result_by_submission_id(results, result_record)  # Phase 4.1 PR2: idempotent upsert
             _safe_save_results(results, teacher_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to load/lock for result save: %s", str(e))
         sentry_sdk.capture_exception(e)
 
@@ -666,7 +666,7 @@ def _finalize_portal_grading(all_questions, answers, written_results, ai_notes, 
         })
         history["scores"] = scores[-20:]  # Keep last 20
         save_student_history(teacher_id, student_info.get("student_id"), history)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to update student history: %s", str(e))
 
     # FERPA: hash both submission_id and student_name (Codex MAJOR #14
@@ -780,7 +780,7 @@ def grade_portal_submission_sync(
                 accommodation_prompt = build_prompt_from_student_accommodations(
                     student_name, student_accommodations, teacher_id
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # Best-effort lookup: Strategy 2 below is the fallback. Debug-level
                 # only — failure here is not user-visible. Log student_id (not
                 # student_name) to avoid avoidable PII in log lines.
@@ -791,7 +791,7 @@ def grade_portal_submission_sync(
             try:
                 from backend.accommodations import build_accommodation_prompt
                 accommodation_prompt = build_accommodation_prompt(student_id, teacher_id)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # Best-effort: if both strategies fail, the student gets no
                 # accommodation prompt. Debug-level only.
                 logger.debug("build_accommodation_prompt failed for student_id=%s: %s", student_id, e)
@@ -803,7 +803,7 @@ def grade_portal_submission_sync(
             history = load_student_history(teacher_id, student_id)
             if history:
                 history_context = str(history)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Best-effort: history is optional context. Debug-level only.
             logger.debug("load_student_history failed for student_id=%s: %s", student_id, e)
 
@@ -815,7 +815,7 @@ def grade_portal_submission_sync(
             if not _q_types:
                 _q_types = ["short_answer", "multiple_choice"]
             _correction_ctx = build_correction_context(teacher_id, teacher_config.get("subject", ""), _q_types)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Best-effort: correction context is optional. Debug-level only.
             logger.debug("build_correction_context failed for teacher %s: %s", teacher_id, e)
 
@@ -860,7 +860,7 @@ def grade_portal_submission_sync(
             keys = resolve_keys_for_teacher(teacher_id, district_id=district_id)
             if keys:
                 set_thread_keys(keys)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # If key resolution fails, grading falls back to whatever
             # backend.api_keys._get_api_key can find (thread-context, district
             # admin, or env), not the intended teacher/district keys. That can
@@ -922,7 +922,7 @@ def grade_portal_submission_sync(
                     "Marked submission %s as grading_failed",
                     hashlib.sha256(str(submission_id).encode()).hexdigest()[:8],
                 )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Critical: if we can't mark a submission as failed, it stays in
             # 'partial' forever and never retries. Sentry must see this.
             # FERPA: hash submission_id — see Codex audit MAJOR #14 round-4.
@@ -973,7 +973,7 @@ def run_portal_grading_thread(submission_id, assessment, answers, student_info,
                     get_submission_repository(path_type).update(
                         submission_id, {"status": "grading_deferred"}
                     )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # Critical: status state matters. If we can't mark deferred,
                 # the submission stays in 'partial' through the redeploy and
                 # may not auto-retry on the new instance.

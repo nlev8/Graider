@@ -172,7 +172,7 @@ def get_behavior_data():
 
         res = query.execute()
         rows = res.data or []
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("Supabase query returned no behavior data for teacher %s", teacher_id)
         sentry_sdk.capture_exception(e)
         rows = []
@@ -203,7 +203,7 @@ def get_behavior_data():
             try:
                 dt = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
                 timestamp = dt.strftime('%H:%M')
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("event timestamp parse failed", exc_info=True)
 
         student = students[sid]
@@ -288,7 +288,7 @@ def get_behavior_events():
 
         res = query.execute()
         rows = res.data or []
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("Supabase query returned no behavior events for teacher %s", teacher_id)
         sentry_sdk.capture_exception(e)
         rows = []
@@ -366,7 +366,7 @@ def debug_behavior_data():
 
     try:
         sb = _get_supabase()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return jsonify({
             "teacher_id": teacher_id,
             "total_sessions": 0,
@@ -383,7 +383,7 @@ def debug_behavior_data():
             'teacher_id', teacher_id
         ).execute()
         sessions = ses_res.data or []
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sessions = []
         sentry_sdk.capture_exception(e)
 
@@ -393,7 +393,7 @@ def debug_behavior_data():
             'teacher_id', teacher_id
         ).order('event_time', desc=True).limit(100).execute()
         events = evt_res.data or []
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         events = []
         sentry_sdk.capture_exception(e)
 
@@ -428,7 +428,7 @@ def get_roster_for_behavior():
                     meta = json.load(fh)
                 csv_name = f.replace('.meta.json', '')
                 period_meta[csv_name] = meta
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
 
     for f in sorted(os.listdir(PERIODS_DIR)):
@@ -457,7 +457,7 @@ def get_roster_for_behavior():
                             "student_id": student_id,
                             "period": period_name,
                         })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
 
     return jsonify(roster)

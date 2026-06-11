@@ -127,7 +127,7 @@ def _get_assistant_model():
         # Check config sub-object first, then top-level for backwards compat
         choice = settings.get("config", {}).get("assistant_model") or settings.get("assistant_model", DEFAULT_MODEL)
         return ASSISTANT_MODELS.get(choice, ASSISTANT_MODELS[DEFAULT_MODEL])
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return ASSISTANT_MODELS[DEFAULT_MODEL]
 
 
@@ -278,7 +278,7 @@ def _persist_conversation(session_id):
 
         with open(CONVERSATIONS_FILE, 'w', encoding='utf-8') as f:
             json.dump(all_convs, f, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to persist conversation %s: %s", session_id, e)
 
 
@@ -290,7 +290,7 @@ def _load_conversation(session_id):
                 all_convs = json.load(f)
             if session_id in all_convs:
                 return all_convs[session_id]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Failed to load conversation %s: %s", session_id, e)
     return None
 
@@ -350,7 +350,7 @@ def _load_user_manual():
     try:
         with open(manual_path, 'r', encoding='utf-8') as f:
             _user_manual_cache = f.read()
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: falls back to default
         _user_manual_cache = ""
     return _user_manual_cache
 
@@ -367,7 +367,7 @@ def _extract_text_from_pdf(file_bytes):
         return "\n\n".join(pages)
     except ImportError:
         return "[PDF extraction requires PyMuPDF: pip install pymupdf]"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return "[Error extracting PDF]"
 
 
@@ -397,7 +397,7 @@ def _extract_text_from_docx(file_bytes):
         return '\n'.join(full_text)
     except ImportError:
         return "[DOCX extraction requires python-docx: pip install python-docx]"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return "[Error extracting DOCX]"
 
 
@@ -463,7 +463,7 @@ def _load_period_differentiation():
             class_level = meta.get("class_level", "standard")
             if period_name:
                 levels[period_name] = class_level
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Best-effort: period metadata is optional context for class-level
         # differentiation. Falls back to defaults.
         logger.debug("Failed to load period class levels: %s", e)
@@ -486,7 +486,7 @@ def _load_accommodation_summary():
             for p in presets:
                 preset_counts[p] = preset_counts.get(p, 0) + 1
         return {"total_students": total_students, "preset_counts": preset_counts}
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return None
 
 
@@ -512,7 +512,7 @@ def _load_resource_names():
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         meta = json.load(f)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     # Best-effort: malformed metadata uses defaults below.
                     logger.debug("Failed to load doc metadata %s: %s", meta_path, e)
             doc_type = meta.get("doc_type", "general")
@@ -522,7 +522,7 @@ def _load_resource_names():
                 entry += f" — {description}"
             entry += f" ({doc_type})"
             names.append(entry)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Best-effort: directory enumeration failed. Returns whatever names
         # were collected before the failure.
         logger.debug("Failed to enumerate support documents: %s", e)
@@ -560,7 +560,7 @@ def _load_resource_content():
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         meta = json.load(f)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     # Best-effort: malformed metadata uses defaults below.
                     logger.debug("Failed to load doc metadata %s: %s", meta_path, e)
 
@@ -578,7 +578,7 @@ def _load_resource_content():
                 elif ext in ('.txt', '.md'):
                     with open(fpath, 'r', encoding='utf-8') as f:
                         content = f.read()
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 logger.debug("attachment text extraction failed", exc_info=True)
                 continue
 
@@ -601,7 +601,7 @@ def _load_resource_content():
             sections.append(f"{header}\n{content}")
             total_chars += len(content)
 
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return ""
 
     return "\n\n".join(sections)
@@ -613,7 +613,7 @@ def _load_rubric():
         if os.path.exists(RUBRIC_FILE):
             with open(RUBRIC_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # User-visible behavior change: silent rubric load failure means the
         # assistant loses the teacher's custom rubric block from the system
         # prompt and falls back to default grading context. Sentry must see
@@ -653,7 +653,7 @@ def _load_assessment_templates():
                 "sample_rows": structure.get("sample_rows", [])[1:],  # Skip header-description row
                 "question_types": sorted(question_types) if question_types else [],
             })
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Best-effort: returns whatever templates were loaded successfully.
         logger.debug("Failed to enumerate platform templates: %s", e)
     return templates
@@ -677,7 +677,7 @@ def _load_analytics_snapshot():
             with open(settings_file, 'r') as f:
                 gs = json.load(f)
             output_folder = gs.get('output_folder', output_folder)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Best-effort: malformed settings file uses the existing
             # output_folder value (caller-supplied or default).
             logger.debug("Failed to load output_folder from settings file: %s", e)
@@ -792,7 +792,7 @@ def _load_analytics_snapshot():
 
         return "\n".join(lines)
 
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return ""
 
 
@@ -988,7 +988,7 @@ def _build_system_prompt():
             grading_period = config.get('grading_period', '')
             global_ai_notes = settings.get('globalAINotes', '')
             available_tools = config.get('availableTools', [])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Best-effort: settings load failure leaves these vars at their
             # caller-default values.
             logger.debug("Failed to load assistant settings/config: %s", e)
@@ -1058,7 +1058,7 @@ def _build_system_prompt():
                 prompt += "\n\n## PERSISTENT MEMORY\nThese are facts you've saved from previous conversations with this teacher:\n"
                 prompt += "\n".join(facts)
                 prompt += "\nUse these to personalize your responses. Save new important facts with the save_memory tool."
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Best-effort: persistent memory load failure means the assistant
         # answers without saved facts. Functional, just less personalized.
         logger.debug("Failed to inject persistent memory facts: %s", e)
@@ -1219,7 +1219,7 @@ def _record_assistant_cost(input_tokens, output_tokens, model, tts_chars=0):
 
         with open(ASSISTANT_COSTS_FILE, 'w') as f:
             json.dump(data, f, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.error("Failed to record assistant cost: %s", e)
 
     return {
@@ -1277,7 +1277,7 @@ def _finalize_assistant_stream(
                     try:
                         tts_stream.send_text(text_to_speak)
                         total_tts_chars += len(text_to_speak)
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         logger.debug("tts_stream.send_text failed on finalize", exc_info=True)
 
         # 4. tts_stream.flush() + wait_for_flush — NORMAL MODE ONLY
@@ -1287,14 +1287,14 @@ def _finalize_assistant_stream(
             try:
                 tts_stream.flush()
                 tts_stream.wait_for_flush(timeout=15.0)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 logger.debug("tts_stream.flush/wait_for_flush raised", exc_info=True)
 
         # 5. tts_stream.close() — both modes
         if tts_stream is not None:
             try:
                 tts_stream.close()
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 logger.debug("tts_stream.close raised", exc_info=True)
 
         # 6. Audio-queue drain + yield — NORMAL MODE ONLY
@@ -1357,7 +1357,7 @@ def _finalize_assistant_stream(
                 total_tts_chars=total_tts_chars,
                 active_model=active_model,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Best-effort: telemetry emit failure must not block stream
             # finalization. The user-facing flow is unaffected.
             logger.debug("Failed to emit assistant.stream.finalized event: %s", e)
@@ -1630,7 +1630,7 @@ def _execute_tool_round(*, tool_use_blocks, session_id, teacher_id, _last_user_t
                     if os.path.exists(pending_path):
                         with open(pending_path, 'r') as _pf:
                             event_data['pending_payload'] = json.load(_pf)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     # Best-effort: missing pending payload
                     # falls back to the event without it.
                     logger.debug("Failed to load pending payload: %s", e)
@@ -1689,7 +1689,7 @@ def _run_assistant_stream(*, session_id, conv, voice_mode, model_info, api_key, 
                 with open(SETTINGS_FILE, 'r') as f:
                     settings = json.load(f)
                 voice_choice = settings.get("config", {}).get("assistant_voice") or settings.get("assistant_voice")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 # Best-effort: settings load failure leaves voice_choice
                 # at its prior value (caller-default or earlier fallback).
                 logger.debug("Failed to load voice from settings: %s", e)
@@ -1707,7 +1707,7 @@ def _run_assistant_stream(*, session_id, conv, voice_mode, model_info, api_key, 
                 target=_drain_audio, daemon=True
             )
             audio_thread.start()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logging.getLogger(__name__).warning(
                 "Voice mode unavailable: %s", e
             )
@@ -1874,7 +1874,7 @@ def _run_assistant_stream(*, session_id, conv, voice_mode, model_info, api_key, 
                 messages.append({"role": "assistant", "content": assistant_content})
                 messages.append({"role": "user", "content": tool_results})
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 logger.warning("Assistant stream error (%s): %s", active_provider, e)
                 if "APIError" in type(e).__name__ or "AuthenticationError" in type(e).__name__:
                     content = f"The {active_provider} provider returned an error. Please try again."
@@ -2124,7 +2124,7 @@ def get_memory():
                     fact = m.get("fact", m) if isinstance(m, dict) else str(m)
                     facts.append(fact)
                 return jsonify({"memories": facts, "count": len(facts)})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return jsonify({"memories": [], "count": 0})
 
@@ -2205,7 +2205,7 @@ def get_credentials():
             with open(creds_file, 'r') as f:
                 data = json.load(f)
             return jsonify({"configured": True, "email": data.get("email", "")})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             sentry_sdk.capture_exception(e)
     return jsonify({"configured": False})
 
@@ -2238,7 +2238,7 @@ def load_portal_credentials(teacher_id='local-dev'):
             password = base64.b64decode(data.get('password', '')).decode()
             if email and password:
                 return email, password
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Best-effort: malformed creds file falls through to (None, None);
             # caller handles the missing-creds case explicitly.
             logger.debug("Failed to load credentials from file: %s", e)
@@ -2278,7 +2278,7 @@ def get_voice_config():
         with open(SETTINGS_FILE, 'r') as f:
             settings = json.load(f)
         voice = settings.get("config", {}).get("assistant_voice") or settings.get("assistant_voice", voice)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Best-effort: settings load failure keeps `voice` at the
         # caller-default value.
         logger.debug("Failed to load voice from settings: %s", e)

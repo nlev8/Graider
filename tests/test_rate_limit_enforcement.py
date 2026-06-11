@@ -81,7 +81,7 @@ def test_client():
             if container is not None and hasattr(container, "clear"):
                 try:
                     container.clear()
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: best-effort, failure tolerated
                     pass
 
     # Re-enable the limiter if an earlier test with

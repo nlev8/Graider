@@ -88,7 +88,7 @@ async def run_assistant_flow(
                         status_code=resp.status_code,
                         error_message=f"Expected 200, got {resp.status_code}",
                     )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
             latency = (time.perf_counter() - start) * 1000
             step = StepResult(
                 persona_id=pid,

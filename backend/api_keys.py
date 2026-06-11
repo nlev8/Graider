@@ -96,7 +96,7 @@ def get_api_key(provider: str, teacher_id: str | None = None, *, district_id: st
             val = district_ai.get(provider, '')
             if val:
                 return val
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # 4. Fall back to env var
@@ -135,7 +135,7 @@ def resolve_keys_for_teacher(teacher_id: str, *, district_id: str | None = None)
     try:
         from backend.storage import load as _storage_load
         district_admin_keys = _storage_load("district:ai_keys", "system") or {}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         district_admin_keys = {}
         sentry_sdk.capture_exception(e)
     resolved = {}
@@ -347,7 +347,7 @@ def _discover_clever_district_token(district_id: str) -> str:
             if entry.get('district_id') == district_id:
                 token = entry.get('access_token', '') or ''
                 break
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.warning("Clever district-token discovery failed (%s): %s",
                        district_id, type(e).__name__)
         sentry_sdk.capture_exception(e)

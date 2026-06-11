@@ -1916,7 +1916,7 @@ def _auto_fix_flagged_questions(assignment, warnings, subject=None, grade=None,
         if not api_key or api_key.startswith('your-'):
             return
         _adapter = OpenAIAdapter(api_key=api_key)
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return
 
     # Build batch for AI review
@@ -2020,7 +2020,7 @@ Rules:
         }
         _record_planner_cost(usage)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Auto-fix quality check failed (non-fatal): %s", e)
 
 

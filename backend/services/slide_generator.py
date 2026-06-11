@@ -262,7 +262,7 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
                     logger.info("Style reference image set from slide %d", slide_index)
             # else: empty response — adapter already emitted llm.image.call.blocked.
             # Slide will render text-only in PPTX assembly.
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Filter CircuitBreakerError out of Sentry to avoid alert fatigue
             # when the breaker stays OPEN across many slides. logger.warning
             # still fires for every failure so the pattern is visible in logs.

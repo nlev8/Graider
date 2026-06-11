@@ -53,7 +53,7 @@ class PortalGradingTask(Task):
             # DB effect is byte-identical.
             from backend.providers import get_submission_repository
             get_submission_repository(supabase_table).mark_failed(submission_id, exc)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             # Sentry already has the original exception; don't mask it.
             _logger.warning("submission mark_failed (status update) failed: %s", type(e).__name__)
 
@@ -181,7 +181,7 @@ def grade_portal_submission(
                 submission_id,
                 'Assessment content unavailable at grading time',
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.warning("submission mark_failed (missing content) failed: %s", type(e).__name__)
         return
 

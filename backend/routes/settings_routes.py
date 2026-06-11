@@ -151,7 +151,7 @@ def get_students_from_period_file(filepath):
                         if name:
                             first, last = parse_student_name(name)
                             students.append({"first": first, "last": last, "full": name, "id": student_id})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error reading period file %s: %s", filepath, e)
         sentry_sdk.capture_exception(e)
 
@@ -260,7 +260,7 @@ def parse_csv_headers(filepath):
             # Count rows
             row_count = sum(1 for _ in reader)
         return {'headers': headers, 'row_count': row_count}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: returns fallback
         return {'error': 'An internal error occurred'}
 
 
@@ -347,7 +347,7 @@ def list_rosters():
                 with open(os.path.join(ROSTERS_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     rosters.append(metadata)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
     return jsonify({"rosters": rosters})
 
@@ -427,7 +427,7 @@ def upload_period():
                 rows = list(reader)
                 headers = reader.fieldnames or []
             storage_save(f'period:{filename}', {"headers": headers, "rows": rows}, teacher_id)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("period roster Supabase persist failed: %s", type(e).__name__)
 
     return jsonify({
@@ -489,7 +489,7 @@ def list_periods():
                     else:
                         metadata['students'] = []
                     periods.append(metadata)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.error("Error loading cloud period metadata %s: %s", key, e)
                 sentry_sdk.capture_exception(e)
         if periods:
@@ -509,7 +509,7 @@ def list_periods():
                         else:
                             metadata['students'] = []
                         periods.append(metadata)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     _logger.error("Error loading period metadata %s: %s", f, e)
                     sentry_sdk.capture_exception(e)
     return jsonify({"periods": periods})
@@ -657,7 +657,7 @@ def list_documents():
                 with open(os.path.join(DOCUMENTS_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     documents.append(metadata)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
     return jsonify({"documents": documents})
 
@@ -1148,7 +1148,7 @@ def get_parent_contacts():
                     if sid and email and sid in contacts:
                         if not contacts[sid].get('student_email'):
                             contacts[sid]['student_email'] = email
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("student email merge from results failed: %s", type(e).__name__)  # Results merge is best-effort
 
         with_email = sum(1 for c in contacts.values() if c.get('parent_emails'))
@@ -1253,7 +1253,7 @@ def get_all_student_accommodations():
                             name = s.get("full") or ((s.get("first", "") + " " + s.get("last", "")).strip())
                             if name:
                                 id_to_name[sid] = name
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("period roster id-to-name build failed: %s", type(e).__name__)
     # Fallback to local files
     if not id_to_name and os.path.exists(PERIODS_DIR):
@@ -1267,7 +1267,7 @@ def get_all_student_accommodations():
                             name = s.get("full") or ((s.get("first", "") + " " + s.get("last", "")).strip())
                             if name:
                                 id_to_name[sid] = name
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     sentry_sdk.capture_exception(e)
 
     # Enrich with preset details for display
@@ -1584,7 +1584,7 @@ def _run_focus_import(creds_path=None):
         _focus_import_state["status"] = "completed"
         _focus_import_state["result"] = result
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _focus_import_state["status"] = "failed"
         sentry_sdk.capture_exception(e)  # full exception detail to Sentry, not to the client
         _focus_import_state["error"] = "Import failed"
@@ -1864,7 +1864,7 @@ def _save_parent_contacts(contacts, teacher_id=None):
             try:
                 storage_save('parent_contacts', contacts, teacher_id)
                 break  # Success
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 if _attempt == 0:
                     _time.sleep(1)
                     continue

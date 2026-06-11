@@ -270,7 +270,7 @@ def load_presets(teacher_id: str = 'local-dev') -> dict:
                 custom = json.load(f)
                 # Merge custom presets (can override defaults)
                 presets.update(custom)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.error("Error loading custom presets: %s", e)
             sentry_sdk.capture_exception(e)
 
@@ -306,7 +306,7 @@ def save_preset(preset: dict, teacher_id: str = 'local-dev') -> bool:
 
         audit_log_accommodation("SAVE_PRESET", f"Saved preset: {preset_id}")
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error saving preset: %s", e)
         sentry_sdk.capture_exception(e)
         return False
@@ -337,7 +337,7 @@ def delete_preset(preset_id: str, teacher_id: str = 'local-dev') -> bool:
             audit_log_accommodation("DELETE_PRESET", f"Deleted preset: {preset_id}")
             return True
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error deleting preset: %s", e)
         sentry_sdk.capture_exception(e)
         return False
@@ -368,7 +368,7 @@ def load_student_accommodations(teacher_id: str = 'local-dev') -> dict:
                 data = json.load(f)
             audit_log_accommodation("LOAD_STUDENT_MAPPINGS", f"Loaded {len(data)} student mappings")
             return data
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             _logger.error("Error loading student accommodations: %s", e)
             sentry_sdk.capture_exception(e)
 
@@ -388,7 +388,7 @@ def save_student_accommodations(mappings: dict, teacher_id: str = 'local-dev') -
 
         audit_log_accommodation("SAVE_STUDENT_MAPPINGS", f"Saved {len(mappings)} student mappings")
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error saving student accommodations: %s", e)
         sentry_sdk.capture_exception(e)
         return False
@@ -467,7 +467,7 @@ def _get_ell_language(student_id: str) -> Optional[str]:
         lang = entry.get("language")
         if lang and lang != "none":
             return lang
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
     return None
 
@@ -701,7 +701,7 @@ def clear_all_accommodations(teacher_id: str = 'local-dev') -> bool:
 
         audit_log_accommodation("CLEAR_ALL_DATA", "Deleted all student accommodation data")
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error clearing accommodations: %s", e)
         sentry_sdk.capture_exception(e)
         return False

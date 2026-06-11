@@ -247,7 +247,7 @@ def validate_launch_jwt(id_token, platform_config):
         raise ValueError(f"id_token audience does not match client_id={client_id}")
     except jwt.InvalidIssuerError:
         raise ValueError(f"id_token issuer does not match expected issuer={issuer}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: re-raised/wrapped
         raise ValueError(f"JWT validation failed: {e}")
 
     # Validate required LTI claims
@@ -476,7 +476,7 @@ class AGSClient:
             )
             response.raise_for_status()
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("post_score failed for user=%s lineitem=%s: %s", user_id, lineitem_url, e)
             return False
 

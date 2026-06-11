@@ -365,7 +365,7 @@ Respond ONLY with this JSON (no other text):
             parsed = response.choices[0].message.parsed
             if parsed:
                 return parsed.model_dump()
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("structured detection parse failed", exc_info=True)  # Fall through to text fallback
 
         # Text fallback if structured output fails
@@ -385,7 +385,7 @@ Respond ONLY with this JSON (no other text):
 
         return json.loads(response_text)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Detection error: %s", e)
         return {
             "ai_detection": {"flag": "none", "confidence": 0, "reason": ""},
@@ -460,7 +460,7 @@ FEEDBACK TO TRANSLATE:
                 token_tracker.record_openai(response, ai_model)
             return response.choices[0].message.content.strip()
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Translation to %s failed: %s", target_language, e)
         return ""
 

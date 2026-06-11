@@ -201,7 +201,7 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
         log_entry = f"{timestamp} | {user} | {safe_action} | {safe_details[:500]} | teacher={resolved_teacher_id}\n"
         with open(AUDIT_LOG_FILE, 'a') as f:
             f.write(log_entry)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         sentry_sdk.capture_exception(e)
 
     # Supabase (persistent across deploys)
@@ -215,7 +215,7 @@ def audit_log(action: str, details: str = "", user: str = "teacher", teacher_id:
                 'details': safe_details[:500],
                 'user_type': user,
             }).execute()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Supabase unavailable — the local file is the fallback. Record to
         # Sentry AND logs (class name only; audit details may contain PII).
         sentry_sdk.capture_exception(e)

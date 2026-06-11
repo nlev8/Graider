@@ -148,7 +148,7 @@ def _get_openai_context():
     try:
         user_id = getattr(g, 'user_id', 'local-dev')
         return build_openai_context(user_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("OpenAI context unavailable (non-fatal): %s", e)
         return None, None
 
@@ -422,7 +422,7 @@ def generate_lesson_plan():
             selected_standards=selected_standards, config=config, selected_idea=selected_idea,
             generate_variations=generate_variations, reference_docs=reference_docs,
             api_key=api_key, openai_context=_get_openai_context()))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         # Keep as warning (recoverable — falls back to mock) but add exc_info for traceback.
         _logger.warning("OpenAI API Error — falling back to Mock Mode", exc_info=True)
 
@@ -881,11 +881,11 @@ def _save_grading_config_for_export(assignment):
                 from flask import g
                 teacher_id = getattr(g, 'user_id', 'local-dev')
                 storage_save(f'assignment:{safe_title}', config, teacher_id)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("assignment Supabase save failed", exc_info=True)  # Local save succeeded, Supabase is best-effort
 
         _logger.info("Saved grading config: %s", config_path)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Could not save grading config: %s", e)
 
 
@@ -1695,7 +1695,7 @@ def get_assessment_templates():
                 with open(os.path.join(TEMPLATES_DIR, f), 'r') as mf:
                     metadata = json.load(mf)
                     templates.append(metadata)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("template metadata load failed", exc_info=True)
 
     # Sort by creation date (newest first)
@@ -2150,7 +2150,7 @@ def export_slides():
         for k, v in slide_data.get("_image_data", {}).items():
             try:
                 images[int(k)] = base64.b64decode(v)
-            except Exception:
+            except Exception:  # noqa: BLE001  # broad catch: error is logged
                 _logger.debug("slide image base64 decode failed", exc_info=True)
 
         filepath = os.path.join(export_dir, safe_title + ".pptx")

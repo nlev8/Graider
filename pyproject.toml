@@ -16,7 +16,11 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["T20"]  # flake8-print
+select = [
+    "T20",    # flake8-print
+    "E722",   # bare `except:` — Error Handling regression lock (hardening sprint PR2)
+    "BLE001", # blind `except Exception` — existing sites noqa'd with justification (PR2); swallow sweep is PR6
+]
 
 [tool.ruff.lint.per-file-ignores]
 # Intentional print surfaces — do NOT expand this list without review. See Phase 5a PR C2.

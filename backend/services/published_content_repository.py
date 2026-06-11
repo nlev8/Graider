@@ -53,7 +53,7 @@ class PublishedContentRepository:
             result = self._sb.table(self.table_name).select("*").eq(
                 self.lookup_column, key
             ).execute()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("fetch_by_lookup_key failed for table %s: %s", self.table_name, e)
             sentry_sdk.capture_exception(e)
             return None

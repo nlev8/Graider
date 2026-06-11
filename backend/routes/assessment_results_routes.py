@@ -168,7 +168,7 @@ def get_assessment_results():
     try:
         from backend.utils.audit import audit_log
         audit_log("VIEW_ASSESSMENT_RESULTS", "Teacher viewed assessment results", user="teacher", teacher_id=teacher_id)
-    except Exception as audit_err:
+    except Exception as audit_err:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Audit log failed for VIEW_ASSESSMENT_RESULTS: %s", str(audit_err))
         sentry_sdk.capture_exception(audit_err)
 
@@ -232,7 +232,7 @@ def get_assessment_results():
                 'question_analysis': _compute_question_analysis(assessment_data, subs),
             }
             assessments.append(entry)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Error fetching join-code assessments: %s", str(e))
         sentry_sdk.capture_exception(e)
 
@@ -256,14 +256,14 @@ def get_assessment_results():
                 try:
                     enrolled = db.table('class_students').select('id', count='exact').eq('class_id', class_id).execute()
                     expected = enrolled.count
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("enrolled student count lookup failed", exc_info=True)
                 try:
                     cls_row = db.table('classes').select('clever_section_id').eq('id', class_id).single().execute()
                     ext_id = (cls_row.data or {}).get('clever_section_id', '')
                     if ext_id and ext_id.startswith('oneroster:'):
                         class_sourced_id = ext_id[len('oneroster:'):]
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("class sourcedId lookup failed", exc_info=True)
 
             scores = [s.get('percentage') for s in subs if s.get('percentage') is not None]
@@ -308,7 +308,7 @@ def get_assessment_results():
                 'question_analysis': _compute_question_analysis(assessment_data, subs),
             }
             assessments.append(entry)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.warning("Error fetching class-based assessments: %s", str(e))
         sentry_sdk.capture_exception(e)
 

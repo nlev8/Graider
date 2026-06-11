@@ -48,7 +48,7 @@ def _server_available():
         import urllib.request
         resp = urllib.request.urlopen(BASE_URL, timeout=3)
         return resp.status == 200
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: returns fallback
         return False
 
 
@@ -200,7 +200,7 @@ def test_stress_rapid_polling(persona_data):
                     status="pass" if resp.status_code == 200 else "fail",
                     status_code=resp.status_code,
                 ))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
                 results.append(StepResult(
                     persona_id=persona["id"],
                     scenario="stress",

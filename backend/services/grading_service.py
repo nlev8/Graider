@@ -160,7 +160,7 @@ def load_teacher_config(teacher_id):
         if rubric_data:
             teacher_config["rubric"] = rubric_data
             teacher_config["grading_style"] = rubric_data.get("gradingStyle", "standard")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         logger.debug("Failed to load teacher config for %s: %s", teacher_id, e)
         sentry_sdk.capture_exception(e)
 
@@ -284,7 +284,7 @@ Respond in JSON format:
 
                 results["questions"][item["index"]] = q_result
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             logger.error("AI grading error: %s", str(e))
             for item in ai_grading_needed:
                 q_result = item["result"]

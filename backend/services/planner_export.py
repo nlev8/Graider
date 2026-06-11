@@ -190,7 +190,7 @@ def _export_assignment_docx_graider(assignment, output_folder, safe_title):
                         _pr.font.color.rgb = RGBColor(0, 0, 0)
 
                     _embed_visual(doc, visual_dict)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     _logger.warning("Could not embed visual for Q%s: %s", q_number, e)
 
             # Inject True/False options if missing for TF questions
@@ -653,7 +653,7 @@ def _build_question_figure_part1(question, show_answer, q_type, plt, np, _math):
                     if not hasattr(y_vals, '__len__'):
                         y_vals = np.full_like(x_vals, float(y_vals))
                     ax.plot(x_vals, y_vals, color=colors[idx % len(colors)], linewidth=2)
-                except Exception:
+                except Exception:  # noqa: BLE001  # broad catch: error is logged
                     _logger.debug("function plot render failed", exc_info=True)
                     continue
     return fig
@@ -992,7 +992,7 @@ def _create_visual_for_question(question: dict, show_answer: bool = False):
 
         return Image(buf, width=target_width, height=target_height)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
         _logger.error("Error creating visual: %s", e)
         return None
 
@@ -1033,7 +1033,7 @@ def parse_template_structure(filepath, ext):
                 elif isinstance(data, dict):
                     structure["columns"] = list(data.keys())
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # broad catch: falls back to default
         structure["error"] = str(e)
 
     return structure

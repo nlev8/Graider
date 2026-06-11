@@ -89,7 +89,7 @@ def navigate_to_outlook(page, context, district, email, password):
             emit("status", message="Clicked portal login, waiting for ADFS...")
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(2000)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             pass  # May already be past this step (cached session)
             sentry_sdk.capture_exception(e)
 
@@ -107,7 +107,7 @@ def navigate_to_outlook(page, context, district, email, password):
             page.click(login_sel)
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(3000)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             pass  # May already be authenticated (persistent session)
             sentry_sdk.capture_exception(e)
 
@@ -133,7 +133,7 @@ def navigate_to_outlook(page, context, district, email, password):
             emit("status", message="2FA complete, continuing...")
             page.wait_for_load_state("networkidle", timeout=15000)
             page.wait_for_timeout(3000)
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: re-raised/wrapped
             raise Exception("2FA timeout — did not complete within 2 minutes. Current URL: " + page.url)
 
     # If we landed on Office 365 after 2FA (not directly on Outlook), go directly
@@ -150,7 +150,7 @@ def navigate_to_outlook(page, context, district, email, password):
             lambda u: "outlook" in u.lower(),
             timeout=30000
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: re-raised/wrapped
         emit("status", message="URL check: " + page.url[:80])
         if "outlook" not in page.url.lower():
             raise Exception(
@@ -166,7 +166,7 @@ def navigate_to_outlook(page, context, district, email, password):
         page.get_by_role("button", name="New mail").wait_for(
             state="visible", timeout=30000
         )
-    except Exception:
+    except Exception:  # noqa: BLE001  # broad catch: error is logged
         _logger.debug("New mail button wait failed", exc_info=True)
     page.wait_for_timeout(2000)
 
@@ -198,7 +198,7 @@ def send_email(page, eml, index, total):
             if expand_btn.is_visible(timeout=2000):
                 expand_btn.click()
                 page.wait_for_timeout(500)
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("CC/BCC expand failed", exc_info=True)  # CC field may already be visible
         page.locator('[aria-label="Cc"]').last.click()
         page.keyboard.type(eml["cc"])
@@ -220,7 +220,7 @@ def send_email(page, eml, index, total):
             page.keyboard.type(eml["subject"])
             subject_filled = True
             break
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("subject field selector failed", exc_info=True)
             continue
     if not subject_filled:
@@ -244,7 +244,7 @@ def send_email(page, eml, index, total):
             page.keyboard.type(eml["body"])
             body_filled = True
             break
-        except Exception:
+        except Exception:  # noqa: BLE001  # broad catch: error is logged
             _logger.debug("body field selector failed", exc_info=True)
             continue
     if not body_filled:
@@ -343,17 +343,17 @@ def main():
                     sent += 1
                     emit("progress", sent=sent, total=total, current=i + 1,
                          student=student, message="Sent to " + student)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                     failed += 1
                     emit("error", message="Failed for " + student + ": " + str(e))
                     try:
                         page.screenshot(path=ERROR_SCREENSHOT)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                         sentry_sdk.capture_exception(e)
                     # Try to dismiss any open compose window
                     try:
                         page.click('[aria-label="Discard"]', timeout=3000)
-                    except Exception:
+                    except Exception:  # noqa: BLE001  # broad catch: error is logged
                         _logger.debug("compose window discard failed", exc_info=True)
 
                 # Brief delay between emails
@@ -367,11 +367,11 @@ def main():
                 emit("status", message="Browser staying open 60s to verify...")
                 page.wait_for_timeout(60000)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # broad catch: error is logged
             emit("error", message=str(e))
             try:
                 page.screenshot(path=ERROR_SCREENSHOT)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  # broad catch: error is logged
                 sentry_sdk.capture_exception(e)
             # Keep browser open on error so user can inspect
             if test_mode or login_only:

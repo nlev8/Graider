@@ -98,7 +98,7 @@ def _parse_policies(sql: str) -> list[dict]:
     raw_events: list[tuple[str, str, str, int]] = []
     try:
         parsed = pglast.parse_sql(sql)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  # test harness: failure recorded/asserted
         pytest.fail(f"pglast failed to parse combined SQL: {e}")
 
     for idx, stmt_wrapper in enumerate(parsed):
