@@ -52,6 +52,38 @@ giant FE component functions (`SettingsClassroom` 2,307 LOC; audit
 campaign. Revised projection for this sprint as listed: **~7.6–7.75**;
 reaching ~8 additionally needs the FE component splits.
 
+## Re-score 2026-06-11 (sprint COMPLETE, mechanical) — overall: **7.6** (7.75 on Clever-cert confirmation)
+
+All seven sprint items are now merged: PR1 #724, PR2 #735 (ruff E722+BLE001
+lock), PR3 #725, PR4 #736 (/metrics), PR5 #740 (e2e de-skip wave 1 +
+`Frontend E2E Extended` job, first CI run green 8m52s), PR6 #739
+(silent-swallow sweep 49→9 + ratchet guard), PR7 #738 (real Alembic baseline,
+live-introspected). Commands re-run 2026-06-11 against `main` @ 9b1cbde;
+binding rulings applied; two new scoring notes from the sprint's opus reviews
+incorporated (DI "down intentionally N/A"; TC factual-basis change).
+
+| Dimension | 2026-06-10 | 2026-06-11 | Evidence for the move |
+|---|--:|--:|---|
+| Security | 9 | **9** | Unchanged (level-10 still blocked: bandit baseline waivers, no threat model/pen-test). |
+| Error Handling | 7 | **7.5** | Anchor grep silent swallows = **9** (was 49; level-8 needs <10 ✓) with ratchet guard `tests/test_no_silent_swallows.py` (ceiling 9); 0 str(e) [CAP ✓]; ~325 decorations/303 routes ✓. Fourth level-8 criterion ("every broad except logs or captures") still fails: ~43 `returns fallback` BLE001 sites are justified-but-unlogged → 3/4 = strict majority → +0.5, not 8. Path to 8: log the returns-fallback class (or amend the criterion reading). |
+| Code Quality | 6 | **6** | Unchanged: `SettingsClassroom.jsx` 2,307-line component function binds; AnalyticsTab 2,954 / App.jsx 2,931. |
+| Architecture | 7 | **7** | Unchanged: DI hits = 0. |
+| Test Coverage | 6 | **7** | Level-7 criteria now BOTH met: floor 70 + measured ≥70 (CI green); **PR CI runs 6 real e2e specs** (smoke + 5 promoted via `Frontend E2E Extended`) **with no silent-skip masking in any spec CI runs** — 0 `test.skip(` in the promoted five, enforced by a CI guard step (also catching only/fixme). The 2026-06-09 Reconciliation rejection of TC 7 was decided when CI ran ONLY the smoke spec and the ≥5 real specs existed solely in masked nightly files — that factual basis no longer holds; the 49 remaining masks live in nightly-only specs outside CI's gate, which is wave-2 scope. Level 8 fails (floor/measured <80; 49 conditional skips repo-wide) → no further credit. |
+| Documentation | 9 | **9** | Unchanged. |
+| Observability | 7 | **7.5** | Metrics layer now present: `/metrics` Prometheus text endpoint + request instrumentation (#736; anchor grep `opentelemetry|prometheus|statsd|metrics_` = 2 hits, was 0). Audit durably persisted (insert failures capture+warn, per 06-09 evidence). 2 of 3 level-8 criteria → +0.5; "error tracking active in prod" remains repo-unverifiable (binding ruling) → not 8. |
+| Data Integrity | 7.5 | **7.5** | Same number, transformed basis (#738): 0001 is now a REAL live-introspected baseline (16 `CREATE TABLE IF NOT EXISTS`, FKs/UNIQUEs/CHECKs/indexes/RLS versioned), up-tested in CI (Migrations Smoke + 15 bootstrap tests). Only level-8 sub-clause unmet: "down tested in CI" — `downgrade()` is intentionally `NotImplementedError` (reversing a baseline = full schema drop; per #738's opus review: credit as "level 8-minus", do NOT record a clean 8). Strict majority of level 8 → +0.5 stands on a much stronger basis. |
+| Operational Safety | 8 | **8** | Unchanged (level 9 needs canary/auto-rollback/on-call). |
+| SSO/Roster | 7.5\* | **7.5\*** | Ruling stands; reverts to 9 on operator cert confirmation in the Clever dashboard. |
+| **OVERALL** | 7.4 | **7.6** | 9+7.5+6+7+9+7+7.5+7.5+8+7.5 = 76.0/10. **7.75 if Clever cert confirms.** |
+
+**Worklist implied:** EH 7.5→8 = log the ~43 returns-fallback sites; TC 7→8 =
+floor/measured 80 + de-mask the remaining 49 (e2e wave 2); Obs 7.5→8 = make
+prod error-tracking repo-verifiable (e.g. a healthz field or boot assertion);
+DI literal-8 = downgrade coverage for post-baseline migrations; CQ 6→7 = FE
+component-function splits (SettingsClassroom et al.) — now the single biggest
+drag. Sec/Doc/OpSafety are at their practical ceilings short of
+threat-model/pen-test, generated docs, and canary infra.
+
 ## Re-score 2026-06-10 (post-Wave-1, mechanical) — overall: **7.4** (7.55 on Clever-cert confirmation)
 
 Wave 1 (#724–#727) + follow-ups (#729 ADR amendment, #730 dep-bump retiring all
