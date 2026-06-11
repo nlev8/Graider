@@ -4,6 +4,10 @@ import ReviewPanel from "./ReviewPanel";
 
 export default function ReviewModalBody(props) {
   const { editedResults, reviewModal, status } = props;
+  // `r` is the resolved per-result object (edited-or-status), computed ONCE
+  // here — it is NOT an App-level prop, so it must be injected explicitly
+  // AFTER the {...props} spread below. Do not "simplify" the children to a
+  // bare {...props}: that would silently feed r=undefined.
   const r =
     editedResults[reviewModal.index] ||
     status.results[reviewModal.index];
