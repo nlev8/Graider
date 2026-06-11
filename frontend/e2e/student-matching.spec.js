@@ -8,15 +8,14 @@
  * - Matching in mixed assessments
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
+import { publishAssessmentStrict, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
 
 test.describe('Matching Questions — Rendering', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.matchingOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.matchingOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('matching cards render terms', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     const body = await page.textContent('body')
     expect(body).toContain('Photosynthesis')
@@ -25,7 +24,6 @@ test.describe('Matching Questions — Rendering', () => {
   })
 
   test('matching cards render definitions', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     const body = await page.textContent('body')
     expect(body).toContain('Converting light to energy')
@@ -34,7 +32,6 @@ test.describe('Matching Questions — Rendering', () => {
   })
 
   test('terms are clickable', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     const term = page.locator('text=Photosynthesis').first()
     await term.click()
@@ -44,7 +41,6 @@ test.describe('Matching Questions — Rendering', () => {
   })
 
   test('definitions are clickable', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     const def = page.locator('text=Converting light to energy').first()
     await def.click()
@@ -53,14 +49,12 @@ test.describe('Matching Questions — Rendering', () => {
   })
 
   test('instructions text visible', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     const body = (await page.textContent('body')).toLowerCase()
     expect(body.includes('click') || body.includes('match') || body.includes('drag') || body.includes('select')).toBeTruthy()
   })
 
   test('question prompt renders', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     const body = await page.textContent('body')
     expect(body).toContain('Match terms to definitions')
@@ -69,11 +63,10 @@ test.describe('Matching Questions — Rendering', () => {
 
 test.describe('Matching Questions — Interactions', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.matchingOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.matchingOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('clicking term then definition creates pair', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Click a term
     await page.locator('text=Photosynthesis').first().click()
@@ -87,7 +80,6 @@ test.describe('Matching Questions — Interactions', () => {
   })
 
   test('clicking multiple terms does not crash', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     await page.locator('text=Photosynthesis').first().click()
     await page.waitForTimeout(200)
@@ -100,7 +92,6 @@ test.describe('Matching Questions — Interactions', () => {
   })
 
   test('submit with no matching answers still works', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // matchingOnly has one question — it is the last, so use finishAndSubmit
     await finishAndSubmit(page)
@@ -109,7 +100,6 @@ test.describe('Matching Questions — Interactions', () => {
   })
 
   test('submit with matching renders results', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Try to match all correctly
     await page.locator('text=Photosynthesis').first().click()
@@ -133,11 +123,10 @@ test.describe('Matching Questions — Interactions', () => {
 
 test.describe('Matching — In Mixed Assessment', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mixed) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mixed) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('matching renders after navigating past MC and TF', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MixedMatch'))
     // Q1: MC — B) Shakespeare (index 1)
     await answerMC(page, 1)
@@ -151,10 +140,8 @@ test.describe('Matching — In Mixed Assessment', () => {
   })
 
   test('matching in science assessment renders layers', async ({ page }) => {
-    test.skip(!joinCode)
     // Use science6 which has matching
-    const sciCode = await publishAssessment(page.request, ASSESSMENTS.science6)
-    test.skip(!sciCode)
+    const sciCode = await publishAssessmentStrict(page.request, ASSESSMENTS.science6)
     await startAssessment(page, sciCode, uniqueName('SciMatch'))
     // Q1: MC — navigate to Q3 (matching) by going through Q1 and Q2
     await answerMC(page, 2)  // Q1: C) Crust (correct)
@@ -170,9 +157,7 @@ test.describe('Matching — In Mixed Assessment', () => {
   })
 
   test('matching in civics renders branches', async ({ page }) => {
-    test.skip(!joinCode)
-    const civCode = await publishAssessment(page.request, ASSESSMENTS.civics)
-    test.skip(!civCode)
+    const civCode = await publishAssessmentStrict(page.request, ASSESSMENTS.civics)
     await startAssessment(page, civCode, uniqueName('CivMatch'))
     // Q1: MC — navigate to Q2 (matching)
     await answerMC(page, 1)  // Q1: B) 3 branches (correct)

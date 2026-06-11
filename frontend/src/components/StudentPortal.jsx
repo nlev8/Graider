@@ -541,6 +541,17 @@ export default function StudentPortal({
             Resumed from draft {String.fromCharCode(8212)} {Object.keys(answers).length} questions answered. Your progress auto-saves every 15 seconds.
           </div>
         )}
+        {error && (
+          /* Submit failures (e.g. duplicate-submission 409/400, network errors)
+             land here while stage stays "assessment" — without this banner the
+             student gets NO feedback at all (the confirm modal has already
+             closed). Root-caused via the PR5 de-skipped duplicate-submission
+             e2e (student-error-states.spec.js). Same style as the join/name
+             stage banners above. */
+          <div style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)", borderRadius: "8px", padding: "12px", margin: "12px 16px", color: "var(--danger-light)", textAlign: "center" }}>
+            <Icon name="AlertCircle" size={16} /> {error}
+          </div>
+        )}
         <QuestionPlayer
           sections={
             assessment?.sections

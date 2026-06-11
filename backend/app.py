@@ -702,4 +702,8 @@ if __name__ == '__main__':
     # Auto-open browser
     threading.Thread(target=open_browser, daemon=True).start()
 
-    app.run(host='0.0.0.0', port=3000, debug=False)
+    # PORT override mirrors the gunicorn Procfile ($PORT) semantics. Added in
+    # hardening sprint PR5 so e2e verification can spawn a second backend
+    # (e.g. GRAIDER_FAKE_SUPABASE=1) on a free port while the normal dev
+    # server keeps 3000. Default unchanged.
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', '3000')), debug=False)

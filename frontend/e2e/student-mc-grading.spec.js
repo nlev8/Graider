@@ -6,15 +6,14 @@
  * - Subject-specific assessments (History, Math, Science, ELA, Civics)
  */
 import { test, expect } from '@playwright/test'
-import { publishAssessment, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
+import { publishAssessmentStrict, deleteAssessment, startAssessment, uniqueName, answerMC, answerTF, clickNext, finishAndSubmit, ASSESSMENTS } from './helpers.js'
 
 test.describe('Student MC Grading — All Correct', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('all correct answers → 100%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1: B) 4 (index 1), Q2: C) Paris (index 2), Q3: B) Jupiter (index 1)
     await answerMC(page, 1)
@@ -31,11 +30,10 @@ test.describe('Student MC Grading — All Correct', () => {
 
 test.describe('Student MC Grading — All Wrong', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('all wrong answers → 0%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1: A) 3 (wrong), Q2: A) London (wrong), Q3: A) Mars (wrong)
     await answerMC(page, 0)
@@ -51,11 +49,10 @@ test.describe('Student MC Grading — All Wrong', () => {
 
 test.describe('Student MC Grading — Partial', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('1 of 3 correct → 33%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     await answerMC(page, 1)  // Q1: B) 4 — correct
     await clickNext(page)
@@ -68,7 +65,6 @@ test.describe('Student MC Grading — Partial', () => {
   })
 
   test('2 of 3 correct → 67%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     await answerMC(page, 1)  // Q1: B) 4 — correct
     await clickNext(page)
@@ -83,11 +79,10 @@ test.describe('Student MC Grading — Partial', () => {
 
 test.describe('Student MC Grading — Answer Change', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.mcOnly) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.mcOnly) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('changing answer before submit uses final selection', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName())
     // Q1: pick wrong first (A), then change to correct (B) on same screen before clicking Next
     await answerMC(page, 0)  // A) 3 — wrong
@@ -105,11 +100,10 @@ test.describe('Student MC Grading — Answer Change', () => {
 // Subject-specific MC tests
 test.describe('US History Grade 8 — MC', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.usHistory8) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.usHistory8) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('assessment loads with history title', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -117,7 +111,6 @@ test.describe('US History Grade 8 — MC', () => {
   })
 
   test('correct answers score full marks', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistStudent'))
     // Q1: MC — B) Declaration of Independence (index 1)
     await answerMC(page, 1)
@@ -132,7 +125,6 @@ test.describe('US History Grade 8 — MC', () => {
   })
 
   test('wrong history answers score 0%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistWrong'))
     // Q1: MC — A) Constitution (wrong, index 0)
     await answerMC(page, 0)
@@ -147,7 +139,6 @@ test.describe('US History Grade 8 — MC', () => {
   })
 
   test('first question renders', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('HistCount'))
     // In one-at-a-time mode, only Q1 is visible on load
     const body = await page.textContent('body')
@@ -157,11 +148,10 @@ test.describe('US History Grade 8 — MC', () => {
 
 test.describe('Math Grade 7 — MC', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.math7) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.math7) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('math assessment loads', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -169,7 +159,6 @@ test.describe('Math Grade 7 — MC', () => {
   })
 
   test('math correct answers → 100%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MathStudent'))
     // Q1: MC — A) 5x (index 0)
     await answerMC(page, 0)
@@ -184,7 +173,6 @@ test.describe('Math Grade 7 — MC', () => {
   })
 
   test('math wrong answers → 0%', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MathWrong'))
     // Q1: MC — B) 6x (wrong, index 1)
     await answerMC(page, 1)
@@ -199,7 +187,6 @@ test.describe('Math Grade 7 — MC', () => {
   })
 
   test('math Q1 renders expression', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('MathRender'))
     // Only Q1 is visible on load
     const body = await page.textContent('body')
@@ -209,11 +196,10 @@ test.describe('Math Grade 7 — MC', () => {
 
 test.describe('Civics — MC + Matching', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.civics) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.civics) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('civics loads', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -221,7 +207,6 @@ test.describe('Civics — MC + Matching', () => {
   })
 
   test('can answer MC then see matching on next screen', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('CivicsStudent'))
     // Q1: MC — B) 3 branches (index 1)
     await answerMC(page, 1)
@@ -232,7 +217,6 @@ test.describe('Civics — MC + Matching', () => {
   })
 
   test('civics Q1 renders MC question', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('CivicsRender'))
     // Only Q1 (MC) is visible on load
     const body = await page.textContent('body')
@@ -242,11 +226,10 @@ test.describe('Civics — MC + Matching', () => {
 
 test.describe('Science Grade 6 — Mixed', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.science6) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.science6) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('science loads', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -254,7 +237,6 @@ test.describe('Science Grade 6 — Mixed', () => {
   })
 
   test('science Q1 renders MC question', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('SciRender'))
     // Q1 (MC about Earth layers) is visible on load
     const body = await page.textContent('body')
@@ -262,7 +244,6 @@ test.describe('Science Grade 6 — Mixed', () => {
   })
 
   test('science correct MC answer', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('SciMC'))
     // Q1: MC — C) Crust (index 2)
     await answerMC(page, 2)
@@ -274,11 +255,10 @@ test.describe('Science Grade 6 — Mixed', () => {
 
 test.describe('ELA Grade 8 — MC + Written', () => {
   let joinCode
-  test.beforeAll(async ({ request }) => { joinCode = await publishAssessment(request, ASSESSMENTS.ela8) })
+  test.beforeAll(async ({ request }) => { joinCode = await publishAssessmentStrict(request, ASSESSMENTS.ela8) })
   test.afterAll(async ({ request }) => { await deleteAssessment(request, joinCode) })
 
   test('ELA loads', async ({ page }) => {
-    test.skip(!joinCode)
     await page.goto('/join/' + joinCode)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -286,7 +266,6 @@ test.describe('ELA Grade 8 — MC + Written', () => {
   })
 
   test('can answer MC and type short answer', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('ELAStudent'))
     // Q1: MC — C) The central message (index 2)
     await answerMC(page, 2)
@@ -307,7 +286,6 @@ test.describe('ELA Grade 8 — MC + Written', () => {
   })
 
   test('ELA Q1 renders MC options', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('ELAOptions'))
     // Q1 about "theme" is visible on load
     const body = await page.textContent('body')
@@ -315,7 +293,6 @@ test.describe('ELA Grade 8 — MC + Written', () => {
   })
 
   test('ELA short answer textarea renders on Q3', async ({ page }) => {
-    test.skip(!joinCode)
     await startAssessment(page, joinCode, uniqueName('ELATextarea'))
     // Navigate to Q3 (short answer)
     await answerMC(page, 2)  // Q1

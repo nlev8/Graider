@@ -10,7 +10,7 @@
  * - Results display
  */
 import { test, expect } from '@playwright/test'
-import { answerMC, answerTF, clickNext, finishAndSubmit } from './helpers.js'
+import { publishAssessmentStrict, answerMC, answerTF, clickNext, finishAndSubmit } from './helpers.js'
 
 test.describe('Student Portal — Join Code Flow', () => {
 
@@ -45,71 +45,52 @@ test.describe('Student Portal — Join Code Flow', () => {
 test.describe('Student Portal — Assessment Taking', () => {
 
   // These tests require a published assessment with a known join code.
-  // We'll publish one via API first, then test the student flow.
+  // Published via publishAssessmentStrict — a fixture failure throws and
+  // fails the run loudly (the silent-skip masks were removed in hardening
+  // sprint PR5; this spec is PR-gated by the Frontend E2E Extended job).
 
   let joinCode = null
 
   test.beforeAll(async ({ request }) => {
-    // Publish a test assessment via the API
-    // X-Test-Teacher-Id header simulates auth in dev mode
-    try {
-      const response = await request.post('/api/publish-assessment', {
-        headers: { 'Content-Type': 'application/json', 'X-Test-Teacher-Id': 'playwright-teacher' },
-        data: {
-          assessment: {
-            title: 'Playwright Test Assessment',
-            sections: [
-              {
-                name: 'Part A: Multiple Choice',
-                questions: [
-                  {
-                    number: 1,
-                    type: 'multiple_choice',
-                    question: 'What is 2 + 2?',
-                    options: ['A) 3', 'B) 4', 'C) 5', 'D) 6'],
-                    answer: 'B',
-                    points: 5,
-                  },
-                  {
-                    number: 2,
-                    type: 'true_false',
-                    question: 'The sky is blue.',
-                    answer: 'True',
-                    points: 5,
-                  },
-                ],
-              },
-              {
-                name: 'Part B: Matching',
-                questions: [
-                  {
-                    number: 3,
-                    type: 'matching',
-                    question: 'Match the animals.',
-                    terms: ['Cat', 'Dog'],
-                    definitions: ['Barks', 'Meows'],
-                    answer: { Cat: 'Meows', Dog: 'Barks' },
-                    points: 10,
-                  },
-                ],
-              },
-            ],
-          },
-          settings: {
-            teacher_name: 'Playwright Teacher',
-            show_score_immediately: true,
-            show_correct_answers: true,
-            content_type: 'assessment',
-          },
+    joinCode = await publishAssessmentStrict(request, {
+      title: 'Playwright Test Assessment',
+      sections: [
+        {
+          name: 'Part A: Multiple Choice',
+          questions: [
+            {
+              number: 1,
+              type: 'multiple_choice',
+              question: 'What is 2 + 2?',
+              options: ['A) 3', 'B) 4', 'C) 5', 'D) 6'],
+              answer: 'B',
+              points: 5,
+            },
+            {
+              number: 2,
+              type: 'true_false',
+              question: 'The sky is blue.',
+              answer: 'True',
+              points: 5,
+            },
+          ],
         },
-      })
-      const data = await response.json()
-      if (data.join_code) {
-        joinCode = data.join_code
-      }
-    } catch (e) {
-      // API might not be available — tests will skip
-    }
+        {
+          name: 'Part B: Matching',
+          questions: [
+            {
+              number: 3,
+              type: 'matching',
+              question: 'Match the animals.',
+              terms: ['Cat', 'Dog'],
+              definitions: ['Barks', 'Meows'],
+              answer: { Cat: 'Meows', Dog: 'Barks' },
+              points: 10,
+            },
+          ],
+        },
+      ],
+    })
   })
 
   test.afterAll(async ({ request }) => {
@@ -124,7 +105,6 @@ test.describe('Student Portal — Assessment Taking', () => {
   })
 
   test('assessment loads with join code', async ({ page }) => {
-    test.skip(!joinCode, 'No join code — API not available')
     await page.goto(`/join/${joinCode}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -133,7 +113,6 @@ test.describe('Student Portal — Assessment Taking', () => {
   })
 
   test('name input field appears', async ({ page }) => {
-    test.skip(!joinCode, 'No join code — API not available')
     await page.goto(`/join/${joinCode}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -143,7 +122,6 @@ test.describe('Student Portal — Assessment Taking', () => {
   })
 
   test('can enter name and start assessment', async ({ page }) => {
-    test.skip(!joinCode, 'No join code — API not available')
     await page.goto(`/join/${joinCode}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -163,7 +141,6 @@ test.describe('Student Portal — Assessment Taking', () => {
   })
 
   test('MC options are clickable', async ({ page }) => {
-    test.skip(!joinCode, 'No join code — API not available')
     await page.goto(`/join/${joinCode}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -183,7 +160,6 @@ test.describe('Student Portal — Assessment Taking', () => {
   })
 
   test('TF options are clickable', async ({ page }) => {
-    test.skip(!joinCode, 'No join code — API not available')
     await page.goto(`/join/${joinCode}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -205,7 +181,6 @@ test.describe('Student Portal — Assessment Taking', () => {
   })
 
   test('matching cards render with terms and definitions', async ({ page }) => {
-    test.skip(!joinCode, 'No join code — API not available')
     await page.goto(`/join/${joinCode}`)
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(2000)
@@ -229,7 +204,6 @@ test.describe('Student Portal — Assessment Taking', () => {
   })
 
   test('full submission flow — answer and submit', async ({ page }) => {
-    test.skip(!joinCode, 'No join code — API not available')
     // Use unique name to avoid duplicate submission rejection
     const uniqueStudentName = 'E2E Student ' + Date.now()
     await page.goto(`/join/${joinCode}`)

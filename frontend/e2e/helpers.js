@@ -9,25 +9,47 @@ const AUTH_HEADERS = {
 }
 
 /**
+ * Publish a test assessment via API and THROW on any failure.
+ *
+ * Promoted (PR-gated) specs use this so a broken fixture fails the run
+ * loudly instead of silently skipping every test — the silent-skip
+ * `test.skip(!joinCode)` masks were removed in hardening sprint PR5.
+ */
+async function publishAssessmentStrict(request, assessment, settings = {}) {
+  const response = await request.post('/api/publish-assessment', {
+    headers: AUTH_HEADERS,
+    data: {
+      assessment,
+      settings: {
+        teacher_name: 'Playwright Teacher',
+        show_score_immediately: true,
+        show_correct_answers: true,
+        content_type: 'assessment',
+        ...settings,
+      },
+    },
+  })
+  if (!response.ok()) {
+    throw new Error(
+      `publish-assessment failed: HTTP ${response.status()} — ${await response.text()}`
+    )
+  }
+  const data = await response.json()
+  if (!data.join_code) {
+    throw new Error('publish-assessment returned no join_code: ' + JSON.stringify(data))
+  }
+  return data.join_code
+}
+
+/**
  * Publish a test assessment via API. Returns join code or null.
+ *
+ * Lenient variant kept for the nightly/non-promoted specs that still
+ * tolerate a missing backend fixture (they pair this with test.skip).
  */
 async function publishAssessment(request, assessment, settings = {}) {
   try {
-    const response = await request.post('/api/publish-assessment', {
-      headers: AUTH_HEADERS,
-      data: {
-        assessment,
-        settings: {
-          teacher_name: 'Playwright Teacher',
-          show_score_immediately: true,
-          show_correct_answers: true,
-          content_type: 'assessment',
-          ...settings,
-        },
-      },
-    })
-    const data = await response.json()
-    return data.join_code || null
+    return await publishAssessmentStrict(request, assessment, settings)
   } catch (e) {
     return null
   }
@@ -59,9 +81,13 @@ async function startAssessment(page, joinCode, studentName) {
 
 /**
  * Generate a unique student name to avoid duplicate constraints.
+ * Counter suffix makes collisions impossible even when two calls land in
+ * the same millisecond (serial --workers=1 runs have no parallel jitter,
+ * so Date.now() alone is collision-improbable, not collision-proof).
  */
+let __uniqueNameSeq = 0
 function uniqueName(prefix = 'Student') {
-  return `${prefix} ${Date.now()}`
+  return `${prefix} ${Date.now()}-${++__uniqueNameSeq}`
 }
 
 /**
@@ -277,6 +303,7 @@ const ASSESSMENTS = {
 export {
   AUTH_HEADERS,
   publishAssessment,
+  publishAssessmentStrict,
   deleteAssessment,
   startAssessment,
   uniqueName,
