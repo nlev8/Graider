@@ -98,9 +98,21 @@ because each item exists because *something burned us before*.
     spec-compliance, investigation, and synthesis agents (Class A included);
     the main loop does final arbitration itself — never delegated. Exception:
     wide fan-outs (15+ agents) may use sonnet workers + opus verification of
-    their outputs to protect the usage cap. Codex adversarial passes run
-    `--effort high`. (Plan-tier rationale: on Max, the constraint is the usage
-    window, not dollars — reliability-per-cap beats tier savings.)
+    their outputs to protect the usage cap. (Plan-tier rationale: on Max, the
+    constraint is the usage window, not dollars — reliability-per-cap beats
+    tier savings.)
+
+    **Codex is a STANDING second-model layer, not an occasional tool**
+    (operator directive, 2026-06-12): every review loop — per-wave PR
+    batches, re-scores, anything Class B — gets a Codex adversarial pass
+    (`codex exec -s read-only -c model_reasoning_effort=high`) IN ADDITION
+    to the Claude opus reviews, explicitly prompted to find what Claude
+    missed (identifier-capture changes, eager-evaluation at guard seams,
+    stale closures, non-pure-move logic). Merges wait for the Codex verdict;
+    findings are triaged real-vs-false-positive by the main loop. Rationale:
+    the 2026-06-09 reconciliation — Codex caught a score-inflating error
+    that Claude reviewers had passed; different-model blind spots are
+    real and cheap to cover.
 
 ---
 
