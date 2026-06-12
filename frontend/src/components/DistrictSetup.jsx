@@ -1,268 +1,28 @@
 import React, { useState, useEffect } from "react";
 import * as api from "../services/api";
+import {
+  styles,
+  sectionHeadingStyle,
+  BORDER,
+  GREEN,
+  RED,
+  TEXT,
+  TEXT_DIM,
+  LIGHT_TEXT,
+  LIGHT_TEXT_DIM,
+} from "./district-setup/theme";
+import PasswordField from "./district-setup/PasswordField";
+import createConfigFormHandlers from "./district-setup/createConfigFormHandlers";
+import SisProviderSection from "./district-setup/SisProviderSection";
+import AiKeysSection from "./district-setup/AiKeysSection";
+import SchoolAdminsSection from "./district-setup/SchoolAdminsSection";
+import ConfigSummarySection from "./district-setup/ConfigSummarySection";
+import ChangePasswordSection from "./district-setup/ChangePasswordSection";
 
-var PURPLE = "#7c3aed";
-var BG = "#0a0a0a";
-var CARD_BG = "rgba(255,255,255,0.03)";
-var BORDER = "rgba(255,255,255,0.08)";
-var TEXT = "#e5e5e5";
-var TEXT_DIM = "#999";
-var GREEN = "#22c55e";
-var RED = "#ef4444";
-
-var styles = {
-  page: {
-    minHeight: "100vh",
-    background: BG,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    color: TEXT,
-    padding: "20px",
-  },
-  card: {
-    background: CARD_BG,
-    border: "1px solid " + BORDER,
-    borderRadius: "16px",
-    padding: "32px",
-    width: "100%",
-    maxWidth: "520px",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-  },
-  configCard: {
-    background: CARD_BG,
-    border: "1px solid " + BORDER,
-    borderRadius: "16px",
-    padding: "32px",
-    width: "100%",
-    maxWidth: "680px",
-    maxHeight: "85vh",
-    overflowY: "auto",
-    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-  },
-  logo: {
-    textAlign: "center",
-    marginBottom: "24px",
-  },
-  logoText: {
-    fontSize: "28px",
-    fontWeight: "700",
-    color: PURPLE,
-    letterSpacing: "-0.5px",
-  },
-  subtitle: {
-    fontSize: "13px",
-    color: TEXT_DIM,
-    marginTop: "4px",
-  },
-  heading: {
-    fontSize: "20px",
-    fontWeight: "600",
-    marginBottom: "20px",
-    color: TEXT,
-  },
-  sectionHeading: {
-    fontSize: "16px",
-    fontWeight: "600",
-    marginBottom: "12px",
-    marginTop: "28px",
-    color: TEXT,
-    borderBottom: "1px solid " + BORDER,
-    paddingBottom: "8px",
-  },
-  label: {
-    display: "block",
-    fontSize: "13px",
-    fontWeight: "500",
-    color: TEXT_DIM,
-    marginBottom: "6px",
-    marginTop: "12px",
-  },
-  input: {
-    width: "100%",
-    padding: "10px 12px",
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid " + BORDER,
-    borderRadius: "8px",
-    color: TEXT,
-    fontSize: "14px",
-    outline: "none",
-    boxSizing: "border-box",
-  },
-  passwordWrap: {
-    position: "relative",
-    width: "100%",
-  },
-  toggleBtn: {
-    position: "absolute",
-    right: "8px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    background: "none",
-    border: "none",
-    color: TEXT_DIM,
-    cursor: "pointer",
-    fontSize: "12px",
-    padding: "4px 8px",
-  },
-  btn: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "10px 20px",
-    background: PURPLE,
-    color: "#fff",
-    border: "none",
-    borderRadius: "8px",
-    fontSize: "14px",
-    fontWeight: "600",
-    cursor: "pointer",
-    marginTop: "16px",
-    width: "100%",
-  },
-  btnSmall: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "8px 16px",
-    background: PURPLE,
-    color: "#fff",
-    border: "none",
-    borderRadius: "8px",
-    fontSize: "13px",
-    fontWeight: "500",
-    cursor: "pointer",
-    marginTop: "12px",
-  },
-  btnOutline: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "8px 16px",
-    background: "transparent",
-    color: TEXT_DIM,
-    border: "1px solid " + BORDER,
-    borderRadius: "8px",
-    fontSize: "13px",
-    fontWeight: "500",
-    cursor: "pointer",
-    marginTop: "12px",
-  },
-  btnDanger: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "8px 16px",
-    background: "rgba(239,68,68,0.15)",
-    color: RED,
-    border: "1px solid rgba(239,68,68,0.3)",
-    borderRadius: "8px",
-    fontSize: "13px",
-    fontWeight: "500",
-    cursor: "pointer",
-    marginTop: "12px",
-  },
-  presetBtn: {
-    display: "inline-block",
-    padding: "6px 14px",
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid " + BORDER,
-    borderRadius: "6px",
-    color: TEXT_DIM,
-    fontSize: "12px",
-    cursor: "pointer",
-    marginRight: "8px",
-    marginTop: "8px",
-  },
-  badge: {
-    display: "inline-block",
-    padding: "4px 10px",
-    borderRadius: "12px",
-    fontSize: "12px",
-    fontWeight: "600",
-    marginLeft: "8px",
-  },
-  badgeGreen: {
-    background: "rgba(34,197,94,0.15)",
-    color: GREEN,
-  },
-  badgeRed: {
-    background: "rgba(239,68,68,0.15)",
-    color: RED,
-  },
-  error: {
-    color: RED,
-    fontSize: "13px",
-    marginTop: "8px",
-  },
-  success: {
-    color: GREEN,
-    fontSize: "13px",
-    marginTop: "8px",
-  },
-  helperText: {
-    fontSize: "12px",
-    color: TEXT_DIM,
-    marginTop: "4px",
-  },
-  radioGroup: {
-    display: "flex",
-    gap: "16px",
-    marginTop: "8px",
-    marginBottom: "12px",
-  },
-  radioLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    cursor: "pointer",
-    fontSize: "14px",
-    color: TEXT,
-  },
-  summaryItem: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "8px 0",
-    borderBottom: "1px solid " + BORDER,
-    fontSize: "13px",
-  },
-};
-
-var LIGHT_TEXT = "#333";
-var LIGHT_TEXT_DIM = "#666";
-var LIGHT_BORDER = "#e0e0e0";
-
-// Section headings (and several body text nodes) hardcode the dark-mode
-// TEXT/TEXT_DIM constants. On the light-mode white card that renders
-// white-on-white (invisible). Theme them per the established isDark pattern.
-function sectionHeadingStyle(isDark) {
-  return isDark
-    ? styles.sectionHeading
-    : Object.assign({}, styles.sectionHeading, { color: LIGHT_TEXT, borderBottom: "1px solid " + LIGHT_BORDER });
-}
-
-function PasswordField(props) {
-  var show = props.show;
-  var setShow = props.setShow;
-  var isDark = props.isDark !== false;
-  var pfInput = isDark ? styles.input : Object.assign({}, styles.input, { background: "#f9f9f9", border: "1px solid #ddd", color: "#333" });
-  return React.createElement("div", { style: styles.passwordWrap },
-    React.createElement("input", {
-      type: show ? "text" : "password",
-      value: props.value,
-      onChange: props.onChange,
-      placeholder: props.placeholder || "",
-      style: Object.assign({}, pfInput, { paddingRight: "60px" }),
-      autoComplete: props.autoComplete || "off",
-    }),
-    React.createElement("button", {
-      type: "button",
-      style: styles.toggleBtn,
-      onClick: function() { setShow(!show); },
-    }, show ? "Hide" : "Show")
-  );
-}
+// CQ wave-5 split: ConfigForm's section markup + handlers moved verbatim to
+// ./district-setup/* (theme.js, PasswordField, createConfigFormHandlers,
+// *Section components). ConfigForm stays the always-mounted owner of ALL
+// config/admin/password state and threads it down via props.
 
 function LoginGate(props) {
   var isDark = props.isDark !== false;
@@ -811,142 +571,16 @@ function ConfigForm(props) {
     });
   }, []);
 
-  function updateField(field, value) {
-    setConfig(function(prev) {
-      var next = Object.assign({}, prev);
-      next[field] = value;
-      return next;
-    });
-    setSisSaved(false);
-    setKeysSaved(false);
-  }
-
-  function toggleSecret(key) {
-    setShowSecrets(function(prev) {
-      var next = Object.assign({}, prev);
-      next[key] = !prev[key];
-      return next;
-    });
-  }
-
-  function handleSaveSIS() {
-    setSaving(true);
-    setError("");
-    setSisSaved(false);
-    var payload = { sis_type: sisType };
-    if (sisType === "clever") {
-      payload.clever_client_id = config.clever_client_id;
-      if (config.clever_client_secret) payload.clever_client_secret = config.clever_client_secret;
-      payload.clever_redirect_uri = config.clever_redirect_uri;
-      if (config.clever_district_token) payload.clever_district_token = config.clever_district_token;
-    } else {
-      payload.oneroster_base_url = config.oneroster_base_url;
-      payload.oneroster_client_id = config.oneroster_client_id;
-      if (config.oneroster_client_secret) payload.oneroster_client_secret = config.oneroster_client_secret;
-      payload.oneroster_token_url = config.oneroster_token_url;
-      payload.oneroster_school_id = config.oneroster_school_id;
-    }
-    api.saveDistrictConfig(payload).then(function(res) {
-      setSaving(false);
-      if (res && res.error) {
-        setError(res.error);
-      } else {
-        setSisSaved(true);
-        // Update has_keys indicators
-        if (sisType === "clever") {
-          setHasKeys(function(prev) {
-            return Object.assign({}, prev, {
-              has_clever_secret: prev.has_clever_secret || !!config.clever_client_secret,
-              has_clever_token: prev.has_clever_token || !!config.clever_district_token,
-            });
-          });
-        } else {
-          setHasKeys(function(prev) {
-            return Object.assign({}, prev, {
-              has_oneroster_secret: prev.has_oneroster_secret || !!config.oneroster_client_secret,
-            });
-          });
-        }
-      }
-    }).catch(function() {
-      setSaving(false);
-      setError("Failed to save");
-    });
-  }
-
-  function handleTestConnection() {
-    setTesting(true);
-    setTestResult(null);
-    api.testDistrictConnection().then(function(res) {
-      setTesting(false);
-      setTestResult(res);
-    }).catch(function() {
-      setTesting(false);
-      setTestResult({ error: "Connection failed" });
-    });
-  }
-
-  function handleSaveKeys() {
-    setSaving(true);
-    setError("");
-    setKeysSaved(false);
-    var payload = { ai_keys: true };
-    if (config.openai_api_key) payload.openai_api_key = config.openai_api_key;
-    if (config.anthropic_api_key) payload.anthropic_api_key = config.anthropic_api_key;
-    if (config.gemini_api_key) payload.gemini_api_key = config.gemini_api_key;
-    api.saveDistrictConfig(payload).then(function(res) {
-      setSaving(false);
-      if (res && res.error) {
-        setError(res.error);
-      } else {
-        setKeysSaved(true);
-        setHasKeys(function(prev) {
-          return Object.assign({}, prev, {
-            has_openai: prev.has_openai || !!config.openai_api_key,
-            has_anthropic: prev.has_anthropic || !!config.anthropic_api_key,
-            has_gemini: prev.has_gemini || !!config.gemini_api_key,
-          });
-        });
-      }
-    }).catch(function() {
-      setSaving(false);
-      setError("Failed to save keys");
-    });
-  }
-
-  function handleChangePassword() {
-    setPwMsg("");
-    setPwErr("");
-    if (newPw.length < 8) {
-      setPwErr("New password must be at least 8 characters");
-      return;
-    }
-    api.changeDistrictPassword(currentPw, newPw).then(function(res) {
-      if (res && res.error) {
-        setPwErr(res.error);
-      } else {
-        setPwMsg("Password changed successfully");
-        setCurrentPw("");
-        setNewPw("");
-      }
-    }).catch(function() {
-      setPwErr("Failed to change password");
-    });
-  }
-
-  function handleLogout() {
-    api.districtLogout().then(function() {
-      onLogout();
-    });
-  }
-
-  function applyPreset(preset) {
-    if (preset === "classlink") {
-      updateField("oneroster_token_url", config.oneroster_base_url.replace(/\/ims\/oneroster\/.*/, "") + "/oauth/token");
-    } else if (preset === "powerschool") {
-      updateField("oneroster_token_url", config.oneroster_base_url.replace(/\/ws\/.*/, "") + "/oauth/access_token");
-    }
-  }
+  // Handlers moved verbatim to createConfigFormHandlers (CQ wave-5 split);
+  // re-created each render with the current state values, exactly as the
+  // inline definitions were.
+  var handlers = createConfigFormHandlers({
+    config: config, sisType: sisType, currentPw: currentPw, newPw: newPw, onLogout: onLogout,
+    setConfig: setConfig, setSisSaved: setSisSaved, setKeysSaved: setKeysSaved,
+    setSaving: setSaving, setError: setError, setHasKeys: setHasKeys,
+    setTesting: setTesting, setTestResult: setTestResult, setShowSecrets: setShowSecrets,
+    setPwMsg: setPwMsg, setPwErr: setPwErr, setCurrentPw: setCurrentPw, setNewPw: setNewPw,
+  });
 
   if (loading) {
     return React.createElement("div", { style: styles.page },
@@ -975,369 +609,39 @@ function ConfigForm(props) {
         React.createElement("div", { style: Object.assign({}, styles.subtitle, isDark ? {} : { color: "#888" }) }, "District Configuration")
       ),
 
-      // Section 1: SIS Provider
-      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "SIS Provider"),
-      React.createElement("div", { style: styles.radioGroup },
-        React.createElement("label", { style: radioLabelStyle },
-          React.createElement("input", {
-            type: "radio",
-            name: "sis_type",
-            value: "clever",
-            checked: sisType === "clever",
-            onChange: function() { setSisType("clever"); setSisSaved(false); },
-          }),
-          "Clever"
-        ),
-        React.createElement("label", { style: radioLabelStyle },
-          React.createElement("input", {
-            type: "radio",
-            name: "sis_type",
-            value: "oneroster",
-            checked: sisType === "oneroster",
-            onChange: function() { setSisType("oneroster"); setSisSaved(false); },
-          }),
-          "OneRoster"
-        )
-      ),
-
-      // Clever fields
-      sisType === "clever" ? React.createElement(React.Fragment, null,
-        React.createElement("label", { style: styles.label }, "Client ID"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: config.clever_client_id,
-          onChange: function(e) { updateField("clever_client_id", e.target.value); },
-          placeholder: "Clever application client ID",
-        }),
-        React.createElement("label", { style: styles.label },
-          "Client Secret",
-          hasKeys.has_clever_secret ? React.createElement("span", {
-            style: Object.assign({}, styles.badge, styles.badgeGreen),
-          }, "Saved") : null
-        ),
-        React.createElement(PasswordField, { isDark: isDark,
-          value: config.clever_client_secret,
-          onChange: function(e) { updateField("clever_client_secret", e.target.value); },
-          placeholder: hasKeys.has_clever_secret ? "Leave blank to keep current" : "Clever client secret",
-          show: !!showSecrets.clever_secret,
-          setShow: function() { toggleSecret("clever_secret"); },
-        }),
-        React.createElement("label", { style: styles.label }, "Redirect URI"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: config.clever_redirect_uri,
-          onChange: function(e) { updateField("clever_redirect_uri", e.target.value); },
-          placeholder: "https://app.graider.live/api/clever/callback",
-        }),
-        React.createElement("label", { style: styles.label },
-          "District Token (optional)",
-          hasKeys.has_clever_token ? React.createElement("span", {
-            style: Object.assign({}, styles.badge, styles.badgeGreen),
-          }, "Saved") : null
-        ),
-        React.createElement(PasswordField, { isDark: isDark,
-          value: config.clever_district_token,
-          onChange: function(e) { updateField("clever_district_token", e.target.value); },
-          placeholder: hasKeys.has_clever_token ? "Leave blank to keep current" : "For Secure Sync (optional)",
-          show: !!showSecrets.clever_token,
-          setShow: function() { toggleSecret("clever_token"); },
-        })
-      ) : null,
-
-      // OneRoster fields
-      sisType === "oneroster" ? React.createElement(React.Fragment, null,
-        React.createElement("label", { style: styles.label }, "Base URL"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: config.oneroster_base_url,
-          onChange: function(e) { updateField("oneroster_base_url", e.target.value); },
-          placeholder: "https://sis.district.org/ims/oneroster/v1p1",
-        }),
-        React.createElement("label", { style: styles.label }, "Client ID"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: config.oneroster_client_id,
-          onChange: function(e) { updateField("oneroster_client_id", e.target.value); },
-          placeholder: "OAuth 2.0 client ID",
-        }),
-        React.createElement("label", { style: styles.label },
-          "Client Secret",
-          hasKeys.has_oneroster_secret ? React.createElement("span", {
-            style: Object.assign({}, styles.badge, styles.badgeGreen),
-          }, "Saved") : null
-        ),
-        React.createElement(PasswordField, { isDark: isDark,
-          value: config.oneroster_client_secret,
-          onChange: function(e) { updateField("oneroster_client_secret", e.target.value); },
-          placeholder: hasKeys.has_oneroster_secret ? "Leave blank to keep current" : "OAuth 2.0 client secret",
-          show: !!showSecrets.oneroster_secret,
-          setShow: function() { toggleSecret("oneroster_secret"); },
-        }),
-        React.createElement("label", { style: styles.label }, "Token URL (optional)"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: config.oneroster_token_url,
-          onChange: function(e) { updateField("oneroster_token_url", e.target.value); },
-          placeholder: "Auto-detected if blank",
-        }),
-        React.createElement("div", null,
-          React.createElement("button", {
-            type: "button",
-            style: styles.presetBtn,
-            onClick: function() { applyPreset("classlink"); },
-          }, "ClassLink"),
-          React.createElement("button", {
-            type: "button",
-            style: styles.presetBtn,
-            onClick: function() { applyPreset("powerschool"); },
-          }, "PowerSchool")
-        ),
-        React.createElement("label", { style: styles.label }, "School ID (optional)"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: config.oneroster_school_id,
-          onChange: function(e) { updateField("oneroster_school_id", e.target.value); },
-          placeholder: "sourcedId to scope roster",
-        })
-      ) : null,
-
-      // Test + Save buttons for SIS
-      React.createElement("div", { style: { display: "flex", gap: "10px", marginTop: "16px" } },
-        React.createElement("button", {
-          type: "button",
-          style: Object.assign({}, styles.btnSmall, { flex: 1 }),
-          onClick: handleTestConnection,
-          disabled: testing,
-        }, testing ? "Testing..." : "Test Connection"),
-        React.createElement("button", {
-          type: "button",
-          style: Object.assign({}, styles.btnSmall, { flex: 1 }),
-          onClick: handleSaveSIS,
-          disabled: saving,
-        }, saving ? "Saving..." : "Save SIS Config")
-      ),
-      sisSaved ? React.createElement("span", {
-        style: Object.assign({}, styles.badge, styles.badgeGreen, { marginTop: "8px", display: "inline-block" }),
-      }, "Saved") : null,
-      testResult ? React.createElement("div", {
-        style: testResult.error ? styles.error : styles.success,
-      }, testResult.error ? "Error: " + testResult.error : "Connection successful") : null,
+      // Section 1: SIS Provider (Clever/OneRoster credentials + test/save)
+      React.createElement(SisProviderSection, {
+        isDark: isDark, inputStyleThemed: inputStyleThemed, radioLabelStyle: radioLabelStyle,
+        sisType: sisType, setSisType: setSisType, setSisSaved: setSisSaved,
+        config: config, updateField: handlers.updateField,
+        hasKeys: hasKeys, showSecrets: showSecrets, toggleSecret: handlers.toggleSecret,
+        applyPreset: handlers.applyPreset,
+        handleTestConnection: handlers.handleTestConnection, handleSaveSIS: handlers.handleSaveSIS,
+        testing: testing, saving: saving, sisSaved: sisSaved, testResult: testResult,
+      }),
 
       // Section 2: AI API Keys
-      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "AI API Keys"),
-      React.createElement("div", { style: styles.helperText }, "Teachers can override with their own keys in Settings"),
-
-      React.createElement("label", { style: styles.label },
-        "OpenAI API Key",
-        hasKeys.has_openai ? React.createElement("span", {
-          style: Object.assign({}, styles.badge, styles.badgeGreen),
-        }, "Saved") : null
-      ),
-      React.createElement(PasswordField, { isDark: isDark,
-        value: config.openai_api_key,
-        onChange: function(e) { updateField("openai_api_key", e.target.value); },
-        placeholder: hasKeys.has_openai ? "Leave blank to keep current" : "sk-...",
-        show: !!showSecrets.openai,
-        setShow: function() { toggleSecret("openai"); },
+      React.createElement(AiKeysSection, {
+        isDark: isDark, config: config, updateField: handlers.updateField,
+        hasKeys: hasKeys, showSecrets: showSecrets, toggleSecret: handlers.toggleSecret,
+        handleSaveKeys: handlers.handleSaveKeys, saving: saving, keysSaved: keysSaved,
       }),
 
-      React.createElement("label", { style: styles.label },
-        "Anthropic API Key",
-        hasKeys.has_anthropic ? React.createElement("span", {
-          style: Object.assign({}, styles.badge, styles.badgeGreen),
-        }, "Saved") : null
-      ),
-      React.createElement(PasswordField, { isDark: isDark,
-        value: config.anthropic_api_key,
-        onChange: function(e) { updateField("anthropic_api_key", e.target.value); },
-        placeholder: hasKeys.has_anthropic ? "Leave blank to keep current" : "sk-ant-...",
-        show: !!showSecrets.anthropic,
-        setShow: function() { toggleSecret("anthropic"); },
-      }),
-
-      React.createElement("label", { style: styles.label },
-        "Gemini API Key",
-        hasKeys.has_gemini ? React.createElement("span", {
-          style: Object.assign({}, styles.badge, styles.badgeGreen),
-        }, "Saved") : null
-      ),
-      React.createElement(PasswordField, { isDark: isDark,
-        value: config.gemini_api_key,
-        onChange: function(e) { updateField("gemini_api_key", e.target.value); },
-        placeholder: hasKeys.has_gemini ? "Leave blank to keep current" : "AIza...",
-        show: !!showSecrets.gemini,
-        setShow: function() { toggleSecret("gemini"); },
-      }),
-
-      React.createElement("button", {
-        type: "button",
-        style: styles.btnSmall,
-        onClick: handleSaveKeys,
-        disabled: saving,
-      }, saving ? "Saving..." : "Save Keys"),
-      keysSaved ? React.createElement("span", {
-        style: Object.assign({}, styles.badge, styles.badgeGreen, { marginLeft: "10px" }),
-      }, "Saved") : null,
-
+      // Shared save-error line (set by both the SIS and AI-keys save handlers)
       error ? React.createElement("div", { style: styles.error }, error) : null,
 
       // Section 3: School Admins
-      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "School Admins"),
-      React.createElement("div", { style: styles.helperText }, "Invite teachers to become school-level administrators"),
-
-      // Current admins table
-      adminList.length > 0 ? React.createElement("div", { style: { marginTop: "12px" } },
-        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "13px" } },
-          React.createElement("thead", null,
-            React.createElement("tr", { style: { borderBottom: "1px solid " + BORDER } },
-              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: txtDim, fontWeight: "500" } }, "Name"),
-              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: txtDim, fontWeight: "500" } }, "School"),
-              React.createElement("th", { style: { textAlign: "left", padding: "8px 4px", color: txtDim, fontWeight: "500" } }, "Granted"),
-              React.createElement("th", { style: { textAlign: "right", padding: "8px 4px" } }, "")
-            )
-          ),
-          React.createElement("tbody", null,
-            adminList.map(function(admin) {
-              return React.createElement("tr", { key: admin.user_id, style: { borderBottom: "1px solid " + BORDER } },
-                React.createElement("td", { style: { padding: "8px 4px", color: txt } }, admin.name || admin.email || "Unknown"),
-                React.createElement("td", { style: { padding: "8px 4px", color: txt } }, admin.school || "-"),
-                React.createElement("td", { style: { padding: "8px 4px", color: txtDim } }, admin.granted_at ? new Date(admin.granted_at).toLocaleDateString() : "-"),
-                React.createElement("td", { style: { padding: "8px 4px", textAlign: "right" } },
-                  React.createElement("button", {
-                    type: "button",
-                    style: Object.assign({}, styles.btnDanger, { marginTop: 0, padding: "4px 10px", fontSize: "12px" }),
-                    onClick: function() {
-                      if (confirm("Revoke admin access for " + (admin.name || admin.email || "this user") + "?")) {
-                        api.revokeAdmin(admin.user_id).then(function(res) {
-                          if (res && !res.error) {
-                            setAdminList(function(prev) {
-                              return prev.filter(function(a) { return a.user_id !== admin.user_id; });
-                            });
-                          }
-                        }).catch(function() {});
-                      }
-                    },
-                  }, "Revoke")
-                )
-              );
-            })
-          )
-        )
-      ) : React.createElement("div", { style: { color: txtDim, fontSize: "13px", marginTop: "8px" } }, "No school admins yet"),
-
-      // Create invite form
-      React.createElement("div", { style: { marginTop: "20px", padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "10px", border: "1px solid " + BORDER } },
-        React.createElement("div", { style: { fontSize: "14px", fontWeight: "600", color: txt, marginBottom: "12px" } }, "Create Admin Invite"),
-
-        React.createElement("label", { style: styles.label }, "School Name"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: adminSchoolName,
-          onChange: function(e) { setAdminSchoolName(e.target.value); },
-          placeholder: "Lincoln Middle School",
-        }),
-
-        React.createElement("label", { style: Object.assign({}, styles.label, { marginTop: "14px" }) }, "Pre-assign Teachers (optional)"),
-        React.createElement("input", {
-          style: inputStyleThemed,
-          value: adminTeacherSearch,
-          onChange: function(e) {
-            var val = e.target.value;
-            setAdminTeacherSearch(val);
-            if (searchTimer) clearTimeout(searchTimer);
-            if (val.length >= 2) {
-              setSearchTimer(setTimeout(function() {
-                api.searchTeachers(val).then(function(res) {
-                  setAdminSearchResults(res.teachers || []);
-                }).catch(function() { setAdminSearchResults([]); });
-              }, 300));
-            } else {
-              setAdminSearchResults([]);
-            }
-          },
-          placeholder: "Search by name or email...",
-        }),
-
-        // Search results dropdown
-        adminSearchResults.length > 0 ? React.createElement("div", {
-          style: { background: "rgba(255,255,255,0.06)", border: "1px solid " + BORDER, borderRadius: "8px", marginTop: "4px", maxHeight: "150px", overflowY: "auto" },
-        },
-          adminSearchResults.map(function(teacher) {
-            var alreadyAdded = adminManualTeachers.some(function(t) { return t.id === teacher.id; });
-            return React.createElement("div", {
-              key: teacher.id,
-              style: { padding: "8px 12px", cursor: alreadyAdded ? "default" : "pointer", color: alreadyAdded ? TEXT_DIM : TEXT, fontSize: "13px", borderBottom: "1px solid " + BORDER },
-              onClick: function() {
-                if (alreadyAdded) return;
-                setAdminManualTeachers(function(prev) { return prev.concat([teacher]); });
-                setAdminTeacherSearch('');
-                setAdminSearchResults([]);
-              },
-            }, (teacher.name || teacher.email) + (alreadyAdded ? " (added)" : ""));
-          })
-        ) : null,
-
-        // Selected teachers chips
-        adminManualTeachers.length > 0 ? React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" } },
-          adminManualTeachers.map(function(teacher) {
-            return React.createElement("span", {
-              key: teacher.id,
-              style: { display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", borderRadius: "12px", fontSize: "12px" },
-            },
-              teacher.name || teacher.email,
-              React.createElement("button", {
-                type: "button",
-                style: { background: "none", border: "none", color: "#a5b4fc", cursor: "pointer", fontSize: "14px", padding: "0 2px", lineHeight: "1" },
-                onClick: function() {
-                  setAdminManualTeachers(function(prev) {
-                    return prev.filter(function(t) { return t.id !== teacher.id; });
-                  });
-                },
-              }, "\u00d7")
-            );
-          })
-        ) : null,
-
-        React.createElement("button", {
-          type: "button",
-          style: Object.assign({}, styles.btnSmall, { marginTop: "14px" }, creatingInvite ? { opacity: 0.6 } : {}),
-          disabled: creatingInvite || !adminSchoolName.trim(),
-          onClick: function() {
-            setCreatingInvite(true);
-            setAdminInviteCode(null);
-            var teacherIds = adminManualTeachers.map(function(t) { return t.id; });
-            api.createAdminInvite(adminSchoolName.trim(), teacherIds).then(function(res) {
-              setCreatingInvite(false);
-              if (res && res.code) {
-                setAdminInviteCode(res);
-                // Refresh admin list
-                api.listAdmins().then(function(r) {
-                  if (r && r.admins) setAdminList(r.admins);
-                }).catch(function() {});
-              }
-            }).catch(function() {
-              setCreatingInvite(false);
-            });
-          },
-        }, creatingInvite ? "Generating..." : "Generate Invite Code"),
-
-        // Generated invite code display
-        adminInviteCode ? React.createElement("div", {
-          style: { marginTop: "16px", padding: "16px", background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "10px", textAlign: "center" },
-        },
-          React.createElement("div", { style: { fontSize: "12px", color: txtDim, marginBottom: "6px" } }, "Invite Code"),
-          React.createElement("div", {
-            style: { fontSize: "24px", fontWeight: "700", color: GREEN, letterSpacing: "2px", cursor: "pointer", fontFamily: "monospace" },
-            title: "Click to copy",
-            onClick: function() {
-              navigator.clipboard.writeText(adminInviteCode.code);
-            },
-          }, adminInviteCode.code),
-          React.createElement("div", { style: { fontSize: "12px", color: txtDim, marginTop: "8px" } },
-            "Expires: " + new Date(adminInviteCode.expires_at).toLocaleDateString() + " \u2022 Click code to copy"
-          )
-        ) : null
-      ),
+      React.createElement(SchoolAdminsSection, {
+        isDark: isDark, txt: txt, txtDim: txtDim, inputStyleThemed: inputStyleThemed,
+        adminList: adminList, setAdminList: setAdminList,
+        adminSchoolName: adminSchoolName, setAdminSchoolName: setAdminSchoolName,
+        adminTeacherSearch: adminTeacherSearch, setAdminTeacherSearch: setAdminTeacherSearch,
+        adminSearchResults: adminSearchResults, setAdminSearchResults: setAdminSearchResults,
+        adminManualTeachers: adminManualTeachers, setAdminManualTeachers: setAdminManualTeachers,
+        adminInviteCode: adminInviteCode, setAdminInviteCode: setAdminInviteCode,
+        searchTimer: searchTimer, setSearchTimer: setSearchTimer,
+        creatingInvite: creatingInvite, setCreatingInvite: setCreatingInvite,
+      }),
 
       // Section 3b: SSO Admin Access (Graider-managed SSO designations)
       React.createElement(SsoAdminSection, { isDark: isDark }),
@@ -1345,70 +649,23 @@ function ConfigForm(props) {
       // Section 3c: District Analytics (school-wide rollup)
       React.createElement(DistrictAnalyticsSection, { isDark: isDark }),
 
-      // Section 4: Configuration Summary + Logout
-      React.createElement("div", { style: sectionHeadingStyle(isDark) }, "Configuration Summary"),
-
-      React.createElement("div", { style: styles.summaryItem },
-        React.createElement("span", null, "SIS Provider"),
-        React.createElement("span", { style: { fontWeight: "600" } }, sisType === "clever" ? "Clever" : "OneRoster")
-      ),
-      React.createElement("div", { style: styles.summaryItem },
-        React.createElement("span", null, "SIS Credentials"),
-        React.createElement("span", null,
-          (sisType === "clever" ? (config.clever_client_id ? "Configured" : "Not set") : (config.oneroster_base_url ? "Configured" : "Not set"))
-        )
-      ),
-      React.createElement("div", { style: styles.summaryItem },
-        React.createElement("span", null, "OpenAI"),
-        React.createElement("span", null, hasKeys.has_openai ? "Configured" : "Not set")
-      ),
-      React.createElement("div", { style: styles.summaryItem },
-        React.createElement("span", null, "Anthropic"),
-        React.createElement("span", null, hasKeys.has_anthropic ? "Configured" : "Not set")
-      ),
-      React.createElement("div", { style: styles.summaryItem },
-        React.createElement("span", null, "Gemini"),
-        React.createElement("span", null, hasKeys.has_gemini ? "Configured" : "Not set")
-      ),
+      // Section 4: Configuration Summary
+      React.createElement(ConfigSummarySection, { isDark: isDark, sisType: sisType, config: config, hasKeys: hasKeys }),
 
       // Change Password
-      React.createElement("div", { style: { marginTop: "20px" } },
-        React.createElement("button", {
-          type: "button",
-          style: styles.btnOutline,
-          onClick: function() { setShowChangePw(!showChangePw); setPwMsg(""); setPwErr(""); },
-        }, showChangePw ? "Cancel" : "Change Password"),
-        showChangePw ? React.createElement("div", { style: { marginTop: "12px" } },
-          React.createElement("label", { style: styles.label }, "Current Password"),
-          React.createElement("input", {
-            type: "password",
-            style: inputStyleThemed,
-            value: currentPw,
-            onChange: function(e) { setCurrentPw(e.target.value); },
-          }),
-          React.createElement("label", { style: styles.label }, "New Password"),
-          React.createElement("input", {
-            type: "password",
-            style: inputStyleThemed,
-            value: newPw,
-            onChange: function(e) { setNewPw(e.target.value); },
-            placeholder: "Min 8 characters",
-          }),
-          React.createElement("button", {
-            type: "button",
-            style: styles.btnSmall,
-            onClick: handleChangePassword,
-          }, "Update Password"),
-          pwMsg ? React.createElement("div", { style: styles.success }, pwMsg) : null,
-          pwErr ? React.createElement("div", { style: styles.error }, pwErr) : null
-        ) : null
-      ),
+      React.createElement(ChangePasswordSection, {
+        inputStyleThemed: inputStyleThemed,
+        showChangePw: showChangePw, setShowChangePw: setShowChangePw,
+        setPwMsg: setPwMsg, setPwErr: setPwErr, pwMsg: pwMsg, pwErr: pwErr,
+        currentPw: currentPw, setCurrentPw: setCurrentPw, newPw: newPw, setNewPw: setNewPw,
+        handleChangePassword: handlers.handleChangePassword,
+      }),
 
       // Logout
       React.createElement("button", {
         type: "button",
         style: Object.assign({}, styles.btnDanger, { marginTop: "20px" }),
-        onClick: handleLogout,
+        onClick: handlers.handleLogout,
       }, "Log Out")
     )
   );
