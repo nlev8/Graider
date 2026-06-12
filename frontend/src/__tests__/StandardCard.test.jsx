@@ -54,6 +54,16 @@ describe('StandardCard', () => {
     expect(screen.getByText('Hide Details')).toBeDefined();
   });
 
+  it('renders NO expanded section content when isExpanded=false (StandardCardDetails early-return-null)', () => {
+    // Guards the CQ wave-8 split: the isExpanded gate moved from an inline
+    // `{isExpanded && ...}` in the shell to an early-return-null inside
+    // standard-card/StandardCardDetails.jsx.
+    render(<StandardCard standard={richStandard} isSelected={false} onToggle={() => {}} isExpanded={false} onExpand={() => {}} />);
+    expect(screen.queryByText(/What caused the war\?/)).toBeNull();
+    expect(screen.queryByText('secession')).toBeNull();
+    expect(screen.queryByText(/Sample Assessment Item/)).toBeNull();
+  });
+
   it('renders all expanded sections when isExpanded=true', () => {
     render(<StandardCard standard={richStandard} isSelected={false} onToggle={() => {}} isExpanded={true} onExpand={() => {}} />);
     // Bullet-prefixed lines: match by substring
