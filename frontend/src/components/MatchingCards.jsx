@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
+import TermsColumn from "./matching-cards/TermsColumn";
+import DefinitionsColumn from "./matching-cards/DefinitionsColumn";
 
 /**
  * MatchingCards — Interactive card-matching game for vocabulary/matching questions.
@@ -6,6 +8,12 @@ import React, { useState, useMemo, useEffect } from "react";
  * Microsoft-style: terms and definitions displayed as shuffled cards.
  * Click a term, then click the matching definition. Correct pairs disappear
  * with a success animation. Wrong pairs shake and reset.
+ *
+ * Shell owns ALL match state (matched/selectedTerm/selectedDef/shaking/
+ * justMatched), the shuffle + correct-answer memos, the click handlers, and
+ * tryMatch — unchanged from before the CQ wave 8 split. The two card columns
+ * (with their per-card style builders) are stateless children in
+ * matching-cards/, receiving the shell's state via same-named props.
  *
  * Props:
  *   terms: string[]         — list of terms
@@ -192,87 +200,6 @@ export default function MatchingCards({
     }
   }
 
-  function getTermStyle(tIdx) {
-    var isMatched = matched[tIdx] !== undefined;
-    var isSelected = selectedTerm === tIdx;
-    var isShaking = shaking && shaking.term === tIdx;
-    var isJustMatched = justMatched && justMatched.term === tIdx;
-
-    return {
-      padding: "14px 16px",
-      marginBottom: "10px",
-      borderRadius: "10px",
-      fontSize: "0.95rem",
-      fontWeight: 600,
-      cursor: readOnly || isMatched ? "default" : "pointer",
-      transition: "all 0.3s ease",
-      display: "flex",
-      alignItems: "center",
-      gap: "10px",
-      userSelect: "none",
-      background: isJustMatched
-        ? "rgba(34, 197, 94, 0.3)"
-        : isMatched
-        ? "rgba(34, 197, 94, 0.1)"
-        : isSelected
-        ? "rgba(139, 92, 246, 0.3)"
-        : "rgba(139, 92, 246, 0.08)",
-      border: isJustMatched
-        ? "2px solid #22c55e"
-        : isMatched
-        ? "1px solid rgba(34, 197, 94, 0.3)"
-        : isSelected
-        ? "2px solid #8b5cf6"
-        : isShaking
-        ? "2px solid #ef4444"
-        : "1px solid rgba(139, 92, 246, 0.2)",
-      opacity: isMatched && !isJustMatched ? 0.5 : 1,
-      transform: isShaking ? "translateX(-4px)" : isJustMatched ? "scale(1.02)" : "none",
-      animation: isShaking ? "matchShake 0.5s ease" : "none",
-      textDecoration: isMatched ? "line-through" : "none",
-    };
-  }
-
-  function getDefStyle(sdIdx) {
-    var isUsed = Object.values(matched).indexOf(sdIdx) !== -1;
-    var isSelected = selectedDef === sdIdx;
-    var isShaking = shaking && shaking.def === sdIdx;
-    var isJustMatched = justMatched && justMatched.def === sdIdx;
-
-    return {
-      padding: "14px 16px",
-      marginBottom: "10px",
-      borderRadius: "10px",
-      fontSize: "0.9rem",
-      cursor: readOnly || isUsed ? "default" : "pointer",
-      transition: "all 0.3s ease",
-      display: "flex",
-      alignItems: "flex-start",
-      gap: "10px",
-      userSelect: "none",
-      background: isJustMatched
-        ? "rgba(34, 197, 94, 0.3)"
-        : isUsed
-        ? "rgba(34, 197, 94, 0.1)"
-        : isSelected
-        ? "rgba(34, 197, 94, 0.3)"
-        : "rgba(34, 197, 94, 0.05)",
-      border: isJustMatched
-        ? "2px solid #22c55e"
-        : isUsed
-        ? "1px solid rgba(34, 197, 94, 0.3)"
-        : isSelected
-        ? "2px solid #22c55e"
-        : isShaking
-        ? "2px solid #ef4444"
-        : "1px solid rgba(34, 197, 94, 0.15)",
-      opacity: isUsed && !isJustMatched ? 0.5 : 1,
-      transform: isShaking ? "translateX(4px)" : isJustMatched ? "scale(1.02)" : "none",
-      animation: isShaking ? "matchShake 0.5s ease" : "none",
-      textDecoration: isUsed ? "line-through" : "none",
-    };
-  }
-
   return (
     <div style={{ marginTop: "12px" }}>
       {/* CSS keyframes for shake animation */}
@@ -312,86 +239,26 @@ export default function MatchingCards({
         borderRadius: "12px",
       }}>
         {/* Terms column */}
-        <div>
-          <div style={{
-            fontSize: "0.85rem",
-            fontWeight: 700,
-            marginBottom: "10px",
-            color: "#8b5cf6",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-          }}>
-            Terms
-          </div>
-          {terms.map(function(term, tIdx) {
-            return (
-              <div
-                key={tIdx}
-                onClick={function() { handleTermClick(tIdx); }}
-                style={getTermStyle(tIdx)}
-              >
-                <span style={{
-                  minWidth: "24px",
-                  height: "24px",
-                  borderRadius: "50%",
-                  background: matched[tIdx] !== undefined ? "#22c55e" : "#8b5cf6",
-                  color: "white",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}>
-                  {matched[tIdx] !== undefined ? String.fromCharCode(10003) : tIdx + 1}
-                </span>
-                <span>{term}</span>
-              </div>
-            );
-          })}
-        </div>
+        <TermsColumn
+          terms={terms}
+          matched={matched}
+          selectedTerm={selectedTerm}
+          shaking={shaking}
+          justMatched={justMatched}
+          readOnly={readOnly}
+          handleTermClick={handleTermClick}
+        />
 
         {/* Definitions column (shuffled) */}
-        <div>
-          <div style={{
-            fontSize: "0.85rem",
-            fontWeight: 700,
-            marginBottom: "10px",
-            color: "#22c55e",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-          }}>
-            Definitions
-          </div>
-          {shuffledDefs.map(function(sd, sdIdx) {
-            var letter = String.fromCharCode(65 + sdIdx);
-            var isUsed = Object.values(matched).indexOf(sdIdx) !== -1;
-            return (
-              <div
-                key={sdIdx}
-                onClick={function() { handleDefClick(sdIdx); }}
-                style={getDefStyle(sdIdx)}
-              >
-                <span style={{
-                  minWidth: "24px",
-                  height: "24px",
-                  borderRadius: "50%",
-                  background: isUsed ? "#22c55e" : "rgba(34, 197, 94, 0.3)",
-                  color: "white",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}>
-                  {isUsed ? String.fromCharCode(10003) : letter}
-                </span>
-                <span>{sd.text}</span>
-              </div>
-            );
-          })}
-        </div>
+        <DefinitionsColumn
+          shuffledDefs={shuffledDefs}
+          matched={matched}
+          selectedDef={selectedDef}
+          shaking={shaking}
+          justMatched={justMatched}
+          readOnly={readOnly}
+          handleDefClick={handleDefClick}
+        />
       </div>
     </div>
   );
