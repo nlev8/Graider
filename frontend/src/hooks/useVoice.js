@@ -1,4 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import {
+  PRE_BUFFER_CHUNKS,
+  PRE_BUFFER_MS,
+  SILENCE_TIMEOUT_MS,
+  isSpeechRecognitionSupported,
+  createSpeechRecognition,
+  accumulateTranscript,
+  isFatalRecognitionError,
+  decodeBase64ToArrayBuffer,
+  waitForQueuedChunk,
+  pollUntil,
+} from './voice-utils'
 
 /**
  * Hook for voice conversation in the assistant.
@@ -22,15 +34,11 @@ export function useVoice({ onTranscript }) {
   const bufferingRef = useRef(true)
   const bufferTimerRef = useRef(null)
   const streamDoneRef = useRef(false)
-  const PRE_BUFFER_CHUNKS = 5
-  const PRE_BUFFER_MS = 2000
-  const SILENCE_TIMEOUT_MS = 4000
 
   // Keep ref in sync for use in callbacks
   useEffect(() => { isListeningRef.current = isListening }, [isListening])
 
-  const speechAvailable = typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+  const speechAvailable = isSpeechRecognitionSupported()
 
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -56,11 +64,7 @@ export function useVoice({ onTranscript }) {
     accumulatedRef.current = ''
     intentionalStopRef.current = false
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    const recognition = new SpeechRecognition()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
+    const recognition = createSpeechRecognition()
 
     // Reset silence timer whenever speech activity occurs
     const resetSilenceTimer = () => {
@@ -83,24 +87,11 @@ export function useVoice({ onTranscript }) {
     }
 
     recognition.onresult = (event) => {
-      let finalTranscript = ''
-      let interimTranscript = ''
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript
-        } else {
-          interimTranscript += event.results[i][0].transcript
-        }
-      }
-
-      if (finalTranscript) {
-        accumulatedRef.current += (accumulatedRef.current ? ' ' : '') + finalTranscript
-      }
+      const { accumulated, live } = accumulateTranscript(accumulatedRef.current, event)
+      accumulatedRef.current = accumulated
 
       // Show accumulated + interim as live transcript
-      const live = accumulatedRef.current + (interimTranscript ? ' ' + interimTranscript : '')
-      setTranscript(live.trim())
+      setTranscript(live)
 
       // Reset silence timer — user is still speaking
       resetSilenceTimer()
@@ -108,7 +99,7 @@ export function useVoice({ onTranscript }) {
 
     recognition.onerror = (event) => {
       // 'no-speech' and 'aborted' are normal in continuous mode — don't kill the session
-      if (event.error === 'no-speech' || event.error === 'aborted') return
+      if (!isFatalRecognitionError(event.error)) return
       // Fatal errors (not-allowed, service-not-allowed, network) — stop for real
       intentionalStopRef.current = true
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
@@ -173,16 +164,12 @@ export function useVoice({ onTranscript }) {
 
   const playNextChunk = useCallback(async () => {
     if (audioQueueRef.current.length === 0) {
-      // If the SSE stream is still sending, wait longer for more chunks.
-      // On slow connections (hotspot), TTS API calls can take 2-3s each,
-      // so we need a generous window to avoid premature silence.
-      const maxRetries = streamDoneRef.current ? 2 : 20
-      for (let i = 0; i < maxRetries; i++) {
-        await new Promise(r => setTimeout(r, 500))
-        if (audioQueueRef.current.length > 0) break
-        if (streamDoneRef.current) break
-      }
-      if (audioQueueRef.current.length === 0) {
+      // Wait for more chunks (generous window while the SSE stream is still sending)
+      const gotChunk = await waitForQueuedChunk({
+        getQueueLength: () => audioQueueRef.current.length,
+        isStreamDone: () => streamDoneRef.current,
+      })
+      if (!gotChunk) {
         isPlayingRef.current = false
         setIsSpeaking(false)
         return
@@ -196,13 +183,7 @@ export function useVoice({ onTranscript }) {
     const base64 = audioQueueRef.current.shift()
 
     try {
-      const binaryStr = atob(base64)
-      const bytes = new Uint8Array(binaryStr.length)
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i)
-      }
-
-      const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0))
+      const audioBuffer = await ctx.decodeAudioData(decodeBase64ToArrayBuffer(base64))
       const source = ctx.createBufferSource()
       source.buffer = audioBuffer
       source.connect(ctx.destination)
@@ -281,20 +262,7 @@ export function useVoice({ onTranscript }) {
   const waitForPlaybackDone = useCallback(() => {
     // Returns a promise that resolves when audio playback finishes.
     // Polls isPlayingRef every 200ms, max 15 seconds.
-    return new Promise(resolve => {
-      if (!isPlayingRef.current && audioQueueRef.current.length === 0) {
-        resolve()
-        return
-      }
-      let checks = 0
-      const interval = setInterval(() => {
-        checks++
-        if ((!isPlayingRef.current && audioQueueRef.current.length === 0) || checks > 75) {
-          clearInterval(interval)
-          resolve()
-        }
-      }, 200)
-    })
+    return pollUntil(() => !isPlayingRef.current && audioQueueRef.current.length === 0)
   }, [])
 
   const toggleListening = useCallback(() => {
