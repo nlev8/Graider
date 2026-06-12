@@ -139,6 +139,38 @@ describe('PublishContentModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // CQ wave-7 split net: one full-depth mount asserting content from every
+  // extracted publish-content-modal/* section in a single render — catches a
+  // section that silently stops rendering after the file split.
+  it('mounts all sections through the publish-content-modal/* split', () => {
+    render(
+      <PublishContentModal
+        {...baseProps}
+        settings={{ ...baseSettings, isMakeup: true, periodFilename: 'p3.csv', selectedStudents: ['Jane Doe'] }}
+        modalStudents={[{ id: 's1', first: 'Jane', last: 'Doe' }]}
+        studentAccommodations={{ s1: { type: 'iep' } }}
+      />
+    );
+    // Shell header + ModalActions CTA
+    expect(screen.getAllByText('Publish Assessment').length).toBe(2);
+    // AssessmentCategoryToggle
+    expect(screen.getByText('Formative')).toBeDefined();
+    // ClassPeriodSection (class select + period select, classId === '')
+    expect(screen.getByText('Publish to Class (optional)')).toBeDefined();
+    expect(screen.getByText(/Period \(Optional\)/)).toBeDefined();
+    // MakeupToggle
+    expect(screen.getByText('Makeup Exam')).toBeDefined();
+    // StudentSelection
+    expect(screen.getByText('Select Students (1 selected)')).toBeDefined();
+    expect(screen.getByText('Jane Doe')).toBeDefined();
+    // AccommodationsToggle (period set + accommodations present)
+    expect(screen.getByText('Apply IEP/504 Accommodations')).toBeDefined();
+    // TimingSection
+    expect(screen.getByText('Time Limit *')).toBeDefined();
+    // ModalActions
+    expect(screen.getByText('Cancel')).toBeDefined();
+  });
+
   it('renders student list when isMakeup + period selected', () => {
     render(
       <PublishContentModal
