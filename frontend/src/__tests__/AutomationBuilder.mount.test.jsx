@@ -11,6 +11,10 @@ import AutomationBuilder from '../components/AutomationBuilder';
 // shell through all three extracted views (list → edit → run) and asserts
 // real content from each actually mounts.
 
+// The 13 api functions are enumerated EXPLICITLY on purpose — do not
+// "simplify" back to the Proxy-based mock the SettingsAI sibling test uses:
+// vitest 4's mock-module export-presence check throws (`No "listAutomations"
+// export is defined`) when this component's named imports hit a Proxy mock.
 vi.mock('../services/api', () => ({
   listAutomations: vi.fn(async () => ({
     workflows: [{ id: 'wf1', name: 'Sync Gradebook', description: 'Pushes grades nightly', step_count: 3 }],
