@@ -1,13 +1,22 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import Icon from './Icon'
 import { useBehaviorStore } from '../hooks/useBehaviorStore'
 // import { useBehaviorListener } from '../hooks/useBehaviorListener'
 import { getAuthHeaders } from '../services/api'
+import CollapsedTab from './behavior-panel/CollapsedTab'
+import PanelHeader from './behavior-panel/PanelHeader'
+import BehaviorFilters from './behavior-panel/BehaviorFilters'
+import StudentList from './behavior-panel/StudentList'
 
 /**
  * BehaviorPanel — collapsible sidebar for the Assistant tab.
  * Shows cumulative behavior data with event detail + email actions.
  * Live session tracking (STT, manual entry) is commented out — phone app handles that.
+ *
+ * Shell for the CQ wave-8 split: owns ALL state (collapse flag, filters,
+ * expanded student + fetched events) and the data/event handlers — including
+ * the `behavior-email-request` dispatch consumed by assistant-chat's
+ * useAssistantChat listener — so the stateless children in behavior-panel/
+ * only render what they're handed.
  */
 export default function BehaviorPanel({ addToast /*, voiceModeActive = false */ }) {
   const store = useBehaviorStore()
@@ -159,32 +168,9 @@ export default function BehaviorPanel({ addToast /*, voiceModeActive = false */ 
     if (addToast) addToast('Email request sent to assistant', 'info')
   }, [addToast])
 
-  // Format event time for display
-  const formatTime = (eventTime) => {
-    if (!eventTime) return ''
-    try {
-      const dt = new Date(eventTime)
-      return dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-    } catch { return '' }
-  }
-
   // ─── Collapsed view ───
   if (collapsed) {
-    return (
-      <div
-        onClick={() => setCollapsed(false)}
-        style={{
-          position: 'absolute', right: 0, top: 60, zIndex: 10,
-          background: 'rgba(99,102,241,0.15)', borderRadius: '8px 0 0 8px',
-          padding: '8px 10px', cursor: 'pointer', display: 'flex',
-          alignItems: 'center', gap: 6, fontSize: 13, color: '#a5b4fc',
-          borderRight: 'none', transition: 'background 0.2s',
-        }}
-        title="Behavior Tracking"
-      >
-        <Icon name="Activity" size={16} />
-      </div>
-    )
+    return <CollapsedTab onExpand={() => setCollapsed(false)} />
   }
 
   // ─── Expanded panel ───
@@ -194,171 +180,23 @@ export default function BehaviorPanel({ addToast /*, voiceModeActive = false */ 
       background: 'rgba(15,15,30,0.6)', display: 'flex', flexDirection: 'column',
       height: '100%', overflow: 'hidden', position: 'relative',
     }}>
-      {/* Header */}
-      <div style={{
-        padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Icon name="Activity" size={16} style={{ color: '#a5b4fc' }} />
-          <span style={{ fontWeight: 600, fontSize: 14, color: '#e2e8f0' }}>Behavior</span>
-        </div>
-        <button onClick={() => setCollapsed(true)} style={{
-          background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 2,
-        }}>
-          <Icon name="PanelRightClose" size={16} />
-        </button>
-      </div>
+      <PanelHeader onCollapse={() => setCollapsed(true)} />
 
-      {/* Filters */}
-      <div style={{ padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <input
-          value={periodFilter}
-          onChange={e => setPeriodFilter(e.target.value)}
-          placeholder="Filter by period"
-          style={{
-            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 6, padding: '5px 8px', color: '#e2e8f0', fontSize: 12, outline: 'none',
-          }}
-        />
-        <div style={{ display: 'flex', gap: 6 }}>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            style={{
-              flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 4, padding: '3px 6px', color: '#e2e8f0', fontSize: 11, outline: 'none',
-              colorScheme: 'dark',
-            }}
-            title="From date"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            style={{
-              flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 4, padding: '3px 6px', color: '#e2e8f0', fontSize: 11, outline: 'none',
-              colorScheme: 'dark',
-            }}
-            title="To date"
-          />
-          {(dateFrom || dateTo || periodFilter) && (
-            <button onClick={() => { setDateFrom(''); setDateTo(''); setPeriodFilter('') }} style={{
-              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 4, padding: '3px 6px', color: '#94a3b8', fontSize: 11, cursor: 'pointer',
-            }} title="Clear filters">
-              <Icon name="X" size={12} />
-            </button>
-          )}
-        </div>
-      </div>
+      <BehaviorFilters
+        periodFilter={periodFilter} setPeriodFilter={setPeriodFilter}
+        dateFrom={dateFrom} setDateFrom={setDateFrom}
+        dateTo={dateTo} setDateTo={setDateTo}
+      />
 
-      {/* Student List */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '8px 14px' }}>
-        {Object.keys(state.cumulativeData).length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {Object.values(state.cumulativeData)
-              .sort((a, b) => (b.total_corrections || 0) - (a.total_corrections || 0))
-              .map(s => (
-                <div key={s.name}>
-                  {/* Student row */}
-                  <div style={{
-                    background: expandedStudent === s.name ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.03)',
-                    borderRadius: expandedStudent === s.name ? '6px 6px 0 0' : 6,
-                    padding: '8px 10px', cursor: 'pointer',
-                    border: expandedStudent === s.name ? '1px solid rgba(99,102,241,0.2)' : 'none',
-                    borderBottom: expandedStudent === s.name ? 'none' : undefined,
-                  }} onClick={() => loadStudentEvents(s.name)}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                        <Icon name={expandedStudent === s.name ? 'ChevronDown' : 'ChevronRight'} size={12} style={{ color: '#64748b', flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                        <span style={{ color: '#f87171', fontSize: 12 }}>{s.total_corrections || 0}</span>
-                        <span style={{ color: '#4ade80', fontSize: 12 }}>{s.total_praise || 0}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleEmailAction(s.name) }}
-                          style={{
-                            background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.2)',
-                            borderRadius: 4, padding: '2px 5px', cursor: 'pointer', display: 'flex',
-                            alignItems: 'center', color: '#a5b4fc',
-                          }}
-                          title={'Generate email for ' + s.name}
-                        >
-                          <Icon name="Mail" size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expanded event detail */}
-                  {expandedStudent === s.name && (
-                    <div style={{
-                      background: 'rgba(99,102,241,0.05)',
-                      border: '1px solid rgba(99,102,241,0.2)',
-                      borderTop: 'none', borderRadius: '0 0 6px 6px',
-                      padding: '6px 8px', maxHeight: 300, overflow: 'auto',
-                    }}>
-                      {eventsLoading ? (
-                        <div style={{ textAlign: 'center', color: '#64748b', fontSize: 11, padding: 12 }}>
-                          Loading events...
-                        </div>
-                      ) : studentEvents.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {studentEvents.map((evt, i) => (
-                            <div key={evt.id || i} style={{
-                              background: 'rgba(255,255,255,0.03)', borderRadius: 4, padding: '6px 8px',
-                              borderLeft: '2px solid ' + (evt.type === 'correction' ? '#f87171' : '#4ade80'),
-                            }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                  <span style={{
-                                    fontSize: 9, padding: '1px 4px', borderRadius: 3, fontWeight: 600,
-                                    background: evt.type === 'correction' ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
-                                    color: evt.type === 'correction' ? '#f87171' : '#4ade80',
-                                    textTransform: 'uppercase',
-                                  }}>{evt.type}</span>
-                                  {evt.source && evt.source !== 'manual' && (
-                                    <span style={{
-                                      fontSize: 9, padding: '1px 4px', borderRadius: 3,
-                                      background: 'rgba(99,102,241,0.15)', color: '#a5b4fc',
-                                    }}>{evt.source}</span>
-                                  )}
-                                </div>
-                                <span style={{ fontSize: 10, color: '#64748b' }}>
-                                  {evt.date} {formatTime(evt.event_time)}
-                                </span>
-                              </div>
-                              {evt.note && (
-                                <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>{evt.note}</div>
-                              )}
-                              {evt.transcript && (
-                                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, fontStyle: 'italic' }}>
-                                  "{evt.transcript.length > 100 ? evt.transcript.slice(0, 100) + '...' : evt.transcript}"
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={{ textAlign: 'center', color: '#64748b', fontSize: 11, padding: 8 }}>
-                          No individual events found
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', color: '#64748b', fontSize: 13, marginTop: 30 }}>
-            {state.loading ? 'Loading...' : 'No behavior data yet'}
-          </div>
-        )}
-      </div>
+      <StudentList
+        cumulativeData={state.cumulativeData}
+        loading={state.loading}
+        expandedStudent={expandedStudent}
+        studentEvents={studentEvents}
+        eventsLoading={eventsLoading}
+        loadStudentEvents={loadStudentEvents}
+        handleEmailAction={handleEmailAction}
+      />
 
       {/* Error display */}
       {state.error && (
