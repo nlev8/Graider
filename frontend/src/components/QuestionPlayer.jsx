@@ -75,6 +75,13 @@ export default function QuestionPlayer({
   var canGoBack = isAssignment;
 
   var current = flatQuestions[currentIndex];
+  // KNOWN RULES-OF-HOOKS QUIRK (preserved verbatim from the pre-split file —
+  // deliberate, do not "fix" casually): this early return precedes the timer
+  // useEffect at ~L155, so the effect is conditionally skipped on an
+  // empty-sections render. Hoisting the effect above this guard changes
+  // edge-case behavior (empty sections + time limit) and is a Class B change,
+  // tracked as a follow-up in PR #760's body.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   if (!current) return null;
 
   var q = current.question;
