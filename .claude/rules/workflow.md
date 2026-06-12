@@ -103,7 +103,7 @@ because each item exists because *something burned us before*.
     tier savings.)
 
     **Codex is a STANDING second-model layer, not an occasional tool**
-    (operator directive, 2026-06-12): every review loop — per-wave PR
+    (operator directive, 2026-06-11): every review loop — per-wave PR
     batches, re-scores, anything Class B — gets a Codex adversarial pass
     (`codex exec -s read-only -c model_reasoning_effort=high`) IN ADDITION
     to the Claude opus reviews, explicitly prompted to find what Claude
