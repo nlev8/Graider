@@ -21,9 +21,17 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-describe("App.jsx tab imports", () => {
-  it("every <XxxTab> rendered in App.jsx has a matching import", () => {
-    const appPath = join(__dirname, "..", "App.jsx");
+// The App.jsx finale split (CQ campaign) relocated the tab mounts into
+// src/app/AppTabPanels.jsx, so the per-file import check now runs over both
+// files — the guarantee is per-file (an import in one file cannot satisfy a
+// usage in the other, which is exactly the PR #191 failure mode).
+const FILES = [
+  join(__dirname, "..", "App.jsx"),
+  join(__dirname, "..", "app", "AppTabPanels.jsx"),
+];
+
+describe.each(FILES)("tab imports in %s", (appPath) => {
+  it("every <XxxTab> rendered has a matching import", () => {
     const src = readFileSync(appPath, "utf-8");
 
     // Find all JSX usages of components matching `<XxxTab` (case-sensitive
