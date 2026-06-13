@@ -287,7 +287,14 @@ PR_A_EXPECTED_CAPTURES = {
     "backend/services/assistant_tools.py": 3,
     "backend/services/assistant_tools_behavior.py": 3,
     "backend/services/assistant_tools_communication.py": 1,
-    "backend/services/assistant_tools_reports.py": 2,
+    # 2026-06-13: assistant_tools_reports.py was split into a package
+    # (backend/services/assistant_tools_reports/). Its 5 capture sites
+    # moved verbatim into sub-modules: comms.py (2), lessons.py (1),
+    # calendar_tools.py (1), config.py (1). The pre-split PR-a floor of 2
+    # is now pinned on comms.py (the 2 send-flow captures). The other 3
+    # are floor-checked under PR_B_EXPECTED_CAPTURES below. Net Sentry
+    # coverage unchanged (5 = 5); pure file decomposition.
+    "backend/services/assistant_tools_reports/comms.py": 2,
     "backend/services/assistant_tools_student.py": 12,
     "backend/services/outlook_sender.py": 4,
     "backend/student_history.py": 2,
@@ -317,7 +324,15 @@ PR_B_EXPECTED_CAPTURES = {
     "backend/routes/student_account_routes.py": 3,
     "backend/services/assistant_tools.py": 13,
     "backend/services/assistant_tools_behavior.py": 4,
-    "backend/services/assistant_tools_reports.py": 5,
+    # 2026-06-13: assistant_tools_reports.py split into a package. The
+    # pre-split PR-b floor of 5 is now distributed across the sub-modules
+    # that received the verbatim capture sites: comms.py (2 send-flow),
+    # lessons.py (1 get_recent_lessons), calendar_tools.py (1 get_calendar),
+    # config.py (1 save_assignment_config). Sum = 5, conserved exactly.
+    "backend/services/assistant_tools_reports/comms.py": 2,
+    "backend/services/assistant_tools_reports/lessons.py": 1,
+    "backend/services/assistant_tools_reports/calendar_tools.py": 1,
+    "backend/services/assistant_tools_reports/config.py": 1,
     # Issue #339 (2026-05-14): floor lowered 21 -> 16 after `import_student_data`
     # was refactored to `backend.storage.{save,save_student_history}` for
     # teacher-scoped persistence. The 5 removed captures wrapped raw file
