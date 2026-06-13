@@ -12,6 +12,15 @@ These tests pin:
   1. All writers inject `teacher_id` into the pending payload
   2. All writers persist to the namespaced filesystem path
   3. confirm_and_send rejects payloads from a different tenant
+
+NOTE (2026-06-13 package split): `assistant_tools_reports` became a package;
+`send_parent_emails`, `send_focus_comms`, and `confirm_and_send` now live in
+the `assistant_tools_reports.comms` sub-module. The public names are still
+re-exported from the package `__init__`, so the `import` statements below are
+unchanged. But `patch()` must target the name where the *implementation* looks
+it up — i.e. `assistant_tools_reports.comms.{storage_load,storage_save,
+_load_roster,_load_parent_contacts,_load_email_config,audit_tool_action}` — so
+those patch targets were updated to the `.comms` path.
 """
 from __future__ import annotations
 
@@ -48,9 +57,9 @@ class TestConfirmAndSendCrossTenantBlock:
             "messages": [{"to": "x@y.com"}],
             "teacher_id": "tenant-A",
         }
-        with patch("backend.services.assistant_tools_reports.storage_load",
+        with patch("backend.services.assistant_tools_reports.comms.storage_load",
                    return_value=pending), \
-             patch("backend.services.assistant_tools_reports.storage_save"), \
+             patch("backend.services.assistant_tools_reports.comms.storage_save"), \
              patch("backend.utils.pending_send.sentry_sdk.capture_message") as mock_sentry:
             result = confirm_and_send(teacher_id="tenant-B")
 
@@ -76,7 +85,7 @@ class TestConfirmAndSendCrossTenantBlock:
             "teacher_id": "some-other-tenant",
         }))
 
-        with patch("backend.services.assistant_tools_reports.storage_load",
+        with patch("backend.services.assistant_tools_reports.comms.storage_load",
                    return_value=None):
             result = confirm_and_send(teacher_id="tenant-X")
 
@@ -94,9 +103,9 @@ class TestConfirmAndSendCrossTenantBlock:
             "messages": [{"to": "x@y.com", "subject": "S", "email_body": "B"}],
             "teacher_id": "tenant-X",
         }
-        with patch("backend.services.assistant_tools_reports.storage_load",
+        with patch("backend.services.assistant_tools_reports.comms.storage_load",
                    return_value=pending), \
-             patch("backend.services.assistant_tools_reports.storage_save"), \
+             patch("backend.services.assistant_tools_reports.comms.storage_save"), \
              patch("backend.routes.email_routes.launch_focus_comms",
                    return_value={"queued": 1}) as mock_launch:
             result = confirm_and_send(teacher_id="tenant-X")
@@ -118,7 +127,7 @@ class TestConfirmAndSendCrossTenantBlock:
             "messages": [{"to": "x@y.com"}],
             # NO teacher_id field — pre-fix shape
         }
-        with patch("backend.services.assistant_tools_reports.storage_load",
+        with patch("backend.services.assistant_tools_reports.comms.storage_load",
                    return_value=legacy_pending), \
              patch("backend.utils.pending_send.sentry_sdk.capture_message"):
             result = confirm_and_send(teacher_id="tenant-real-prod")
@@ -141,23 +150,23 @@ class TestWritersInjectTeacherId:
 
         # Mock all external dependencies — we just want to verify the
         # pending save side effects.
-        with patch("backend.services.assistant_tools_reports._load_roster",
+        with patch("backend.services.assistant_tools_reports.comms._load_roster",
                    return_value=[
                        {"student_name": "Alice", "student_id": "s1",
                         "period": "1"},
                    ]), \
-             patch("backend.services.assistant_tools_reports._load_parent_contacts",
+             patch("backend.services.assistant_tools_reports.comms._load_parent_contacts",
                    return_value={
                        "s1": {
                            "student_name": "Alice",
                            "parent_emails": ["alice@parent.com"],
                        },
                    }), \
-             patch("backend.services.assistant_tools_reports._load_email_config",
+             patch("backend.services.assistant_tools_reports.comms._load_email_config",
                    return_value={"teacher_name": "Mrs. T",
                                  "subject_area": "Math"}), \
-             patch("backend.services.assistant_tools_reports.storage_save") as mock_save, \
-             patch("backend.services.assistant_tools_reports.audit_tool_action"):
+             patch("backend.services.assistant_tools_reports.comms.storage_save") as mock_save, \
+             patch("backend.services.assistant_tools_reports.comms.audit_tool_action"):
             result = send_parent_emails(
                 email_subject="Subject",
                 email_body="Body",
