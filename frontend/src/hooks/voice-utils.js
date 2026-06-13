@@ -1,7 +1,17 @@
 /**
- * Pure helpers for the useVoice hook (no React hook calls inside).
+ * Non-React helpers for the useVoice hook (zero React hook calls, refs, or
+ * component state inside — that's the load-bearing invariant for the split).
  * Bodies relocated verbatim from useVoice.js — Web Audio / SpeechRecognition
  * timing behavior must not change here.
+ *
+ * Classification (per the Codex review of PR #773 — "pure" was too strong):
+ * - PURE: accumulateTranscript, decodeBase64ToArrayBuffer,
+ *   isFatalRecognitionError, isSpeechRecognitionSupported (env probe).
+ * - FACTORY (constructs+configures a native SpeechRecognition, never starts
+ *   it): createSpeechRecognition.
+ * - ASYNC SIDE-EFFECT HELPERS (schedule timers, read external state via
+ *   caller-supplied getter closures): waitForQueuedChunk, pollUntil.
+ * All lifecycle calls (start/stop/close/speak) remain in useVoice itself.
  */
 
 export const PRE_BUFFER_CHUNKS = 5
