@@ -19,6 +19,81 @@ import sentry_sdk
 _logger = logging.getLogger(__name__)
 
 
+def _find_curriculum_map_unit_candidates(doc, req_start, req_end, _parse_map_date):
+    """Pass 1: scan all tables for unit+date-range rows that overlap [req_start, req_end].
+
+    Returns a list of (span_days, unit_name, dates_str, weeks, table_index) tuples.
+    Extracted from _parse_curriculum_map_for_dates to keep the parent ≤200 LOC.
+    """
+    import re
+    candidates = []  # (span_days, unit_name, dates_str, weeks, table_index)
+
+    # First pass: scan detail table headers + benchmark rows
+    current_unit_header = None
+    current_table_idx = None
+    for ti, table in enumerate(doc.tables):
+        for ri, row in enumerate(table.rows):
+            seen_cells = set()
+            cells = []
+            for c in row.cells:
+                t = c.text.strip()
+                if t and t not in seen_cells:
+                    seen_cells.add(t)
+                    cells.append(t)
+            row_text = ' '.join(cells)
+
+            # Detect unit header rows like "Unit 7: Manifest Destiny (4 weeks)"
+            unit_header = re.search(r'(Unit\s+\d+:\s*[^\(]+)', row_text)
+            if unit_header and ('weeks' in row_text.lower() or 'Standard' in row_text):
+                current_unit_header = unit_header.group(1).strip()
+                current_table_idx = ti
+                continue
+
+            # Look for date ranges in benchmark rows
+            row_lower = row_text.lower()
+            # Pattern 1: "February 17th - March 12th" (both have month)
+            date_ranges = re.findall(
+                r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*\s+\d{1,2}(?:st|nd|rd|th)?)\s*[-–—]\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*\s+\d{1,2}(?:st|nd|rd|th)?)',
+                row_lower, re.IGNORECASE
+            )
+            # Pattern 2: "Feb. 2nd -6th" (end date has no month — inherit from start)
+            short_ranges = re.findall(
+                r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*\s+\d{1,2}(?:st|nd|rd|th)?)\s*[-–—]\s*(\d{1,2}(?:st|nd|rd|th)?)\b',
+                row_lower, re.IGNORECASE
+            )
+            for d_start_str, day_only in short_ranges:
+                # Infer month from start date
+                month_match = re.match(r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*)', d_start_str, re.IGNORECASE)
+                if month_match:
+                    d_end_str = f"{month_match.group(1)} {day_only}"
+                    date_ranges.append((d_start_str, d_end_str))
+
+            for d_start_str, d_end_str in date_ranges:
+                d_start = _parse_map_date(d_start_str)
+                d_end = _parse_map_date(d_end_str)
+                if d_start and d_end and d_end >= req_start and d_start <= req_end:
+                    span = (d_end - d_start).days
+                    # Use current_unit_header if in a detail table, else look in same row
+                    unit_name = current_unit_header
+                    if not unit_name:
+                        for cell_text in cells:
+                            um = re.search(r'(Unit\s+\d+:\s*[^|]+)', cell_text)
+                            if um:
+                                unit_name = um.group(1).strip()
+                                break
+                    if unit_name:
+                        # Extract week numbers from range patterns like "25-28"
+                        joined = ' '.join(cells)
+                        week_ranges = re.findall(r'\b(\d{1,2})-(\d{1,2})\b', joined)
+                        weeks = None
+                        if week_ranges:
+                            s, e = int(week_ranges[0][0]), int(week_ranges[0][1])
+                            if 1 <= s <= 52 and 1 <= e <= 52:
+                                weeks = list(range(s, e + 1))
+                        candidates.append((span, unit_name, f"{d_start_str.strip()} – {d_end_str.strip()}", weeks, ti))
+    return candidates
+
+
 def _parse_curriculum_map_for_dates(start_date, end_date):
     """Parse curriculum map DOCX and return structured data for a date range.
 
@@ -81,74 +156,8 @@ def _parse_curriculum_map_for_dates(start_date, end_date):
 
     doc = Document(curriculum_file)
 
-    # Pass 1: Find unit that covers these dates.
-    # Strategy: scan detail table headers (e.g., "Unit 7: Manifest Destiny (4 weeks)")
-    # then check benchmark rows for matching date ranges. Pick the narrowest match.
-    candidates = []  # (span_days, unit_name, dates_str, weeks, table_index)
-
-    # First pass: scan detail table headers + benchmark rows
-    current_unit_header = None
-    current_table_idx = None
-    for ti, table in enumerate(doc.tables):
-        for ri, row in enumerate(table.rows):
-            seen_cells = set()
-            cells = []
-            for c in row.cells:
-                t = c.text.strip()
-                if t and t not in seen_cells:
-                    seen_cells.add(t)
-                    cells.append(t)
-            row_text = ' '.join(cells)
-
-            # Detect unit header rows like "Unit 7: Manifest Destiny (4 weeks)"
-            unit_header = re.search(r'(Unit\s+\d+:\s*[^\(]+)', row_text)
-            if unit_header and ('weeks' in row_text.lower() or 'Standard' in row_text):
-                current_unit_header = unit_header.group(1).strip()
-                current_table_idx = ti
-                continue
-
-            # Look for date ranges in benchmark rows
-            row_lower = row_text.lower()
-            # Pattern 1: "February 17th - March 12th" (both have month)
-            date_ranges = re.findall(
-                r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*\s+\d{1,2}(?:st|nd|rd|th)?)\s*[-\u2013\u2014]\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*\s+\d{1,2}(?:st|nd|rd|th)?)',
-                row_lower, re.IGNORECASE
-            )
-            # Pattern 2: "Feb. 2nd -6th" (end date has no month — inherit from start)
-            short_ranges = re.findall(
-                r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*\s+\d{1,2}(?:st|nd|rd|th)?)\s*[-\u2013\u2014]\s*(\d{1,2}(?:st|nd|rd|th)?)\b',
-                row_lower, re.IGNORECASE
-            )
-            for d_start_str, day_only in short_ranges:
-                # Infer month from start date
-                month_match = re.match(r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*)', d_start_str, re.IGNORECASE)
-                if month_match:
-                    d_end_str = f"{month_match.group(1)} {day_only}"
-                    date_ranges.append((d_start_str, d_end_str))
-
-            for d_start_str, d_end_str in date_ranges:
-                d_start = _parse_map_date(d_start_str)
-                d_end = _parse_map_date(d_end_str)
-                if d_start and d_end and d_end >= req_start and d_start <= req_end:
-                    span = (d_end - d_start).days
-                    # Use current_unit_header if in a detail table, else look in same row
-                    unit_name = current_unit_header
-                    if not unit_name:
-                        for cell_text in cells:
-                            um = re.search(r'(Unit\s+\d+:\s*[^|]+)', cell_text)
-                            if um:
-                                unit_name = um.group(1).strip()
-                                break
-                    if unit_name:
-                        # Extract week numbers from range patterns like "25-28"
-                        joined = ' '.join(cells)
-                        week_ranges = re.findall(r'\b(\d{1,2})-(\d{1,2})\b', joined)
-                        weeks = None
-                        if week_ranges:
-                            s, e = int(week_ranges[0][0]), int(week_ranges[0][1])
-                            if 1 <= s <= 52 and 1 <= e <= 52:
-                                weeks = list(range(s, e + 1))
-                        candidates.append((span, unit_name, f"{d_start_str.strip()} \u2013 {d_end_str.strip()}", weeks, ti))
+    # Pass 1: Find unit that covers these dates (delegated to module-level helper).
+    candidates = _find_curriculum_map_unit_candidates(doc, req_start, req_end, _parse_map_date)
 
     if not candidates:
         return None
