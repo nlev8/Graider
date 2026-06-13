@@ -52,6 +52,50 @@ giant FE component functions (`SettingsClassroom` 2,307 LOC; audit
 campaign. Revised projection for this sprint as listed: **~7.6–7.75**;
 reaching ~8 additionally needs the FE component splits.
 
+## Re-score 2026-06-12 (CQ campaign COMPLETE, mechanical) — overall: **7.85**
+
+The Code Quality campaign (waves 1–10, PRs #743–#777: 36 component splits
+culminating in App.jsx 2,677→189) is fully merged. Commands re-run
+2026-06-12 against `main` @ f118c07; binding rulings applied; only Code
+Quality moved — all other dimensions spot-verified unchanged (swallows=9,
+str(e)=0, DI=0, metrics grep=2, promoted-spec masks=0, migrations=2 with
+real baseline).
+
+| Dimension | 2026-06-11 | 2026-06-12 | Evidence |
+|---|--:|--:|---|
+| Code Quality | 6 | **7** | All three level-7 criteria now met, AST-verified (babel for FE incl. .js, python ast for BE — never def-to-def, which produced two false positives this campaign): **0 functions >300 LOC frontend AND backend**; largest file 2,723 (`backend/services/assistant_tools_reports.py` — no file >3,000; the frontend no longer places in the top 7); Flask-free service layer (standing). The 2026-06-09 ruling's pinned violation (`SettingsClassroom.jsx` 2,302-line function) and its 35 successors are gone. Level 8 honestly fails: 1 file >2,500 (2,723) and **79** FE functions >200 → 0/2 criteria, no partial credit. Clean integer 7. |
+| All others | — | unchanged | Security 9, EH 7.5, Arch 7, TC 7, Doc 9, Obs 7.5, DI 7.5, OpSafety 8, SSO 9 — campaign touched only frontend component structure (+1 backend docs comment); spot-checks above confirm no drift in either direction. |
+| **OVERALL** | 7.75 | **7.85** | 9+7.5+7+7+9+7+7.5+7.5+8+9 = 78.5/10. |
+
+**Audit record + BINDING RULING (2026-06-12 dual audit):** the opus audit
+UPHELD 7.85 (re-derived both AST scans: FE 0 >300/largest 291, BE 0
+>300/largest 294; file table exact; level-8 denial exact; spot-checks
+clean). The Codex audit confirmed every measurement (FE 401 files
+count_gt300=0, BE 161 files count_gt300=0, largest file 2,723, arithmetic
+exact) but CORRECTED to 7.75 on a strict reading of "Flask-free service
+layer," citing `backend/services/assistant_tools_behavior.py:15` (`from
+flask import g` for a `g.user_id` convenience read). **Arbitration (main
+loop): UPHELD at 7.85.** Ruling: the criterion text is "a Flask-free
+service layer **exists**" — an architectural-existence claim, not an
+absolute import ban; these exact `flask.g` reads were present at the
+anchors' own 2026-06-02 calibration (which scored the criterion met) and
+through every reconciled score since, including the 06-09 reconciliation's
+Codex-audited acceptance of "services are Flask-free" at Architecture 7.
+Tightening the interpretation now would retroactively invalidate prior
+reconciled scores — the same failure mode as moving thresholds, prohibited
+by the anchors' Maintenance rules in both directions. The `flask.g`
+convenience reads in `assistant_tools_{behavior,student}.py` +
+`portal_grading.py` are recorded as a cleanup follow-up (thread teacher_id
+as a parameter), not a CQ blocker.
+
+**Worklist implied (path toward 8.0+):** EH 7.5→8 = log the ~59
+returns-fallback sites; TC 7→8 = de-mask the 48 nightly e2e specs + 80%
+floor; Obs 7.5→8 = repo-verifiable prod error-tracking; DI 7.5→8 =
+downgrade coverage for post-baseline migrations; CQ 7→8 = split
+assistant_tools_reports.py below 2,500 + the 79 FE functions >200 (a new
+campaign, much lighter than the last). Arch 7→8 (DI at critical seams)
+remains the deferred heavy.
+
 ## Re-score 2026-06-11 (sprint COMPLETE, mechanical) — overall: **7.75** (Clever cert operator-confirmed same day; was 7.6 pending confirmation)
 
 All seven sprint items are now merged: PR1 #724, PR2 #735 (ruff E722+BLE001
