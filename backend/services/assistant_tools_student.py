@@ -452,6 +452,67 @@ def _delete_student_supabase(student_name):
         return ""
 
 
+def _remove_student_from_json_stores(safe_id, matched_id, results, errors):
+    """Remove a student from the three flat JSON stores: accommodations, parent contacts, ELL data.
+
+    Mutates *results* and *errors* in-place (append-only), exactly as the inline
+    blocks did inside _execute_student_removal before extraction.
+    """
+    # --- Remove from accommodations ---
+    try:
+        accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
+        if os.path.exists(accomm_file):
+            with open(accomm_file, 'r') as f:
+                all_acc = json.load(f)
+            removed_keys = [k for k in list(all_acc.keys())
+                           if k == safe_id or k == (matched_id or '')]
+            if removed_keys:
+                for k in removed_keys:
+                    del all_acc[k]
+                with open(accomm_file, 'w') as f:
+                    json.dump(all_acc, f, indent=2)
+                results.append({"source": "accommodations", "removed": len(removed_keys)})
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
+        errors.append({"source": "accommodations", "error": "Failed to remove accommodations"})
+        sentry_sdk.capture_exception(e)
+
+    # --- Remove from parent contacts ---
+    try:
+        contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
+        if os.path.exists(contacts_file):
+            with open(contacts_file, 'r') as f:
+                all_contacts = json.load(f)
+            removed_keys = [k for k in list(all_contacts.keys())
+                           if k == safe_id or k == (matched_id or '')]
+            if removed_keys:
+                for k in removed_keys:
+                    del all_contacts[k]
+                with open(contacts_file, 'w') as f:
+                    json.dump(all_contacts, f, indent=2)
+                results.append({"source": "parent_contacts", "removed": len(removed_keys)})
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
+        errors.append({"source": "parent_contacts", "error": "Failed to remove parent contacts"})
+        sentry_sdk.capture_exception(e)
+
+    # --- Remove from ELL data ---
+    try:
+        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
+        if os.path.exists(ell_file):
+            with open(ell_file, 'r') as f:
+                all_ell = json.load(f)
+            removed_keys = [k for k in list(all_ell.keys())
+                           if k == safe_id or k == (matched_id or '')]
+            if removed_keys:
+                for k in removed_keys:
+                    del all_ell[k]
+                with open(ell_file, 'w') as f:
+                    json.dump(all_ell, f, indent=2)
+                results.append({"source": "ell_data", "removed": len(removed_keys)})
+    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
+        errors.append({"source": "ell_data", "error": "Failed to remove ELL data"})
+        sentry_sdk.capture_exception(e)
+
+
 def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
     """Remove a student from ALL records: rosters, results, history, accommodations, contacts, ELL, master CSV, Supabase."""
     require_teacher_id(teacher_id)
@@ -584,59 +645,8 @@ def _execute_student_removal(student_name, teacher_id='local-dev', **kwargs):
         errors.append({"source": "student_history", "error": "Failed to remove student history"})
         sentry_sdk.capture_exception(e)
 
-    # --- Remove from accommodations ---
-    try:
-        accomm_file = os.path.expanduser("~/.graider_data/accommodations/student_accommodations.json")
-        if os.path.exists(accomm_file):
-            with open(accomm_file, 'r') as f:
-                all_acc = json.load(f)
-            removed_keys = [k for k in list(all_acc.keys())
-                           if k == safe_id or k == (matched_id or '')]
-            if removed_keys:
-                for k in removed_keys:
-                    del all_acc[k]
-                with open(accomm_file, 'w') as f:
-                    json.dump(all_acc, f, indent=2)
-                results.append({"source": "accommodations", "removed": len(removed_keys)})
-    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
-        errors.append({"source": "accommodations", "error": "Failed to remove accommodations"})
-        sentry_sdk.capture_exception(e)
-
-    # --- Remove from parent contacts ---
-    try:
-        contacts_file = os.path.expanduser("~/.graider_data/parent_contacts.json")
-        if os.path.exists(contacts_file):
-            with open(contacts_file, 'r') as f:
-                all_contacts = json.load(f)
-            removed_keys = [k for k in list(all_contacts.keys())
-                           if k == safe_id or k == (matched_id or '')]
-            if removed_keys:
-                for k in removed_keys:
-                    del all_contacts[k]
-                with open(contacts_file, 'w') as f:
-                    json.dump(all_contacts, f, indent=2)
-                results.append({"source": "parent_contacts", "removed": len(removed_keys)})
-    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
-        errors.append({"source": "parent_contacts", "error": "Failed to remove parent contacts"})
-        sentry_sdk.capture_exception(e)
-
-    # --- Remove from ELL data ---
-    try:
-        ell_file = os.path.expanduser("~/.graider_data/ell_students.json")
-        if os.path.exists(ell_file):
-            with open(ell_file, 'r') as f:
-                all_ell = json.load(f)
-            removed_keys = [k for k in list(all_ell.keys())
-                           if k == safe_id or k == (matched_id or '')]
-            if removed_keys:
-                for k in removed_keys:
-                    del all_ell[k]
-                with open(ell_file, 'w') as f:
-                    json.dump(all_ell, f, indent=2)
-                results.append({"source": "ell_data", "removed": len(removed_keys)})
-    except Exception as e:  # noqa: BLE001  # broad catch: error is logged
-        errors.append({"source": "ell_data", "error": "Failed to remove ELL data"})
-        sentry_sdk.capture_exception(e)
+    # --- Remove from accommodations, parent contacts, ELL data ---
+    _remove_student_from_json_stores(safe_id, matched_id, results, errors)
 
     # --- Cascade delete from Supabase ---
     supabase_msg = _delete_student_supabase(matched_name)
