@@ -67,6 +67,27 @@ real baseline).
 | All others | — | unchanged | Security 9, EH 7.5, Arch 7, TC 7, Doc 9, Obs 7.5, DI 7.5, OpSafety 8, SSO 9 — campaign touched only frontend component structure (+1 backend docs comment); spot-checks above confirm no drift in either direction. |
 | **OVERALL** | 7.75 | **7.85** | 9+7.5+7+7+9+7+7.5+7.5+8+9 = 78.5/10. |
 
+**Audit record + BINDING RULING (2026-06-12 dual audit):** the opus audit
+UPHELD 7.85 (re-derived both AST scans: FE 0 >300/largest 291, BE 0
+>300/largest 294; file table exact; level-8 denial exact; spot-checks
+clean). The Codex audit confirmed every measurement (FE 401 files
+count_gt300=0, BE 161 files count_gt300=0, largest file 2,723, arithmetic
+exact) but CORRECTED to 7.75 on a strict reading of "Flask-free service
+layer," citing `backend/services/assistant_tools_behavior.py:15` (`from
+flask import g` for a `g.user_id` convenience read). **Arbitration (main
+loop): UPHELD at 7.85.** Ruling: the criterion text is "a Flask-free
+service layer **exists**" — an architectural-existence claim, not an
+absolute import ban; these exact `flask.g` reads were present at the
+anchors' own 2026-06-02 calibration (which scored the criterion met) and
+through every reconciled score since, including the 06-09 reconciliation's
+Codex-audited acceptance of "services are Flask-free" at Architecture 7.
+Tightening the interpretation now would retroactively invalidate prior
+reconciled scores — the same failure mode as moving thresholds, prohibited
+by the anchors' Maintenance rules in both directions. The `flask.g`
+convenience reads in `assistant_tools_{behavior,student}.py` +
+`portal_grading.py` are recorded as a cleanup follow-up (thread teacher_id
+as a parameter), not a CQ blocker.
+
 **Worklist implied (path toward 8.0+):** EH 7.5→8 = log the ~59
 returns-fallback sites; TC 7→8 = de-mask the 48 nightly e2e specs + 80%
 floor; Obs 7.5→8 = repo-verifiable prod error-tracking; DI 7.5→8 =
