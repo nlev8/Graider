@@ -1,6 +1,6 @@
 import React from "react";
 import Icon from "../../components/Icon";
-import * as api from "../../services/api";
+import ResultsClearButton from "./ResultsClearButton";
 
 export default function ResultsFilterControls({
   resultsSort,
@@ -150,93 +150,19 @@ export default function ResultsFilterControls({
                               Apply Curve
                             </button>
                           )}
-                          <button
-                            onClick={async () => {
-                              const hasAnyFilter = resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter || resultsSearch.trim();
-
-                              // Collect filenames of currently visible results
-                              const visibleFilenames = [];
-                              const searchLower = resultsSearch.trim().toLowerCase();
-                              status.results.forEach((r, idx) => {
-                                if (resultsFilter === "handwritten" && !r.is_handwritten) return;
-                                if (resultsFilter === "typed" && r.is_handwritten) return;
-                                if (resultsFilter === "verified" && r.marker_status !== "verified") return;
-                                if (resultsFilter === "unverified" && r.marker_status !== "unverified") return;
-                                if (resultsFilter === "mismatched" && !r.config_mismatch) return;
-                                if (resultsFilter === "resubmission" && !r.is_resubmission) return;
-                                if (resultsFilter === "approved" && emailApprovals[idx] !== "approved") return;
-                                if (resultsFilter === "unapproved" && emailApprovals[idx] === "approved") return;
-                                if (resultsPeriodFilter && r.period !== resultsPeriodFilter) return;
-                                if (resultsAssignmentFilter && (r.assignment || r.filename) !== resultsAssignmentFilter) return;
-                                if (searchLower && !(
-                                  (r.student_name || "").toLowerCase().includes(searchLower) ||
-                                  (r.assignment || "").toLowerCase().includes(searchLower)
-                                )) return;
-                                if (r.filename) visibleFilenames.push(r.filename);
-                              });
-
-                              const clearCount = hasAnyFilter ? visibleFilenames.length : status.results.length;
-                              const confirmMsg = hasAnyFilter
-                                ? "Clear " + clearCount + " filtered results? This cannot be undone."
-                                : "Clear all " + clearCount + " grading results? This cannot be undone.";
-
-                              if (confirm(confirmMsg)) {
-                                try {
-                                  if (hasAnyFilter && visibleFilenames.length > 0) {
-                                    // Clear only the visible results by filename
-                                    await api.clearResults(visibleFilenames);
-                                    const filenameSet = new Set(visibleFilenames);
-                                    setStatus((prev) => ({
-                                      ...prev,
-                                      results: prev.results.filter(r => !filenameSet.has(r.filename)),
-                                    }));
-                                    setEditedResults((prev) =>
-                                      prev.filter(r => !filenameSet.has(r.filename))
-                                    );
-                                    // Clear approvals/emails for removed results
-                                    const removedIndices = new Set();
-                                    status.results.forEach((r, i) => {
-                                      if (filenameSet.has(r.filename)) removedIndices.add(i);
-                                    });
-                                    setEmailApprovals((prev) => {
-                                      const updated = { ...prev };
-                                      removedIndices.forEach(i => delete updated[i]);
-                                      return updated;
-                                    });
-                                    setEditedEmails((prev) => {
-                                      const updated = { ...prev };
-                                      removedIndices.forEach(i => delete updated[i]);
-                                      return updated;
-                                    });
-                                    addToast("Cleared " + visibleFilenames.length + " results", "success");
-                                  } else if (!hasAnyFilter) {
-                                    // Clear everything
-                                    await api.clearResults();
-                                    setStatus((prev) => ({
-                                      ...prev,
-                                      results: [],
-                                      log: [],
-                                      complete: false,
-                                    }));
-                                    setEditedResults([]);
-                                    setEmailApprovals({});
-                                    setEditedEmails({});
-                                    addToast("Cleared all results", "success");
-                                  }
-                                } catch (e) {
-                                  addToast(
-                                    "Error clearing results: " + e.message,
-                                    "error",
-                                  );
-                                }
-                              }
-                            }}
-                            className="btn btn-secondary"
-                            style={{ background: "rgba(239,68,68,0.2)" }}
-                          >
-                            <Icon name="Trash2" size={18} />
-                            {(resultsFilter !== "all" || resultsPeriodFilter || resultsAssignmentFilter || resultsSearch.trim()) ? "Clear Filtered" : "Clear All"}
-                          </button>
+                          <ResultsClearButton
+                            resultsFilter={resultsFilter}
+                            resultsPeriodFilter={resultsPeriodFilter}
+                            resultsAssignmentFilter={resultsAssignmentFilter}
+                            resultsSearch={resultsSearch}
+                            status={status}
+                            emailApprovals={emailApprovals}
+                            setStatus={setStatus}
+                            setEditedResults={setEditedResults}
+                            setEmailApprovals={setEmailApprovals}
+                            setEditedEmails={setEditedEmails}
+                            addToast={addToast}
+                          />
                           {/* Approval Gate Checkbox */}
                           {status.results.length > 0 && (
                             <label
