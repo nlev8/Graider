@@ -14,6 +14,8 @@ from backend.services.assistant_tools import _load_settings, DOCUMENTS_DIR
 from backend.utils.compliance import require_teacher_id
 from backend.paths import graider_export_dir
 
+from ._paths import PROJECT_ROOT
+
 _logger = logging.getLogger(__name__)
 
 MAX_RESOURCE_TEXT = 120000
@@ -259,8 +261,12 @@ def read_resource_tool(filename, teacher_id='local-dev'):
     filepath = os.path.join(DOCUMENTS_DIR, safe_name)
 
     if not os.path.exists(filepath):
-        # Also check project root for built-in docs like User_Manual.md
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # Also check project root for built-in docs like User_Manual.md.
+        # Use the shared PROJECT_ROOT, NOT a __file__-relative dirname chain: this file
+        # moved one directory deeper in the package split, so the original 3-hop chain
+        # would now resolve to backend/ instead of the repo root (behavior bug caught by
+        # the Codex review of the split PR).
+        project_root = PROJECT_ROOT
         alt_path = os.path.join(project_root, safe_name)
         if os.path.exists(alt_path):
             filepath = alt_path
