@@ -1,12 +1,34 @@
 #!/usr/bin/env node
 // CQ level-8 frontend scan: flag any function whose line span >200 LOC under frontend/src.
-// Exit 1 if any offender, 0 if clean. Run from frontend/ (needs @babel/parser).
+// Exit 1 if any offender, 0 if clean.
+// Canonical:  node scripts/cq_scan_frontend.mjs            (run from repo root → scans frontend/src)
+// Also works: cd frontend && node ../scripts/cq_scan_frontend.mjs
+// @babel/parser is resolved from the frontend package's node_modules regardless of cwd
+// (it lives there as a transitive dep of @vitejs/plugin-react; there is no root node_modules).
 import fs from "node:fs";
 import path from "node:path";
-import { parse } from "@babel/parser";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const LIMIT = 200;
-const root = process.argv[2] || "src";
+
+// Derive paths from the script's own location, not cwd, so the command works from anywhere.
+const scriptDir = path.dirname(fileURLToPath(import.meta.url)); // <repo>/scripts
+const repoRoot = path.resolve(scriptDir, "..");
+const frontendDir = path.join(repoRoot, "frontend"); // owns @babel/parser as a transitive dep
+const root = process.argv[2] || path.join(frontendDir, "src");
+
+const require = createRequire(path.join(frontendDir, "noop.js"));
+let parse;
+try {
+  ({ parse } = require("@babel/parser"));
+} catch {
+  console.error(
+    `Cannot resolve @babel/parser from ${frontendDir}/node_modules — run \`cd frontend && npm install\` first.`,
+  );
+  process.exit(2);
+}
+
 const rows = [];
 
 function len(node) {
@@ -65,6 +87,9 @@ const uniq = rows.filter((r) => {
   return seen.has(k) ? false : (seen.add(k), true);
 });
 uniq.sort((a, b) => b[0] - a[0]);
-for (const [L, f, n] of uniq) console.log(`${String(L).padStart(5)}  ${f}::${n}`);
+for (const [L, f, n] of uniq) {
+  const rel = path.relative(repoRoot, f);
+  console.log(`${String(L).padStart(5)}  ${rel}::${n}`);
+}
 console.error(`\n${uniq.length} functions >${LIMIT} LOC`);
 process.exit(uniq.length ? 1 : 0);
