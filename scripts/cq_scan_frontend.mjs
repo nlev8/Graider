@@ -29,7 +29,13 @@ try {
   process.exit(2);
 }
 
+if (!fs.existsSync(root)) {
+  console.error(`Scan root does not exist: ${root}`);
+  process.exit(2); // fail closed — never certify clean on a missing root
+}
+
 const rows = [];
+let skipped = 0; // any unparsed file means the scan is incomplete → fail closed
 
 function len(node) {
   return node.loc ? node.loc.end.line - node.loc.start.line + 1 : 0;
@@ -72,12 +78,17 @@ function walk(dir) {
       if (e.name === "node_modules") continue;
       walk(p);
     } else if (/\.(jsx?|tsx?)$/.test(e.name)) {
+      // Per-extension plugins so .ts/.tsx parse instead of silently failing under jsx-only.
+      const isTs = /\.tsx?$/.test(e.name);
+      const isTsx = /\.tsx$/.test(e.name);
+      const plugins = isTs ? (isTsx ? ["typescript", "jsx"] : ["typescript"]) : ["jsx"];
       let ast;
       try {
-        ast = parse(fs.readFileSync(p, "utf8"), { sourceType: "module", plugins: ["jsx"] });
+        ast = parse(fs.readFileSync(p, "utf8"), { sourceType: "module", plugins });
       } catch (e) {
-        // Surface skips so an undercount during active refactoring is visible, not silent.
+        // Surface skips AND count them — an incomplete scan must fail closed below.
         console.error(`SKIP (parse error): ${p}: ${e.message}`);
+        skipped++;
         continue;
       }
       const tag = (n) => {
@@ -103,4 +114,10 @@ for (const [L, f, n] of uniq) {
   console.log(`${String(L).padStart(5)}  ${rel}::${n}`);
 }
 console.error(`\n${uniq.length} functions >${LIMIT} LOC`);
-process.exit(uniq.length ? 1 : 0);
+if (uniq.length) process.exit(1);
+if (skipped) {
+  // Clean of offenders but the scan was incomplete — refuse to certify (fail closed).
+  console.error(`INCOMPLETE: ${skipped} file(s) failed to parse — not certified clean.`);
+  process.exit(2);
+}
+process.exit(0);
