@@ -1,11 +1,13 @@
 import subprocess, sys, pathlib
 
+SCAN = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "cq_scan_backend.py"
+
 def test_backend_scan_flags_over_200(tmp_path):
     f = tmp_path / "big.py"
     body = "\n".join(f"    x{i} = {i}" for i in range(210))
     f.write_text(f"def huge():\n{body}\n")
     out = subprocess.run(
-        [sys.executable, str(pathlib.Path("scripts/cq_scan_backend.py")), str(tmp_path)],
+        [sys.executable, str(SCAN), str(tmp_path)],
         capture_output=True, text=True,
     )
     assert "huge" in out.stdout
@@ -14,7 +16,7 @@ def test_backend_scan_flags_over_200(tmp_path):
 def test_backend_scan_clean_is_zero_exit(tmp_path):
     (tmp_path / "ok.py").write_text("def small():\n    return 1\n")
     out = subprocess.run(
-        [sys.executable, str(pathlib.Path("scripts/cq_scan_backend.py")), str(tmp_path)],
+        [sys.executable, str(SCAN), str(tmp_path)],
         capture_output=True, text=True,
     )
     assert out.returncode == 0

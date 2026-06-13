@@ -18,8 +18,11 @@ def scan(roots):
                     continue
                 p = os.path.join(dp, fn)
                 try:
-                    tree = ast.parse(open(p, encoding="utf-8").read())
-                except Exception:
+                    with open(p, encoding="utf-8") as fh:
+                        tree = ast.parse(fh.read())
+                except Exception as e:
+                    # Make an undercount visible rather than silent during active refactoring.
+                    print(f"SKIP (parse error): {p}: {e}", file=sys.stderr)
                     continue
                 for n in ast.walk(tree):
                     if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):

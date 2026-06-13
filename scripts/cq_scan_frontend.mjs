@@ -38,15 +38,24 @@ function visit(node, hint) {
   if (!node || typeof node !== "object") return;
   if (Array.isArray(node)) return node.forEach((n) => visit(n, hint));
   if (node.type) {
+    const isMethod =
+      node.type === "ObjectMethod" ||
+      node.type === "ClassMethod" ||
+      node.type === "ClassPrivateMethod";
     const isFn =
       node.type === "FunctionDeclaration" ||
       node.type === "FunctionExpression" ||
-      node.type === "ArrowFunctionExpression";
+      node.type === "ArrowFunctionExpression" ||
+      isMethod;
     if (isFn) {
-      const nm =
-        node.type === "FunctionDeclaration" && node.id ? node.id.name : hint || "(anon)";
+      let nm;
+      if (node.type === "FunctionDeclaration" && node.id) nm = node.id.name;
+      else if (isMethod) nm = node.key?.name || node.key?.id?.name || hint || "(method)";
+      else nm = hint || "(anon)";
       const L = len(node);
-      if (L > LIMIT) rows.push([L, node.__file, nm]);
+      // Key dedup on the node's source offset (unique per AST node), NOT L::file::name —
+      // two distinct same-length anon functions in one file must not collapse (undercount).
+      if (L > LIMIT) rows.push([L, node.__file, nm, node.start]);
     }
   }
   for (const k in node) {
@@ -66,7 +75,9 @@ function walk(dir) {
       let ast;
       try {
         ast = parse(fs.readFileSync(p, "utf8"), { sourceType: "module", plugins: ["jsx"] });
-      } catch {
+      } catch (e) {
+        // Surface skips so an undercount during active refactoring is visible, not silent.
+        console.error(`SKIP (parse error): ${p}: ${e.message}`);
         continue;
       }
       const tag = (n) => {
@@ -82,8 +93,8 @@ function walk(dir) {
 }
 walk(root);
 const seen = new Set();
-const uniq = rows.filter((r) => {
-  const k = r.join("::");
+const uniq = rows.filter(([, file, , start]) => {
+  const k = `${start}::${file}`; // source offset is unique per AST node — no false merges
   return seen.has(k) ? false : (seen.add(k), true);
 });
 uniq.sort((a, b) => b[0] - a[0]);
