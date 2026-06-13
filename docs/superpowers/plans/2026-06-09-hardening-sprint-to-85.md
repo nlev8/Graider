@@ -52,6 +52,29 @@ giant FE component functions (`SettingsClassroom` 2,307 LOC; audit
 campaign. Revised projection for this sprint as listed: **~7.6–7.75**;
 reaching ~8 additionally needs the FE component splits.
 
+## Re-score 2026-06-12 (CQ campaign COMPLETE, mechanical) — overall: **7.85**
+
+The Code Quality campaign (waves 1–10, PRs #743–#777: 36 component splits
+culminating in App.jsx 2,677→189) is fully merged. Commands re-run
+2026-06-12 against `main` @ f118c07; binding rulings applied; only Code
+Quality moved — all other dimensions spot-verified unchanged (swallows=9,
+str(e)=0, DI=0, metrics grep=2, promoted-spec masks=0, migrations=2 with
+real baseline).
+
+| Dimension | 2026-06-11 | 2026-06-12 | Evidence |
+|---|--:|--:|---|
+| Code Quality | 6 | **7** | All three level-7 criteria now met, AST-verified (babel for FE incl. .js, python ast for BE — never def-to-def, which produced two false positives this campaign): **0 functions >300 LOC frontend AND backend**; largest file 2,723 (`backend/services/assistant_tools_reports.py` — no file >3,000; the frontend no longer places in the top 7); Flask-free service layer (standing). The 2026-06-09 ruling's pinned violation (`SettingsClassroom.jsx` 2,302-line function) and its 35 successors are gone. Level 8 honestly fails: 1 file >2,500 (2,723) and **79** FE functions >200 → 0/2 criteria, no partial credit. Clean integer 7. |
+| All others | — | unchanged | Security 9, EH 7.5, Arch 7, TC 7, Doc 9, Obs 7.5, DI 7.5, OpSafety 8, SSO 9 — campaign touched only frontend component structure (+1 backend docs comment); spot-checks above confirm no drift in either direction. |
+| **OVERALL** | 7.75 | **7.85** | 9+7.5+7+7+9+7+7.5+7.5+8+9 = 78.5/10. |
+
+**Worklist implied (path toward 8.0+):** EH 7.5→8 = log the ~59
+returns-fallback sites; TC 7→8 = de-mask the 48 nightly e2e specs + 80%
+floor; Obs 7.5→8 = repo-verifiable prod error-tracking; DI 7.5→8 =
+downgrade coverage for post-baseline migrations; CQ 7→8 = split
+assistant_tools_reports.py below 2,500 + the 79 FE functions >200 (a new
+campaign, much lighter than the last). Arch 7→8 (DI at critical seams)
+remains the deferred heavy.
+
 ## Re-score 2026-06-11 (sprint COMPLETE, mechanical) — overall: **7.75** (Clever cert operator-confirmed same day; was 7.6 pending confirmation)
 
 All seven sprint items are now merged: PR1 #724, PR2 #735 (ruff E722+BLE001
