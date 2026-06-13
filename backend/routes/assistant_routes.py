@@ -1645,35 +1645,16 @@ def _execute_tool_round(*, tool_use_blocks, session_id, teacher_id, _last_user_t
     return assistant_content, tool_results
 
 
-def _run_assistant_stream(*, session_id, conv, voice_mode, model_info, api_key, teacher_id):
-    """Module-level SSE generator for the assistant chat stream.
+def _setup_voice_mode(voice_mode):
+    """Initialize TTS streaming for voice mode, or return all-None if disabled.
 
-    Lifted verbatim from the former nested ``generate()`` closure inside
-    ``assistant_chat`` (CQ7 <300 LOC split, golden net:
-    tests/test_assistant_chat_golden.py). The body is byte-identical to the
-    closure (de-indented by 4); the former closure captures (session_id, conv,
-    voice_mode, model_info, api_key, teacher_id) are now keyword-only params.
+    Extracted verbatim from ``_run_assistant_stream``'s voice-setup block
+    (CQ8 ≤200 LOC split). Body is byte-identical (de-indented by 4).
+    The nested ``_drain_audio`` helper is unchanged — it still closes over
+    the ``tts_stream`` / ``audio_out_queue`` locals created here.
+
+    Returns (tts_stream, sentence_buffer, audio_out_queue, audio_thread).
     """
-    # Clear any stale cancel flag for this session
-    cancelled_sessions.discard(session_id)
-
-    messages = list(conv["messages"])
-
-    # Extract the last user message text for send-tool name guard
-    _last_user_text = ""
-    for _msg in reversed(messages):
-        if isinstance(_msg, dict) and _msg.get("role") == "user":
-            _content = _msg.get("content", "")
-            if isinstance(_content, str):
-                _last_user_text = _content
-            elif isinstance(_content, list):
-                for _block in _content:
-                    if isinstance(_block, dict) and _block.get("type") == "text":
-                        _last_user_text = _block.get("text", "")
-                        break
-            break
-
-    # Voice mode: set up TTS streaming
     tts_stream = None
     sentence_buffer = None
     audio_out_queue = None
@@ -1713,6 +1694,138 @@ def _run_assistant_stream(*, session_id, conv, voice_mode, model_info, api_key, 
             )
             tts_stream = None
 
+    return tts_stream, sentence_buffer, audio_out_queue, audio_thread
+
+
+def _stream_one_round(*, active_model, active_provider, api_key, messages, system_prompt,
+                      session_id, tts_stream, sentence_buffer, _flush_audio_queue):
+    """Stream one LLM round and yield SSE text/tool-delta events.
+
+    Extracted verbatim from ``_run_assistant_stream``'s per-round adapter
+    streaming block (CQ8 ≤200 LOC split). Body is byte-identical (de-indented
+    by 12). Yields ``text_delta`` and audio SSE frames; accumulates token/TTS
+    deltas locally and returns them as the generator's StopIteration value so
+    the caller can update its running totals:
+
+        (full_response_text, tool_use_blocks, deferred_tool_starts,
+         delta_input_tokens, delta_output_tokens, delta_tts_chars)
+
+    The ``_flush_audio_queue`` nested generator is passed in from the caller
+    (same pattern as ``_execute_tool_round``).
+    """
+    full_response_text = ""
+    tool_use_blocks = []
+    deferred_tool_starts = []  # Yield after TTS flush so voice finishes first
+
+    # Ensure all submodule tools are registered before passing to API
+    _merge_submodules()
+
+    # ── ADAPTER STREAMING (all providers) ──
+    llm_req = _build_llm_request(
+        model=active_model,
+        messages=messages,
+        system_prompt=system_prompt,
+        tools=TOOL_DEFINITIONS,
+        max_tokens=MAX_TOKENS,
+    )
+
+    if active_provider == "anthropic":
+        _stream_adapter = AnthropicAdapter(api_key=api_key)
+    elif active_provider == "openai":
+        _stream_adapter = OpenAIAdapter(api_key=api_key)
+    elif active_provider == "gemini":
+        _stream_adapter = GeminiAdapter(api_key=api_key)
+    else:
+        raise ValueError(f"Unknown provider: {active_provider}")
+
+    # in-progress tool call: tool_call_id -> {id, name, args_fragments}
+    _pending_tool: dict[str, dict] = {}
+
+    # Local accumulators — returned as deltas; caller updates its totals.
+    _delta_in = 0
+    _delta_out = 0
+    _delta_tts = 0
+
+    for stream_event in _stream_adapter.stream_chat(llm_req):
+        if session_id in cancelled_sessions:
+            break
+
+        if isinstance(stream_event, TextDelta):
+            full_response_text += stream_event.text
+            yield f"data: {json.dumps({'type': 'text_delta', 'content': stream_event.text})}\n\n"
+            if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
+                for sent in sentence_buffer.add(stream_event.text):
+                    text_to_speak = sent + " "
+                    tts_stream.send_text(text_to_speak)
+                    _delta_tts += len(text_to_speak)
+
+        elif isinstance(stream_event, ToolCallDelta):
+            tcid = stream_event.tool_call_id
+            if tcid not in _pending_tool:
+                _pending_tool[tcid] = {"id": tcid, "name": "", "args_json": ""}
+            if stream_event.name:
+                _pending_tool[tcid]["name"] = stream_event.name
+                # Defer tool_start SSE until after TTS flush
+                deferred_tool_starts.append({
+                    'type': 'tool_start',
+                    'tool': stream_event.name,
+                    'id': tcid,
+                })
+            _pending_tool[tcid]["args_json"] += stream_event.args_delta
+
+        elif isinstance(stream_event, ToolCallComplete):
+            tc = stream_event.tool_call
+            tool_use_blocks.append({
+                "id": tc.tool_call_id,
+                "name": tc.name,
+                "input_json": json.dumps(tc.args),
+            })
+
+        elif isinstance(stream_event, UsageEvent):
+            _delta_in += stream_event.usage.prompt_tokens
+            _delta_out += stream_event.usage.completion_tokens
+
+        # FinishEvent — nothing to do; finish_reason recorded if needed
+
+        yield from _flush_audio_queue()
+
+    return full_response_text, tool_use_blocks, deferred_tool_starts, _delta_in, _delta_out, _delta_tts
+
+
+def _run_assistant_stream(*, session_id, conv, voice_mode, model_info, api_key, teacher_id):
+    """Module-level SSE generator for the assistant chat stream.
+
+    Lifted verbatim from the former nested ``generate()`` closure inside
+    ``assistant_chat`` (CQ7 <300 LOC split, golden net:
+    tests/test_assistant_chat_golden.py). The body is byte-identical to the
+    closure (de-indented by 4); the former closure captures (session_id, conv,
+    voice_mode, model_info, api_key, teacher_id) are now keyword-only params.
+
+    CQ8 split (≤200 LOC): voice-mode setup extracted to ``_setup_voice_mode``;
+    per-round adapter streaming extracted to ``_stream_one_round``.
+    """
+    # Clear any stale cancel flag for this session
+    cancelled_sessions.discard(session_id)
+
+    messages = list(conv["messages"])
+
+    # Extract the last user message text for send-tool name guard
+    _last_user_text = ""
+    for _msg in reversed(messages):
+        if isinstance(_msg, dict) and _msg.get("role") == "user":
+            _content = _msg.get("content", "")
+            if isinstance(_content, str):
+                _last_user_text = _content
+            elif isinstance(_content, list):
+                for _block in _content:
+                    if isinstance(_block, dict) and _block.get("type") == "text":
+                        _last_user_text = _block.get("text", "")
+                        break
+            break
+
+    # Voice mode: set up TTS streaming
+    tts_stream, sentence_buffer, audio_out_queue, audio_thread = _setup_voice_mode(voice_mode)
+
     def _flush_audio_queue():
         """Yield any available audio chunks from the queue."""
         if not audio_out_queue:
@@ -1749,76 +1862,22 @@ def _run_assistant_stream(*, session_id, conv, voice_mode, model_info, api_key, 
                         yield f"data: {json.dumps({'type': 'cost_warning', 'estimated_cost': round(_est_cost, 4), 'rounds_used': _round_idx})}\n\n"
                         break  # Stop the tool loop — too expensive
 
-                full_response_text = ""
-                tool_use_blocks = []
-                deferred_tool_starts = []  # Yield after TTS flush so voice finishes first
-
-                # Ensure all submodule tools are registered before passing to API
-                _merge_submodules()
-
                 # ── ADAPTER STREAMING (all providers) ──
-                llm_req = _build_llm_request(
-                    model=active_model,
+                (full_response_text, tool_use_blocks, deferred_tool_starts,
+                 _delta_in, _delta_out, _delta_tts) = yield from _stream_one_round(
+                    active_model=active_model,
+                    active_provider=active_provider,
+                    api_key=api_key,
                     messages=messages,
                     system_prompt=system_prompt,
-                    tools=TOOL_DEFINITIONS,
-                    max_tokens=MAX_TOKENS,
+                    session_id=session_id,
+                    tts_stream=tts_stream,
+                    sentence_buffer=sentence_buffer,
+                    _flush_audio_queue=_flush_audio_queue,
                 )
-
-                if active_provider == "anthropic":
-                    _stream_adapter = AnthropicAdapter(api_key=api_key)
-                elif active_provider == "openai":
-                    _stream_adapter = OpenAIAdapter(api_key=api_key)
-                elif active_provider == "gemini":
-                    _stream_adapter = GeminiAdapter(api_key=api_key)
-                else:
-                    raise ValueError(f"Unknown provider: {active_provider}")
-
-                # in-progress tool call: tool_call_id -> {id, name, args_fragments}
-                _pending_tool: dict[str, dict] = {}
-
-                for stream_event in _stream_adapter.stream_chat(llm_req):
-                    if session_id in cancelled_sessions:
-                        break
-
-                    if isinstance(stream_event, TextDelta):
-                        full_response_text += stream_event.text
-                        yield f"data: {json.dumps({'type': 'text_delta', 'content': stream_event.text})}\n\n"
-                        if tts_stream and sentence_buffer and session_id not in tts_muted_sessions:
-                            for sent in sentence_buffer.add(stream_event.text):
-                                text_to_speak = sent + " "
-                                tts_stream.send_text(text_to_speak)
-                                total_tts_chars += len(text_to_speak)
-
-                    elif isinstance(stream_event, ToolCallDelta):
-                        tcid = stream_event.tool_call_id
-                        if tcid not in _pending_tool:
-                            _pending_tool[tcid] = {"id": tcid, "name": "", "args_json": ""}
-                        if stream_event.name:
-                            _pending_tool[tcid]["name"] = stream_event.name
-                            # Defer tool_start SSE until after TTS flush
-                            deferred_tool_starts.append({
-                                'type': 'tool_start',
-                                'tool': stream_event.name,
-                                'id': tcid,
-                            })
-                        _pending_tool[tcid]["args_json"] += stream_event.args_delta
-
-                    elif isinstance(stream_event, ToolCallComplete):
-                        tc = stream_event.tool_call
-                        tool_use_blocks.append({
-                            "id": tc.tool_call_id,
-                            "name": tc.name,
-                            "input_json": json.dumps(tc.args),
-                        })
-
-                    elif isinstance(stream_event, UsageEvent):
-                        total_input_tokens += stream_event.usage.prompt_tokens
-                        total_output_tokens += stream_event.usage.completion_tokens
-
-                    # FinishEvent — nothing to do; finish_reason recorded if needed
-
-                    yield from _flush_audio_queue()
+                total_input_tokens += _delta_in
+                total_output_tokens += _delta_out
+                total_tts_chars += _delta_tts
 
                 # ── POST-STREAM (shared across all providers) ──
 
