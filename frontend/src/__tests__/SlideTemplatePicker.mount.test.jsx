@@ -3,18 +3,17 @@ import { describe, it, expect, vi } from 'vitest';
 import SlideTemplatePicker from '../components/planner-tools/SlideTemplatePicker';
 
 describe('SlideTemplatePicker', () => {
-  it('renders all four templates and marks the selected one', () => {
-    render(<SlideTemplatePicker value="academic" onChange={() => {}} />);
-    expect(screen.getByText('Editorial')).toBeTruthy();
-    expect(screen.getByText('Bold')).toBeTruthy();
-    expect(screen.getByText('Academic')).toBeTruthy();
-    expect(screen.getByText('Playful')).toBeTruthy();
+  it('renders the five Phase-1A templates by name', () => {
+    render(<SlideTemplatePicker value="minimal" onChange={() => {}} />);
+    for (const name of ['Editorial Bold', 'Vibrant Gradient', 'Cinematic Dark', 'Playful Organic', 'Minimal / Swiss']) {
+      expect(screen.getByText(name)).toBeTruthy();
+    }
   });
 
   it('calls onChange with the template key when clicked', () => {
     const onChange = vi.fn();
-    render(<SlideTemplatePicker value="academic" onChange={onChange} />);
-    fireEvent.click(screen.getByText('Bold'));
-    expect(onChange).toHaveBeenCalledWith('bold');
+    render(<SlideTemplatePicker value="minimal" onChange={onChange} />);
+    fireEvent.click(screen.getByText('Cinematic Dark'));
+    expect(onChange).toHaveBeenCalledWith('cinematic');
   });
 });

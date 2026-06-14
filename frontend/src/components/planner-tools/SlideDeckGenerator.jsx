@@ -25,7 +25,7 @@ export default function SlideDeckGenerator({ config, lessonPlan, generatedAssign
   const [slideCount, setSlideCount] = useState(10);
   const [slideImages, setSlideImages] = useState(true);
   const [slideFormat, setSlideFormat] = useState('detailed');
-  const [slideTemplate, setSlideTemplate] = useState('academic');
+  const [slideTemplate, setSlideTemplate] = useState('minimal');
 
   return (
                       <div className="glass-card" style={{ padding: "24px", marginTop: "20px" }}>

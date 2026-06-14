@@ -14,6 +14,7 @@ vi.mock('../services/api', () => ({
   loadResource: vi.fn().mockResolvedValue({ resource: { content: '' } }),
   renderSlidesHtml: vi.fn().mockResolvedValue('<html></html>'),
   downloadSlidesPdf: vi.fn().mockResolvedValue(new Blob()),
+  getSlideTemplates: vi.fn().mockResolvedValue({ groups: [] }),
 }));
 
 import SlideDeckGenerator from '../components/planner-tools/SlideDeckGenerator';
@@ -81,9 +82,9 @@ describe('SlideDeckGenerator mounts without crashing (render-time smoke)', () =>
     ).toBeTruthy();
   });
 
-  it('renders the template picker with Academic default', () => {
+  it('renders the template picker with Minimal / Swiss default', () => {
     render(<SlideDeckGenerator {...baseProps()} />);
-    expect(screen.getByText('Academic')).toBeTruthy();
-    expect(screen.getByText('Editorial')).toBeTruthy();
+    expect(screen.getByText('Minimal / Swiss')).toBeTruthy();
+    expect(screen.getByText('Editorial Bold')).toBeTruthy();
   });
 });
