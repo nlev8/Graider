@@ -1802,3 +1802,33 @@ export async function setContentTags(contentId, tags) {
     body: JSON.stringify({ tags: tags }),
   });
 }
+
+// Web-rendered slide decks: render the deck model to preview HTML (string) or a
+// printed PDF (Blob). Both endpoints are @require_teacher, so the auth headers
+// must be awaited and spread in — getAuthHeaders() is async (a bare spread of
+// the unresolved promise would silently send no Authorization header).
+export async function renderSlidesHtml(slideDeck) {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch('/api/slides/html', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ slides: slideDeck }),
+  });
+  if (!resp.ok) throw new Error('Failed to render slides preview');
+  return resp.text();
+}
+
+export async function downloadSlidesPdf(slideDeck) {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch('/api/slides/pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ slides: slideDeck }),
+  });
+  if (!resp.ok) {
+    let msg = 'Failed to generate PDF';
+    try { msg = (await resp.json()).error || msg; } catch (e) { /* non-JSON error body */ }
+    throw new Error(msg);
+  }
+  return resp.blob();
+}

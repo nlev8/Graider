@@ -1,48 +1,97 @@
-import React from "react";
-import Icon from "../Icon";
+import React, { useState, useEffect } from "react";
+import * as api from "../../services/api";
 
 /*
- * Pure-prop child extracted from SlideDeckGenerator (CQ wave-8 split #cq8-07).
- * Renders the generated slide deck preview list, the Download PowerPoint button,
- * and the Share with Class button. All state and handlers live in the parent.
+ * Results panel for the web-rendered slide deck. Shows a live iframe preview
+ * (pixel-identical to the printed PDF, since both come from the same
+ * build_deck_html backend) plus the download/share actions. The PDF is the
+ * primary export; PowerPoint is kept as a basic secondary download.
+ *
+ * Replaces the previous static slide-list + PPTX-only panel (CQ wave-8 split
+ * #cq8-07). Props: { slideDeck, addToast, onShare } — onShare is the parent's
+ * shareWithClass(deck, type, title).
  */
-export default function SlideDeckResults({ slideDeck, onDownload, onShare }) {
+export default function SlideDeckResults({ slideDeck, addToast, onShare }) {
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  useEffect(function () {
+    let cancelled = false;
+    api.renderSlidesHtml(slideDeck)
+      .then(function (html) { if (!cancelled) setPreviewHtml(html); })
+      .catch(function () { if (!cancelled) setPreviewHtml(""); });
+    return function () { cancelled = true; };
+  }, [slideDeck]);
+
+  async function downloadPdf() {
+    setPdfLoading(true);
+    try {
+      const blob = await api.downloadSlidesPdf(slideDeck);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (slideDeck.title || "slides") + ".pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      addToast(e.message || "Failed to generate PDF", "error");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
+  async function downloadPptx() {
+    try {
+      const resp = await fetch("/api/export-slides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slides: slideDeck }),
+      });
+      if (!resp.ok) {
+        let msg = "Export failed";
+        try { msg = (await resp.json()).error || msg; } catch (e) { /* non-JSON body */ }
+        addToast(msg, "error");
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (slideDeck.title || "slides") + ".pptx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      addToast("Export failed: " + e.message, "error");
+    }
+  }
+
   return (
     <div style={{ marginTop: "20px", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
       <h4 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "12px" }}>
-        {slideDeck.title || 'Slide Deck'} ({(slideDeck.slides || []).length} slides)
+        {slideDeck.title || "Slide Deck"} ({(slideDeck.slides || []).length} slides)
       </h4>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px", maxHeight: "400px", overflowY: "auto" }}>
-        {(slideDeck.slides || []).map(function(slide, si) {
-          return (
-            <div key={si} style={{ padding: "12px 16px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--input-bg)", display: "flex", gap: "12px", alignItems: "flex-start" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#8b5cf6", minWidth: "24px" }}>{si + 1}</span>
-              <div>
-                <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{slide.title}</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                  {slide.layout} {slide.image_prompt ? ' + graphic' : ''}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <iframe
+        title="Slide preview"
+        srcDoc={previewHtml}
+        sandbox=""
+        style={{ width: "100%", height: "420px", border: "1px solid var(--border)",
+                 borderRadius: "8px", background: "#555" }}
+      />
+      <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
+        <button className="btn btn-primary" onClick={downloadPdf} disabled={pdfLoading}
+                style={{ padding: "10px 20px" }}>
+          {pdfLoading ? "Generating PDF…" : "Download PDF"}
+        </button>
+        <button className="btn btn-secondary" onClick={downloadPptx}
+                style={{ padding: "10px 20px" }}>
+          Download PowerPoint (basic)
+        </button>
+        <button className="btn btn-secondary"
+                onClick={function () { onShare(slideDeck, "slide_deck", slideDeck.title || "Slide Deck"); }}
+                style={{ padding: "10px 20px" }}>
+          Share with Class
+        </button>
       </div>
-
-      <button
-        onClick={onDownload}
-        className="btn btn-secondary"
-        style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px" }}
-      >
-        <Icon name="Download" size={16} /> Download PowerPoint (.pptx)
-      </button>
-      <button
-        onClick={onShare}
-        className="btn btn-secondary"
-        style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px" }}
-      >
-        <Icon name="Share2" size={16} /> Share with Class
-      </button>
     </div>
   );
 }

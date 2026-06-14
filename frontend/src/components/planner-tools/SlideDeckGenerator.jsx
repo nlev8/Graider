@@ -25,6 +25,7 @@ export default function SlideDeckGenerator({ config, lessonPlan, generatedAssign
   const [slideCount, setSlideCount] = useState(10);
   const [slideImages, setSlideImages] = useState(true);
   const [slideFormat, setSlideFormat] = useState('detailed');
+  const [slideTemplate, setSlideTemplate] = useState('academic');
 
   return (
                       <div className="glass-card" style={{ padding: "24px", marginTop: "20px" }}>
@@ -43,6 +44,8 @@ export default function SlideDeckGenerator({ config, lessonPlan, generatedAssign
                           setSlideImages={setSlideImages}
                           slideFormat={slideFormat}
                           setSlideFormat={setSlideFormat}
+                          slideTemplate={slideTemplate}
+                          setSlideTemplate={setSlideTemplate}
                           slideDeckInstructions={slideDeckInstructions}
                           setSlideDeckInstructions={setSlideDeckInstructions}
                           slideResourcesLoading={slideResourcesLoading}
@@ -110,6 +113,7 @@ export default function SlideDeckGenerator({ config, lessonPlan, generatedAssign
                                   generateImages: slideImages,
                                   maxImages: 5,
                                   deckFormat: slideFormat,
+                                  template: slideTemplate,
                                 }),
                               });
                               var data = await resp.json();
@@ -141,30 +145,8 @@ export default function SlideDeckGenerator({ config, lessonPlan, generatedAssign
                         {slideDeck && (
                           <SlideDeckResults
                             slideDeck={slideDeck}
-                            onDownload={async function() {
-                              try {
-                                addToast('Assembling PowerPoint...', 'info');
-                                var resp = await fetch('/api/export-slides', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ slides: slideDeck }),
-                                });
-                                if (!resp.ok) {
-                                  var err = await resp.json();
-                                  addToast(err.error || 'Export failed', 'error');
-                                  return;
-                                }
-                                var blob = await resp.blob();
-                                var url = URL.createObjectURL(blob);
-                                var a = document.createElement('a');
-                                a.href = url;
-                                a.download = (slideDeck.title || 'Slides') + '.pptx';
-                                a.click();
-                                URL.revokeObjectURL(url);
-                                addToast('PowerPoint downloaded!', 'success');
-                              } catch (err) { addToast('Export failed: ' + err.message, 'error'); }
-                            }}
-                            onShare={function() { shareWithClass(slideDeck, 'slide_deck', slideDeck.title || 'Slide Deck'); }}
+                            addToast={addToast}
+                            onShare={shareWithClass}
                           />
                         )}
                       </div>

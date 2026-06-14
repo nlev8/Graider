@@ -76,3 +76,41 @@ def test_generate_slides_image_failure_continues(client, headers):
                           headers=headers)
     assert resp.status_code == 200
     assert resp.get_json()['images_generated'] == 0
+
+
+def test_generate_slides_passes_template(client, headers):
+    from unittest.mock import patch
+    captured = {}
+
+    def fake_content(**kwargs):
+        captured.update(kwargs)
+        return {"title": "Cells", "theme": {}, "slides": [{"h": 1}], "template": kwargs.get("template")}
+
+    with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
+         patch('backend.services.slide_generator.generate_slide_content', side_effect=fake_content), \
+         patch('backend.services.slide_generator.generate_slide_images', return_value={}):
+        resp = client.post('/api/generate-slides',
+                           json={"content": "cells", "generateImages": False, "template": "playful"},
+                           headers=headers)
+    assert resp.status_code == 200
+    assert captured["template"] == "playful"           # route threaded it through
+    assert resp.get_json()["slides"]["template"] == "playful"
+
+
+def test_generate_slides_rejects_unknown_template(client, headers):
+    """An unrecognized template falls back to the 'academic' default."""
+    from unittest.mock import patch
+    captured = {}
+
+    def fake_content(**kwargs):
+        captured.update(kwargs)
+        return {"title": "Cells", "theme": {}, "slides": [{"h": 1}], "template": kwargs.get("template")}
+
+    with patch('backend.api_keys.get_api_key', return_value='fake-key'), \
+         patch('backend.services.slide_generator.generate_slide_content', side_effect=fake_content), \
+         patch('backend.services.slide_generator.generate_slide_images', return_value={}):
+        resp = client.post('/api/generate-slides',
+                           json={"content": "cells", "generateImages": False, "template": "haxxor"},
+                           headers=headers)
+    assert resp.status_code == 200
+    assert captured["template"] == "academic"

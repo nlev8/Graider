@@ -481,6 +481,39 @@ def test_generate_slide_images_mime_type_propagates_from_sdk(monkeypatch):
     assert received_requests[1].reference_images[0].mime_type == "image/jpeg"
 
 
+def test_generate_slide_content_records_template(monkeypatch):
+    """The chosen template is echoed into the returned deck dict, and the AI
+    is told design is fixed (it only picks an accent)."""
+    import json as _json
+    from backend.services import slide_generator
+    from backend.services.llm_adapter.types import LLMResponse, TextPart, Usage
+
+    captured = {}
+
+    def fake_chat(self, request):
+        captured["prompt"] = request.messages[0].content[0].text
+        deck = {"title": "T", "theme": {"primary_color": "#123456"},
+                "slides": [{"layout": "title", "title": "T"}]}
+        return LLMResponse(content_parts=[TextPart(text=_json.dumps(deck))],
+                           tool_calls=[], usage=Usage(0, 0, 0.0),
+                           finish_reason="stop", provider="gemini",
+                           model="gemini-2.5-flash")
+
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.GeminiAdapter.chat", fake_chat)
+    monkeypatch.setattr(
+        "backend.services.llm_adapter.gemini_adapter.genai.Client",
+        lambda api_key=None: object())
+
+    deck = slide_generator.generate_slide_content(
+        content="cells are units of life", subject="Bio", grade="7",
+        title="Cells", api_key="k", slide_count=3, template="editorial")
+
+    assert deck["template"] == "editorial"
+    # AI is steered to pick only an accent color, not full design:
+    assert "accent color" in captured["prompt"].lower()
+
+
 def test_generate_slide_images_suppresses_sentry_capture_for_breaker_error(monkeypatch):
     """Every slide that hits OPEN breaker must NOT trigger sentry_sdk.capture_exception.
     logger.warning still fires. Function returns empty images dict."""
