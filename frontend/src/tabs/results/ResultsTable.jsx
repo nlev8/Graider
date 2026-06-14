@@ -1,6 +1,7 @@
 import React from "react";
 import Icon from "../../components/Icon";
 import ResultsTableRow from "./ResultsTableRow";
+import ResultsTableHeader from "./ResultsTableHeader";
 
 export function ResultsSearchInput({ resultsSearch, setResultsSearch }) {
   return (
@@ -85,48 +86,12 @@ export default function ResultsTable({
   return (
                         <div style={{ overflowX: "auto" }} ref={(el) => { tableRef.current = el; if (el && !colWidths) initColWidths(); }}>
                         <table style={{ width: colWidths ? colWidths.reduce((a, b) => a + b, 0) + "px" : "100%", tableLayout: "fixed" }}>
-                          {colWidths && (
-                            <colgroup>
-                              {colWidths.map((w, i) => (
-                                <col key={i} style={{ width: w + "px" }} />
-                              ))}
-                            </colgroup>
-                          )}
-                          {!colWidths && (
-                            <colgroup>
-                              {defaultColPercents.map((p, i) => (
-                                <col key={i} style={{ width: p + "%" }} />
-                              ))}
-                            </colgroup>
-                          )}
-                          <thead>
-                            <tr>
-                              {["Student", "Assignment", "Time", "Score", "Grade", "Cost", "Authenticity", "Email", "Actions"].map((label, i) => (
-                                <th key={label} style={{ textAlign: i >= 3 ? "center" : undefined, position: "relative", overflow: "visible" }}>
-                                  {label}
-                                  {i < 8 && (
-                                    <span
-                                      onMouseDown={(e) => handleResizeStart(e, i)}
-                                      style={{
-                                        position: "absolute",
-                                        right: -2,
-                                        top: 4,
-                                        bottom: 4,
-                                        width: "4px",
-                                        cursor: "col-resize",
-                                        borderRadius: "2px",
-                                        background: theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-                                        transition: "background 0.15s",
-                                        zIndex: 1,
-                                      }}
-                                      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-primary)"; }}
-                                      onMouseLeave={(e) => { e.currentTarget.style.background = theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"; }}
-                                    />
-                                  )}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
+                          <ResultsTableHeader
+                            colWidths={colWidths}
+                            defaultColPercents={defaultColPercents}
+                            handleResizeStart={handleResizeStart}
+                            theme={theme}
+                          />
                           <tbody>
                             {(editedResults.length > 0
                               ? editedResults
