@@ -38,7 +38,7 @@ DEFAULT_THEME = {
 
 def generate_slide_content(content, subject, grade, title, api_key,
                            lesson_plan=None, global_ai_notes="", instructions="",
-                           slide_count=10, deck_format="detailed", template="academic"):
+                           slide_count=10, deck_format="detailed", template="minimal"):
     """Generate structured slide content from source material.
 
     The AI decides colors, layouts, and visual style based on the content.
