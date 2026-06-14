@@ -10,7 +10,7 @@ import math
 import re
 import logging
 import subprocess
-from flask import Blueprint, request, jsonify, g, send_file
+from flask import Blueprint, request, jsonify, g, send_file, Response
 from backend.services.openai_context import build_openai_context
 from werkzeug.utils import secure_filename
 from pathlib import Path
@@ -102,6 +102,8 @@ from backend.services.planner_generation import generate_assessment_content
 from backend.services.planner_generation import generate_assignment_from_lesson_content
 from backend.services.planner_generation import generate_replacement_questions
 from backend.services.planner_assessments import grade_assessment_answers_logic
+from backend.services.slide_html_builder import build_deck_html
+from backend.services.slide_pdf import html_to_pdf, SlidePdfError
 
 # ── Tier 2 PR3: prompt construction extracted to ───────────────────────────
 # backend/services/planner_prompts.py (pure string building, no Flask).
@@ -2173,3 +2175,50 @@ def export_slides():
     except Exception as e:
         _logger.exception("Slide export failed")
         return jsonify({"error": "Export failed"}), 500
+
+
+def _deck_and_images_from_request():
+    """Pull the deck model + its base64 image map from the POST body.
+
+    Images stay base64-encoded (keyed by str(index)) because build_deck_html
+    embeds them as data: URIs — unlike export_slides, which decodes to bytes
+    for the PPTX assembler.
+    """
+    data = request.get_json(silent=True) or {}
+    deck = data.get('slides') or {}
+    images = deck.get('_image_data') or {}
+    return deck, images
+
+
+@planner_bp.route('/api/slides/html', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def slides_html():
+    """Render the deck model to self-contained preview HTML (for the iframe)."""
+    deck, images = _deck_and_images_from_request()
+    if not deck.get('slides'):
+        return jsonify({"error": "No slides to render"}), 400
+    html = build_deck_html(deck, images)
+    return Response(html, mimetype="text/html")
+
+
+@planner_bp.route('/api/slides/pdf', methods=['POST'])
+@require_teacher
+@handle_route_errors
+def slides_pdf():
+    """Render the deck model to a 16:9 PDF download."""
+    deck, images = _deck_and_images_from_request()
+    if not deck.get('slides'):
+        return jsonify({"error": "No slides to render"}), 400
+    html = build_deck_html(deck, images)
+    try:
+        pdf_bytes = html_to_pdf(html)
+    except SlidePdfError:
+        return jsonify({"error": "PDF rendering is temporarily unavailable. "
+                                 "Use the Download PowerPoint export instead."}), 503
+    safe_title = "".join(c for c in (deck.get('title') or 'slides')
+                         if c.isalnum() or c in " -_").strip() or "slides"
+    return Response(
+        pdf_bytes, mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
+    )
