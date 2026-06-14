@@ -73,7 +73,7 @@ def generate_study_guide_content(*, content, subject, grade, instructions,
     from backend.services.llm_adapter import GeminiAdapter, LLMRequest, Message, TextPart
     adapter = GeminiAdapter(api_key=_gak('gemini', user_id))
     response = adapter.chat(LLMRequest(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         messages=[Message(role="user", content=[TextPart(text=prompt)])],
         metadata={"feature_label": "generate_study_guide"},
     ))
@@ -146,7 +146,7 @@ def generate_flashcards_content(*, content, subject, grade, instructions,
     from backend.services.llm_adapter import GeminiAdapter, LLMRequest, Message, TextPart
     adapter = GeminiAdapter(api_key=_gak('gemini', user_id))
     response = adapter.chat(LLMRequest(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         messages=[Message(role="user", content=[TextPart(text=prompt)])],
         metadata={"feature_label": "generate_flashcards"},
     ))
