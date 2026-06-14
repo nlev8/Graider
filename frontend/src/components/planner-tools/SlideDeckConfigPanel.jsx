@@ -1,9 +1,11 @@
 import React from "react";
+import SlideTemplatePicker from "./SlideTemplatePicker";
 
 /*
  * Pure-prop child extracted from SlideDeckGenerator (CQ wave-8 split #cq8-07).
- * Renders the options row (slide count, AI graphics, format, instructions)
- * and the resource picker. All state and handlers live in the parent.
+ * Renders the template picker, the options row (slide count, AI graphics,
+ * format, instructions) and the resource picker. All state and handlers live
+ * in the parent.
  */
 export default function SlideDeckConfigPanel({
   slideCount,
@@ -12,6 +14,8 @@ export default function SlideDeckConfigPanel({
   setSlideImages,
   slideFormat,
   setSlideFormat,
+  slideTemplate,
+  setSlideTemplate,
   slideDeckInstructions,
   setSlideDeckInstructions,
   slideResourcesLoading,
@@ -22,6 +26,9 @@ export default function SlideDeckConfigPanel({
 }) {
   return (
     <>
+      <div style={{ marginBottom: "16px" }}>
+        <SlideTemplatePicker value={slideTemplate} onChange={setSlideTemplate} />
+      </div>
       <div style={{ display: "flex", gap: "12px", marginBottom: "12px", flexWrap: "wrap" }}>
         <div>
           <label style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "6px", display: "block" }}>Slides</label>
