@@ -14,7 +14,10 @@ DEFAULT_TEMPLATE = "academic"
 # against a strict hex-color grammar before interpolating into a <style> block —
 # a mere "#"-prefix check would let `#fff; } body { background:url(...) } :root{`
 # through, injecting CSS (and, via server-side Chromium url(), an SSRF vector).
-_HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+# Matched with .fullmatch() (not .match()): Python's `$` also matches just before
+# a trailing newline, so `re.match(r"...$", "#fff\n")` would accept "#fff\n".
+# fullmatch requires the WHOLE string to be a hex color — exact invariant.
+_HEX_COLOR = re.compile(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")
 
 # 1280x720 = 16:9. Each .slide is one print page.
 _BASE_CSS = """
@@ -100,7 +103,7 @@ TEMPLATES = {
 def template_css(template: str, accent: str) -> str:
     """Return the full <style> body for a template with the AI accent injected."""
     tmpl = TEMPLATES.get(template) or TEMPLATES[DEFAULT_TEMPLATE]
-    safe_accent = accent if (isinstance(accent, str) and _HEX_COLOR.match(accent)) else "#1a7f43"
+    safe_accent = accent if (isinstance(accent, str) and _HEX_COLOR.fullmatch(accent)) else "#1a7f43"
     root_vars = "".join(f"{k}:{v};" for k, v in tmpl["vars"].items())
     root = f":root{{--accent:{safe_accent};{root_vars}}}"
     return _BASE_CSS + "\n" + root + "\n" + tmpl.get("extra", "")

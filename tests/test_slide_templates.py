@@ -33,3 +33,11 @@ def test_malicious_accent_is_rejected_not_injected():
 def test_valid_hex_accents_pass_through():
     for good in ("#abc", "#1a7f43", "#1A7F43FF"):
         assert good.lstrip("#") in template_css("academic", accent=good)
+
+
+def test_accent_with_trailing_or_embedded_newline_is_rejected():
+    """Guards the fullmatch (not match) invariant: Python's `$` matches before a
+    trailing newline, so .match() would accept '#fff\\n'. .fullmatch() must not."""
+    for bad in ("#fff\n", "#1a7f43\n", "#fff\n; }", "#fff\r\n"):
+        css = template_css("academic", accent=bad)
+        assert css == template_css("academic", accent="#1a7f43")  # safe fallback
