@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from "react";
-import PlannerCalendar from "../components/PlannerCalendar";
-import PlannerTools from "../components/PlannerTools";
 import { useQuestionEditing } from "../hooks/useQuestionEditing";
-import PlannerModeToggle from "./planner/PlannerModeToggle";
-import PlannerLessonMode from "./planner/PlannerLessonMode";
-import PlannerAssessmentMode from "./planner/PlannerAssessmentMode";
-import PlannerDashboardMode from "./planner/PlannerDashboardMode";
-import PlannerModals from "./planner/PlannerModals";
+import PlannerTabBody from "./planner/PlannerTabBody";
 import usePublishAssessment from "./planner/usePublishAssessment";
 import useShareWithClasses from "./planner/useShareWithClasses";
 import useTagRow from "./planner/useTagRow";
@@ -31,6 +25,9 @@ import usePlannerDocs from "./planner/usePlannerDocs";
  * State ownership is unchanged: truly-shared state stays in App.jsx and
  * arrives as props; Planner-owned clusters live in the hooks above; the
  * cross-cluster glue states below stay in this shell.
+ *
+ * cq8-07: rendered JSX subtree extracted verbatim into PlannerTabBody
+ * (pure-prop child; no logic added or changed).
  */
 
 export default function PlannerTab(props) {
@@ -166,107 +163,33 @@ export default function PlannerTab(props) {
   }, [plannerMode]);
 
   return (
-                <div data-tutorial="planner-card" className="fade-in">
-                  {/* Mode Toggle */}
-                  <PlannerModeToggle
-                    plannerMode={plannerMode}
-                    setPlannerMode={setPlannerMode}
-                    fetchPublishedAssessments={fetchPublishedAssessments}
-                    fetchSharedResources={fetchSharedResources}
-                    fetchTeacherTags={fetchTeacherTags}
-                    fetchSavedAssessments={fetchSavedAssessments}
-                  />
-
-                  {/* Lesson Planning Mode. Spread order is load-bearing:
-                      hook-owned values override same-named leftovers in
-                      {...props}. */}
-                  <PlannerLessonMode
-                    {...props}
-                    {...lessonGen}
-                    {...docs}
-                    {...questionEditing}
-                    expandedStandards={expandedStandards}
-                    setExpandedStandards={setExpandedStandards}
-                    assignmentSectionsOpen={assignmentSectionsOpen}
-                    setAssignmentSectionsOpen={setAssignmentSectionsOpen}
-                    previewShowAnswers={previewShowAnswers}
-                    setPreviewShowAnswers={setPreviewShowAnswers}
-                    publishAssessmentHandler={publish.publishAssessmentHandler}
-                    publishingAssessment={publish.publishingAssessment}
-                    setShowSaveLesson={setShowSaveLesson}
-                  />
-
-                  {/* Assessment Generator Mode */}
-                  <PlannerAssessmentMode
-                    {...props}
-                    {...questionEditing}
-                    plannerLoading={lessonGen.plannerLoading}
-                    previewShowAnswers={previewShowAnswers}
-                    publishAssessmentHandler={publish.publishAssessmentHandler}
-                    publishingAssessment={publish.publishingAssessment}
-                    sectionsDropdownOpen={sectionsDropdownOpen}
-                    setSectionsDropdownOpen={setSectionsDropdownOpen}
-                    showPlatformExport={showPlatformExport}
-                    setShowPlatformExport={setShowPlatformExport}
-                  />
-
-                  {/* Student Portal Dashboard */}
-                  <PlannerDashboardMode
-                    {...props}
-                    renderTagRow={tagRow.renderTagRow}
-                    setAttemptDrawerStudent={setAttemptDrawerStudent}
-                  />
-
-                  {/* Calendar Mode */}
-                  {plannerMode === "calendar" && (
-                    <PlannerCalendar
-                      active={activeTab === "planner"}
-                      addToast={addToast}
-                      savedLessons={savedLessons}
-                      supportDocs={supportDocs}
-                      setSupportDocs={setSupportDocs}
-                    />
-                  )}
-
-                  {/* Tools Mode */}
-                  {plannerMode === "tools" && (
-                    <PlannerTools
-                      config={config}
-                      lessonPlan={lessonPlan}
-                      generatedAssignment={generatedAssignment}
-                      globalAINotes={globalAINotes}
-                      uploadedDocs={uploadedDocs}
-                      addToast={addToast}
-                      shareWithClass={share.shareWithClass}
-                    />
-                  )}
-
-      {/* Drawer + modal mounts (PRs 6b/7a/7c/7d/7e) — ./planner/PlannerModals. */}
-      <PlannerModals
-        {...publish}
-        {...share}
-        newUnitModal={tagRow.newUnitModal}
-        setNewUnitModal={tagRow.setNewUnitModal}
-        attemptDrawerStudent={attemptDrawerStudent}
-        setAttemptDrawerStudent={setAttemptDrawerStudent}
-        showSaveLesson={showSaveLesson}
-        setShowSaveLesson={setShowSaveLesson}
-        lessonPlan={lessonPlan}
-        saveLessonUnit={saveLessonUnit}
-        setSaveLessonUnit={setSaveLessonUnit}
-        newUnitName={newUnitName}
-        setNewUnitName={setNewUnitName}
-        savedUnits={savedUnits}
-        fetchSavedLessons={fetchSavedLessons}
-        teacherClasses={teacherClasses}
-        periods={periods}
-        studentAccommodations={studentAccommodations}
-        addToast={addToast}
-        setSharedResources={setSharedResources}
-        setPublishedAssessments={setPublishedAssessments}
-        fetchTeacherTags={fetchTeacherTags}
-      />
-
-                </div>
+    <PlannerTabBody
+      passthroughProps={props}
+      lessonGen={lessonGen}
+      docs={docs}
+      questionEditing={questionEditing}
+      publish={publish}
+      share={share}
+      tagRow={tagRow}
+      expandedStandards={expandedStandards}
+      setExpandedStandards={setExpandedStandards}
+      assignmentSectionsOpen={assignmentSectionsOpen}
+      setAssignmentSectionsOpen={setAssignmentSectionsOpen}
+      previewShowAnswers={previewShowAnswers}
+      setPreviewShowAnswers={setPreviewShowAnswers}
+      sectionsDropdownOpen={sectionsDropdownOpen}
+      setSectionsDropdownOpen={setSectionsDropdownOpen}
+      showPlatformExport={showPlatformExport}
+      setShowPlatformExport={setShowPlatformExport}
+      attemptDrawerStudent={attemptDrawerStudent}
+      setAttemptDrawerStudent={setAttemptDrawerStudent}
+      showSaveLesson={showSaveLesson}
+      setShowSaveLesson={setShowSaveLesson}
+      saveLessonUnit={saveLessonUnit}
+      setSaveLessonUnit={setSaveLessonUnit}
+      newUnitName={newUnitName}
+      setNewUnitName={setNewUnitName}
+      savedUnits={savedUnits}
+    />
   );
 }
