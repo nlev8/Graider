@@ -2106,9 +2106,11 @@ def generate_slides():
     max_images = min(data.get('maxImages', 5), 10)
     generate_images = data.get('generateImages', True)
     deck_format = data.get('deckFormat', 'detailed')
-    template = (data.get('template') or 'academic')
-    if template not in ('editorial', 'bold', 'academic', 'playful'):
-        template = 'academic'
+    from backend.services.slide_templates import resolve_key, TEMPLATES, LEGACY_ALIASES
+    _req_template = data.get('template') or 'minimal'
+    template = resolve_key(_req_template)
+    if _req_template not in TEMPLATES and _req_template not in LEGACY_ALIASES:
+        _logger.warning("unknown slide template %r -> %s", _req_template, template)
 
     if not content and not lesson_plan:
         return jsonify({"error": "Provide content or a lesson plan to generate slides."}), 400
@@ -2130,6 +2132,21 @@ def generate_slides():
     except Exception as e:
         _logger.exception("Slide generation failed")
         return jsonify({"error": "Generation failed"}), 500
+
+
+@planner_bp.route('/api/slide-templates', methods=['GET'])
+@require_teacher
+@handle_route_errors
+def slide_templates():
+    """Registry for the picker — single source of truth (spec §7/§9)."""
+    from backend.services.slide_templates import GROUPS, TEMPLATES
+    groups = [
+        {"group": g, "templates": [
+            {"key": k, "name": TEMPLATES[k].name, "group": g} for k in keys
+        ]}
+        for g, keys in GROUPS.items()
+    ]
+    return jsonify({"groups": groups})
 
 
 @planner_bp.route('/api/export-slides', methods=['POST'])

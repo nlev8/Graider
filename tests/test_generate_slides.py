@@ -93,12 +93,13 @@ def test_generate_slides_passes_template(client, headers):
                            json={"content": "cells", "generateImages": False, "template": "playful"},
                            headers=headers)
     assert resp.status_code == 200
-    assert captured["template"] == "playful"           # route threaded it through
-    assert resp.get_json()["slides"]["template"] == "playful"
+    # "playful" is a legacy alias → resolves to "playful-organic"
+    assert captured["template"] == "playful-organic"
+    assert resp.get_json()["slides"]["template"] == "playful-organic"
 
 
 def test_generate_slides_rejects_unknown_template(client, headers):
-    """An unrecognized template falls back to the 'academic' default."""
+    """An unrecognized template falls back to the 'minimal' default (registry-driven)."""
     from unittest.mock import patch
     captured = {}
 
@@ -113,4 +114,20 @@ def test_generate_slides_rejects_unknown_template(client, headers):
                            json={"content": "cells", "generateImages": False, "template": "haxxor"},
                            headers=headers)
     assert resp.status_code == 200
-    assert captured["template"] == "academic"
+    assert captured["template"] == "minimal"
+
+
+def test_generate_slides_garbage_template_falls_back_to_minimal(client, headers):
+    from unittest.mock import patch
+    captured = {}
+    def fake_content(**kwargs):
+        captured.update(kwargs)
+        return {"title": "C", "theme": {}, "slides": [{"h": 1}], "template": kwargs.get("template")}
+    with patch('backend.api_keys.get_api_key', return_value='k'), \
+         patch('backend.services.slide_generator.generate_slide_content', side_effect=fake_content), \
+         patch('backend.services.slide_generator.generate_slide_images', return_value={}):
+        resp = client.post('/api/generate-slides',
+                           json={"content": "x", "generateImages": False, "template": "<garbage>"},
+                           headers=headers)
+    assert resp.status_code == 200
+    assert captured["template"] == "minimal"
