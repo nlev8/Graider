@@ -29,20 +29,46 @@ class Font:
     style: str = "normal"
 
 @dataclass(frozen=True)
+class ImageStyle:                 # structured, not one freeform phrase — see §5
+    medium: str
+    composition: str
+    avoid: str
+    education_constraints: str
+
+@dataclass(frozen=True)
 class TemplateSpec:
     key: str             # "anime"
     name: str            # "Anime / Manga"
     group: str           # "Illustrated"  (Classic | Illustrated | Themed | Refined)
     fonts: tuple[Font, ...]
     tokens: dict[str, str]   # CSS variables: colors, --font-head/body, radii, padding
-    decor_css: str           # template-specific CSS: backgrounds, overlays, bullets, per-layout flourishes
-    image_style: str         # → Gemini image prompt
-    accent_role: str = "fixed"   # "fixed" (own palette) | "ai" (inject validated accent into --accent)
+    decor_css: str           # template-specific CSS (PDF-safe subset, validated) — see §3
+    image_style: ImageStyle  # → Gemini image prompt (§5)
+    accent_role: str = "fixed"           # "fixed" (own palette) | "ai" (inject validated accent into --accent)
+    layout_variants: dict[str, str] = field(default_factory=dict)  # {layout: variant_name}; unset → default (§3)
 ```
 
-Adding a template = ~20–50 lines of descriptor. **Escape hatch:** a template needing genuinely different *structure* (e.g. newspaper columns) may register an optional `layout_overrides` mapping `layout_name -> render_fn`; CSS skins cover ~90%, so this is reserved, not built in Phase 1.
+A descriptor is realistically ~40–120 lines (decor CSS for vivid styles sprawls); the package split (below) keeps files within gates.
+
+### Layout variants (not CSS-only) — built in Phase 1
+
+CSS skins alone cannot create genuinely different *reading models*: some styles need structural change, not just paint. Newspaper needs multi-column flow + masthead; Anime needs panels/balloons; Sports needs diagonal masks + stat strips; HUD needs framed metadata panels. (Codex spec-review 2026-06-14.) So each of the six layouts has a **default renderer plus a small set of named variants** a template may opt into — bounded structure, not arbitrary per-template functions:
+
+```python
+# in slide_html_builder: registry of {layout: {variant_name: render_fn}}
+content:      bullets(default) | columns | card_grid | annotation_board
+image_focus:  full_bleed(default) | framed_caption | diagonal_crop | comic_panel
+title:        centered(default) | masthead | split
+# key_concept / two_column / section_divider: default + 1–2 variants as needed
+```
+
+A descriptor declares `layout_variants={"content":"columns", "image_focus":"comic_panel", …}`; unspecified layouts use the default. This gives structure where it matters without exploding to 25×6 bespoke renderers. **Phase 1 builds the variant mechanism and proves it with one structurally-demanding template (Newspaper), so the hard path is validated up front — not deferred.**
 
 Because each deck uses exactly one template, only that template's CSS is in the document — no CSS scoping/prefixing needed.
+
+### PDF-safe CSS + `decor_css` validation
+
+`decor_css` is **code-authored only** (never AI/admin/user-generated — see Security). It is constrained to a **PDF-safe subset** and checked by a validator (run in tests, and at startup in debug) that **rejects**: `@import`, external `url(...)` (anything not a `data:` URI), `backdrop-filter`, `mix-blend-mode`, unbounded `animation`/`infinite`; and **flags for QA**: heavy `filter`, `clip-path` on transformed children, viewport units in decoration, hairline (<1px) borders. The print path locks `@page` size and body dimensions so absolute/pseudo decoration can't be clipped by print margins. (My mockups used `backdrop-filter` + `background-blend-mode` for speed — the real templates must use PDF-safe equivalents.)
 
 ### Module structure (respects repo CQ gates: no file >2,500 LOC, no fn >200 LOC)
 
@@ -69,17 +95,32 @@ backend/assets/slide_fonts/*.woff2   # bundled OFL/Apache fonts
 
 Vivid styles need display fonts. To make the iframe preview and the server-side Chromium PDF render identically and **offline**, `template_css` embeds **only the selected template's** fonts as base64 `@font-face` (1–3 files per deck, `lru_cache`d). Fonts are OFL/Apache Google Fonts bundled in `backend/assets/slide_fonts/` — embeddable, no CDN, no network fetch, works inside the `sandbox=""` iframe and in headless Chromium with no network.
 
-Robustness: before printing the PDF, `slide_pdf` waits on `page.evaluate("document.fonts.ready")` (in addition to `wait_until="load"`) so embedded fonts are guaranteed applied.
+Robustness: before printing, `slide_pdf` waits on `document.fonts.ready` **and** one `requestAnimationFrame` settle (font-metric reflow can land after `fonts.ready`), in addition to `wait_until="load"`. Data-fonts inside a `sandbox=""` `srcdoc` are verified by an explicit test, not assumed. The iframe preview may briefly show fallback (FOUT) before fonts settle — acceptable; the React preview can fade in on load.
 
-~16 font families total; see catalog (§8). Each font's license is verified OFL/Apache before bundling; the license files ship alongside in `backend/assets/slide_fonts/LICENSES/`.
+~16 font families total; see catalog (§8). All restricted to OFL/Apache. A **font manifest** (`backend/assets/slide_fonts/MANIFEST.json`) records each file's family, version, license id, and source URL; license texts ship in `slide_fonts/LICENSES/`. **Latin-glyph caveat:** decorative display fonts (Press Start 2P, Bangers, Cinzel Decorative, handwriting faces) are used for **headings only**; **body text uses broad-coverage faces** (Inter / system stack) so translated/ELL content (the app translates feedback for ELL students) and non-Latin glyphs still render.
 
 ## 5. AI image style per template
 
-Today the Gemini image prompt is generic/color-based (`theme.style_prompt`). Each descriptor's `image_style` becomes the basis of the image prompt, so **Anime → anime art, Storybook → watercolor, Blueprint → schematics, Cosmic → space art**. Threads template → `image_style` → `slide_generator.generate_slide_content` / `generate_slide_images`. Image **count and cost are unchanged** — only the style wording changes. Existing reference-image style-consistency chaining is preserved.
+Today the Gemini image prompt is generic/color-based (`theme.style_prompt`). Each descriptor supplies a **structured** image style (not one freeform phrase), so the prompt builder can compose it safely:
+
+```python
+image_style = ImageStyle(
+    medium="cel-shaded anime-inspired illustration",   # generic medium, NOT a named franchise
+    composition="dynamic, clean lineart, vibrant flats",
+    avoid="text, logos, watermarks, real people, copyrighted characters",
+    education_constraints="clear, age-appropriate, subject-accurate, keeps contrast/legibility behind text",
+)
+```
+
+So **Anime → anime-inspired cel art, Storybook → watercolor, Blueprint → schematics, Cosmic → space art** — while the `avoid` + `education_constraints` clauses guard against franchise/copyright pull, cultural stereotype, and busy-behind-text clarity loss (important for an education product). Threads template → `image_style` → `slide_generator.generate_slide_content` / `generate_slide_images`. Image **count and cost are unchanged** — only wording. Reference-image style-consistency chaining is preserved, but `avoid` is repeated each call so artifacts don't compound across the deck.
 
 ## 6. Accent strategy
 
 Per-template `accent_role`: `"fixed"` templates own their palette (their identity *is* the palette — Cinematic, Synthwave, Art Deco…); `"ai"` templates accept the AI/teacher accent (Minimal, Editorial, Botanical, Sports…). The existing strict-hex `fullmatch` validation stays for the `"ai"` path and is the only place untrusted accent text enters CSS.
+
+**Alias resolution is centralized:** every render path (preview HTML, PDF, PPTX export, both publish flows, regenerate) goes through `template_css(deck.template)` → `get_spec(key)`, which resolves `LEGACY_ALIASES` → default. Because resolution lives in that one choke point, legacy keys render correctly everywhere by construction — no per-call-site handling. The frontend picker also normalizes a legacy/unknown key it receives from an old deck so the control still reflects a selection. Unknown keys are **logged** (and the route may return a `template_warning` field) rather than silently swallowed, so malformed clients are visible in dev.
+
+**Security invariants (explicit):** `decor_css` and `tokens` are **code-authored only** — never AI-, admin-, or user-generated through any UI. User/AI text only ever flows HTML-**escaped** into slide *content* — never into inline `style`, CSS custom properties, font names, or raw CSS. Layout/variant names come from fixed registries (not user input). The accent is the sole user-controlled CSS value and is hex-`fullmatch`-validated. Image `src` is a backend-built `data:` URI, escaped. The `sandbox=""` iframe is defense-in-depth on top of escaping, not a substitute for it.
 
 ## 7. Picker UX (frontend)
 
@@ -128,29 +169,44 @@ The `/api/generate-slides` route's validation changes from the hardcoded 4-key w
 
 ## 9. Phasing (approved: engine first, then waves)
 
-- **Phase 1 — Engine (PR 1).** Package structure; `base_css.py`; `engine.template_css` with token + `decor_css` + embedded `@font-face`; `fonts.py` bundling + base64; thread `image_style` through `slide_generator`; `accent_role` handling; **migrate the existing 4 templates to descriptors** (Editorial Bold, Vibrant Gradient, Cinematic Dark, Playful Organic) + add Minimal/Swiss as the default; `LEGACY_ALIASES` + registry-driven route validation; `slide_pdf` `document.fonts.ready`; data-driven `SlideTemplatePicker` (grouped, even if only the first specs exist); full tests. Proves the system end-to-end.
-- **Phase 2–4 — Template waves (PRs 2–4).** Author the remaining ~21 descriptors in batches of ~6–7 (Illustrated, Themed, Refined), each batch with its fonts bundled and a manual visual-QA pass.
-- **Phase 5 — Polish.** Picker thumbnails, filter/search, any structural `layout_overrides` a template proved to need.
+- **Phase 1 — Engine + structural proof (PR 1).** Package structure; `base_css.py`; `engine.template_css` (tokens + `decor_css` + embedded `@font-face`); `fonts.py` bundling/base64 + manifest; **layout-variant mechanism** in `slide_html_builder` (default + named variants per layout); **`decor_css` PDF-safe validator**; structured `image_style` threaded through `slide_generator`; `accent_role` handling; centralized `LEGACY_ALIASES`/`get_spec` + registry-driven route validation with invalid-key logging; `slide_pdf` `document.fonts.ready` + rAF; **registry exposed via API** (`GET /api/slide-templates` → keys/names/groups) so the picker is single-source; data-driven grouped `SlideTemplatePicker`; **migrate the 4 existing templates to descriptors** + add Minimal/Swiss default **+ build Newspaper as the structural proof** (forces the `columns`/`masthead` variants to exist); **automated render smoke tests** (see §10). Proves the *hard* path end-to-end, not just easy skins.
+- **Phase 2–4 — Template waves (PRs 2–4).** Author the remaining ~20 descriptors in batches of ~6–7 (Illustrated, Themed, Refined), each batch bundling its fonts, adding any new layout variants it needs, and passing the render smoke tests + a manual visual-QA pass.
+- **Phase 5 — Polish.** Picker thumbnails + filter/search; accessibility pass (contrast, all-caps readability); text-overflow tuning across templates.
 
-Each phase is its own implementation plan (writing-plans), reviewed and merged independently. CI is config/structure-safe; **aesthetic quality is verified by manual visual QA**, not automated tests.
+Each phase is its own implementation plan (writing-plans), reviewed and merged independently. **Effort note:** the hard part is not writing 25 descriptors — it is making each readable across six layouts with arbitrary-length text in both iframe and PDF. Automated render smoke tests (not just CSS-string unit tests) catch blank/overflow/clipping/font-load regressions; final aesthetic judgment stays human (visual QA per wave).
 
 ## 10. Testing
 
-- `template_css(key)` for every registered key: contains the template's tokens + its `@font-face`; never raises; unknown key falls back to default.
-- `build_deck_html` for each template × each of the 6 layouts: renders without error, escapes injected text, embeds the data-URI image.
-- Registry test: every `TemplateSpec` has required fields; every referenced font file exists in `slide_fonts/`; every `image_style` is non-empty; groups are from the allowed set.
-- Security regression (carried over): malicious accent (CSS-injection / trailing-newline) still falls back to the safe default; image data still escaped in `src`.
-- Frontend: picker renders all registered templates grouped; `onChange` fires the correct key; mount test.
-- Visual QA (manual, per wave): render ~3 representative slides per template in the iframe and check the PDF.
+**Unit / structure**
+- `template_css(key)` for every registered key + every legacy alias: contains the resolved template's tokens + its `@font-face`; never raises; unknown key → default.
+- `build_deck_html` for each template × each of the 6 layouts × its declared variants: renders without error, escapes injected text, embeds the data-URI image.
+- Registry test: every `TemplateSpec` has required fields; every referenced font file exists in `slide_fonts/` and in `MANIFEST.json` with an OFL/Apache license id; `image_style` has all structured fields; groups + variant names are from the allowed sets.
+- **`decor_css` validator test:** every template's `decor_css` passes the PDF-safe validator (no `@import`/external `url()`/`backdrop-filter`/`mix-blend-mode`/unbounded animation).
+- Security regression (carried over): malicious accent (CSS-injection / trailing-newline) falls back to safe default; image data escaped in `src`.
+
+**Render smoke (the new layer Codex flagged — beyond string asserts)**
+- A Playwright matrix renders each template across a small case set — `{long-text, short-text} × {image, no-image}` over the structural layouts — to PNG, asserting: output is **non-blank**, content is **not clipped/overflowing** the 1280×720 page (no element exceeds the slide box), and the **template's font actually applied** (`getComputedStyle(headingEl).fontFamily` resolves to the template family, not a fallback). Same check runs against the **PDF** path for the structural proof template. Pixel-perfect is not required — blank/overflow/font-load are.
+
+**Frontend / parity**
+- Picker renders all registered templates grouped; `onChange` fires the correct key; legacy key normalizes to a selection; mount test.
+- **Registry parity:** the JS template list is sourced from / checked against `GET /api/slide-templates` so Python and JS keys cannot drift (a test fails if they diverge).
+
+**Manual**
+- Visual QA per wave: render ~3 representative slides per template in the iframe and check the PDF for aesthetic quality + contrast/readability.
 
 ## 11. Risks / mitigations
 
-- **Aesthetic quality is human-judged** — automated tests guard structure, not beauty; budget a visual-QA pass per wave.
-- **Font licensing** — restrict to OFL/Apache families; ship license files; verify before bundling.
+- **Aesthetic quality is human-judged** — automated render-smoke tests guard blank/overflow/font-load; final beauty is visual-QA per wave.
+- **Text overflow** — arbitrary-length AI/teacher titles + bullets in display fonts can break decorative layouts; mitigations: per-layout `max-height` + overflow clamps, line-count limits, optional auto-fit scaling on titles. Covered by the overflow smoke check.
+- **i18n / glyph coverage** — decorative display fonts lack non-Latin glyphs; decorative faces are headings-only, body uses broad-coverage faces, so ELL-translated content renders.
+- **Accessibility** — busy backgrounds + all-caps display faces hurt contrast/readability; Phase 5 a11y pass; `education_constraints` keeps images legible behind text.
+- **Heavy CSS in Chromium print** — *not* assumed safe: a PDF-safe CSS subset + validator (§3) bans `backdrop-filter`/`mix-blend-mode`/external resources; gradients/transforms/`print_background` verified per wave; watch moiré from repeating-gradient halftones and disappearing hairlines in Blueprint/HUD/Newspaper.
+- **Font application** — `document.fonts.ready` + rAF before PDF; data-fonts-in-sandboxed-srcdoc explicitly tested.
+- **Font licensing** — OFL/Apache only; `MANIFEST.json` records version/license/source; license texts shipped.
+- **Registry / thumbnail drift** — picker sourced from `GET /api/slide-templates` + parity test; thumbnails derive from the same tokens or are parity-checked.
+- **Preview perf** — base64 fonts+images make `srcdoc` heavy; re-render the preview only when the deck/template actually changes (not on every keystroke).
 - **Repo size / CQ gates** — package split keeps every file <2,500 LOC and every function <200 LOC; descriptors are data, not logic.
-- **PDF font application** — `document.fonts.ready` wait guards against printing before embedded fonts load.
-- **Heavy CSS in Chromium print** — gradients/transforms/`print_background` render fine; verify per wave during visual QA.
-- **Image-style cost** — unchanged image count; only prompt wording changes.
+- **Image-style cost** — unchanged image count; only prompt wording changes; `avoid` clause repeated per call so reference-chaining doesn't compound artifacts.
 
 ## 12. Out of scope (v1)
 
