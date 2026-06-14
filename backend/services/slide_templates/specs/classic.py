@@ -1,13 +1,15 @@
-"""Classic group descriptors — the four migrated templates, now full skins."""
-from backend.services.slide_templates.types import Font, ImageStyle, TemplateSpec
+"""Classic group descriptors — the four migrated templates, now full skins.
 
-_INTER = Font("Inter", "Inter-400-normal.woff2", 400)
-_INTER_BLACK = Font("Inter", "Inter-800-normal.woff2", 800)
+Each decor_css below uses implicit adjacent-string concatenation: every line is a
+complete, self-terminated CSS rule, so keep each fragment a whole rule (a dropped
+trailing ';' would be a silent style bug, not a syntax error)."""
+from backend.services.slide_templates.types import Font, ImageStyle, TemplateSpec
+from backend.services.slide_templates.specs._fonts import INTER
 
 EDITORIAL_BOLD = TemplateSpec(
     key="editorial-bold", name="Editorial Bold", group="Classic",
     fonts=(Font("Playfair Display", "PlayfairDisplay-700-normal.woff2", 700),
-           Font("Playfair Display", "PlayfairDisplay-900-normal.woff2", 900), _INTER),
+           Font("Playfair Display", "PlayfairDisplay-900-normal.woff2", 900), INTER),
     tokens={
         "--bg": "#f7f3ea", "--ink": "#1f1b16", "--muted": "#6b6453", "--accent": "#c0392b",
         "--font-head": "'Playfair Display', Georgia, serif", "--font-body": "'Inter', system-ui, sans-serif",
@@ -26,7 +28,7 @@ EDITORIAL_BOLD = TemplateSpec(
 
 VIBRANT_GRADIENT = TemplateSpec(
     key="vibrant-gradient", name="Vibrant Gradient", group="Classic",
-    fonts=(Font("Space Grotesk", "SpaceGrotesk-700-normal.woff2", 700), _INTER),
+    fonts=(Font("Space Grotesk", "SpaceGrotesk-700-normal.woff2", 700), INTER),
     tokens={
         "--bg": "linear-gradient(135deg,#6d28d9,#db2777 55%,#f59e0b)", "--ink": "#ffffff",
         "--muted": "#f0e6ff", "--accent": "#ffe14d",
@@ -45,7 +47,7 @@ VIBRANT_GRADIENT = TemplateSpec(
 
 CINEMATIC = TemplateSpec(
     key="cinematic", name="Cinematic Dark", group="Classic",
-    fonts=(Font("Space Grotesk", "SpaceGrotesk-700-normal.woff2", 700), _INTER),
+    fonts=(Font("Space Grotesk", "SpaceGrotesk-700-normal.woff2", 700), INTER),
     tokens={
         "--bg": "radial-gradient(120% 120% at 80% 0%,#13233a,#070b12 70%)", "--ink": "#ffffff",
         "--muted": "#8aa0bf", "--accent": "#7CFC00",

@@ -15,7 +15,7 @@ def _safe_accent(accent) -> str:
     return accent if (isinstance(accent, str) and _HEX_COLOR.fullmatch(accent)) else _SAFE_ACCENT_FALLBACK
 
 
-def template_css(key, accent="#1a7f43") -> str:
+def template_css(key, accent=_SAFE_ACCENT_FALLBACK) -> str:
     # local import avoids a circular import (registry imports this module)
     from . import get_spec
     spec = get_spec(key)

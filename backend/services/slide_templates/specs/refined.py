@@ -1,10 +1,10 @@
 """Refined group — Minimal/Swiss, the clean default."""
-from backend.services.slide_templates.types import Font, ImageStyle, TemplateSpec
+from backend.services.slide_templates.types import ImageStyle, TemplateSpec
+from backend.services.slide_templates.specs._fonts import INTER, INTER_BLACK
 
 MINIMAL = TemplateSpec(
     key="minimal", name="Minimal / Swiss", group="Refined",
-    fonts=(Font("Inter", "Inter-400-normal.woff2", 400),
-           Font("Inter", "Inter-800-normal.woff2", 800)),
+    fonts=(INTER, INTER_BLACK),
     tokens={
         "--bg": "#ffffff", "--ink": "#111418", "--muted": "#8a8f98", "--accent": "#e63946",
         "--font-head": "'Inter', system-ui, sans-serif", "--font-body": "'Inter', system-ui, sans-serif",

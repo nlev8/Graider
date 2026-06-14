@@ -14,7 +14,7 @@ _INFINITE = re.compile(r"\binfinite\b", re.IGNORECASE)
 _BANNED_PROPS = ("backdrop-filter", "mix-blend-mode")
 
 
-def validate_decor_css(css: str) -> list:
+def validate_decor_css(css: str) -> list[str]:
     """Return a list of violation messages ([] means PDF-safe)."""
     errors = []
     if _IMPORT.search(css):

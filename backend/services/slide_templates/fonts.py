@@ -27,8 +27,8 @@ def font_face_css(fonts) -> str:
     for f in fonts:
         b64 = _b64(f.file)
         blocks.append(
-            "@font-face{font-family:'%s';font-style:%s;font-weight:%d;"
-            "font-display:swap;src:url(data:font/woff2;base64,%s) format('woff2');}"
-            % (f.family, f.style, f.weight, b64)
+            f"@font-face{{font-family:'{f.family}';font-style:{f.style};"
+            f"font-weight:{f.weight};font-display:swap;"
+            f"src:url(data:font/woff2;base64,{b64}) format('woff2');}}"
         )
     return "".join(blocks)
