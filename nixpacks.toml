@@ -32,6 +32,14 @@ cmds = [
   "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-frontend-build]'; exit 0; }; cd frontend && npm ci && VITE_SUPABASE_URL=\"$VITE_SUPABASE_URL\" VITE_SUPABASE_ANON_KEY=\"$VITE_SUPABASE_ANON_KEY\" npm run build",
   "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-frontend-build]'; exit 0; }; test -s backend/static/index.html",
   "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-frontend-build]'; exit 0; }; grep -Rq -- \"$VITE_SUPABASE_URL\" backend/static/assets/ || { echo 'FATAL: VITE_SUPABASE_URL not baked into bundle'; exit 1; }",
+  # Install headless Chromium for Playwright PDF rendering (/api/slides/pdf).
+  # Gated by the same SKIP_FRONTEND_BUILD flag: only the web service serves the
+  # Flask routes that render PDFs, so non-web services (worker, Celery beat —
+  # which set SKIP_FRONTEND_BUILD=true) skip the ~150MB Chromium download they'd
+  # never use. Operator (Hard Rule #8): after deploy, generate a deck and
+  # download the PDF against the live Railway image — if it 503s, Chromium's
+  # OS-level shared libs are missing; add them via [phases.setup].nixPkgs.
+  "[ \"$SKIP_FRONTEND_BUILD\" = \"true\" ] && { echo '[skip-chromium-install]'; exit 0; }; python -m playwright install chromium",
 ]
 
 [start]
