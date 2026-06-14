@@ -1,27 +1,19 @@
 import React, { useState } from "react";
-import Icon from "../components/Icon";
 import AssessmentResultsSection from "./results/AssessmentResultsSection";
-import ResultsHeader from "./results/ResultsHeader";
-import SendProgressIndicators from "./results/SendProgressIndicators";
-import AuthenticitySummaryAlert from "./results/AuthenticitySummaryAlert";
-import AutoApproveControls from "./results/AutoApproveControls";
-import PortalSubmissionsSection from "./results/PortalSubmissionsSection";
-import ResultsTable, { ResultsSearchInput } from "./results/ResultsTable";
-import SendApprovedEmailsButton from "./results/SendApprovedEmailsButton";
+import AssignmentResultsSection from "./results/AssignmentResultsSection";
 
 /*
  * Props required by ResultsTab:
  *
  * NOTE: The tab's sections are composed from ./results/* (CQ wave-1 split,
- *       behavior-preserving): AssessmentResultsSection, ResultsHeader
- *       (filter/export controls), SendProgressIndicators,
- *       AuthenticitySummaryAlert, AutoApproveControls,
- *       PortalSubmissionsSection, ResultsTable (+Row/cells),
- *       SendApprovedEmailsButton.
+ *       behavior-preserving): AssessmentResultsSection, AssignmentResultsSection
+ *       (filter/export controls, header, table, send button — extracted in CQ
+ *       wave-3 split), and the remaining results/* sub-components.
  *
  * NOTE: resultsFilter / resultsAssignmentFilter / resultsSort / resultsSearch /
- *       batchExportLoading / outlookExportLoading / ccParents (and their setters) are now
- *       ResultsTab-owned local state (useState in the body), pushed down from App (App.jsx decomp slice 2).
+ *       batchExportLoading / outlookExportLoading / ccParents / assignmentSectionOpen
+ *       (and their setters) are ResultsTab-owned local state (useState in the body),
+ *       pushed down as props to AssignmentResultsSection.
  *
  * --- State values ---
  * status                 - { results, is_running, log, complete }
@@ -188,196 +180,80 @@ export default React.memo(function ResultsTab({
                   />
 
                   {/* Assignment Results Section */}
-                  <div>
-                    <div
-                      onClick={function() { setAssignmentSectionOpen(!assignmentSectionOpen); }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: "10px",
-                        padding: "12px 16px",
-                        background: assignmentSectionOpen ? "rgba(255,255,255,0.03)" : "var(--glass-bg)",
-                        border: "1px solid var(--glass-border)",
-                        borderRadius: assignmentSectionOpen ? "10px 10px 0 0" : "10px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Icon name={assignmentSectionOpen ? "ChevronDown" : "ChevronRight"} size={16} />
-                      <span style={{ fontWeight: 700, fontSize: "1rem" }}>Assignment Results</span>
-                      <span style={{
-                        padding: "2px 8px", borderRadius: "10px", fontSize: "0.75rem",
-                        background: "rgba(255,255,255,0.08)", color: "var(--text-secondary)",
-                      }}>{(status.results || []).length + ' graded'}</span>
-                    </div>
-                    {assignmentSectionOpen && (
-                  <div data-tutorial="results-card" className="glass-card" style={{ padding: "25px" }}>
-                    <ResultsHeader
-                      status={status}
-                      resultsFilter={resultsFilter}
-                      resultsPeriodFilter={resultsPeriodFilter}
-                      resultsAssignmentFilter={resultsAssignmentFilter}
-                      emailApprovals={emailApprovals}
-                      resultsSort={resultsSort}
-                      setResultsSort={setResultsSort}
-                      setResultsFilter={setResultsFilter}
-                      portalSubmissions={portalSubmissions}
-                      sortedPeriods={sortedPeriods}
-                      setResultsPeriodFilter={setResultsPeriodFilter}
-                      savedAssignments={savedAssignments}
-                      savedAssignmentData={savedAssignmentData}
-                      setResultsAssignmentFilter={setResultsAssignmentFilter}
-                      curveModal={curveModal}
-                      setCurveModal={setCurveModal}
-                      resultsSearch={resultsSearch}
-                      setStatus={setStatus}
-                      setEditedResults={setEditedResults}
-                      setEmailApprovals={setEmailApprovals}
-                      setEditedEmails={setEditedEmails}
-                      addToast={addToast}
-                      gradesApproved={gradesApproved}
-                      setGradesApproved={setGradesApproved}
-                      batchExportLoading={batchExportLoading}
-                      setBatchExportLoading={setBatchExportLoading}
-                      editedResults={editedResults}
-                      setFocusExportModal={setFocusExportModal}
-                      config={config}
-                      focusCommentsStatus={focusCommentsStatus}
-                      setFocusCommentsStatus={setFocusCommentsStatus}
-                      setFocusCommentsPolling={setFocusCommentsPolling}
-                      vportalConfigured={vportalConfigured}
-                      outlookExportLoading={outlookExportLoading}
-                      setOutlookExportLoading={setOutlookExportLoading}
-                      outlookSendStatus={outlookSendStatus}
-                      setOutlookSendStatus={setOutlookSendStatus}
-                      setOutlookSendPolling={setOutlookSendPolling}
-                      focusCommsStatus={focusCommsStatus}
-                      setFocusCommsStatus={setFocusCommsStatus}
-                      setFocusCommsPolling={setFocusCommsPolling}
-                      setConfirmationStudentFilter={setConfirmationStudentFilter}
-                      confirmationStudentFilter={confirmationStudentFilter}
-                      pendingConfirmationStudents={pendingConfirmationStudents}
-                      pendingConfirmations={pendingConfirmations}
-                      pendingConfirmationFilenames={pendingConfirmationFilenames}
-                      ccParents={ccParents}
-                      setCcParents={setCcParents}
-                    />
-
-                    {/* Outlook Send Progress */}
-                    <SendProgressIndicators
-                      outlookSendStatus={outlookSendStatus}
-                      focusCommsStatus={focusCommsStatus}
-                    />
-
-                    {/* Authenticity Summary Alert */}
-                    <AuthenticitySummaryAlert status={status} />
-
-                    {/* Auto-Approve Toggle */}
-                    <AutoApproveControls
-                      status={status}
-                      autoApproveEmails={autoApproveEmails}
-                      setAutoApproveEmails={setAutoApproveEmails}
-                      resultsFilter={resultsFilter}
-                      resultsPeriodFilter={resultsPeriodFilter}
-                      resultsAssignmentFilter={resultsAssignmentFilter}
-                      emailApprovals={emailApprovals}
-                      updateApprovalsBulk={updateApprovalsBulk}
-                      sentEmails={sentEmails}
-                      setSentEmails={setSentEmails}
-                      addToast={addToast}
-                    />
-
-                    {emailStatus.message && (
-                      <div
-                        style={{
-                          marginBottom: "15px",
-                          padding: "12px 15px",
-                          background: emailStatus.message.includes("Error")
-                            ? "rgba(248,113,113,0.1)"
-                            : "rgba(74,222,128,0.1)",
-                          borderRadius: "8px",
-                          border: emailStatus.message.includes("Error")
-                            ? "1px solid rgba(248,113,113,0.3)"
-                            : "1px solid rgba(74,222,128,0.3)",
-                        }}
-                      >
-                        {emailStatus.message}
-                      </div>
-                    )}
-
-                    {/* Portal Submissions Section */}
-                    <PortalSubmissionsSection
-                      portalSubmissions={portalSubmissions}
-                      resultsFilter={resultsFilter}
-                      pendingConfirmations={pendingConfirmations}
-                      vportalConfigured={vportalConfigured}
-                      outlookSendStatus={outlookSendStatus}
-                      setOutlookSendStatus={setOutlookSendStatus}
-                      setOutlookSendPolling={setOutlookSendPolling}
-                      addToast={addToast}
-                      pendingConfirmationIds={pendingConfirmationIds}
-                    />
-
-                    {status.results.length === 0 && portalSubmissions.length === 0 ? (
-                      <p
-                        style={{
-                          color: "var(--text-secondary)",
-                          textAlign: "center",
-                          padding: "40px",
-                        }}
-                      >
-                        No results yet. Grade some assignments first.
-                      </p>
-                    ) : (
-                      <>
-                        {/* Search Input */}
-                        <ResultsSearchInput
-                          resultsSearch={resultsSearch}
-                          setResultsSearch={setResultsSearch}
-                        />
-                        <ResultsTable
-                          editedResults={editedResults}
-                          status={status}
-                          setStatus={setStatus}
-                          setEditedResults={setEditedResults}
-                          resultsFilter={resultsFilter}
-                          emailApprovals={emailApprovals}
-                          resultsPeriodFilter={resultsPeriodFilter}
-                          resultsAssignmentFilter={resultsAssignmentFilter}
-                          resultsSearch={resultsSearch}
-                          resultsSort={resultsSort}
-                          colWidths={colWidths}
-                          defaultColPercents={defaultColPercents}
-                          tableRef={tableRef}
-                          initColWidths={initColWidths}
-                          handleResizeStart={handleResizeStart}
-                          theme={theme}
-                          studentAccommodations={studentAccommodations}
-                          config={config}
-                          setConfig={setConfig}
-                          addToast={addToast}
-                          autoApproveEmails={autoApproveEmails}
-                          sentEmails={sentEmails}
-                          outlookSendStatus={outlookSendStatus}
-                          openReview={openReview}
-                          sendSingleEmail={sendSingleEmail}
-                        />
-
-                        {/* Send Approved Emails Button */}
-                        <SendApprovedEmailsButton
-                          emailApprovals={emailApprovals}
-                          autoApproveEmails={autoApproveEmails}
-                          status={status}
-                          editedEmails={editedEmails}
-                          getDefaultEmailBody={getDefaultEmailBody}
-                          emailStatus={emailStatus}
-                          setEmailStatus={setEmailStatus}
-                          sentEmails={sentEmails}
-                          setSentEmails={setSentEmails}
-                          config={config}
-                        />
-                      </>
-                    )}
-                  </div>
-                    )}
-                  </div>
+                  <AssignmentResultsSection
+                    assignmentSectionOpen={assignmentSectionOpen}
+                    setAssignmentSectionOpen={setAssignmentSectionOpen}
+                    resultsFilter={resultsFilter}
+                    setResultsFilter={setResultsFilter}
+                    resultsAssignmentFilter={resultsAssignmentFilter}
+                    setResultsAssignmentFilter={setResultsAssignmentFilter}
+                    resultsSort={resultsSort}
+                    setResultsSort={setResultsSort}
+                    resultsSearch={resultsSearch}
+                    setResultsSearch={setResultsSearch}
+                    batchExportLoading={batchExportLoading}
+                    setBatchExportLoading={setBatchExportLoading}
+                    outlookExportLoading={outlookExportLoading}
+                    setOutlookExportLoading={setOutlookExportLoading}
+                    ccParents={ccParents}
+                    setCcParents={setCcParents}
+                    status={status}
+                    config={config}
+                    theme={theme}
+                    resultsPeriodFilter={resultsPeriodFilter}
+                    setResultsPeriodFilter={setResultsPeriodFilter}
+                    editedResults={editedResults}
+                    emailApprovals={emailApprovals}
+                    sentEmails={sentEmails}
+                    editedEmails={editedEmails}
+                    emailStatus={emailStatus}
+                    autoApproveEmails={autoApproveEmails}
+                    gradesApproved={gradesApproved}
+                    savedAssignments={savedAssignments}
+                    savedAssignmentData={savedAssignmentData}
+                    studentAccommodations={studentAccommodations}
+                    sortedPeriods={sortedPeriods}
+                    portalSubmissions={portalSubmissions}
+                    vportalConfigured={vportalConfigured}
+                    outlookSendStatus={outlookSendStatus}
+                    focusCommsStatus={focusCommsStatus}
+                    focusCommentsStatus={focusCommentsStatus}
+                    curveModal={curveModal}
+                    colWidths={colWidths}
+                    defaultColPercents={defaultColPercents}
+                    pendingConfirmations={pendingConfirmations}
+                    pendingConfirmationStudents={pendingConfirmationStudents}
+                    confirmationStudentFilter={confirmationStudentFilter}
+                    setStatus={setStatus}
+                    setConfig={setConfig}
+                    setEditedResults={setEditedResults}
+                    setEmailApprovals={setEmailApprovals}
+                    setSentEmails={setSentEmails}
+                    setEditedEmails={setEditedEmails}
+                    setEmailStatus={setEmailStatus}
+                    setAutoApproveEmails={setAutoApproveEmails}
+                    setGradesApproved={setGradesApproved}
+                    setOutlookSendStatus={setOutlookSendStatus}
+                    setOutlookSendPolling={setOutlookSendPolling}
+                    setFocusCommsStatus={setFocusCommsStatus}
+                    setFocusCommsPolling={setFocusCommsPolling}
+                    setFocusCommentsStatus={setFocusCommentsStatus}
+                    setFocusCommentsPolling={setFocusCommentsPolling}
+                    setCurveModal={setCurveModal}
+                    setFocusExportModal={setFocusExportModal}
+                    setColWidths={setColWidths}
+                    setConfirmationStudentFilter={setConfirmationStudentFilter}
+                    addToast={addToast}
+                    openReview={openReview}
+                    sendSingleEmail={sendSingleEmail}
+                    getDefaultEmailBody={getDefaultEmailBody}
+                    updateApprovalsBulk={updateApprovalsBulk}
+                    initColWidths={initColWidths}
+                    handleResizeStart={handleResizeStart}
+                    tableRef={tableRef}
+                    pendingConfirmationIds={pendingConfirmationIds}
+                    pendingConfirmationFilenames={pendingConfirmationFilenames}
+                  />
                 </div>
   );
 });
