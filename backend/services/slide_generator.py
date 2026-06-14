@@ -38,7 +38,7 @@ DEFAULT_THEME = {
 
 def generate_slide_content(content, subject, grade, title, api_key,
                            lesson_plan=None, global_ai_notes="", instructions="",
-                           slide_count=10, deck_format="detailed"):
+                           slide_count=10, deck_format="detailed", template="academic"):
     """Generate structured slide content from source material.
 
     The AI decides colors, layouts, and visual style based on the content.
@@ -77,10 +77,8 @@ def generate_slide_content(content, subject, grade, title, api_key,
     prompt_parts.append('{')
     prompt_parts.append('  "title": "Deck Title",')
     prompt_parts.append('  "theme": {')
-    prompt_parts.append('    "primary_color": "#hex (choose a color that fits the subject and mood)",')
-    prompt_parts.append('    "secondary_color": "#hex (complementary accent color)",')
-    prompt_parts.append('    "accent": "#hex (light tint for backgrounds)",')
-    prompt_parts.append('    "style_description": "brief description of the visual style you chose and why"')
+    prompt_parts.append('    "primary_color": "#hex — a single accent color appropriate to the SUBJECT. The deck design (fonts, layout, spacing) is fixed by a professional template; you ONLY choose this one accent color.",')
+    prompt_parts.append('    "secondary_color": "#hex — optional complementary accent"')
     prompt_parts.append('  },')
     prompt_parts.append('  "slides": [')
     prompt_parts.append('    {')
@@ -176,10 +174,11 @@ def generate_slide_content(content, subject, grade, title, api_key,
     # Build the image style prompt from the AI's chosen theme
     result["theme"]["style_prompt"] = (
         "flat vector illustration, clean minimal educational style, "
-        "soft color palette using " + theme["primary_color"] + " and " + theme["secondary_color"] + ", "
+        "soft color palette using " + theme.get("primary_color", DEFAULT_THEME["primary_color"]) + " and " + theme.get("secondary_color", DEFAULT_THEME["secondary_color"]) + ", "
         "no text in the image, professional, suitable for a classroom presentation"
     )
 
+    result["template"] = template
     return result
 
 
