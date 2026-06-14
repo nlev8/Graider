@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './CoordinateInput.css';
+import CoordinateDmsInput from './coordinate-input/CoordinateDmsInput.jsx';
 
 const COORDINATE_FORMATS = [
   { id: 'dd', label: 'Decimal Degrees', example: '40.7128, -74.0060' },
@@ -140,87 +141,13 @@ export default function CoordinateInput({ value, onChange, showMap = false, labe
       )}
 
       {inputFormat === 'dms' && (
-        <div className="dms-input">
-          <div className="dms-row">
-            <label>Latitude:</label>
-            <input
-              type="number"
-              value={latDeg}
-              onChange={(e) => setLatDeg(e.target.value)}
-              placeholder="°"
-              className="deg"
-              min="0"
-              max="90"
-            />
-            <span>°</span>
-            <input
-              type="number"
-              value={latMin}
-              onChange={(e) => setLatMin(e.target.value)}
-              placeholder="'"
-              className="min"
-              min="0"
-              max="59"
-            />
-            <span>'</span>
-            <input
-              type="number"
-              step="0.01"
-              value={latSec}
-              onChange={(e) => setLatSec(e.target.value)}
-              placeholder='"'
-              className="sec"
-              min="0"
-              max="59.99"
-            />
-            <span>"</span>
-            <select value={latDir} onChange={(e) => setLatDir(e.target.value)}>
-              <option value="N">N</option>
-              <option value="S">S</option>
-            </select>
-          </div>
-          <div className="dms-row">
-            <label>Longitude:</label>
-            <input
-              type="number"
-              value={lonDeg}
-              onChange={(e) => setLonDeg(e.target.value)}
-              placeholder="°"
-              className="deg"
-              min="0"
-              max="180"
-            />
-            <span>°</span>
-            <input
-              type="number"
-              value={lonMin}
-              onChange={(e) => setLonMin(e.target.value)}
-              placeholder="'"
-              className="min"
-              min="0"
-              max="59"
-            />
-            <span>'</span>
-            <input
-              type="number"
-              step="0.01"
-              value={lonSec}
-              onChange={(e) => setLonSec(e.target.value)}
-              placeholder='"'
-              className="sec"
-              min="0"
-              max="59.99"
-            />
-            <span>"</span>
-            <select value={lonDir} onChange={(e) => setLonDir(e.target.value)}>
-              <option value="E">E</option>
-              <option value="W">W</option>
-            </select>
-          </div>
-          <button type="button" onClick={handleDMSUpdate} className="convert-btn">
-            Convert to Decimal
-          </button>
-        </div>
+        <CoordinateDmsInput
+          latDeg={latDeg} latMin={latMin} latSec={latSec} latDir={latDir}
+          lonDeg={lonDeg} lonMin={lonMin} lonSec={lonSec} lonDir={lonDir}
+          setLatDeg={setLatDeg} setLatMin={setLatMin} setLatSec={setLatSec} setLatDir={setLatDir}
+          setLonDeg={setLonDeg} setLonMin={setLonMin} setLonSec={setLonSec} setLonDir={setLonDir}
+          onConvert={handleDMSUpdate}
+        />
       )}
 
       {showMap && hasValidCoords && (
