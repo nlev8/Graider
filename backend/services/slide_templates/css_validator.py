@@ -1,9 +1,15 @@
 """PDF-safe CSS subset enforcement for template decor_css (spec §3).
 
-decor_css is code-authored, but this validator guards against print-hostile or
-non-self-contained CSS slipping in: external resources break the no-network
-self-contained render, and some properties don't print reliably in headless
-Chromium. Run in tests (and at startup in debug)."""
+decor_css is always code-authored (it comes only from the hardcoded TemplateSpec
+descriptors — there is no path for user-supplied CSS to reach it). This validator
+is therefore a *developer-error guard*, not an adversarial sanitizer: it catches a
+descriptor that accidentally pulls in an external resource (breaks the no-network
+self-contained render) or a property that doesn't print reliably in headless
+Chromium. Because the input is trusted, literal-spelling matching is sufficient —
+it deliberately does NOT decode CSS escape sequences (e.g. `@im\\70ort`), since a
+developer obfuscating their own CSS is not in scope. Enforced as a CI gate by
+tests/test_slide_template_registry.py::test_every_decor_css_is_pdf_safe, which runs
+every shipped decor_css through this validator."""
 import re
 
 # url(...) that is NOT a data: URI

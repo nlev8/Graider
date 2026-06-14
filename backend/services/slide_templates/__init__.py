@@ -27,7 +27,13 @@ GROUPS = OrderedDict((g, ks) for g, ks in GROUPS.items() if ks)  # drop empty gr
 
 
 def resolve_key(key):
-    """Resolve a request key/alias to a registered key, falling back to default."""
+    """Resolve a request key/alias to a registered key, falling back to default.
+
+    Total for any input: a non-string key (None, an int, or an unhashable list/
+    dict from a malformed request body) resolves to the default instead of
+    raising — `key in TEMPLATES` would otherwise TypeError on unhashable input."""
+    if not isinstance(key, str):
+        return DEFAULT_TEMPLATE
     if key in TEMPLATES:
         return key
     if key in LEGACY_ALIASES:

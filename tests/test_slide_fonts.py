@@ -1,6 +1,8 @@
 import json
 import os
 
+import pytest
+
 FONT_DIR = os.path.join(os.path.dirname(__file__), "..", "backend", "assets", "slide_fonts")
 
 
@@ -32,3 +34,15 @@ def test_font_face_css_missing_file_raises():
     from backend.services.slide_templates.types import Font
     with pytest.raises(SlideFontError):
         font_face_css((Font("Nope", "does-not-exist.woff2"),))
+
+
+@pytest.mark.parametrize("traversal", [
+    "../secret.woff2", "../../etc/passwd", "/etc/hosts", "sub/dir/x.woff2",
+])
+def test_font_face_css_rejects_path_traversal(traversal):
+    # A font filename must be a bare name within the bundle; any path component
+    # or absolute path is rejected as SlideFontError (no arbitrary-file read).
+    from backend.services.slide_templates.fonts import font_face_css, SlideFontError
+    from backend.services.slide_templates.types import Font
+    with pytest.raises(SlideFontError):
+        font_face_css((Font("X", traversal),))

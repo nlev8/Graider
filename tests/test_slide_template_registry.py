@@ -40,3 +40,11 @@ def test_registry_resolution_and_aliases():
     # groups index every template exactly once
     grouped = [k for keys in GROUPS.values() for k in keys]
     assert sorted(grouped) == sorted(TEMPLATES)
+
+
+def test_resolve_key_is_total_for_nonstring_and_unhashable_input():
+    # A malformed request body can send template as a list/dict/number/None;
+    # resolve_key must fall back to the default, never TypeError on `in TEMPLATES`.
+    from backend.services.slide_templates import resolve_key, DEFAULT_TEMPLATE
+    for bad in (None, 3, [], [1], {}, {"x": 1}, object()):
+        assert resolve_key(bad) == DEFAULT_TEMPLATE

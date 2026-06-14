@@ -14,11 +14,18 @@ class SlideFontError(RuntimeError):
 
 @functools.lru_cache(maxsize=128)
 def _b64(filename: str) -> str:
+    # Bundled fonts are referenced by bare filename; reject any path component or
+    # absolute path so a stray descriptor can never turn this into an
+    # arbitrary-file read. (Descriptors are code-authored today, but this keeps
+    # the bundled-font invariant honest regardless of future callers.)
+    if filename != os.path.basename(filename):
+        raise SlideFontError(f"font filename must be a bare name: {filename!r}")
     path = os.path.join(_FONT_DIR, filename)
-    if not os.path.exists(path):
-        raise SlideFontError(f"bundled font missing: {filename}")
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("ascii")
+    try:
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("ascii")
+    except OSError as e:
+        raise SlideFontError(f"bundled font missing or unreadable: {filename}") from e
 
 
 def font_face_css(fonts) -> str:

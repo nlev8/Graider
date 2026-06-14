@@ -1,3 +1,5 @@
+import pytest
+
 from backend.services.slide_templates.base_css import BASE_CSS
 
 
@@ -43,6 +45,19 @@ def test_malicious_accent_rejected():  # carried over from the old security test
     assert "169.254.169.254" not in css
 
 
-def test_accent_trailing_newline_rejected():
+@pytest.mark.parametrize("good", ["#abc", "#1a7f43", "#1A7F43FF"])
+def test_valid_hex_accents_pass_through(good):
+    # 3/6/8-digit hex are all accepted by the engine's _HEX_COLOR fullmatch.
     from backend.services.slide_templates import template_css
-    assert "\n;" not in template_css("editorial-bold", accent="#fff\n")
+    css = template_css("editorial-bold", accent=good)
+    assert f"--accent:{good}" in css.replace(" ", "")
+
+
+@pytest.mark.parametrize("bad", ["#fff\n", "#1a7f43\n", "#fff\n; }", "#fff\r\n"])
+def test_newline_or_breakout_accent_falls_back(bad):
+    # Trailing-newline / CSS-breakout accents must fail the fullmatch and be
+    # replaced by the safe fallback — the raw payload never reaches the CSS.
+    from backend.services.slide_templates import template_css
+    css = template_css("editorial-bold", accent=bad)
+    assert "--accent:#1a7f43" in css.replace(" ", "")  # safe fallback injected
+    assert bad not in css                               # raw payload absent
