@@ -514,6 +514,29 @@ def test_generate_slide_content_records_template(monkeypatch):
     assert "accent color" in captured["prompt"].lower()
 
 
+def test_image_style_comes_from_template(monkeypatch):
+    import json as _json
+    from backend.services import slide_generator
+    from backend.services.llm_adapter.types import LLMResponse, TextPart, Usage
+
+    def fake_chat(self, request):
+        deck = {"title": "T", "theme": {"primary_color": "#123456"},
+                "slides": [{"layout": "title", "title": "T"}]}
+        return LLMResponse(content_parts=[TextPart(text=_json.dumps(deck))],
+                           tool_calls=[], usage=Usage(0, 0, 0.0),
+                           finish_reason="stop", provider="gemini", model="gemini-2.5-flash")
+
+    monkeypatch.setattr("backend.services.llm_adapter.gemini_adapter.GeminiAdapter.chat", fake_chat)
+    monkeypatch.setattr("backend.services.llm_adapter.gemini_adapter.genai.Client", lambda api_key=None: object())
+
+    deck = slide_generator.generate_slide_content(
+        content="cells", subject="Bio", grade="7", title="Cells", api_key="k",
+        slide_count=3, template="playful-organic")
+    sp = deck["theme"]["style_prompt"]
+    assert "friendly rounded flat illustration" in sp   # template medium
+    assert "avoid" in sp.lower() and "text" in sp.lower()  # avoid clause present
+
+
 def test_generate_slide_images_suppresses_sentry_capture_for_breaker_error(monkeypatch):
     """Every slide that hits OPEN breaker must NOT trigger sentry_sdk.capture_exception.
     logger.warning still fires. Function returns empty images dict."""

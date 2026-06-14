@@ -171,11 +171,15 @@ def generate_slide_content(content, subject, grade, title, api_key,
         theme["accent"] = "#dbeafe"
     result["theme"] = theme
 
-    # Build the image style prompt from the AI's chosen theme
+    # Build the image style prompt from the SELECTED TEMPLATE's structured style
+    # (spec §5) — medium + composition steer the look, avoid + education_constraints
+    # guard franchise/clarity drift. Repeated on every image call via this prompt.
+    from backend.services.slide_templates import get_spec
+    _img = get_spec(template).image_style
     result["theme"]["style_prompt"] = (
-        "flat vector illustration, clean minimal educational style, "
-        "soft color palette using " + theme.get("primary_color", DEFAULT_THEME["primary_color"]) + " and " + theme.get("secondary_color", DEFAULT_THEME["secondary_color"]) + ", "
-        "no text in the image, professional, suitable for a classroom presentation"
+        f"{_img.medium}, {_img.composition}. "
+        f"Avoid: {_img.avoid}. Must be {_img.education_constraints}. "
+        "No text in the image."
     )
 
     result["template"] = template
