@@ -13,6 +13,7 @@ import {
 import Icon from "../../components/Icon";
 import DeferredMount from "./DeferredMount";
 import { studentNameMatchesPeriod } from "./helpers";
+import AssignmentAveragesChart from "./AssignmentAveragesChart";
 
 // Stats cards row — moved verbatim out of GradeChartsSection (CQ wave 1 split).
 // Plain (non-memo) component: it was inline JSX before, so it still renders
@@ -282,57 +283,7 @@ const GradeChartsSection = React.memo(function GradeChartsSection({ filteredAnal
         )}
       </div>
 
-      <div ref={avgRef} className="glass-card" style={{ padding: "25px", minWidth: 0, overflow: "hidden" }}>
-        <h3
-          style={{
-            fontSize: "1.1rem",
-            fontWeight: 700,
-            marginBottom: "20px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          <Icon name="BarChart3" size={20} />
-          Assignment Averages
-        </h3>
-        <DeferredMount height={200}>
-          {avgWidth > 0 && (<BarChart
-            width={avgWidth}
-            height={200}
-            data={filteredAnalytics.assignment_stats || []}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="var(--glass-border)"
-            />
-            <XAxis
-              dataKey="name"
-              tick={{
-                fill: "var(--text-secondary)",
-                fontSize: 11,
-              }}
-            />
-            <YAxis
-              domain={[0, 100]}
-              tick={{ fill: "var(--text-secondary)" }}
-            />
-            <Tooltip
-              contentStyle={{
-                background: "var(--modal-content-bg)",
-                border: "1px solid var(--glass-border)",
-                borderRadius: "8px",
-              }}
-            />
-            <Bar
-              dataKey="average"
-              fill="#6366f1"
-              radius={[4, 4, 0, 0]}
-              animationDuration={400}
-            />
-          </BarChart>)}
-        </DeferredMount>
-      </div>
+      <AssignmentAveragesChart containerRef={avgRef} chartWidth={avgWidth} assignmentStats={filteredAnalytics.assignment_stats} />
     </div>
     </>
   );
