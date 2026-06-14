@@ -73,6 +73,7 @@ export default function SlideDeckResults({ slideDeck, addToast, onShare }) {
       <iframe
         title="Slide preview"
         srcDoc={previewHtml}
+        sandbox=""
         style={{ width: "100%", height: "420px", border: "1px solid var(--border)",
                  borderRadius: "8px", background: "#555" }}
       />

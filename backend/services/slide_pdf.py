@@ -26,7 +26,10 @@ def html_to_pdf(html: str) -> bytes:
             browser = p.chromium.launch(args=["--no-sandbox"])
             try:
                 page = browser.new_page()
-                page.set_content(html, wait_until="networkidle")
+                # The deck is self-contained (CSS + data-URI images inlined), so
+                # "load" fires promptly; an explicit timeout makes the bound
+                # intentional rather than inheriting the 30s default.
+                page.set_content(html, wait_until="load", timeout=15000)
                 pdf = page.pdf(width="1280px", height="720px",
                                print_background=True, prefer_css_page_size=True)
             finally:
