@@ -1,6 +1,7 @@
 import React from "react";
 import Icon from "./Icon";
-import * as api from "../services/api";
+import BillingPlanCard from "./BillingPlanCard";
+import ApiUsageSummary from "./ApiUsageSummary";
 
 export default function SettingsBilling({ addToast, config, costSummary, setConfig, setCostSummary, setSubscription, setSubscriptionLoading, subscription, subscriptionLoading }) {
   return (
@@ -14,93 +15,13 @@ export default function SettingsBilling({ addToast, config, costSummary, setConf
                     Manage your Graider subscription plan and billing details.
                   </p>
 
-                  {subscriptionLoading ? (
-                    <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
-                      Loading subscription status...
-                    </div>
-                  ) : subscription && subscription.status === "active" ? (
-                    <div style={{ background: "var(--input-bg)", borderRadius: "12px", padding: "20px", marginBottom: "20px", border: "1px solid var(--glass-border)" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-                        <span style={{ background: "#10b981", color: "white", padding: "3px 10px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: 600 }}>Active</span>
-                        <span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-                          {subscription.plan === "month" ? "Monthly" : subscription.plan === "year" ? "Annual" : subscription.plan} Plan
-                        </span>
-                      </div>
-                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "4px" }}>
-                        {subscription.cancel_at_period_end
-                          ? "Cancels on: "
-                          : "Renews on: "}
-                        {new Date(subscription.current_period_end * 1000).toLocaleDateString()}
-                      </p>
-                      {subscription.cancel_at_period_end && (
-                        <p style={{ fontSize: "0.8rem", color: "#f59e0b", marginTop: "8px" }}>
-                          Your subscription will not renew. You can resubscribe anytime.
-                        </p>
-                      )}
-                      <button
-                        onClick={async () => {
-                          try {
-                            const res = await api.createPortalSession();
-                            if (res.portal_url) window.location.href = res.portal_url;
-                            else addToast(res.error || "Failed to open portal", "error");
-                          } catch { addToast("Failed to open billing portal", "error"); }
-                        }}
-                        style={{ marginTop: "16px", padding: "10px 20px", borderRadius: "8px", border: "none", background: "var(--accent-primary)", color: "white", fontWeight: 600, cursor: "pointer", fontSize: "0.85rem" }}
-                      >
-                        Manage Subscription
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      <div style={{ background: "var(--input-bg)", borderRadius: "12px", padding: "20px", marginBottom: "20px", border: "1px solid var(--glass-border)" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-                          <span style={{ background: "var(--text-secondary)", color: "white", padding: "3px 10px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: 600 }}>No Active Plan</span>
-                        </div>
-                        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "16px" }}>
-                          Subscribe to unlock all Graider features.
-                        </p>
-                        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await api.createCheckoutSession("monthly");
-                                if (res.checkout_url) window.location.href = res.checkout_url;
-                                else addToast(res.error || "Failed to start checkout", "error");
-                              } catch { addToast("Failed to start checkout", "error"); }
-                            }}
-                            style={{ padding: "10px 20px", borderRadius: "8px", border: "1px solid var(--accent-primary)", background: "transparent", color: "var(--accent-primary)", fontWeight: 600, cursor: "pointer", fontSize: "0.85rem" }}
-                          >
-                            Subscribe Monthly
-                          </button>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await api.createCheckoutSession("annual");
-                                if (res.checkout_url) window.location.href = res.checkout_url;
-                                else addToast(res.error || "Failed to start checkout", "error");
-                              } catch { addToast("Failed to start checkout", "error"); }
-                            }}
-                            style={{ padding: "10px 20px", borderRadius: "8px", border: "none", background: "var(--accent-primary)", color: "white", fontWeight: 600, cursor: "pointer", fontSize: "0.85rem" }}
-                          >
-                            Subscribe Annual
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      setSubscriptionLoading(true);
-                      api.getSubscriptionStatus()
-                        .then((res) => { if (!res.error) setSubscription(res); })
-                        .catch(() => {})
-                        .finally(() => setSubscriptionLoading(false));
-                    }}
-                    style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.8rem" }}
-                  >
-                    Refresh Status
-                  </button>
+                  <BillingPlanCard
+                    addToast={addToast}
+                    setSubscription={setSubscription}
+                    setSubscriptionLoading={setSubscriptionLoading}
+                    subscription={subscription}
+                    subscriptionLoading={subscriptionLoading}
+                  />
                 </div>
 
                 {/* API Cost Controls */}
@@ -165,83 +86,7 @@ export default function SettingsBilling({ addToast, config, costSummary, setConf
                     <Icon name="BarChart3" size={20} style={{ color: "#10b981" }} />
                     API Usage Summary
                   </h3>
-                  {!costSummary ? (
-                    <button
-                      onClick={async () => {
-                        try {
-                          const [analyticsRes, plannerRes, assistantRes] = await Promise.all([
-                            api.getAnalytics().catch(() => null),
-                            api.getPlannerCosts().catch(() => null),
-                            api.getAssistantCosts().catch(() => null),
-                          ]);
-                          setCostSummary({
-                            grading: analyticsRes?.cost_summary || { total_cost: 0, total_graded: 0, avg_cost_per_student: 0 },
-                            planner: plannerRes?.total || { total_cost: 0, api_calls: 0 },
-                            assistant: assistantRes?.total || { total_cost: 0, api_calls: 0 },
-                          });
-                        } catch {
-                          setCostSummary({ grading: { total_cost: 0 }, planner: { total_cost: 0 }, assistant: { total_cost: 0 } });
-                        }
-                      }}
-                      className="btn btn-secondary"
-                      style={{ fontSize: "0.85rem" }}
-                    >
-                      <Icon name="RefreshCw" size={14} />
-                      Load Cost Summary
-                    </button>
-                  ) : (
-                    <div style={{ background: "var(--input-bg)", borderRadius: "12px", padding: "20px", border: "1px solid var(--glass-border)" }}>
-                      <div style={{ display: "grid", gap: "12px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--glass-border)" }}>
-                          <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Grading</span>
-                          <div style={{ display: "flex", gap: "16px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                            <span>${(costSummary.grading.total_cost || 0).toFixed(4)}</span>
-                            <span>{costSummary.grading.total_graded || 0} students</span>
-                            <span>~${(costSummary.grading.avg_cost_per_student || 0).toFixed(4)}/student</span>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--glass-border)" }}>
-                          <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Assistant</span>
-                          <div style={{ display: "flex", gap: "16px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                            <span>${(costSummary.assistant.total_cost || 0).toFixed(4)}</span>
-                            <span>{costSummary.assistant.api_calls || 0} API calls</span>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--glass-border)" }}>
-                          <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Planner</span>
-                          <div style={{ display: "flex", gap: "16px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                            <span>${(costSummary.planner.total_cost || 0).toFixed(4)}</span>
-                            <span>{costSummary.planner.api_calls || 0} API calls</span>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0 0", fontWeight: 700 }}>
-                          <span style={{ fontSize: "0.9rem" }}>Total</span>
-                          <span style={{ fontSize: "0.9rem", color: "#f59e0b" }}>
-                            ${((costSummary.grading.total_cost || 0) + (costSummary.assistant.total_cost || 0) + (costSummary.planner.total_cost || 0)).toFixed(4)}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          try {
-                            const [analyticsRes, plannerRes, assistantRes] = await Promise.all([
-                              api.getAnalytics().catch(() => null),
-                              api.getPlannerCosts().catch(() => null),
-                              api.getAssistantCosts().catch(() => null),
-                            ]);
-                            setCostSummary({
-                              grading: analyticsRes?.cost_summary || { total_cost: 0, total_graded: 0, avg_cost_per_student: 0 },
-                              planner: plannerRes?.total || { total_cost: 0, api_calls: 0 },
-                              assistant: assistantRes?.total || { total_cost: 0, api_calls: 0 },
-                            });
-                          } catch { /* ignore */ }
-                        }}
-                        style={{ marginTop: "12px", padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.75rem" }}
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                  )}
+                  <ApiUsageSummary costSummary={costSummary} setCostSummary={setCostSummary} />
                 </div>
               </>
   );
