@@ -2104,6 +2104,9 @@ def generate_slides():
     max_images = min(data.get('maxImages', 5), 10)
     generate_images = data.get('generateImages', True)
     deck_format = data.get('deckFormat', 'detailed')
+    template = (data.get('template') or 'academic')
+    if template not in ('editorial', 'bold', 'academic', 'playful'):
+        template = 'academic'
 
     if not content and not lesson_plan:
         return jsonify({"error": "Provide content or a lesson plan to generate slides."}), 400
@@ -2116,6 +2119,7 @@ def generate_slides():
             instructions=instructions, global_ai_notes=global_ai_notes,
             lesson_plan=lesson_plan, slide_count=slide_count, max_images=max_images,
             generate_images=generate_images, deck_format=deck_format, user_id=user_id,
+            template=template,
         ))
 
     except json.JSONDecodeError as e:
