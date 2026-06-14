@@ -87,3 +87,24 @@ def test_generate_slides_payload_returns_shape():
     assert out["title"] == "Cells"
     assert out["slide_count"] == 2
     assert out["images_generated"] == 1
+
+
+def test_generate_slides_payload_threads_template():
+    from unittest.mock import patch
+    from backend.services.planner_study_aids import generate_slides_payload
+    captured = {}
+
+    def fake_content(**kwargs):
+        captured.update(kwargs)
+        return {"title": "Cells", "theme": {}, "slides": [{"h": 1}], "template": kwargs.get("template")}
+
+    with patch('backend.api_keys.get_api_key', return_value='k'), \
+         patch('backend.services.slide_generator.generate_slide_content', side_effect=fake_content), \
+         patch('backend.services.slide_generator.generate_slide_images', return_value={}):
+        out = generate_slides_payload(
+            content="cells", title="Cells", subject="Bio", grade="7", instructions="",
+            global_ai_notes="", lesson_plan=None, slide_count=10, max_images=5,
+            generate_images=False, deck_format="detailed", user_id="t1", template="bold")
+
+    assert captured["template"] == "bold"
+    assert out["slides"]["template"] == "bold"
