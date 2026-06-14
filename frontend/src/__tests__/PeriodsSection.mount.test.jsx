@@ -10,7 +10,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 // supplied, (5) PeriodStudentTable renders student rows when expanded.
 // Uses Vitest native matchers (toBeTruthy), NOT jest-dom.
 
-vi.mock('../../services/api', () => ({
+vi.mock('../services/api', () => ({
   uploadPeriod: vi.fn().mockResolvedValue({}),
   listPeriods: vi.fn().mockResolvedValue({ periods: [] }),
   getPeriodStudents: vi.fn().mockResolvedValue({ students: [] }),
