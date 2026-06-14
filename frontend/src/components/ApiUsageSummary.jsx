@@ -11,7 +11,11 @@ import * as api from "../services/api";
  * handlers are props.
  */
 export default function ApiUsageSummary({ costSummary, setCostSummary }) {
-  async function loadCosts() {
+  // resetOnError preserves the two distinct original catch behaviors: the
+  // "Load Cost Summary" button reset costSummary to a zeroed fallback on error
+  // (resetOnError=true); the "Refresh" button ignored errors, leaving the prior
+  // summary intact (resetOnError=false). Same try body for both.
+  async function loadCosts(resetOnError) {
     try {
       const [analyticsRes, plannerRes, assistantRes] = await Promise.all([
         api.getAnalytics().catch(() => null),
@@ -24,13 +28,15 @@ export default function ApiUsageSummary({ costSummary, setCostSummary }) {
         assistant: assistantRes?.total || { total_cost: 0, api_calls: 0 },
       });
     } catch {
-      setCostSummary({ grading: { total_cost: 0 }, planner: { total_cost: 0 }, assistant: { total_cost: 0 } });
+      if (resetOnError) {
+        setCostSummary({ grading: { total_cost: 0 }, planner: { total_cost: 0 }, assistant: { total_cost: 0 } });
+      }
     }
   }
 
   if (!costSummary) {
     return (
-      <button onClick={loadCosts} className="btn btn-secondary" style={{ fontSize: "0.85rem" }}>
+      <button onClick={() => loadCosts(true)} className="btn btn-secondary" style={{ fontSize: "0.85rem" }}>
         <Icon name="RefreshCw" size={14} />
         Load Cost Summary
       </button>
@@ -70,7 +76,7 @@ export default function ApiUsageSummary({ costSummary, setCostSummary }) {
         </div>
       </div>
       <button
-        onClick={loadCosts}
+        onClick={() => loadCosts(false)}
         style={{ marginTop: "12px", padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.75rem" }}
       >
         Refresh
