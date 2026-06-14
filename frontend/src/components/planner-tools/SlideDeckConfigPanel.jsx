@@ -1,5 +1,4 @@
 import React from "react";
-import Icon from "../Icon";
 
 /*
  * Pure-prop child extracted from SlideDeckGenerator (CQ wave-8 split #cq8-07).
