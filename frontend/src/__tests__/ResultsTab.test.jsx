@@ -226,7 +226,7 @@ describe('ResultsTab (post tabs/results/ split)', () => {
     // Auto-approve controls (AutoApproveControls)
     expect(screen.getByText('Auto-Approve Emails')).toBeTruthy();
 
-    // Email status banner (still inline in ResultsTab)
+    // Email status banner (AssignmentResultsFooter, CQ wave-3 split)
     expect(screen.getByText('Sent 1 emails successfully!')).toBeTruthy();
 
     // Portal submissions (PortalSubmissionsSection)
