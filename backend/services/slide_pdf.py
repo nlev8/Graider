@@ -19,7 +19,11 @@ def html_to_pdf(html: str) -> bytes:
     """Render a self-contained HTML deck to PDF bytes (1280x720 pages)."""
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(args=["--no-sandbox"])  # nosec B603 - server-generated HTML; --no-sandbox required for Chromium in many container runtimes
+            # --no-sandbox: Chromium cannot enable its sandbox when running as
+            # root, the common container/Railway case. Safe here because the
+            # input HTML is server-generated and fully escaped (see
+            # slide_html_builder) — there is no untrusted page navigation.
+            browser = p.chromium.launch(args=["--no-sandbox"])
             try:
                 page = browser.new_page()
                 page.set_content(html, wait_until="networkidle")
