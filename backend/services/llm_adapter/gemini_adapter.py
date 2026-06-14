@@ -72,7 +72,9 @@ def _estimate_image_cost_usd(model: str, image_count: int) -> float:
     """Per-image flat-rate pricing. Verify against
     https://ai.google.dev/gemini-api/docs/pricing when adding a new model."""
     rates = {
-        # $0.04 per image as of 2026-04
+        # $0.04 per image as of 2026-04. gemini-2.5-flash-preview-image-generation
+        # was retired by Google; gemini-2.5-flash-image is the current image model.
+        "gemini-2.5-flash-image": 0.04,
         "gemini-2.5-flash-preview-image-generation": 0.04,
     }
     return round(rates.get(model, 0.04) * image_count, 6)

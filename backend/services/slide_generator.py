@@ -150,7 +150,7 @@ def generate_slide_content(content, subject, grade, title, api_key,
     from backend.services.llm_adapter import GeminiAdapter, LLMRequest, Message, TextPart
     adapter = GeminiAdapter(api_key=api_key)
     llm_resp = adapter.chat(LLMRequest(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         messages=[Message(role="user", content=[TextPart(text=prompt)])],
         metadata={"feature_label": "generate_slide_content"},
     ))
@@ -247,7 +247,7 @@ def generate_slide_images(slides, theme, api_key, max_images=5):
 
             response = adapter.generate_image(ImageRequest(
                 prompt=full_prompt,
-                model="gemini-2.5-flash-preview-image-generation",
+                model="gemini-2.5-flash-image",
                 reference_images=reference_images,
                 aspect_ratio="16:9",
                 metadata={"feature_label": "slide_generator_image"},
