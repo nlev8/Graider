@@ -15,7 +15,12 @@ html, body { background: #555; }
   display:flex; flex-direction:column;
   break-after: page;
 }
-.slide h1, .slide h2, .kicker { font-family: var(--font-head); }
+/* Display font targets the heading/display divs the builder actually emits
+   (.s-title, .s-head, .key-concept .big) — NOT <h1>/<h2>, which it never emits.
+   Without these, headings inherit --font-body from .slide and templates whose
+   head font != body font (editorial-bold, vibrant-gradient, cinematic) lose
+   their headline typography. h1/h2 kept as a forward-compatible safety net. */
+.slide h1, .slide h2, .s-title, .s-head, .key-concept .big, .kicker { font-family: var(--font-head); }
 .kicker { text-transform:uppercase; letter-spacing:var(--kicker-spacing,3px); font-size:var(--kicker-size,18px); color:var(--accent); margin-bottom:18px; }
 .s-title { font-size:var(--title-size); font-weight:var(--title-weight,800); line-height:var(--title-leading,1.05); color:var(--title-color,var(--ink)); }
 .s-head  { font-size:var(--head-size); font-weight:var(--head-weight,800); color:var(--head-color,var(--accent)); margin-bottom:28px; }
