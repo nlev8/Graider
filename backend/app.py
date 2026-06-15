@@ -115,6 +115,14 @@ def set_security_headers(response):
             f"script-src 'self'; "
             f"style-src 'self' 'unsafe-inline'; "
             f"img-src 'self' data:; "
+            # Slide-template decks embed fonts as base64 data: @font-face
+            # (slide_templates/fonts.py) so decks are self-contained; the
+            # preview iframe (SlideDeckResults.jsx srcdoc) inherits this CSP.
+            # Without an explicit font-src, fonts fall back to default-src
+            # 'self', which excludes data:, so the browser dropped each
+            # template's display font in the on-screen preview (the PDF path
+            # has no CSP and was unaffected). data: fonts cannot execute.
+            f"font-src 'self' data:; "
             f"connect-src {connect_src}; "
             f"frame-ancestors 'none'"
         )
