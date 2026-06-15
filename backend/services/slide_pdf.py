@@ -30,6 +30,12 @@ def html_to_pdf(html: str) -> bytes:
                 # "load" fires promptly; an explicit timeout makes the bound
                 # intentional rather than inheriting the 30s default.
                 page.set_content(html, wait_until="load", timeout=15000)
+                # Ensure embedded @font-face are applied before printing: await
+                # fonts.ready, then one rAF so any font-metric reflow settles.
+                page.evaluate(
+                    "async () => { await document.fonts.ready;"
+                    " await new Promise(r => requestAnimationFrame(r)); }"
+                )
                 pdf = page.pdf(width="1280px", height="720px",
                                print_background=True, prefer_css_page_size=True)
             finally:

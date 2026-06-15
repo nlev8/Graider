@@ -180,8 +180,10 @@ class TestGenerateSlideContentBranches:
         assert result["theme"]["primary_color"] == "#1a56db"
         assert result["theme"]["secondary_color"] == "#60a5fa"
         assert result["theme"]["accent"] == "#dbeafe"
-        # Style prompt built from chosen colors
-        assert "#1a56db" in result["theme"]["style_prompt"]
+        # style_prompt is now composed from the selected template's structured
+        # ImageStyle (spec §5), decoupled from the AI's per-deck colors; the
+        # default template resolves to Minimal. Verify the composition ran.
+        assert "No text in the image" in result["theme"]["style_prompt"]
 
 
 # ──────────────────────────────────────────────────────────────────

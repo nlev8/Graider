@@ -1,0 +1,58 @@
+[
+  {
+    "file": "Inter-400-normal.woff2",
+    "family": "Inter",
+    "weight": 400,
+    "style": "normal",
+    "license": "OFL-1.1",
+    "source": "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/files/inter-latin-400-normal.woff2"
+  },
+  {
+    "file": "Inter-800-normal.woff2",
+    "family": "Inter",
+    "weight": 800,
+    "style": "normal",
+    "license": "OFL-1.1",
+    "source": "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/files/inter-latin-800-normal.woff2"
+  },
+  {
+    "file": "PlayfairDisplay-700-normal.woff2",
+    "family": "Playfair Display",
+    "weight": 700,
+    "style": "normal",
+    "license": "OFL-1.1",
+    "source": "https://cdn.jsdelivr.net/npm/@fontsource/playfair-display@5.0.19/files/playfair-display-latin-700-normal.woff2"
+  },
+  {
+    "file": "PlayfairDisplay-900-normal.woff2",
+    "family": "Playfair Display",
+    "weight": 900,
+    "style": "normal",
+    "license": "OFL-1.1",
+    "source": "https://cdn.jsdelivr.net/npm/@fontsource/playfair-display@5.0.19/files/playfair-display-latin-900-normal.woff2"
+  },
+  {
+    "file": "SpaceGrotesk-700-normal.woff2",
+    "family": "Space Grotesk",
+    "weight": 700,
+    "style": "normal",
+    "license": "OFL-1.1",
+    "source": "https://cdn.jsdelivr.net/npm/@fontsource/space-grotesk@5.0.18/files/space-grotesk-latin-700-normal.woff2"
+  },
+  {
+    "file": "Fredoka-600-normal.woff2",
+    "family": "Fredoka",
+    "weight": 600,
+    "style": "normal",
+    "license": "OFL-1.1",
+    "source": "https://cdn.jsdelivr.net/npm/@fontsource/fredoka@5.2.10/files/fredoka-latin-600-normal.woff2"
+  },
+  {
+    "file": "SpaceMono-700-normal.woff2",
+    "family": "Space Mono",
+    "weight": 700,
+    "style": "normal",
+    "license": "OFL-1.1",
+    "source": "https://cdn.jsdelivr.net/npm/@fontsource/space-mono@5.0.18/files/space-mono-latin-700-normal.woff2"
+  }
+]

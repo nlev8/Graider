@@ -1818,6 +1818,15 @@ export async function renderSlidesHtml(slideDeck) {
   return resp.text();
 }
 
+export async function getSlideTemplates() {
+  const authHeaders = await getAuthHeaders();
+  const resp = await fetch('/api/slide-templates', {
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+  });
+  if (!resp.ok) throw new Error('Failed to load slide templates');
+  return resp.json();   // { groups: [{ group, templates: [{key,name,group}] }] }
+}
+
 export async function downloadSlidesPdf(slideDeck) {
   const authHeaders = await getAuthHeaders();
   const resp = await fetch('/api/slides/pdf', {

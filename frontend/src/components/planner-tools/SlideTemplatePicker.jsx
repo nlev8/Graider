@@ -1,11 +1,12 @@
 import React from "react";
 
-// Four selectable design systems for slide decks. Pure-prop: value + onChange.
+// Five selectable design systems for slide decks. Pure-prop: value + onChange.
 const TEMPLATES = [
-  { key: "editorial", name: "Editorial", blurb: "Minimal, serif, upper grades" },
-  { key: "bold", name: "Bold", blurb: "Gradient, big type, wow" },
-  { key: "academic", name: "Academic", blurb: "Clean, structured (default)" },
-  { key: "playful", name: "Playful", blurb: "Rounded, warm, younger grades" },
+  { key: "editorial-bold", name: "Editorial Bold", blurb: "Magazine serif, refined" },
+  { key: "vibrant-gradient", name: "Vibrant Gradient", blurb: "Bold gradient keynote" },
+  { key: "cinematic", name: "Cinematic Dark", blurb: "Dark, neon, dramatic" },
+  { key: "playful-organic", name: "Playful Organic", blurb: "Warm, rounded, younger grades" },
+  { key: "minimal", name: "Minimal / Swiss", blurb: "Clean, structured (default)" },
 ];
 
 export default function SlideTemplatePicker({ value, onChange }) {

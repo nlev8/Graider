@@ -165,7 +165,7 @@ def generate_flashcards_content(*, content, subject, grade, instructions,
 
 def generate_slides_payload(*, content, title, subject, grade, instructions,
                             global_ai_notes, lesson_plan, slide_count, max_images,
-                            generate_images, deck_format, user_id, template="academic"):
+                            generate_images, deck_format, user_id, template="minimal"):
     """Generate the slide-deck payload (content via slide_generator + optional
     images). Returns {slides, title, slide_count, images_generated}. Flask-free;
     the route keeps request parse + the 400 guard + jsonify/except.
