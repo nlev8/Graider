@@ -209,6 +209,55 @@ class TestApproveUserReflectedXss:
 
 
 # ──────────────────────────────────────────────────────────────────
+# Slide-preview font fidelity — CSP must allow data: @font-face
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestCspFontSrcAllowsDataUris:
+    """Slide-template decks embed fonts as base64 ``data:`` @font-face URIs
+    (backend/services/slide_templates/fonts.py) so decks are self-contained.
+    The deck-preview iframe (SlideDeckResults.jsx, ``srcdoc``) inherits the
+    SPA document's CSP. With only ``default-src 'self'`` and no ``font-src``,
+    fonts fall back to default-src — which excludes ``data:`` — so the browser
+    silently dropped each template's distinctive display font in the on-screen
+    preview (the server-side PDF path has no CSP, so it was unaffected; proven
+    via pdffonts in the Hard Rule #8 pass). The fix adds an explicit
+    ``font-src 'self' data:``, mirroring the existing ``img-src 'self' data:``.
+    """
+
+    @staticmethod
+    def _directives(csp: str) -> dict[str, str]:
+        return {
+            d.strip().split(" ")[0]: d.strip()
+            for d in csp.split(";")
+            if d.strip()
+        }
+
+    def test_font_src_directive_allows_data_uris(self, client, monkeypatch):
+        # /api/auth/approve-user (wrong token) is a text/html page that carries
+        # the same CSP the SPA document (and thus the preview iframe) gets.
+        monkeypatch.setenv("SUPABASE_JWT_SECRET", "s")
+        resp = client.get(
+            "/api/auth/approve-user",
+            query_string={"user_id": "u1", "email": "a@x.com",
+                          "token": "wrong"},
+        )
+        csp = resp.headers["Content-Security-Policy"]
+        directives = self._directives(csp)
+        assert "font-src" in directives, (
+            f"CSP needs an explicit font-src so embedded data: fonts load; "
+            f"got {csp!r}"
+        )
+        font_src = directives["font-src"]
+        assert "data:" in font_src, (
+            f"font-src must allow data: for base64 @font-face; got {font_src!r}"
+        )
+        assert "'self'" in font_src, (
+            f"font-src must keep 'self' for same-origin UI fonts; got {font_src!r}"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────
 # #23 — HTML injection in /api/auth/notify-signup admin email
 # ──────────────────────────────────────────────────────────────────
 
